@@ -19,4 +19,8 @@ pub enum TokenKind {
     Print,
     Borrow,
     For,
+    Plus,
+    Minus,
+    Slash,
+    Star,
 }
