@@ -2,8 +2,8 @@ use std::{iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        BinaryOp, CaseArm, Expr, ExprKind, Function, Generics, Ident, Mutable, Param, Pattern,
-        PatternKind, Program, Type,
+        BinaryOp, CaseArm, Expr, ExprKind, Function, FunctionType, Generics, Ident, Lambda,
+        Mutable, Param, Pattern, PatternKind, Program, Region, Type,
     },
     diagnostics::DiagnosticReporter,
     parsing::{
@@ -125,6 +125,26 @@ impl Parser {
         let name = self.expect_ident("Expected variable name".to_string())?;
         Ok((mutable, name))
     }
+    fn parse_region(&mut self) -> Result<Region, ParseError> {
+        match self.match_ident() {
+            Some(name) => Ok(Region::Named(name)),
+            None => match self.peek_token() {
+                Some(&Token {
+                    line,
+                    kind: TokenKind::Static,
+                }) => {
+                    self.next_token();
+                    Ok(Region::Static(line))
+                }
+                _ => Err({
+                    let line = self.current_line();
+                    self.diag
+                        .report("Expected a valid region".to_string(), line);
+                    ParseError
+                }),
+            },
+        }
+    }
     fn parse_pattern_ident(
         &mut self,
         line: usize,
@@ -132,7 +152,7 @@ impl Parser {
     ) -> Result<Pattern, ParseError> {
         let name = self.match_ident().expect("Expected a name");
         let region = if self.match_token(&TokenKind::In).is_some() {
-            Some(self.match_ident().ok_or_else(|| {
+            Some(self.parse_region().map_err(|_| {
                 let line = self.current_line();
                 self.diag.report("Expected a region name".to_string(), line);
                 ParseError
@@ -387,6 +407,38 @@ impl Parser {
                         kind: ExprKind::List(values),
                     })
                 }
+                TokenKind::Fun => {
+                    self.next_token();
+                    let _ = self.expect("Expected '('".to_string(), &TokenKind::LeftParen);
+                    let mut params = Vec::new();
+                    while let Some(name) = self.match_ident() {
+                        let param_type = if self.match_token(&TokenKind::Colon).is_some() {
+                            Some(self.parse_type()?)
+                        } else {
+                            None
+                        };
+                        params.push((name, param_type));
+                        if self.match_token(&TokenKind::Coma).is_none() {
+                            break;
+                        }
+                    }
+                    let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
+                    let return_type = if self.match_token(&TokenKind::Arrow).is_some() {
+                        Some(self.parse_type()?)
+                    } else {
+                        None
+                    };
+                    let _ = self.expect("Expected '='".to_string(), &TokenKind::Equal);
+                    let body = self.parse_expr()?;
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::Lambda(Lambda {
+                            params,
+                            return_type,
+                            body: Box::new(body),
+                        }),
+                    })
+                }
                 _ => {
                     let line = self.current_line();
                     self.diag.report("Expected valid expr".to_string(), line);
@@ -492,16 +544,48 @@ impl Parser {
             Ok(None)
         }
     }
+    fn parse_type_function(&mut self) -> Result<FunctionType, ParseError> {
+        let _ = self.expect("Expected '('".to_string(), &TokenKind::LeftParen);
+        let mut params = Vec::new();
+        while self
+            .peek_token()
+            .is_some_and(|token| !matches!(token.kind, TokenKind::RightParen))
+        {
+            params.push(self.parse_type()?);
+            if self.match_token(&TokenKind::Coma).is_some() {
+                break;
+            }
+        }
+        let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
+        let _ = self.expect("Expected '->'".to_string(), &TokenKind::Arrow);
+        let return_type = self.parse_type()?;
+        Ok(FunctionType {
+            params,
+            return_type: Box::new(return_type),
+        })
+    }
     fn parse_optional_type(&mut self) -> Result<Option<Type>, ParseError> {
         match self.peek_token() {
             None => Ok(None),
             Some(token) => match token.kind {
+                TokenKind::Mut => {
+                    self.next_token();
+                    let region = if self.match_token(&TokenKind::LeftBracket).is_some() {
+                        let region = self.parse_region()?;
+                        let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
+                        Some(region)
+                    } else {
+                        None
+                    };
+                    let ty = self.parse_type()?;
+                    Ok(Some(Type::Mut(region, Box::new(ty))))
+                }
                 TokenKind::Imm => {
                     self.next_token();
                     let region = if self.match_token(&TokenKind::LeftBracket).is_some() {
-                        let name = self.expect_ident("Expected region name".to_string())?;
+                        let region = self.parse_region()?;
                         let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
-                        Some(name)
+                        Some(region)
                     } else {
                         None
                     };
@@ -543,6 +627,15 @@ impl Parser {
                     let ty = self.parse_type()?;
                     let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
                     Ok(Some(Type::Option(Box::new(ty))))
+                }
+                TokenKind::Ident(_) => {
+                    let name = self.match_ident().expect("Expected valid ident");
+                    Ok(Some(Type::Named(name)))
+                }
+                TokenKind::Fun => {
+                    self.next_token();
+                    let function = self.parse_type_function()?;
+                    Ok(Some(Type::Function(function)))
                 }
                 _ => Ok(None),
             },

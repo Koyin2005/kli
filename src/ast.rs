@@ -44,7 +44,7 @@ pub struct Pattern {
 }
 #[derive(Debug)]
 pub enum PatternKind {
-    Binding(Mutable, Ident, Option<Ident>),
+    Binding(Mutable, Ident, Option<Region>),
     Some(Box<Pattern>),
     None,
 }
@@ -71,6 +71,7 @@ pub enum ExprKind {
     Assign(Place, Box<Expr>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Ident(Ident),
+    Lambda(Lambda),
     Deref(Box<Expr>),
     Number(u64),
 }
@@ -80,20 +81,34 @@ pub struct Generics {
     pub names: Vec<Ident>,
 }
 #[derive(Debug)]
+pub struct FunctionType {
+    pub params: Vec<Type>,
+    pub return_type: Box<Type>,
+}
+#[derive(Debug)]
 pub enum Type {
     Int,
     Bool,
     String,
     Unit,
+    Named(Ident),
+    Closure(FunctionType),
+    Function(FunctionType),
     Option(Box<Type>),
     List(Box<Type>),
-    Imm(Option<Ident>, Box<Type>),
-    Mut(Option<Ident>, Box<Type>),
+    Imm(Option<Region>, Box<Type>),
+    Mut(Option<Region>, Box<Type>),
 }
 #[derive(Debug)]
 pub struct Param {
     pub name: Ident,
     pub ty: Type,
+}
+#[derive(Debug)]
+pub struct Lambda {
+    pub params: Vec<(Ident, Option<Type>)>,
+    pub return_type: Option<Type>,
+    pub body: Box<Expr>,
 }
 #[derive(Debug)]
 pub struct Function {
@@ -102,6 +117,11 @@ pub struct Function {
     pub params: Vec<Param>,
     pub return_type: Type,
     pub body: Expr,
+}
+#[derive(Debug)]
+pub enum Region {
+    Static(usize),
+    Named(Ident),
 }
 
 #[derive(Debug)]
