@@ -26,7 +26,6 @@ struct FunctionInfo {
 #[derive(Debug)]
 struct VarInfo {
     ty: Type,
-    name: String,
 }
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Builtin {
@@ -339,10 +338,7 @@ impl TypeCheck {
     }
     pub(super) fn declare_var(&mut self, _mutable: Mutable, var_name: &str, ty: Type) {
         let next_var = self.variables.len();
-        self.variables.push(VarInfo {
-            ty,
-            name: var_name.to_string(),
-        });
+        self.variables.push(VarInfo { ty });
         self.env.insert(var_name.to_string(), Res::Var(next_var));
     }
     pub(super) fn declare_region(&mut self, name: &str) -> usize {
