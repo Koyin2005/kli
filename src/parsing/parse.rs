@@ -1,0 +1,608 @@
+use std::{iter::Peekable, vec::IntoIter};
+
+use crate::{
+    ast::{
+        BinaryOp, CaseArm, Expr, ExprKind, Function, Generics, Ident, Mutable, Param, Pattern,
+        PatternKind, Place, Program, Type,
+    },
+    diagnostics::DiagnosticReporter,
+    parsing::{
+        lex::Lexer,
+        tokens::{Token, TokenKind},
+    },
+};
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+enum Precedence {
+    None,
+    Term,
+    Factor,
+}
+pub struct ParseError;
+pub struct Parser {
+    diag: DiagnosticReporter,
+    last_line: usize,
+    tokens: Peekable<IntoIter<Token>>,
+}
+impl Parser {
+    pub fn new(src: &str) -> Self {
+        let tokens = Lexer::new(src).lex();
+        let last_line = tokens.last().map(|token| token.line).unwrap_or(1);
+        Self {
+            diag: DiagnosticReporter::new(),
+            tokens: tokens.into_iter().peekable(),
+            last_line,
+        }
+    }
+    fn current_line(&mut self) -> usize {
+        self.peek_token()
+            .map(|token| token.line)
+            .unwrap_or(self.last_line)
+    }
+    fn peek_token(&mut self) -> Option<&Token> {
+        self.tokens.peek()
+    }
+    fn next_token(&mut self) -> Option<Token> {
+        self.tokens.next()
+    }
+    fn match_token(&mut self, kind: &TokenKind) -> Option<Token> {
+        let token = self.peek_token()?;
+        if token.kind == *kind {
+            self.next_token()
+        } else {
+            None
+        }
+    }
+    fn match_ident(&mut self) -> Option<Ident> {
+        if let Some(Token { line: _, kind }) = self.peek_token()
+            && let TokenKind::Ident(_) = kind
+        {
+            let Token {
+                line,
+                kind: TokenKind::Ident(name),
+            } = self.next_token().expect("There should be a token")
+            else {
+                unreachable!("Has to be a name")
+            };
+            Some(Ident {
+                content: name,
+                line,
+            })
+        } else {
+            None
+        }
+    }
+    fn expect_ident(&mut self, msg: String) -> Result<Ident, ParseError> {
+        if let Some(Token { line: _, kind }) = self.peek_token()
+            && let TokenKind::Ident(_) = kind
+        {
+            let Token {
+                line,
+                kind: TokenKind::Ident(name),
+            } = self.next_token().expect("There should be a token")
+            else {
+                unreachable!("Has to be a name")
+            };
+            Ok(Ident {
+                content: name,
+                line,
+            })
+        } else {
+            let line = self.current_line();
+            self.diag.report(msg, line);
+            Err(ParseError)
+        }
+    }
+    fn expect(&mut self, msg: String, kind: &TokenKind) -> Result<(), ParseError> {
+        let line = match self.peek_token() {
+            Some(token) => {
+                if token.kind == *kind {
+                    self.next_token();
+                    return Ok(());
+                } else {
+                    token.line
+                }
+            }
+            None => self.current_line(),
+        };
+        self.diag.report(msg, line);
+        Err(ParseError)
+    }
+    fn binary_op(&mut self) -> Option<(Precedence, BinaryOp)> {
+        match self.peek_token()?.kind {
+            TokenKind::Plus => Some((Precedence::Factor, BinaryOp::Add)),
+            TokenKind::Minus => Some((Precedence::Factor, BinaryOp::Subtract)),
+            TokenKind::Slash => Some((Precedence::Term, BinaryOp::Divide)),
+            TokenKind::Star => Some((Precedence::Term, BinaryOp::Multiply)),
+            _ => None,
+        }
+    }
+    fn parse_binding(&mut self) -> Result<(Mutable, Ident), ParseError> {
+        let mutable = if self.match_token(&TokenKind::Mut).is_some() {
+            Mutable::Mutable
+        } else {
+            Mutable::Immutable
+        };
+        let name = self.expect_ident("Expected variable name".to_string())?;
+        Ok((mutable, name))
+    }
+    fn parse_pattern_ident(
+        &mut self,
+        line: usize,
+        mutable: Mutable,
+    ) -> Result<Pattern, ParseError> {
+        let name = self.match_ident().expect("Expected a name");
+        let region = if self.match_token(&TokenKind::In).is_some() {
+            Some(self.match_ident().ok_or_else(|| {
+                let line = self.current_line();
+                self.diag.report("Expected a region name".to_string(), line);
+                ParseError
+            })?)
+        } else {
+            None
+        };
+        Ok(Pattern {
+            line,
+            kind: PatternKind::Binding(mutable, name, region),
+        })
+    }
+    fn parse_pattern(&mut self) -> Result<Pattern, ParseError> {
+        match self.peek_token() {
+            None => {
+                let line = self.current_line();
+                self.diag.report("Expected a pattern".to_string(), line);
+                Err(ParseError)
+            }
+            Some(&Token { line, ref kind }) => match kind {
+                TokenKind::Ident(_) => self.parse_pattern_ident(line, Mutable::Immutable),
+                TokenKind::Mut => {
+                    self.next_token();
+                    self.parse_pattern_ident(line, Mutable::Mutable)
+                }
+                TokenKind::Some => {
+                    self.next_token();
+                    let _ = self.expect("Expected '('".to_string(), &TokenKind::LeftParen);
+                    let pat = self.parse_pattern()?;
+                    let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
+                    Ok(Pattern {
+                        line,
+                        kind: PatternKind::Some(Box::new(pat)),
+                    })
+                }
+                TokenKind::None => {
+                    self.next_token();
+                    Ok(Pattern {
+                        line,
+                        kind: PatternKind::None,
+                    })
+                }
+                _ => {
+                    self.diag
+                        .report("Expected a valid pattern".to_string(), line);
+                    Err(ParseError)
+                }
+            },
+        }
+    }
+    fn parse_case_arm(&mut self) -> Result<CaseArm, ParseError> {
+        let pattern = self.parse_pattern()?;
+        let _ = self.expect("Expected '->'".to_string(), &TokenKind::Arrow);
+        let body = self.parse_expr()?;
+        Ok(CaseArm { pat: pattern, body })
+    }
+    fn parse_expr_prefix(&mut self) -> Result<Expr, ParseError> {
+        match self.peek_token() {
+            None => {
+                let line = self.current_line();
+                self.diag.report("Expected expr".to_string(), line);
+                Err(ParseError)
+            }
+            Some(token @ &Token { line, .. }) => match token.kind {
+                TokenKind::Number(num) => {
+                    self.next_token();
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::Number(num),
+                    })
+                }
+                TokenKind::LeftParen => {
+                    self.next_token();
+                    let expr = if self.peek_token().is_some_and(|token| matches!(token.kind,TokenKind::RightParen)){
+                        Expr { line, kind: ExprKind::Unit}
+
+                    } else {
+                        self.parse_expr()?
+                    };
+                    let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
+                    Ok(expr)
+                }
+                TokenKind::For => {
+                    self.next_token();
+                    let _ = self.expect("Expected '('".to_string(), &TokenKind::LeftParen);
+                    let (mutable, name) = self.parse_binding()?;
+                    let _ = self.expect("Expected 'in'".to_string(), &TokenKind::In);
+                    let iterator = self.parse_expr()?;
+                    let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
+                    let _ = self.expect("Expected '{'".to_string(), &TokenKind::LeftBrace);
+                    let body = self.parse_expr()?;
+                    let _ = self.expect("Expected '}'".to_string(), &TokenKind::RightBrace);
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::For(mutable, name, Box::new(iterator), Box::new(body)),
+                    })
+                }
+                TokenKind::Borrow => {
+                    self.next_token();
+                    let _ = self.expect("Expected '('".to_string(), &TokenKind::LeftParen);
+                    let (mutable, name) = self.parse_binding()?;
+                    let _ = self.expect("Expected 'in'".to_string(), &TokenKind::In);
+                    let region = self.expect_ident("Expected region name".to_string())?;
+                    let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
+                    let _ = self.expect("Expected '{'".to_string(), &TokenKind::LeftBrace);
+                    let body = self.parse_expr()?;
+                    let _ = self.expect("Expected '}'".to_string(), &TokenKind::RightBrace);
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::Borrow(mutable, name, region, Box::new(body)),
+                    })
+                }
+                TokenKind::Let => {
+                    self.next_token();
+                    let (mutable, name) = self.parse_binding()?;
+                    let ty = if self.match_token(&TokenKind::Colon).is_some() {
+                        Some(self.parse_type()?)
+                    } else {
+                        None
+                    };
+                    let _ = self.expect("Expected '='".to_string(), &TokenKind::Equal);
+                    let expr = self.parse_expr()?;
+                    let _ = self.expect("Expected 'in'".to_string(), &TokenKind::In);
+                    let body = self.parse_expr()?;
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::Let(mutable, name, Box::new(expr), ty, Box::new(body)),
+                    })
+                }
+                TokenKind::Ident(_) => {
+                    let Some(name) = self.match_ident() else {
+                        unreachable!("Should be an ident on {line}")
+                    };
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::Ident(name),
+                    })
+                }
+                TokenKind::Some => {
+                    self.next_token();
+                    let _ = self.expect("Expected '('".to_string(), &TokenKind::LeftParen);
+                    let expr = self.parse_expr()?;
+                    let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
+
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::Some(Box::new(expr)),
+                    })
+                }
+                TokenKind::None => {
+                    self.next_token();
+                    let ty = if self.match_token(&TokenKind::LeftBracket).is_some() {
+                        let ty = self.parse_type()?;
+                        let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
+                        Some(ty)
+                    } else {
+                        None
+                    };
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::None(ty),
+                    })
+                }
+                TokenKind::Print => {
+                    self.next_token();
+                    let _ = self.expect("Expected '('".to_string(), &TokenKind::LeftParen);
+                    let expr = if self
+                        .peek_token()
+                        .is_some_and(|t| t.kind == TokenKind::RightParen)
+                    {
+                        None
+                    } else {
+                        let expr = self.parse_expr()?;
+                        Some(expr)
+                    };
+                    let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
+
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::Print(expr.map(Box::new)),
+                    })
+                }
+                TokenKind::Panic => {
+                    self.next_token();
+                    let ty = if self.match_token(&TokenKind::LeftBracket).is_some() {
+                        let ty = self.parse_type()?;
+                        let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
+                        Some(ty)
+                    } else {
+                        None
+                    };
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::None(ty),
+                    })
+                }
+                TokenKind::Case => {
+                    self.next_token();
+                    let _ = self.expect("Expected '('".to_string(), &TokenKind::LeftParen);
+                    let matchee = self.parse_expr()?;
+                    let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
+                    let _ = self.expect("Expected '{'".to_string(), &TokenKind::LeftBrace);
+                    let mut arms = Vec::new();
+                    while let Some(token) = self.peek_token()
+                        && !matches!(token.kind, TokenKind::RightBrace)
+                    {
+                        arms.push(self.parse_case_arm()?);
+                        if !self.match_token(&TokenKind::Coma).is_some() {
+                            break;
+                        }
+                    }
+                    let _ = self.expect("Expected '}'".to_string(), &TokenKind::RightBrace);
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::Case(Box::new(matchee), arms),
+                    })
+                }
+                TokenKind::StringLiteral(_) => {
+                    let Some(Token {
+                        line,
+                        kind: TokenKind::StringLiteral(string),
+                    }) = self.next_token()
+                    else {
+                        unreachable!("Should be a string literal here {line}")
+                    };
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::String(string),
+                    })
+                }
+                TokenKind::List => {
+                    self.next_token();
+                    let mut values = Vec::new();
+                    let _ = self.expect("Expected '['".to_string(), &TokenKind::LeftBracket);
+                    while self
+                        .peek_token()
+                        .is_some_and(|token| !matches!(token.kind, TokenKind::RightBracket))
+                    {
+                        values.push(self.parse_expr()?);
+                        if self.match_token(&TokenKind::Coma).is_none() {
+                            break;
+                        }
+                    }
+                    let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::List(values),
+                    })
+                }
+                _ => {
+                    let line = self.current_line();
+                    self.diag.report("Expected valid expr".to_string(), line);
+                    Err(ParseError)
+                }
+            },
+        }
+    }
+    fn parse_expr_postfix(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.parse_expr_prefix()?;
+        loop {
+            expr = match self.peek_token() {
+                None => break Ok(expr),
+                Some(token) => match token.kind {
+                    TokenKind::LeftParen => {
+                        self.next_token();
+                        let mut args = Vec::new();
+                        while self
+                            .peek_token()
+                            .is_some_and(|token| !matches!(token.kind, TokenKind::RightParen))
+                        {
+                            args.push(self.parse_expr()?);
+                            if self.match_token(&TokenKind::Coma).is_none() {
+                                break;
+                            }
+                        }
+                        let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
+                        Expr {
+                            line: expr.line,
+                            kind: ExprKind::Call(Box::new(expr), args),
+                        }
+                    }
+                    TokenKind::Caret => {
+                        self.next_token();
+                        Expr {
+                            line: expr.line,
+                            kind: ExprKind::Deref(Box::new(expr)),
+                        }
+                    }
+                    _ => break Ok(expr),
+                },
+            }
+        }
+    }
+    fn parse_expr_precedence(&mut self, prec: Precedence) -> Result<Expr, ParseError> {
+        let mut expr = self.parse_expr_postfix()?;
+        while let Some((curr_prec, op)) = self.binary_op()
+            && curr_prec >= prec
+        {
+            self.next_token();
+            let rhs = self.parse_expr_precedence(prec)?;
+            expr = Expr {
+                line: expr.line,
+                kind: ExprKind::Binary(op, Box::new(expr), Box::new(rhs)),
+            }
+        }
+        Ok(expr)
+    }
+    fn parse_assign(&mut self) -> Result<Expr, ParseError> {
+        let mut lhs = self.parse_expr_precedence(Precedence::None)?;
+        while self.match_token(&TokenKind::Equal).is_some() {
+            let line = lhs.line;
+            lhs = match lhs.as_place() {
+                Ok(place) => Expr {
+                    line,
+                    kind: ExprKind::Assign(
+                        place,
+                        Box::new(self.parse_expr_precedence(Precedence::None)?),
+                    ),
+                },
+                Err(non_place) => {
+                    lhs = non_place;
+                    self.diag
+                        .report("Invalid assignment target".to_string(), line);
+                    break;
+                }
+            };
+        }
+        Ok(lhs)
+    }
+    fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+        let mut first = self.parse_assign()?;
+        while self.match_token(&TokenKind::Semi).is_some() {
+            first = Expr {
+                line: first.line,
+                kind: ExprKind::Sequence(Box::new(first), Box::new(self.parse_assign()?)),
+            };
+        }
+        Ok(first)
+    }
+    fn parse_optional_generics(&mut self) -> Result<Option<Generics>, ParseError> {
+        if let Some(Token { line, .. }) = self.match_token(&TokenKind::LeftBracket) {
+            let mut names = Vec::new();
+            while let Some(name) = self.match_ident() {
+                names.push(name);
+                if self.match_token(&TokenKind::Coma).is_none() {
+                    break;
+                }
+            }
+            let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
+            Ok(Some(Generics { line, names }))
+        } else {
+            Ok(None)
+        }
+    }
+    fn parse_optional_type(&mut self) -> Result<Option<Type>, ParseError> {
+        match self.peek_token() {
+            None => Ok(None),
+            Some(token) => match token.kind {
+                TokenKind::Imm => {
+                    self.next_token();
+                    let region = if self.match_token(&TokenKind::LeftBracket).is_some() {
+                        let name = self.expect_ident("Expected region name".to_string())?;
+                        let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
+                        Some(name)
+                    } else {
+                        None
+                    };
+                    let ty = self.parse_type()?;
+                    Ok(Some(Type::Imm(region, Box::new(ty))))
+                }
+                TokenKind::Int => {
+                    self.next_token();
+                    Ok(Some(Type::Int))
+                }
+                TokenKind::Bool => {
+                    self.next_token();
+                    Ok(Some(Type::Bool))
+                }
+                TokenKind::String => {
+                    self.next_token();
+                    Ok(Some(Type::String))
+                }
+                TokenKind::List => {
+                    self.next_token();
+                    let _ = self.expect("Expected '['".to_string(), &TokenKind::LeftBracket);
+                    let ty = self.parse_type()?;
+                    let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
+                    Ok(Some(Type::List(Box::new(ty))))
+                }
+                TokenKind::LeftParen => {
+                    self.next_token();
+                    if self.match_token(&TokenKind::RightParen).is_some() {
+                        Ok(Some(Type::Unit))
+                    } else {
+                        let ty = self.parse_type()?;
+                        let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
+                        Ok(Some(ty))
+                    }
+                }
+                TokenKind::Option => {
+                    self.next_token();
+                    let _ = self.expect("Expected '['".to_string(), &TokenKind::LeftBracket);
+                    let ty = self.parse_type()?;
+                    let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
+                    Ok(Some(Type::Option(Box::new(ty))))
+                }
+                _ => Ok(None),
+            },
+        }
+    }
+    fn parse_type(&mut self) -> Result<Type, ParseError> {
+        let ty = self.parse_optional_type()?;
+        match ty {
+            Some(ty) => Ok(ty),
+            None => Err({
+                let line = self.current_line();
+                self.diag.report("Expected a type".to_string(), line);
+                ParseError
+            }),
+        }
+    }
+    fn parse_param(&mut self) -> Result<Param, ParseError> {
+        let name = self.expect_ident("Expected param name".to_string())?;
+        let _ = self.expect("Expected ':'".to_string(), &TokenKind::Colon);
+        let ty = self.parse_type()?;
+        Ok(Param { name, ty })
+    }
+    fn parse_function(&mut self) -> Result<Function, ParseError> {
+        let _ = self.expect("Expected function".to_string(), &TokenKind::Fun);
+        let name = self.expect_ident("Expected function name".to_string())?;
+        let generics = self.parse_optional_generics()?;
+        let _ = self.expect("Expected '('".to_string(), &TokenKind::LeftParen);
+        let mut params = Vec::new();
+        while self
+            .peek_token()
+            .is_some_and(|token| matches!(token.kind, TokenKind::Ident(_)))
+        {
+            let param = self.parse_param()?;
+            params.push(param);
+            if self.match_token(&TokenKind::Coma).is_none() {
+                break;
+            }
+        }
+        let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
+        let _ = self.expect("Expected '->'".to_string(), &TokenKind::Arrow);
+        let ty = self.parse_type()?;
+        let _ = self.expect("Expected '='".to_string(), &TokenKind::Equal);
+        let body = self.parse_expr()?;
+        Ok(Function {
+            name,
+            generics,
+            params,
+            return_type: ty,
+            body,
+        })
+    }
+    pub fn parse_program(mut self) -> Result<Program, ParseError> {
+        let mut functions = Vec::new();
+        while self.peek_token().is_some() {
+            let Ok(function) = self.parse_function() else {
+                while let Some(token) = self.peek_token()
+                    && !matches!(token.kind, TokenKind::Fun)
+                {
+                    self.next_token();
+                }
+                continue;
+            };
+            functions.push(function);
+        }
+        self.diag.finish();
+        Ok(Program { functions })
+    }
+}

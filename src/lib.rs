@@ -1,3 +1,3 @@
-pub mod tokens;
-pub mod parse;
 pub mod ast;
+pub mod diagnostics;
+pub mod parsing;
