@@ -146,6 +146,7 @@ impl<'s> Lexer<'s> {
                 "print" => TokenKind::Print,
                 "option" => TokenKind::Option,
                 "static" => TokenKind::Static,
+                "ref" => TokenKind::Ref,
                 _ => TokenKind::Ident(src),
             },
         })

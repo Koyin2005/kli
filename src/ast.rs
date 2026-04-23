@@ -96,6 +96,7 @@ pub enum Type {
     Function(FunctionType),
     Option(Box<Type>),
     List(Box<Type>),
+    Ref(Box<Type>),
     Imm(Option<Region>, Box<Type>),
     Mut(Option<Region>, Box<Type>),
 }

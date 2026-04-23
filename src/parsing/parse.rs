@@ -639,6 +639,13 @@ impl Parser {
                     let function = self.parse_type_function()?;
                     Ok(Some(Type::Function(function)))
                 }
+                TokenKind::Ref => {
+                    self.next_token();
+                    let _ = self.expect("Expected '['".to_string(), &TokenKind::LeftBracket);
+                    let ty = self.parse_type()?;
+                    let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
+                    Ok(Some(Type::Ref(Box::new(ty))))
+                }
                 _ => Ok(None),
             },
         }
