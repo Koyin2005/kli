@@ -318,9 +318,6 @@ impl TypeCheck {
     pub(super) fn fresh_ty(&mut self, line: usize) -> Type {
         Type::Infer(self.infer.fresh_ty(line))
     }
-    pub(super) fn fresh_region(&mut self, line: usize) -> Region {
-        Region::Infer(self.infer.fresh_region(line))
-    }
     pub(super) fn instantiate_function_args(
         &mut self,
         function: usize,
@@ -340,7 +337,7 @@ impl TypeCheck {
     pub(super) fn var_type(&self, var: usize) -> &Type {
         &self.variables[var].ty
     }
-    pub(super) fn declare_var(&mut self, mutable: Mutable, var_name: &str, ty: Type) {
+    pub(super) fn declare_var(&mut self, _mutable: Mutable, var_name: &str, ty: Type) {
         let next_var = self.variables.len();
         self.variables.push(VarInfo {
             ty,

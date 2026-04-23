@@ -61,7 +61,7 @@ impl TypeCheck {
                     (Some(region), None) => {
                         self.diag
                             .borrow_mut()
-                            .report(format!("Cant borrow without region"), pattern.line);
+                            .report("Cant borrow without region".to_string(), pattern.line);
                         let ty = match *mutable {
                             Mutable::Immutable => {
                                 Type::Imm(region, Box::new(expected_type.clone()))

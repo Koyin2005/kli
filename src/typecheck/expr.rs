@@ -252,7 +252,7 @@ impl TypeCheck {
                 callee.line,
             );
             for (i, arg) in args.iter().enumerate() {
-                let arg = self.check_expr(arg, params.get(i).cloned());
+                self.check_expr(arg, params.get(i).cloned());
             }
             return match expected_ty {
                 Some(ty) => self.unify(ty, *return_type, callee.line),
