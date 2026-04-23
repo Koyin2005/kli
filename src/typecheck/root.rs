@@ -9,8 +9,8 @@ use crate::{
     typecheck::{
         infer::TypeInfer,
         scheme::Scheme,
-        types::{FunctionType, GenericArg, GenericKind, Region, Type},
     },
+    types::{FunctionType, GenericArg, GenericKind, Region, Type}
 };
 #[derive(Clone)]
 struct GenericInfo {

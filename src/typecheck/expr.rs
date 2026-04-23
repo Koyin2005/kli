@@ -2,8 +2,8 @@ use crate::{
     ast::{Expr, ExprKind, Ident, Lambda, Mutable, Pattern, Place},
     typecheck::{
         root::{Res, TypeCheck},
-        types::{FunctionType, Region, Type},
     },
+    types::{FunctionType, Region, Type},
 };
 
 impl TypeCheck {

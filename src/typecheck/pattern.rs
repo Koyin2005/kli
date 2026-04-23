@@ -1,6 +1,6 @@
 use crate::{
     ast::{Mutable, Pattern, PatternKind},
-    typecheck::types::{Region, Type},
+    types::{Region, Type}
 };
 
 use super::root::TypeCheck;

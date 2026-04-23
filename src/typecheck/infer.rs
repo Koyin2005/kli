@@ -1,4 +1,4 @@
-use crate::typecheck::types::{FunctionType, Region, Type};
+use crate::types::{FunctionType, Region, Type};
 #[derive(Debug)]
 pub struct TypeVarInfo {
     ty: Option<Type>,

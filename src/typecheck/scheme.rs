@@ -1,4 +1,4 @@
-use crate::typecheck::types::{FunctionType, GenericArg, Region, Type};
+use crate::types::{FunctionType, GenericArg, Region, Type};
 #[derive(Clone)]
 pub struct Scheme<T> {
     value: T,
