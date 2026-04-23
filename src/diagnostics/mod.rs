@@ -16,9 +16,12 @@ impl DiagnosticReporter {
         self.diagnostics.push(Diagnostic { msg, line });
     }
 
-    pub fn finish(self) {
+    pub fn finish(self) -> bool {
+        let mut emit_diagnostic = false;
         for diagnostic in self.diagnostics {
+            emit_diagnostic = true;
             eprintln!("Line [{}] : {}", diagnostic.line, diagnostic.msg);
         }
+        emit_diagnostic
     }
 }
