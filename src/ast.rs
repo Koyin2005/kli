@@ -1,4 +1,4 @@
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct Ident {
     pub content: String,
     pub line: usize,
@@ -18,8 +18,9 @@ impl Expr {
         match self.kind {
             ExprKind::Ident(name) => Ok(Place::Ident(name)),
             ExprKind::Deref(expr) => {
+                let line = expr.line;
                 let place = expr.as_place()?;
-                Ok(Place::Deref(Box::new(place)))
+                Ok(Place::Deref(Box::new(place), line))
             }
             _ => Err(self),
         }
@@ -35,7 +36,7 @@ pub enum BinaryOp {
 #[derive(Debug)]
 pub enum Place {
     Ident(Ident),
-    Deref(Box<Place>),
+    Deref(Box<Place>, usize),
 }
 #[derive(Debug)]
 pub struct Pattern {
@@ -67,7 +68,7 @@ pub enum ExprKind {
     Case(Box<Expr>, Vec<CaseArm>),
     Let(Mutable, Ident, Box<Expr>, Option<Type>, Box<Expr>),
     Sequence(Box<Expr>, Box<Expr>),
-    For(Mutable, Ident, Box<Expr>, Box<Expr>),
+    For(Pattern, Box<Expr>, Box<Expr>),
     Assign(Place, Box<Expr>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Ident(Ident),
@@ -75,32 +76,31 @@ pub enum ExprKind {
     Deref(Box<Expr>),
     Number(u64),
 }
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct Generics {
     pub line: usize,
     pub names: Vec<Ident>,
 }
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct FunctionType {
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
 }
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum Type {
     Int,
     Bool,
     String,
     Unit,
     Named(Ident),
-    Closure(FunctionType),
     Function(FunctionType),
     Option(Box<Type>),
     List(Box<Type>),
     Ref(Box<Type>),
-    Imm(Option<Region>, Box<Type>),
-    Mut(Option<Region>, Box<Type>),
+    Imm(Region, Box<Type>),
+    Mut(Region, Box<Type>),
 }
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct Param {
     pub name: Ident,
     pub ty: Type,
@@ -119,7 +119,7 @@ pub struct Function {
     pub return_type: Type,
     pub body: Expr,
 }
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum Region {
     Static(usize),
     Named(Ident),

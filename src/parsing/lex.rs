@@ -103,12 +103,13 @@ impl<'s> Lexer<'s> {
     }
     fn string_token(&mut self, line: usize) -> Option<Token> {
         self.next_char();
-        let mut src = self.next_char()?.to_string();
+        let mut src = String::new();
         while let Some(c) = self.peek_char()
             && c != '"'
         {
             src.push(c);
         }
+
         if self.match_char('"').is_some() {
             Some(Token {
                 line,

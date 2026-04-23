@@ -68,8 +68,7 @@ impl Parser {
         }
     }
     fn match_ident(&mut self) -> Option<Ident> {
-        if self.check_token_is_ident()
-        {
+        if self.check_token_is_ident() {
             let Token {
                 line,
                 kind: TokenKind::Ident(name),
@@ -86,7 +85,7 @@ impl Parser {
         }
     }
     fn expect_ident(&mut self, msg: String) -> Result<Ident, ParseError> {
-        if self.check_token_is_ident(){
+        if self.check_token_is_ident() {
             let Token {
                 line,
                 kind: TokenKind::Ident(name),
@@ -159,19 +158,11 @@ impl Parser {
     }
     fn parse_pattern_ident(
         &mut self,
+        region: Option<Region>,
         line: usize,
         mutable: Mutable,
     ) -> Result<Pattern, ParseError> {
         let name = self.match_ident().expect("Expected a name");
-        let region = if self.matches_token(&TokenKind::In) {
-            Some(self.parse_region().map_err(|_| {
-                let line = self.current_line();
-                self.diag.report("Expected a region name".to_string(), line);
-                ParseError
-            })?)
-        } else {
-            None
-        };
         Ok(Pattern {
             line,
             kind: PatternKind::Binding(mutable, name, region),
@@ -185,10 +176,26 @@ impl Parser {
                 Err(ParseError)
             }
             Some(&Token { line, ref kind }) => match kind {
-                TokenKind::Ident(_) => self.parse_pattern_ident(line, Mutable::Immutable),
+                TokenKind::Ref => {
+                    self.next_token();
+                    let region = if self.matches_token(&TokenKind::LeftBracket) {
+                        let region = self.parse_region()?;
+                        let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
+                        Some(region)
+                    } else {
+                        None
+                    };
+                    let mutable = if self.matches_token(&TokenKind::Mut) {
+                        Mutable::Mutable
+                    } else {
+                        Mutable::Immutable
+                    };
+                    self.parse_pattern_ident(region, line, mutable)
+                }
+                TokenKind::Ident(_) => self.parse_pattern_ident(None, line, Mutable::Immutable),
                 TokenKind::Mut => {
                     self.next_token();
-                    self.parse_pattern_ident(line, Mutable::Mutable)
+                    self.parse_pattern_ident(None, line, Mutable::Mutable)
                 }
                 TokenKind::Some => {
                     self.next_token();
@@ -252,7 +259,7 @@ impl Parser {
                 TokenKind::For => {
                     self.next_token();
                     let _ = self.expect("Expected '('".to_string(), &TokenKind::LeftParen);
-                    let (mutable, name) = self.parse_binding()?;
+                    let pattern = self.parse_pattern()?;
                     let _ = self.expect("Expected 'in'".to_string(), &TokenKind::In);
                     let iterator = self.parse_expr()?;
                     let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
@@ -261,7 +268,7 @@ impl Parser {
                     let _ = self.expect("Expected '}'".to_string(), &TokenKind::RightBrace);
                     Ok(Expr {
                         line,
-                        kind: ExprKind::For(mutable, name, Box::new(iterator), Box::new(body)),
+                        kind: ExprKind::For(pattern, Box::new(iterator), Box::new(body)),
                     })
                 }
                 TokenKind::Borrow => {
@@ -357,7 +364,7 @@ impl Parser {
                     };
                     Ok(Expr {
                         line,
-                        kind: ExprKind::None(ty),
+                        kind: ExprKind::Panic(ty),
                     })
                 }
                 TokenKind::Case => {
@@ -367,8 +374,7 @@ impl Parser {
                     let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
                     let _ = self.expect("Expected '{'".to_string(), &TokenKind::LeftBrace);
                     let mut arms = Vec::new();
-                    while !self.check_token( &TokenKind::RightBrace)
-                    {
+                    while !self.check_token(&TokenKind::RightBrace) {
                         arms.push(self.parse_case_arm()?);
                         if self.match_token(&TokenKind::Coma).is_none() {
                             break;
@@ -572,25 +578,17 @@ impl Parser {
             Some(token) => match token.kind {
                 TokenKind::Mut => {
                     self.next_token();
-                    let region = if self.matches_token(&TokenKind::LeftBracket) {
-                        let region = self.parse_region()?;
-                        let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
-                        Some(region)
-                    } else {
-                        None
-                    };
+                    let _ = self.expect("Expected '['".to_string(), &TokenKind::LeftBracket);
+                    let region = self.parse_region()?;
+                    let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
                     let ty = self.parse_type()?;
                     Ok(Some(Type::Mut(region, Box::new(ty))))
                 }
                 TokenKind::Imm => {
                     self.next_token();
-                    let region = if self.matches_token(&TokenKind::LeftBracket) {
-                        let region = self.parse_region()?;
-                        let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
-                        Some(region)
-                    } else {
-                        None
-                    };
+                    let _ = self.expect("Expected '['".to_string(), &TokenKind::LeftBracket);
+                    let region = self.parse_region()?;
+                    let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
                     let ty = self.parse_type()?;
                     Ok(Some(Type::Imm(region, Box::new(ty))))
                 }
