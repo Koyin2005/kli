@@ -68,8 +68,7 @@ impl Parser {
         }
     }
     fn match_ident(&mut self) -> Option<Ident> {
-        if let Some(Token { line: _, kind }) = self.peek_token()
-            && let TokenKind::Ident(_) = kind
+        if self.check_token_is_ident()
         {
             let Token {
                 line,
@@ -87,9 +86,7 @@ impl Parser {
         }
     }
     fn expect_ident(&mut self, msg: String) -> Result<Ident, ParseError> {
-        if let Some(Token { line: _, kind }) = self.peek_token()
-            && let TokenKind::Ident(_) = kind
-        {
+        if self.check_token_is_ident(){
             let Token {
                 line,
                 kind: TokenKind::Ident(name),
@@ -370,8 +367,7 @@ impl Parser {
                     let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
                     let _ = self.expect("Expected '{'".to_string(), &TokenKind::LeftBrace);
                     let mut arms = Vec::new();
-                    while let Some(token) = self.peek_token()
-                        && !matches!(token.kind, TokenKind::RightBrace)
+                    while !self.check_token( &TokenKind::RightBrace)
                     {
                         arms.push(self.parse_case_arm()?);
                         if self.match_token(&TokenKind::Coma).is_none() {
@@ -401,7 +397,7 @@ impl Parser {
                     self.next_token();
                     let mut values = Vec::new();
                     let _ = self.expect("Expected '['".to_string(), &TokenKind::LeftBracket);
-                    while self.check_token(&TokenKind::RightBracket) {
+                    while !self.check_token(&TokenKind::RightBracket) {
                         values.push(self.parse_expr()?);
                         if !self.matches_token(&TokenKind::Coma) {
                             break;
