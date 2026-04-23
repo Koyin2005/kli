@@ -116,7 +116,7 @@ impl<'s> Lexer<'s> {
             })
         } else {
             self.diag
-                .report(format!("Expected '\"' at end of string"), line);
+                .report("Expected '\"' at end of string".to_string(), line);
             None
         }
     }
@@ -152,9 +152,7 @@ impl<'s> Lexer<'s> {
     fn next_token(&mut self) -> Option<Token> {
         self.skip_whitespace();
         let line = self.line;
-        let Some(&c) = self.chars.peek() else {
-            return None;
-        };
+        let &c = self.chars.peek()?;
         match c {
             '=' => Some(self.new_token_from_char(line, TokenKind::Equal)),
             '(' => Some(self.new_token_from_char(line, TokenKind::LeftParen)),

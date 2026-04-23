@@ -3,7 +3,7 @@ use std::{iter::Peekable, vec::IntoIter};
 use crate::{
     ast::{
         BinaryOp, CaseArm, Expr, ExprKind, Function, Generics, Ident, Mutable, Param, Pattern,
-        PatternKind, Place, Program, Type,
+        PatternKind, Program, Type,
     },
     diagnostics::DiagnosticReporter,
     parsing::{
@@ -206,9 +206,14 @@ impl Parser {
                 }
                 TokenKind::LeftParen => {
                     self.next_token();
-                    let expr = if self.peek_token().is_some_and(|token| matches!(token.kind,TokenKind::RightParen)){
-                        Expr { line, kind: ExprKind::Unit}
-
+                    let expr = if self
+                        .peek_token()
+                        .is_some_and(|token| matches!(token.kind, TokenKind::RightParen))
+                    {
+                        Expr {
+                            line,
+                            kind: ExprKind::Unit,
+                        }
                     } else {
                         self.parse_expr()?
                     };
@@ -340,7 +345,7 @@ impl Parser {
                         && !matches!(token.kind, TokenKind::RightBrace)
                     {
                         arms.push(self.parse_case_arm()?);
-                        if !self.match_token(&TokenKind::Coma).is_some() {
+                        if self.match_token(&TokenKind::Coma).is_none() {
                             break;
                         }
                     }

@@ -2,6 +2,7 @@ struct Diagnostic {
     msg: String,
     line: usize,
 }
+#[derive(Default)]
 pub struct DiagnosticReporter {
     diagnostics: Vec<Diagnostic>,
 }
