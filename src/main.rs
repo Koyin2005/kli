@@ -30,5 +30,7 @@ fn main() {
     let Ok(program) = parser.parse_program() else {
         return;
     };
-    TypeCheck::new(&program).check(&program);
+    if !TypeCheck::new(&program).check(&program){
+        return;
+    }
 }

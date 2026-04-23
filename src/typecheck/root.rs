@@ -413,7 +413,7 @@ impl TypeCheck {
             );
         }
     }
-    pub fn check(mut self, program: &Program) {
+    pub fn check(mut self, program: &Program) -> bool {
         self.validate_main(program);
         for (f, _) in program.functions.iter().enumerate() {
             let () = self.in_scope(|this| {
@@ -462,6 +462,6 @@ impl TypeCheck {
                 this.infer.clear();
             });
         }
-        self.diag.into_inner().finish();
+        !self.diag.into_inner().finish()
     }
 }
