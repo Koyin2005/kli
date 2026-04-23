@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Ident {
     pub content: String,
     pub line: usize,
@@ -75,17 +75,17 @@ pub enum ExprKind {
     Deref(Box<Expr>),
     Number(u64),
 }
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Generics {
     pub line: usize,
     pub names: Vec<Ident>,
 }
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct FunctionType {
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
 }
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum Type {
     Int,
     Bool,
@@ -100,7 +100,7 @@ pub enum Type {
     Imm(Option<Region>, Box<Type>),
     Mut(Option<Region>, Box<Type>),
 }
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Param {
     pub name: Ident,
     pub ty: Type,
@@ -119,7 +119,7 @@ pub struct Function {
     pub return_type: Type,
     pub body: Expr,
 }
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum Region {
     Static(usize),
     Named(Ident),
