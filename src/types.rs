@@ -1,4 +1,6 @@
 use std::fmt::Display;
+
+use crate::ast::Mutable;
 #[derive(Clone, Copy, Debug)]
 pub enum GenericKind {
     Region,
@@ -49,21 +51,13 @@ pub enum Type {
     Function(FunctionType),
 }
 impl Type {
-    pub fn strip_mut_quals(self) -> Self {
-        match self {
-            Self::Bool
-            | Self::Int
-            | Self::Infer(_)
-            | Self::List(_)
-            | Self::Function(..)
-            | Self::Unit
-            | Self::String
-            | Self::Unknown
-            | Self::Param(..)
-            | Self::Option(_)
-            | Self::Ref(_) => self,
-            Self::Imm(_, ty) | Self::Mut(_, ty) => ty.strip_mut_quals(),
-        }
+    pub fn as_reference_type(self) -> Result<(Mutable, Region, Self), Self> {
+        let (region, mutable, ty) = match self {
+            Self::Imm(region, ty) => (region, Mutable::Immutable, *ty),
+            Self::Mut(region, ty) => (region, Mutable::Mutable, *ty),
+            _ => return Err(self),
+        };
+        Ok((mutable, region, ty))
     }
 }
 impl Display for Type {

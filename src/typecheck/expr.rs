@@ -1,8 +1,6 @@
 use crate::{
     ast::{Expr, ExprKind, Ident, Lambda, Mutable, Pattern, Place},
-    typecheck::{
-        root::{Res, TypeCheck},
-    },
+    typecheck::root::{Res, TypeCheck},
     types::{FunctionType, Region, Type},
 };
 
@@ -141,7 +139,7 @@ impl TypeCheck {
         })
     }
     fn check_lambda(&mut self, line: usize, lambda: &Lambda, expected_ty: Option<Type>) -> Type {
-        let expected_sig = match expected_ty.clone().map(|ty| self.simplify(ty)) {
+        let expected_sig = match expected_ty.clone().map(|ty| self.simplify_type(ty)) {
             Some(Type::Function(ref function)) => Some(function.clone()),
             _ => None,
         };
@@ -227,7 +225,7 @@ impl TypeCheck {
     }
     fn check_call(&mut self, callee: &Expr, args: &[Expr], expected_ty: Option<Type>) -> Type {
         let callee_type = self.check_expr(callee, None);
-        let callee_type = self.simplify(callee_type);
+        let callee_type = self.simplify_type(callee_type);
         let Type::Function(function) = callee_type else {
             self.diag.borrow_mut().report(
                 format!("Expected a function type but got '{callee_type}'"),
@@ -269,15 +267,14 @@ impl TypeCheck {
     }
     fn check_let(
         &mut self,
-        name: &Ident,
-        mutable: Mutable,
+        pattern: &Pattern,
         ty: Option<Type>,
         value: &Expr,
         body: &Expr,
         expected_ty: Option<Type>,
     ) -> Type {
         let value = self.check_expr(value, ty);
-        self.declare_var(mutable, &name.content, value);
+        self.check_pattern(pattern, value, None);
         self.check_expr(body, expected_ty)
     }
     pub(super) fn check_expr(&mut self, expr: &Expr, expected_ty: Option<Type>) -> Type {
@@ -291,7 +288,7 @@ impl TypeCheck {
                     }
                     (Some(ty), None) => Type::Option(Box::new(ty)),
                     (None, Some(expected)) => {
-                        let expected = self.simplify(expected);
+                        let expected = self.simplify_type(expected);
                         if let Type::Option(ty) = expected {
                             Type::Option(ty)
                         } else {
@@ -356,12 +353,11 @@ impl TypeCheck {
                     Type::String
                 }
             }
-            &ExprKind::Let(mutable, ref name, ref value, ref ty, ref body) => self.check_let(
-                name,
-                mutable,
-                ty.as_ref().map(|ty| self.lower_type(ty)),
-                value,
-                body,
+            ExprKind::Let(let_expr) => self.check_let(
+                &let_expr.pattern,
+                let_expr.ty.as_ref().map(|ty| self.lower_type(ty)),
+                &let_expr.binder,
+                &let_expr.body,
                 expected_ty,
             ),
             ExprKind::Call(callee, args) => self.check_call(callee, args, expected_ty),

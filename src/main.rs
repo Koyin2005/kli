@@ -30,7 +30,7 @@ fn main() {
     let Ok(program) = parser.parse_program() else {
         return;
     };
-    if !TypeCheck::new(&program).check(&program){
+    let Ok(_) = TypeCheck::new(&program).check(&program) else {
         return;
-    }
+    };
 }

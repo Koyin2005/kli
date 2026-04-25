@@ -45,7 +45,23 @@ impl TypeInfer {
             )
             .collect()
     }
-    pub fn simplify(&self, ty: Type) -> Type {
+    pub fn simplify_region(&self, region: Region) -> Region {
+        match region {
+            Region::Infer(var) => {
+                if let RegionVarInfo {
+                    region: Some(region),
+                    line: _,
+                } = &self.region_vars[var]
+                {
+                    self.simplify_region(region.clone())
+                } else {
+                    region
+                }
+            }
+            Region::Local(..) | Region::Static | Region::Param(..) | Region::Unknown => region,
+        }
+    }
+    pub fn simplify_type(&self, ty: Type) -> Type {
         match ty {
             Type::Bool
             | Type::Int
@@ -53,16 +69,16 @@ impl TypeInfer {
             | Type::Unknown
             | Type::String
             | Type::Param(..) => ty,
-            Type::Ref(ty) => Type::Ref(Box::new(self.simplify(*ty))),
-            Type::Option(ty) => Type::Option(Box::new(self.simplify(*ty))),
-            Type::List(ty) => Type::List(Box::new(self.simplify(*ty))),
+            Type::Ref(ty) => Type::Ref(Box::new(self.simplify_type(*ty))),
+            Type::Option(ty) => Type::Option(Box::new(self.simplify_type(*ty))),
+            Type::List(ty) => Type::List(Box::new(self.simplify_type(*ty))),
             Type::Function(function) => Type::Function(FunctionType {
                 params: function
                     .params
                     .into_iter()
-                    .map(|ty| self.simplify(ty))
+                    .map(|ty| self.simplify_type(ty))
                     .collect(),
-                return_type: Box::new(self.simplify(*function.return_type)),
+                return_type: Box::new(self.simplify_type(*function.return_type)),
             }),
             Type::Infer(var) => {
                 if let TypeVarInfo {
@@ -70,13 +86,19 @@ impl TypeInfer {
                     line: _,
                 } = &self.type_vars[var]
                 {
-                    self.simplify(ty.clone())
+                    self.simplify_type(ty.clone())
                 } else {
                     ty
                 }
             }
-            Type::Imm(region, ty) => Type::Imm(region, Box::new(self.simplify(*ty))),
-            Type::Mut(region, ty) => Type::Mut(region, Box::new(self.simplify(*ty))),
+            Type::Imm(region, ty) => Type::Imm(
+                self.simplify_region(region),
+                Box::new(self.simplify_type(*ty)),
+            ),
+            Type::Mut(region, ty) => Type::Mut(
+                self.simplify_region(region),
+                Box::new(self.simplify_type(*ty)),
+            ),
         }
     }
     pub fn unify_region(&mut self, region1: Region, region2: Region) -> Option<Region> {

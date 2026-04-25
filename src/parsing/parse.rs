@@ -2,8 +2,7 @@ use std::{iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        BinaryOp, CaseArm, Expr, ExprKind, Function, FunctionType, Generics, Ident, Lambda,
-        Mutable, Param, Pattern, PatternKind, Program, Region, Type,
+        BinaryOp, CaseArm, Expr, ExprKind, Function, FunctionType, Generics, Ident, Lambda, LetExpr, Mutable, Param, Pattern, PatternKind, Program, Region, Type
     },
     diagnostics::DiagnosticReporter,
     parsing::{
@@ -214,6 +213,14 @@ impl Parser {
                         kind: PatternKind::None,
                     })
                 }
+                TokenKind::Caret => {
+                    self.next_token();
+                    let pattern = self.parse_pattern()?;
+                    Ok(Pattern {
+                        line,
+                        kind: PatternKind::Deref(Box::new(pattern)),
+                    })
+                }
                 _ => {
                     self.diag
                         .report("Expected a valid pattern".to_string(), line);
@@ -288,7 +295,7 @@ impl Parser {
                 }
                 TokenKind::Let => {
                     self.next_token();
-                    let (mutable, name) = self.parse_binding()?;
+                    let pattern = self.parse_pattern()?;
                     let ty = if self.matches_token(&TokenKind::Colon) {
                         Some(self.parse_type()?)
                     } else {
@@ -300,7 +307,15 @@ impl Parser {
                     let body = self.parse_expr()?;
                     Ok(Expr {
                         line,
-                        kind: ExprKind::Let(mutable, name, Box::new(expr), ty, Box::new(body)),
+                        kind: ExprKind::Let(
+                            Box::new(
+                            LetExpr{
+                                pattern,
+                                ty,
+                                binder : expr,
+                                body,
+                            })
+                        )
                     })
                 }
                 TokenKind::Ident(_) => {

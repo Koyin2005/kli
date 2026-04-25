@@ -6,11 +6,8 @@ use std::{
 use crate::{
     ast::{self, Ident, Mutable, Param, Program},
     diagnostics::DiagnosticReporter,
-    typecheck::{
-        infer::TypeInfer,
-        scheme::Scheme,
-    },
-    types::{FunctionType, GenericArg, GenericKind, Region, Type}
+    typecheck::{infer::TypeInfer, scheme::Scheme},
+    types::{FunctionType, GenericArg, GenericKind, Region, Type},
 };
 #[derive(Clone)]
 struct GenericInfo {
@@ -23,6 +20,7 @@ struct FunctionInfo {
     params: Vec<Param>,
     return_type: ast::Type,
 }
+pub struct TypeError;
 #[derive(Debug)]
 struct VarInfo {
     ty: Type,
@@ -235,12 +233,12 @@ impl TypeCheck {
     }
     pub(super) fn iterator_element(&self, ty: Type) -> Option<Type> {
         match ty {
-            Type::Imm(_, ty) | Type::Mut(_, ty) => match self.simplify(*ty) {
+            Type::Imm(_, ty) | Type::Mut(_, ty) => match self.simplify_type(*ty) {
                 Type::List(element) => Some(*element),
                 Type::String => todo!("Charssss"),
                 ty => self.iterator_element(ty),
             },
-            Type::Infer(var) => match self.simplify(Type::Infer(var)) {
+            Type::Infer(var) => match self.simplify_type(Type::Infer(var)) {
                 Type::Infer(_) => None,
                 ty => self.iterator_element(ty),
             },
@@ -348,20 +346,35 @@ impl TypeCheck {
             .insert(name.to_string(), Res::LocalRegion(next_region));
         next_region
     }
-    pub(super) fn simplify(&self, ty: Type) -> Type {
-        self.infer.simplify(ty)
+    pub(super) fn simplify_type(&self, ty: Type) -> Type {
+        self.infer.simplify_type(ty)
+    }
+    pub(super) fn simplify_region(&self, region: Region) -> Region {
+        self.infer.simplify_region(region)
     }
     pub(super) fn declare_generic(&mut self, param: &str, kind: GenericKind) {
         let next_generic = self.generics.len();
         self.generics.push(kind);
         self.env.insert(param.to_string(), Res::Param(next_generic));
     }
+    pub(super) fn unify_region(&mut self, region1: Region, region2: Region, line: usize) -> Region {
+        if let Some(region) = self.infer.unify_region(region1.clone(), region2.clone()) {
+            region
+        } else {
+            let region1 = self.simplify_region(region1);
+            let region2 = self.simplify_region(region2);
+            self.diag
+                .borrow_mut()
+                .report(format!("Expected '{region1}' but got '{region2}'"), line);
+            Region::Unknown
+        }
+    }
     pub(super) fn unify(&mut self, ty1: Type, ty2: Type, line: usize) -> Type {
         if let Some(ty) = self.infer.unify_ty(ty1.clone(), ty2.clone()) {
             ty
         } else {
-            let ty1 = self.simplify(ty1);
-            let ty2 = self.simplify(ty2);
+            let ty1 = self.simplify_type(ty1);
+            let ty2 = self.simplify_type(ty2);
             self.diag
                 .borrow_mut()
                 .report(format!("Expected '{ty1}' but got '{ty2}'"), line);
@@ -413,7 +426,7 @@ impl TypeCheck {
             );
         }
     }
-    pub fn check(mut self, program: &Program) -> bool {
+    pub fn check(mut self, program: &Program) -> Result<(), TypeError> {
         self.validate_main(program);
         for (f, _) in program.functions.iter().enumerate() {
             let () = self.in_scope(|this| {
@@ -462,6 +475,8 @@ impl TypeCheck {
                 this.infer.clear();
             });
         }
-        !self.diag.into_inner().finish()
+        (!self.diag.into_inner().finish())
+            .then_some(())
+            .ok_or(TypeError)
     }
 }

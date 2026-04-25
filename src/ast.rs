@@ -48,11 +48,19 @@ pub enum PatternKind {
     Binding(Mutable, Ident, Option<Region>),
     Some(Box<Pattern>),
     None,
+    Deref(Box<Pattern>),
 }
 #[derive(Debug)]
 pub struct CaseArm {
     pub pat: Pattern,
     pub body: Expr,
+}
+#[derive(Debug)]
+pub struct LetExpr{
+    pub pattern : Pattern,
+    pub ty : Option<Type>,
+    pub binder : Expr,
+    pub body : Expr
 }
 #[derive(Debug)]
 pub enum ExprKind {
@@ -66,7 +74,7 @@ pub enum ExprKind {
     Call(Box<Expr>, Vec<Expr>),
     Borrow(Mutable, Ident, Ident, Box<Expr>),
     Case(Box<Expr>, Vec<CaseArm>),
-    Let(Mutable, Ident, Box<Expr>, Option<Type>, Box<Expr>),
+    Let(Box<LetExpr>),
     Sequence(Box<Expr>, Box<Expr>),
     For(Pattern, Box<Expr>, Box<Expr>),
     Assign(Place, Box<Expr>),

@@ -1,6 +1,6 @@
 use crate::{
     ast::{Mutable, Pattern, PatternKind},
-    types::{Region, Type}
+    types::{Region, Type},
 };
 
 use super::root::TypeCheck;
@@ -12,14 +12,27 @@ impl TypeCheck {
         expected_type: Type,
         region: Option<Region>,
     ) -> Type {
-        let expected_type = self.simplify(expected_type);
+        let expected_type = self.simplify_type(expected_type);
         match &pattern.kind {
-            PatternKind::None => {
-                if let Type::Option(ty) = expected_type {
-                    Type::Option(ty)
-                } else if let Type::Option(ty) = expected_type.clone().strip_mut_quals() {
-                    Type::Option(ty)
-                } else {
+            PatternKind::Deref(pattern) => match expected_type.as_reference_type() {
+                Ok((_, expected_region, ty)) => {
+                    let region = match region {
+                        Some(region) => self.unify_region(region, expected_region, pattern.line),
+                        None => expected_region,
+                    };
+                    self.check_pattern(pattern, ty, Some(region))
+                }
+                Err(ty) => {
+                    self.diag.borrow_mut().report(
+                        format!("Expected a reference type '{}' but got", ty),
+                        pattern.line,
+                    );
+                    self.check_pattern(pattern, Type::Unknown, region)
+                }
+            },
+            PatternKind::None => match expected_type {
+                Type::Option(_) => expected_type,
+                expected_type => {
                     self.diag.borrow_mut().report(
                         format!("Expected an option type but got '{}'", expected_type),
                         pattern.line,
@@ -30,13 +43,12 @@ impl TypeCheck {
                         pattern.line,
                     )
                 }
-            }
-            PatternKind::Some(pattern) => {
-                if let Type::Option(ty) = expected_type {
+            },
+            PatternKind::Some(pattern) => match expected_type {
+                Type::Option(ty) => {
                     Type::Option(Box::new(self.check_pattern(pattern, *ty, region)))
-                } else if let Type::Option(ty) = expected_type.clone().strip_mut_quals() {
-                    Type::Option(Box::new(self.check_pattern(pattern, *ty, region)))
-                } else {
+                }
+                expected_type => {
                     self.diag.borrow_mut().report(
                         format!("Expected an option type but got '{}'", expected_type),
                         pattern.line,
@@ -44,7 +56,7 @@ impl TypeCheck {
                     let ty = self.check_pattern(pattern, Type::Unknown, region);
                     self.unify(expected_type, Type::Option(Box::new(ty)), pattern.line)
                 }
-            }
+            },
             PatternKind::Binding(mutable, name, borrow_region) => {
                 let borrow_region = borrow_region
                     .as_ref()
