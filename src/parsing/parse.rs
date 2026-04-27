@@ -2,7 +2,8 @@ use std::{iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        BinaryOp, CaseArm, Expr, ExprKind, Function, FunctionType, Generics, Ident, Lambda, LetExpr, Mutable, Param, Pattern, PatternKind, Program, Region, Type
+        BinaryOp, CaseArm, Expr, ExprKind, Function, FunctionType, Generics, Ident, Lambda,
+        LetExpr, Mutable, Param, Pattern, PatternKind, Program, Region, Type, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     parsing::{
@@ -307,15 +308,12 @@ impl Parser {
                     let body = self.parse_expr()?;
                     Ok(Expr {
                         line,
-                        kind: ExprKind::Let(
-                            Box::new(
-                            LetExpr{
-                                pattern,
-                                ty,
-                                binder : expr,
-                                body,
-                            })
-                        )
+                        kind: ExprKind::Let(Box::new(LetExpr {
+                            pattern,
+                            ty,
+                            binder: expr,
+                            body,
+                        })),
                     })
                 }
                 TokenKind::Ident(_) => {
@@ -462,9 +460,10 @@ impl Parser {
                         }),
                     })
                 }
-                _ => {
+                ref kind => {
+                    let msg = format!("Expected valid expr but got {kind:?}");
                     let line = self.current_line();
-                    self.diag.report("Expected valid expr".to_string(), line);
+                    self.diag.report(msg, line);
                     Err(ParseError)
                 }
             },
@@ -590,14 +589,17 @@ impl Parser {
     fn parse_optional_type(&mut self) -> Result<Option<Type>, ParseError> {
         match self.peek_token() {
             None => Ok(None),
-            Some(token) => match token.kind {
+            Some(&Token { line, ref kind }) => match kind {
                 TokenKind::Mut => {
                     self.next_token();
                     let _ = self.expect("Expected '['".to_string(), &TokenKind::LeftBracket);
                     let region = self.parse_region()?;
                     let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
                     let ty = self.parse_type()?;
-                    Ok(Some(Type::Mut(region, Box::new(ty))))
+                    Ok(Some(Type {
+                        line,
+                        kind: TypeKind::Mut(region, Box::new(ty)),
+                    }))
                 }
                 TokenKind::Imm => {
                     self.next_token();
@@ -605,31 +607,49 @@ impl Parser {
                     let region = self.parse_region()?;
                     let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
                     let ty = self.parse_type()?;
-                    Ok(Some(Type::Imm(region, Box::new(ty))))
+                    Ok(Some(Type {
+                        line,
+                        kind: TypeKind::Imm(region, Box::new(ty)),
+                    }))
                 }
                 TokenKind::Int => {
                     self.next_token();
-                    Ok(Some(Type::Int))
+                    Ok(Some(Type {
+                        line,
+                        kind: TypeKind::Int,
+                    }))
                 }
                 TokenKind::Bool => {
                     self.next_token();
-                    Ok(Some(Type::Bool))
+                    Ok(Some(Type {
+                        line,
+                        kind: TypeKind::Bool,
+                    }))
                 }
                 TokenKind::String => {
                     self.next_token();
-                    Ok(Some(Type::String))
+                    Ok(Some(Type {
+                        line,
+                        kind: TypeKind::String,
+                    }))
                 }
                 TokenKind::List => {
                     self.next_token();
                     let _ = self.expect("Expected '['".to_string(), &TokenKind::LeftBracket);
                     let ty = self.parse_type()?;
                     let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
-                    Ok(Some(Type::List(Box::new(ty))))
+                    Ok(Some(Type {
+                        line,
+                        kind: TypeKind::List(Box::new(ty)),
+                    }))
                 }
                 TokenKind::LeftParen => {
                     self.next_token();
                     if self.matches_token(&TokenKind::RightParen) {
-                        Ok(Some(Type::Unit))
+                        Ok(Some(Type {
+                            line,
+                            kind: TypeKind::Unit,
+                        }))
                     } else {
                         let ty = self.parse_type()?;
                         let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
@@ -641,23 +661,35 @@ impl Parser {
                     let _ = self.expect("Expected '['".to_string(), &TokenKind::LeftBracket);
                     let ty = self.parse_type()?;
                     let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
-                    Ok(Some(Type::Option(Box::new(ty))))
+                    Ok(Some(Type {
+                        line,
+                        kind: TypeKind::Option(Box::new(ty)),
+                    }))
                 }
                 TokenKind::Ident(_) => {
                     let name = self.match_ident().expect("Expected valid ident");
-                    Ok(Some(Type::Named(name)))
+                    Ok(Some(Type {
+                        line,
+                        kind: TypeKind::Named(name),
+                    }))
                 }
                 TokenKind::Fun => {
                     self.next_token();
                     let function = self.parse_type_function()?;
-                    Ok(Some(Type::Function(function)))
+                    Ok(Some(Type {
+                        line,
+                        kind: TypeKind::Function(function),
+                    }))
                 }
-                TokenKind::Ref => {
+                TokenKind::Box => {
                     self.next_token();
                     let _ = self.expect("Expected '['".to_string(), &TokenKind::LeftBracket);
                     let ty = self.parse_type()?;
                     let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
-                    Ok(Some(Type::Ref(Box::new(ty))))
+                    Ok(Some(Type {
+                        line,
+                        kind: TypeKind::Box(Box::new(ty)),
+                    }))
                 }
                 _ => Ok(None),
             },
@@ -681,6 +713,7 @@ impl Parser {
         Ok(Param { name, ty })
     }
     fn parse_function(&mut self) -> Result<Function, ParseError> {
+        let line = self.current_line();
         let _ = self.expect("Expected function".to_string(), &TokenKind::Fun);
         let name = self.expect_ident("Expected function name".to_string())?;
         let generics = self.parse_optional_generics()?;
@@ -699,6 +732,7 @@ impl Parser {
         let _ = self.expect("Expected '='".to_string(), &TokenKind::Equal);
         let body = self.parse_expr()?;
         Ok(Function {
+            line,
             name,
             generics,
             params,

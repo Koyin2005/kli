@@ -1,6 +1,6 @@
 use std::env;
 
-use kli::{parsing::parse::Parser, typecheck::root::TypeCheck};
+use kli::{parsing::parse::Parser, resolve::Resolve, typecheck::root::TypeCheck};
 
 fn main() {
     let mut args = env::args().skip(1).collect::<Vec<_>>();
@@ -30,7 +30,8 @@ fn main() {
     let Ok(program) = parser.parse_program() else {
         return;
     };
-    let Ok(_) = TypeCheck::new(&program).check(&program) else {
+    let program = Resolve::new().resolve(program);
+    let Ok(_program) = TypeCheck::new(&program).check(program) else {
         return;
     };
 }

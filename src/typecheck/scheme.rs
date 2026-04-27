@@ -44,7 +44,7 @@ impl Bind for Type {
             Self::Imm(region, ty) => Self::Imm(region.bind(args), Box::new((*ty).bind(args))),
             Self::Mut(region, ty) => Self::Mut(region.bind(args), Box::new((*ty).bind(args))),
             Self::Function(function) => Self::Function(function.bind(args)),
-            Self::Ref(ty) => Self::Ref(Box::new((*ty).bind(args))),
+            Self::Box(ty) => Self::Box(Box::new((*ty).bind(args))),
             Self::List(ty) => Self::List(Box::new((*ty).bind(args))),
             Self::Option(ty) => Self::Option(Box::new((*ty).bind(args))),
             Self::Param(_, index) => {

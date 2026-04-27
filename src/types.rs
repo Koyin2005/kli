@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::ast::Mutable;
+use crate::{ast::Mutable, resolved_ast::LocalRegionId};
 #[derive(Clone, Copy, Debug)]
 pub enum GenericKind {
     Region,
@@ -21,7 +21,7 @@ pub enum Region {
     Unknown,
     Static,
     Param(String, usize),
-    Local(String, usize),
+    Local(String, LocalRegionId),
     Infer(usize),
 }
 impl Display for Region {
@@ -43,7 +43,7 @@ pub enum Type {
     Bool,
     String,
     Param(String, usize),
-    Ref(Box<Type>),
+    Box(Box<Type>),
     List(Box<Type>),
     Option(Box<Type>),
     Imm(Region, Box<Type>),
@@ -51,6 +51,12 @@ pub enum Type {
     Function(FunctionType),
 }
 impl Type {
+    pub fn reference(self, mutable: Mutable, region: Region) -> Self {
+        match mutable {
+            Mutable::Immutable => Self::Imm(region, Box::new(self)),
+            Mutable::Mutable => Self::Mut(region, Box::new(self)),
+        }
+    }
     pub fn as_reference_type(self) -> Result<(Mutable, Region, Self), Self> {
         let (region, mutable, ty) = match self {
             Self::Imm(region, ty) => (region, Mutable::Immutable, *ty),
@@ -70,8 +76,8 @@ impl Display for Type {
             Self::String => f.pad("string"),
             Self::Infer(_) => f.pad("_"),
             Self::Param(name, _) => f.pad(name),
-            Self::Ref(ty) => {
-                f.pad("ref[")?;
+            Self::Box(ty) => {
+                f.pad("box[")?;
                 ty.fmt(f)?;
                 f.pad("]")
             }

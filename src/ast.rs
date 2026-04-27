@@ -19,8 +19,7 @@ impl Expr {
             ExprKind::Ident(name) => Ok(Place::Ident(name)),
             ExprKind::Deref(expr) => {
                 let line = expr.line;
-                let place = expr.as_place()?;
-                Ok(Place::Deref(Box::new(place), line))
+                Ok(Place::Deref(Box::new(*expr), line))
             }
             _ => Err(self),
         }
@@ -36,7 +35,7 @@ pub enum BinaryOp {
 #[derive(Debug)]
 pub enum Place {
     Ident(Ident),
-    Deref(Box<Place>, usize),
+    Deref(Box<Expr>, usize),
 }
 #[derive(Debug)]
 pub struct Pattern {
@@ -56,11 +55,11 @@ pub struct CaseArm {
     pub body: Expr,
 }
 #[derive(Debug)]
-pub struct LetExpr{
-    pub pattern : Pattern,
-    pub ty : Option<Type>,
-    pub binder : Expr,
-    pub body : Expr
+pub struct LetExpr {
+    pub pattern: Pattern,
+    pub ty: Option<Type>,
+    pub binder: Expr,
+    pub body: Expr,
 }
 #[derive(Debug)]
 pub enum ExprKind {
@@ -95,7 +94,7 @@ pub struct FunctionType {
     pub return_type: Box<Type>,
 }
 #[derive(Debug, Clone)]
-pub enum Type {
+pub enum TypeKind {
     Int,
     Bool,
     String,
@@ -104,9 +103,14 @@ pub enum Type {
     Function(FunctionType),
     Option(Box<Type>),
     List(Box<Type>),
-    Ref(Box<Type>),
+    Box(Box<Type>),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
+}
+#[derive(Debug, Clone)]
+pub struct Type {
+    pub line: usize,
+    pub kind: TypeKind,
 }
 #[derive(Debug, Clone)]
 pub struct Param {
@@ -121,6 +125,7 @@ pub struct Lambda {
 }
 #[derive(Debug)]
 pub struct Function {
+    pub line: usize,
     pub name: Ident,
     pub generics: Option<Generics>,
     pub params: Vec<Param>,

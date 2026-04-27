@@ -1,6 +1,9 @@
 pub mod ast;
 pub mod diagnostics;
+mod names;
 pub mod parsing;
+pub mod resolve;
+mod resolved_ast;
 pub mod typecheck;
 pub mod typed_ast;
 pub mod types;

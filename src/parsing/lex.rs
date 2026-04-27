@@ -148,6 +148,7 @@ impl<'s> Lexer<'s> {
                 "option" => TokenKind::Option,
                 "static" => TokenKind::Static,
                 "ref" => TokenKind::Ref,
+                "box" => TokenKind::Box,
                 _ => TokenKind::Ident(src),
             },
         })

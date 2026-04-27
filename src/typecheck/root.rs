@@ -1,76 +1,47 @@
-use std::{
-    cell::RefCell,
-    collections::{HashMap, hash_map::Entry},
-};
+use std::cell::RefCell;
 
 use crate::{
-    ast::{self, Ident, Mutable, Param, Program},
-    diagnostics::DiagnosticReporter,
-    typecheck::{infer::TypeInfer, scheme::Scheme},
-    types::{FunctionType, GenericArg, GenericKind, Region, Type},
+    ast::Ident, diagnostics::DiagnosticReporter, resolved_ast::{self as res, Builtin, FunctionId, Program, VarId}, typecheck::{infer::TypeInfer, lower::Lower, scheme::Scheme}, typed_ast::{self, Function, GenericParam}, types::{FunctionType, GenericArg, GenericKind, Region, Type}
 };
-#[derive(Clone)]
-struct GenericInfo {
-    name: Ident,
-    kind: GenericKind,
-}
-struct FunctionInfo {
-    line: usize,
-    generics: Vec<GenericInfo>,
-    params: Vec<Param>,
-    return_type: ast::Type,
-}
 pub struct TypeError;
 #[derive(Debug)]
 struct VarInfo {
     ty: Type,
 }
-#[derive(Clone, Copy, Debug)]
-pub(super) enum Builtin {
-    Alloc,
-    DestroyBox,
-    DestroyList,
-}
-#[derive(Clone, Copy, Debug)]
-pub(super) enum Res {
-    LocalRegion(usize),
-    Param(usize),
-    Builtin(Builtin),
-    Function(usize),
-    Var(usize),
-}
 struct GenericInfer {
-    kinds: HashMap<String, GenericKind>,
+    kinds: Vec<Option<GenericKind>>,
 }
-fn infer_generic_kinds_region(region: &ast::Region, infer: &mut GenericInfer) {
-    match region {
-        ast::Region::Static(_) => (),
-        ast::Region::Named(name) => {
-            if let Entry::Vacant(vacant) = infer.kinds.entry(name.content.clone()) {
-                vacant.insert(GenericKind::Region);
-            }
+impl GenericInfer {
+    fn set(&mut self, index: usize, kind: GenericKind) {
+        self.kinds[index].get_or_insert(kind);
+    }
+}
+fn infer_generic_kinds_region(region: &res::Region, infer: &mut GenericInfer) {
+    match &region.kind {
+        res::RegionKind::Static | res::RegionKind::Unknown | res::RegionKind::Local(..) => (),
+        res::RegionKind::Param(_, index) => {
+            infer.set(*index, GenericKind::Region);
         }
     }
 }
-fn infer_generic_kinds_ty(ty: &ast::Type, infer: &mut GenericInfer) {
-    match ty {
-        ast::Type::Bool | ast::Type::Int | ast::Type::String | ast::Type::Unit => (),
-        ast::Type::Option(ty) | ast::Type::List(ty) | ast::Type::Ref(ty) => {
+fn infer_generic_kinds_ty(ty: &res::Type, infer: &mut GenericInfer) {
+    match &ty.kind {
+        res::TypeKind::Bool
+        | res::TypeKind::Int
+        | res::TypeKind::String
+        | res::TypeKind::Unit
+        | res::TypeKind::Unknown => (),
+        res::TypeKind::Option(ty) | res::TypeKind::List(ty) | res::TypeKind::Box(ty) => {
             infer_generic_kinds_ty(ty, infer);
         }
-        ast::Type::Named(name) => {
-            if let Entry::Vacant(vacant) = infer.kinds.entry(name.content.clone()) {
-                vacant.insert(GenericKind::Type);
-            }
+        res::TypeKind::Param(_, index) => {
+            infer.set(*index, GenericKind::Type);
         }
-        ast::Type::Imm(region, ty) | ast::Type::Mut(region, ty) => {
+        res::TypeKind::Imm(region, ty) | res::TypeKind::Mut(region, ty) => {
             infer_generic_kinds_region(region, infer);
             infer_generic_kinds_ty(ty, infer);
         }
-        ast::Type::Function(ast::FunctionType {
-            params,
-            return_type,
-        }) => {
+        res::TypeKind::Function(params, return_type) => {
             for param in params {
                 infer_generic_kinds_ty(param, infer);
             }
@@ -79,170 +50,74 @@ fn infer_generic_kinds_ty(ty: &ast::Type, infer: &mut GenericInfer) {
     }
 }
 pub struct TypeCheck {
-    functions: Vec<FunctionInfo>,
+    function_generic_kinds: Vec<Vec<GenericKind>>,
     pub(super) diag: RefCell<DiagnosticReporter>,
     variables: Vec<VarInfo>,
     generics: Vec<GenericKind>,
-    regions: usize,
-    env: HashMap<String, Res>,
     signatures: Vec<Scheme<FunctionType>>,
     pub(super) infer: TypeInfer,
 }
 
 impl TypeCheck {
     pub fn new(program: &Program) -> Self {
-        let mut env = HashMap::from([
-            (String::from("alloc"), Res::Builtin(Builtin::Alloc)),
-            (
-                String::from("destroy_box"),
-                Res::Builtin(Builtin::DestroyBox),
-            ),
-            (
-                String::from("destroy_list"),
-                Res::Builtin(Builtin::DestroyList),
-            ),
-        ]);
-        let functions = program
-            .functions
-            .iter()
-            .enumerate()
-            .map(|(i, function)| {
-                env.insert(function.name.content.clone(), Res::Function(i));
-                FunctionInfo {
-                    line: function.name.line,
-                    generics: match function.generics {
-                        None => Vec::new(),
-                        Some(ref generics) => {
-                            let infer = &mut GenericInfer {
-                                kinds: HashMap::new(),
-                            };
-                            for param in function.params.iter() {
-                                infer_generic_kinds_ty(&param.ty, infer);
-                            }
-                            infer_generic_kinds_ty(&function.return_type, infer);
-                            generics
-                                .names
-                                .iter()
-                                .map(|name| match infer.kinds.get(&name.content) {
-                                    Some(&kind) => GenericInfo {
-                                        name: name.clone(),
-                                        kind,
-                                    },
-                                    None => GenericInfo {
-                                        name: name.clone(),
-                                        kind: GenericKind::Type,
-                                    },
-                                })
-                                .collect()
-                        }
-                    },
-                    params: function.params.clone(),
-                    return_type: function.return_type.clone(),
+        let mut signatures = Vec::new();
+        let diag = RefCell::new(DiagnosticReporter::new());
+        let mut function_kinds = Vec::new();
+        for function in program.functions.iter() {
+            let kinds = match function.generics {
+                None => Vec::new(),
+
+                Some(ref generics) => {
+                    let mut infer = GenericInfer { kinds: Vec::new() };
+                    infer.kinds.resize(generics.names.len(), None);
+
+                    for param in function.params.iter() {
+                        infer_generic_kinds_ty(&param.ty, &mut infer);
+                    }
+                    infer_generic_kinds_ty(&function.return_type, &mut infer);
+                    infer
+                        .kinds
+                        .into_iter()
+                        .map(|kind| match kind {
+                            Some(kind) => kind,
+                            None => GenericKind::Type,
+                        })
+                        .collect()
                 }
-            })
-            .collect();
+            };
+            let lower = Lower::new(&kinds, &diag);
+            let param_count = kinds.len();
+            let signature = Scheme::new(
+                FunctionType {
+                    params: lower.lower_types(&mut function.params.iter().map(|param| &param.ty)),
+                    return_type: Box::new(lower.lower_type(&function.return_type)),
+                },
+                param_count,
+            );
+            signatures.push(signature);
+            function_kinds.push(kinds);
+        }
         Self {
-            signatures: Vec::new(),
-            regions: 0,
-            infer: TypeInfer::new(),
-            functions,
-            env,
             generics: Vec::new(),
+            signatures,
+            infer: TypeInfer::new(),
+            function_generic_kinds: function_kinds,
             diag: RefCell::new(DiagnosticReporter::new()),
             variables: Vec::new(),
         }
     }
-    pub(super) fn get_res(&self, name: &str) -> Option<Res> {
-        self.env.get(name).copied()
-    }
-    pub(super) fn lower_region(&self, region: &ast::Region) -> Region {
-        match region {
-            ast::Region::Named(name) => match self.get_res(&name.content) {
-                None => {
-                    self.diag
-                        .borrow_mut()
-                        .report(format!("'{}' not in scope", name.content), name.line);
-                    Region::Unknown
-                }
-                Some(Res::LocalRegion(region)) => Region::Local(name.content.clone(), region),
-                Some(Res::Param(region)) if let GenericKind::Region = self.generics[region] => {
-                    Region::Param(name.content.clone(), region)
-                }
-                _ => {
-                    self.diag.borrow_mut().report(
-                        format!("Cannot use '{}' as region", name.content),
-                        name.line,
-                    );
-                    Region::Unknown
-                }
-            },
-            ast::Region::Static(_) => Region::Static,
-        }
-    }
-    pub(super) fn lower_types(&self, tys: &mut dyn Iterator<Item = &ast::Type>) -> Vec<Type> {
-        tys.map(|ty| self.lower_type(ty)).collect()
-    }
-    pub(super) fn lower_type(&self, ty: &ast::Type) -> Type {
-        match ty {
-            ast::Type::Bool => Type::Bool,
-            ast::Type::Int => Type::Int,
-            ast::Type::Unit => Type::Unit,
-            ast::Type::String => Type::String,
-            ast::Type::Option(ty) => Type::Option(Box::new(self.lower_type(ty))),
-            ast::Type::Ref(ty) => Type::Ref(Box::new(self.lower_type(ty))),
-            ast::Type::List(ty) => Type::List(Box::new(self.lower_type(ty))),
-            ast::Type::Imm(region, ty) => {
-                let region = self.lower_region(region);
-                let ty = self.lower_type(ty);
-                Type::Imm(region, Box::new(ty))
-            }
-            ast::Type::Mut(region, ty) => {
-                let region = self.lower_region(region);
-                let ty = self.lower_type(ty);
-                Type::Mut(region, Box::new(ty))
-            }
-            ast::Type::Function(function) => {
-                let params = self.lower_types(&mut function.params.iter());
-                let return_type = self.lower_type(&function.return_type);
-                Type::Function(FunctionType {
-                    params,
-                    return_type: Box::new(return_type),
-                })
-            }
-            ast::Type::Named(name) => match self.get_res(&name.content) {
-                Some(res) => match res {
-                    Res::Param(param) if let GenericKind::Type = self.generics[param] => {
-                        Type::Param(name.content.clone(), param)
-                    }
-                    _ => {
-                        self.diag.borrow_mut().report(
-                            format!("Cannot use '{}' as a type", name.content),
-                            name.line,
-                        );
-                        Type::Unknown
-                    }
-                },
-                None => {
-                    self.diag
-                        .borrow_mut()
-                        .report(format!("'{}' not in scope", name.content), name.line);
-                    Type::Unknown
-                }
-            },
-        }
-    }
-    pub(super) fn iterator_element(&self, ty: Type) -> Option<Type> {
+    pub(super) fn iterator_element(&self, ty: Type) -> Result<Type, Type> {
         match ty {
             Type::Imm(_, ty) | Type::Mut(_, ty) => match self.simplify_type(*ty) {
-                Type::List(element) => Some(*element),
+                Type::List(element) => Ok(*element),
                 Type::String => todo!("Charssss"),
                 ty => self.iterator_element(ty),
             },
             Type::Infer(var) => match self.simplify_type(Type::Infer(var)) {
-                Type::Infer(_) => None,
+                Type::Infer(_) => Err(ty),
                 ty => self.iterator_element(ty),
             },
-            Type::Unknown => Some(Type::Unknown),
+            Type::Unknown => Ok(Type::Unknown),
             Type::Bool
             | Type::Int
             | Type::Param(..)
@@ -251,31 +126,53 @@ impl TypeCheck {
             | Type::String
             | Type::Option(_)
             | Type::Function(_)
-            | Type::Ref(_) => None,
+            | Type::Box(_) => Err(ty),
         }
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
         match builtin {
-            Builtin::Alloc => Scheme::new(
+            Builtin::AllocBox => Scheme::new(
                 FunctionType {
                     params: vec![Type::Param("T".to_string(), 0)],
-                    return_type: Box::new(Type::Ref(Box::new(Type::Param("T".to_string(), 0)))),
+                    return_type: Box::new(Type::Box(Box::new(Type::Param("T".to_string(), 0)))),
                 },
                 1,
             ),
-            Builtin::DestroyBox => Scheme::new(
+            Builtin::DeallocBox => Scheme::new(
                 FunctionType {
-                    params: vec![
-                        Type::Ref(Box::new(Type::Param("T".to_string(), 0))),
-                        Type::Function(FunctionType {
-                            params: vec![Type::Param("T".to_string(), 0)],
-                            return_type: Box::new(Type::Unit),
-                        }),
-                    ],
-                    return_type: Box::new(Type::Unit),
+                    params: vec![Type::Box(Box::new(Type::Param("T".to_string(), 0)))],
+                    return_type: Box::new(Type::Param("T".to_string(), 0)),
                 },
                 1,
             ),
+            Builtin::DerefBox => {
+                let r_param = Region::Param("r".to_string(), 0);
+                let t_param = Type::Param("T".to_string(), 1);
+                Scheme::new(
+                    FunctionType {
+                        params: vec![Type::Imm(
+                            r_param.clone(),
+                            Box::new(Type::Box(Box::new(t_param.clone()))),
+                        )],
+                        return_type: Box::new(Type::Imm(r_param, Box::new(t_param))),
+                    },
+                    2,
+                )
+            }
+            Builtin::DerefBoxMut => {
+                let r_param = Region::Param("r".to_string(), 0);
+                let t_param = Type::Param("T".to_string(), 1);
+                Scheme::new(
+                    FunctionType {
+                        params: vec![Type::Mut(
+                            r_param.clone(),
+                            Box::new(Type::Box(Box::new(t_param.clone()))),
+                        )],
+                        return_type: Box::new(Type::Mut(r_param, Box::new(t_param))),
+                    },
+                    2,
+                )
+            }
             Builtin::DestroyList => Scheme::new(
                 FunctionType {
                     params: vec![
@@ -291,15 +188,8 @@ impl TypeCheck {
             ),
         }
     }
-    pub(super) fn signature_of_function(&self, function: usize) -> Scheme<FunctionType> {
-        self.signatures[function].clone()
-    }
-    pub(super) fn find_signature_of(&self, function: &str) -> Option<Scheme<FunctionType>> {
-        self.env.get(function).and_then(|res| match res {
-            Res::Builtin(builtin) => Some(self.signature_of_builtin(*builtin)),
-            Res::Function(function) => Some(self.signature_of_function(*function)),
-            Res::Var(_) | Res::Param(_) | Res::LocalRegion(_) => None,
-        })
+    pub(super) fn signature_of_function(&self, function: FunctionId) -> Scheme<FunctionType> {
+        self.signatures[usize::from(function)].clone()
     }
     pub(super) fn instantiate_builtin_args(
         &mut self,
@@ -307,23 +197,31 @@ impl TypeCheck {
         line: usize,
     ) -> Vec<GenericArg> {
         match builtin {
-            Builtin::Alloc | Builtin::DestroyBox | Builtin::DestroyList => {
-                vec![GenericArg::Type(Type::Infer(self.infer.fresh_ty(line)))]
+            Builtin::AllocBox | Builtin::DeallocBox | Builtin::DestroyList => {
+                vec![GenericArg::Type(self.fresh_ty(line))]
+            }
+            Builtin::DerefBox | Builtin::DerefBoxMut => {
+                vec![
+                    GenericArg::Region(self.fresh_region(line)),
+                    GenericArg::Type(self.fresh_ty(line)),
+                ]
             }
         }
+    }
+    pub(super) fn fresh_region(&mut self, line: usize) -> Region {
+        Region::Infer(self.infer.fresh_region(line))
     }
     pub(super) fn fresh_ty(&mut self, line: usize) -> Type {
         Type::Infer(self.infer.fresh_ty(line))
     }
     pub(super) fn instantiate_function_args(
         &mut self,
-        function: usize,
+        function: FunctionId,
         line: usize,
     ) -> Vec<GenericArg> {
-        self.functions[function]
-            .generics
+        self.function_generic_kinds[usize::from(function)]
             .iter()
-            .map(|arg| match arg.kind {
+            .map(|kind| match *kind {
                 GenericKind::Region => {
                     GenericArg::Region(Region::Infer(self.infer.fresh_region(line)))
                 }
@@ -331,31 +229,22 @@ impl TypeCheck {
             })
             .collect()
     }
-    pub(super) fn var_type(&self, var: usize) -> &Type {
-        &self.variables[var].ty
+    pub(super) fn var_type(&self, var: VarId) -> &Type {
+        &self.variables[usize::from(var)].ty
     }
-    pub(super) fn declare_var(&mut self, _mutable: Mutable, var_name: &str, ty: Type) {
-        let next_var = self.variables.len();
+    pub(super) fn declare_var(&mut self, var_id: VarId, ty: Type) {
+        assert_eq!(
+            usize::from(var_id),
+            self.variables.len(),
+            "variable declarations not in order"
+        );
         self.variables.push(VarInfo { ty });
-        self.env.insert(var_name.to_string(), Res::Var(next_var));
-    }
-    pub(super) fn declare_region(&mut self, name: &str) -> usize {
-        let next_region = self.regions;
-        self.regions += 1;
-        self.env
-            .insert(name.to_string(), Res::LocalRegion(next_region));
-        next_region
     }
     pub(super) fn simplify_type(&self, ty: Type) -> Type {
         self.infer.simplify_type(ty)
     }
     pub(super) fn simplify_region(&self, region: Region) -> Region {
         self.infer.simplify_region(region)
-    }
-    pub(super) fn declare_generic(&mut self, param: &str, kind: GenericKind) {
-        let next_generic = self.generics.len();
-        self.generics.push(kind);
-        self.env.insert(param.to_string(), Res::Param(next_generic));
     }
     pub(super) fn unify_region(&mut self, region1: Region, region2: Region, line: usize) -> Region {
         if let Some(region) = self.infer.unify_region(region1.clone(), region2.clone()) {
@@ -387,29 +276,23 @@ impl TypeCheck {
             .borrow_mut()
             .report("type annotations needed".to_string(), line);
     }
-    pub(super) fn in_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        let old_env = self.env.clone();
-        let value = f(self);
-        self.env = old_env;
-        value
-    }
-    fn validate_main(&mut self, program: &Program) {
-        let Some(main) = self.env.get("main").and_then(|res| match res {
-            &Res::Function(function) => Some(function),
-            _ => None,
-        }) else {
+    fn validate_main(&mut self, program: &res::Program) {
+        let Some(main) = program
+            .functions
+            .iter()
+            .position(|f| f.name.content == "main")
+        else {
             return self.diag.borrow_mut().report(
                 "Missing main".to_string(),
                 program
                     .functions
                     .last()
-                    .map(|function| function.body.line)
+                    .map(|function| function.name.line)
                     .unwrap_or(1),
             );
         };
-
-        let main = &self.functions[main];
-        if !main.generics.is_empty() {
+        let main = &program.functions[main];
+        if main.generics.as_ref().is_some_and(|g| g.names.is_empty()) {
             self.diag
                 .borrow_mut()
                 .report("'main' should not be generic".to_string(), main.line);
@@ -419,64 +302,64 @@ impl TypeCheck {
                 .borrow_mut()
                 .report("'main' should have no parameters".to_string(), main.line);
         }
-        if !matches!(main.return_type, ast::Type::Unit) {
+        if !matches!(main.return_type.kind, res::TypeKind::Unit) {
             self.diag.borrow_mut().report(
                 "'main' should have '()' as return type".to_string(),
                 main.line,
             );
         }
     }
-    pub fn check(mut self, program: &Program) -> Result<(), TypeError> {
-        self.validate_main(program);
-        for (f, _) in program.functions.iter().enumerate() {
-            let () = self.in_scope(|this| {
-                for param_info in this.functions[f].generics.clone() {
-                    this.declare_generic(&param_info.name.content, param_info.kind);
-                }
-                let function = &this.functions[f];
-                let param_count = function.generics.len();
-                let signature = Scheme::new(
-                    FunctionType {
-                        params: this
-                            .lower_types(&mut function.params.iter().map(|param| &param.ty)),
-                        return_type: Box::new(this.lower_type(&function.return_type)),
-                    },
-                    param_count,
-                );
-                this.signatures.push(signature);
-                this.generics.clear();
-                this.infer.clear();
-            });
+    pub(super) fn lower_region(&self, region: res::Region) -> Region {
+        Lower::new(&self.generics, &self.diag).lower_region(&region)
+    }
+    pub(super) fn lower_type(&self, ty: res::Type) -> Type {
+        Lower::new(&self.generics, &self.diag).lower_type(&ty)
+    }
+    pub(super) fn check_function(&mut self, id: FunctionId, f: res::Function) -> Function {
+        self.generics
+            .clone_from(&self.function_generic_kinds[usize::from(id)]);
+        let FunctionType {
+            params,
+            return_type,
+        } = self.signature_of_function(id).skip();
+        let params = f.params.into_iter().zip(params).map(|(param,ty)|{
+            self.declare_var(param.var.1, ty.clone());
+            typed_ast::Param{
+                name:Ident { content: param.var.0, line: param.line },
+                var:param.var.1,
+                ty
+            }
+        }).collect::<Vec<_>>();
+        let body = self.check_expr(f.body, Some(*return_type));
+        for line in self.infer.unsolved_var_lines() {
+            self.diag
+                .borrow_mut()
+                .report("type annotations needed".to_string(), line);
         }
-        for (function_index, function) in program.functions.iter().enumerate() {
-            let () = self.in_scope(|this| {
-                for param_info in this.functions[function_index].generics.clone() {
-                    this.declare_generic(&param_info.name.content, param_info.kind);
-                }
-                let FunctionType {
-                    params,
-                    return_type,
-                } = this
-                    .find_signature_of(&function.name.content)
-                    .expect("All functions should be defined")
-                    .skip();
-                for (param_name, ty) in function.params.iter().map(|param| &param.name).zip(params)
-                {
-                    this.declare_var(Mutable::Immutable, &param_name.content, ty);
-                }
-                this.check_expr(&function.body, Some(*return_type));
-                for line in this.infer.unsolved_var_lines() {
-                    this.diag
-                        .borrow_mut()
-                        .report("type annotations needed".to_string(), line);
-                }
-                this.variables.clear();
-                this.generics.clear();
-                this.infer.clear();
-            });
+        self.variables.clear();
+        self.infer.clear();
+        let generics = std::mem::take(&mut self.generics).into_iter().zip(f.generics.into_iter().flat_map(|generics|{
+            generics.names
+        })).map(|(kind,name)|{
+            GenericParam{
+                name,
+                kind
+            }
+        }).collect::<Vec<_>>();
+        Function { name: f.name, generics, params, return_type: body.ty.clone(), body }
+    }
+    pub fn check(mut self, program: res::Program) -> Result<typed_ast::Program, TypeError> {
+        self.validate_main(&program);
+        let mut functions = Vec::new();
+        for (function_index, function) in program.functions.into_iter().enumerate() {
+            functions.push(self.check_function(FunctionId::new(function_index), function));
         }
-        (!self.diag.into_inner().finish())
-            .then_some(())
-            .ok_or(TypeError)
+        if !self.diag.into_inner().finish(){
+            Ok(typed_ast::Program{
+                functions
+            })
+        } else {
+            Err(TypeError)
+        }
     }
 }

@@ -30,6 +30,7 @@ pub enum TokenKind {
     String,
     StringLiteral(String),
     Ref,
+    Box,
     List,
     Static,
     Let,

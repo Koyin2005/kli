@@ -69,7 +69,7 @@ impl TypeInfer {
             | Type::Unknown
             | Type::String
             | Type::Param(..) => ty,
-            Type::Ref(ty) => Type::Ref(Box::new(self.simplify_type(*ty))),
+            Type::Box(ty) => Type::Box(Box::new(self.simplify_type(*ty))),
             Type::Option(ty) => Type::Option(Box::new(self.simplify_type(*ty))),
             Type::List(ty) => Type::List(Box::new(self.simplify_type(*ty))),
             Type::Function(function) => Type::Function(FunctionType {
@@ -144,8 +144,8 @@ impl TypeInfer {
                 assert_eq!(name1, name2);
                 Some(Type::Param(name1, index1))
             }
-            (Type::Ref(ty1), Type::Ref(ty2)) => {
-                self.unify_ty(*ty1, *ty2).map(|ty| Type::Ref(Box::new(ty)))
+            (Type::Box(ty1), Type::Box(ty2)) => {
+                self.unify_ty(*ty1, *ty2).map(|ty| Type::Box(Box::new(ty)))
             }
             (Type::Option(ty1), Type::Option(ty2)) => self
                 .unify_ty(*ty1, *ty2)
