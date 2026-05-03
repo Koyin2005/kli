@@ -7,3 +7,4 @@ mod resolved_ast;
 pub mod typecheck;
 pub mod typed_ast;
 pub mod types;
+pub mod linearitycheck;
