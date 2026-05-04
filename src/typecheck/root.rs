@@ -1,7 +1,12 @@
 use std::cell::RefCell;
 
 use crate::{
-    ast::Ident, diagnostics::DiagnosticReporter, resolved_ast::{self as res, Builtin, FunctionId, Program, VarId}, typecheck::{infer::TypeInfer, lower::Lower, scheme::Scheme}, typed_ast::{self, Function, GenericParam}, types::{FunctionType, GenericArg, GenericKind, Region, Type}
+    ast::Ident,
+    diagnostics::DiagnosticReporter,
+    resolved_ast::{self as res, Builtin, FunctionId, Program, VarId},
+    typecheck::{infer::TypeInfer, lower::Lower, scheme::Scheme, subst::TypeSubst},
+    typed_ast::{self, Function, GenericParam},
+    types::{FunctionType, GenericArg, GenericKind, Region, Type},
 };
 pub struct TypeError;
 #[derive(Debug)]
@@ -108,11 +113,15 @@ impl TypeCheck {
     }
     pub(super) fn iterator_element(&self, ty: Type) -> Result<Type, Type> {
         match ty {
-            Type::Imm(_, ty) | Type::Mut(_, ty) => match self.simplify_type(*ty) {
-                Type::List(element) => Ok(*element),
+            Type::Imm(_, _) | Type::Mut(_, _) => {
+                let (mutable,region,ty) = ty.as_reference_type().expect("Should be a reference");
+                let ty = self.simplify_type(ty);
+                match ty {
+                Type::List(element) => Ok(Type::reference(*element, mutable, region)),
                 Type::String => todo!("Charssss"),
                 ty => self.iterator_element(ty),
-            },
+            }
+        },
             Type::Infer(var) => match self.simplify_type(Type::Infer(var)) {
                 Type::Infer(_) => Err(ty),
                 ty => self.iterator_element(ty),
@@ -186,6 +195,9 @@ impl TypeCheck {
                 },
                 1,
             ),
+            Builtin::Freeze => Scheme::new(FunctionType { params: vec![
+                Type::Mut(Region::Param("r".to_string(), 0), Box::new(Type::Param("T".to_string(), 1))),
+            ], return_type: Box::new(Type::Imm(Region::Param("r".to_string(), 0), Box::new(Type::Param("T".to_string(), 1)))) }, 2)
         }
     }
     pub(super) fn signature_of_function(&self, function: FunctionId) -> Scheme<FunctionType> {
@@ -200,7 +212,7 @@ impl TypeCheck {
             Builtin::AllocBox | Builtin::DeallocBox | Builtin::DestroyList => {
                 vec![GenericArg::Type(self.fresh_ty(line))]
             }
-            Builtin::DerefBox | Builtin::DerefBoxMut => {
+            Builtin::DerefBox | Builtin::DerefBoxMut | Builtin::Freeze => {
                 vec![
                     GenericArg::Region(self.fresh_region(line)),
                     GenericArg::Type(self.fresh_ty(line)),
@@ -322,31 +334,51 @@ impl TypeCheck {
             params,
             return_type,
         } = self.signature_of_function(id).skip();
-        let params = f.params.into_iter().zip(params).map(|(param,ty)|{
-            self.declare_var(param.var.1, ty.clone());
-            typed_ast::Param{
-                name:Ident { content: param.var.0, line: param.line },
-                var:param.var.1,
-                ty
-            }
-        }).collect::<Vec<_>>();
+        let params = f
+            .params
+            .into_iter()
+            .zip(params)
+            .map(|(param, ty)| {
+                self.declare_var(param.var.1, ty.clone());
+                typed_ast::Param {
+                    name: Ident {
+                        content: param.var.0,
+                        line: param.line,
+                    },
+                    var: param.var.1,
+                    ty,
+                }
+            })
+            .collect::<Vec<_>>();
         let body = self.check_expr(f.body, Some(*return_type));
-        for line in self.infer.unsolved_var_lines() {
-            self.diag
-                .borrow_mut()
-                .report("type annotations needed".to_string(), line);
+        let unsolved_lines = self.infer.unsolved_var_lines();
+        let body = if !unsolved_lines.is_empty(){
+            for line in self.infer.unsolved_var_lines() {
+                self.diag
+                    .borrow_mut()
+                    .report("type annotations needed".to_string(), line);
+            }
+            body
         }
+        else {
+            let mut body = body;
+            TypeSubst::new(&mut self.infer).subst_expr(&mut body);
+            body
+        };
         self.variables.clear();
         self.infer.clear();
-        let generics = std::mem::take(&mut self.generics).into_iter().zip(f.generics.into_iter().flat_map(|generics|{
-            generics.names
-        })).map(|(kind,name)|{
-            GenericParam{
-                name,
-                kind
-            }
-        }).collect::<Vec<_>>();
-        Function { name: f.name, generics, params, return_type: body.ty.clone(), body }
+        let generics = std::mem::take(&mut self.generics)
+            .into_iter()
+            .zip(f.generics.into_iter().flat_map(|generics| generics.names))
+            .map(|(kind, name)| GenericParam { name, kind })
+            .collect::<Vec<_>>();
+        Function {
+            name: f.name,
+            generics,
+            params,
+            return_type: body.ty.clone(),
+            body,
+        }
     }
     pub fn check(mut self, program: res::Program) -> Result<typed_ast::Program, TypeError> {
         self.validate_main(&program);
@@ -354,10 +386,8 @@ impl TypeCheck {
         for (function_index, function) in program.functions.into_iter().enumerate() {
             functions.push(self.check_function(FunctionId::new(function_index), function));
         }
-        if !self.diag.into_inner().finish(){
-            Ok(typed_ast::Program{
-                functions
-            })
+        if !self.diag.into_inner().finish() {
+            Ok(typed_ast::Program { functions })
         } else {
             Err(TypeError)
         }

@@ -4,7 +4,7 @@ mod names;
 pub mod parsing;
 pub mod resolve;
 mod resolved_ast;
+pub mod resourcecheck;
 pub mod typecheck;
 pub mod typed_ast;
 pub mod types;
-pub mod linearitycheck;

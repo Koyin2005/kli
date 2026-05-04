@@ -52,7 +52,6 @@ pub enum ExprKind {
     Builtin(Builtin, Vec<GenericArg>),
     Function(String, FunctionId, Vec<GenericArg>),
     Print(Option<Box<Expr>>),
-    Var(String, VarId),
     List(Vec<Expr>),
     Call(Box<Expr>, Vec<Expr>),
     Load(Place),
@@ -73,6 +72,7 @@ pub enum ExprKind {
         new_var: VarId,
         region_name: Ident,
         region: LocalRegionId,
+        new_ty : Type,
         body: Box<Expr>,
     },
     Case(Box<Expr>, Vec<CaseArm>),
@@ -89,19 +89,19 @@ pub struct GenericParam {
     pub name: Ident,
     pub kind: GenericKind,
 }
-pub struct Param{
-    pub name : Ident,
-    pub var : VarId,
-    pub ty : Type
+pub struct Param {
+    pub name: Ident,
+    pub var: VarId,
+    pub ty: Type,
 }
 pub struct Function {
-    pub name : Ident,
+    pub name: Ident,
     pub generics: Vec<GenericParam>,
-    pub params : Vec<Param>,
-    pub return_type : Type,
+    pub params: Vec<Param>,
+    pub return_type: Type,
     pub body: Expr,
 }
 
-pub struct Program{
-    pub functions : Vec<Function>
+pub struct Program {
+    pub functions: Vec<Function>,
 }

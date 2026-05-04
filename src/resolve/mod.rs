@@ -22,7 +22,7 @@ pub struct Resolve {
     generics: usize,
     diag: DiagnosticReporter,
 }
-impl Default for Resolve{
+impl Default for Resolve {
     fn default() -> Self {
         Self::new()
     }
@@ -46,6 +46,13 @@ impl Resolve {
                 names::DEREF_BOX_MUT.to_string(),
                 Res::Builtin(Builtin::DerefBoxMut),
             ),
+            (
+                names::DESTROY_LIST.to_string(),
+                Res::Builtin(Builtin::DestroyList)
+            ),
+            (names::FREEZE.to_string(),
+                Res::Builtin(Builtin::Freeze)
+            )
         ]);
         Self {
             prev_envs: Vec::new(),
@@ -180,8 +187,7 @@ impl Resolve {
         generic
     }
     fn in_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        self.prev_envs
-            .push(std::mem::take(&mut self.env));
+        self.prev_envs.push(std::mem::take(&mut self.env));
         let value = f(self);
         self.env = self
             .prev_envs
@@ -330,22 +336,22 @@ impl Resolve {
                 res::ExprKind::Assign(place, Box::new(value))
             }
             ast::ExprKind::Borrow(mutable, var_name, region_name, body) => {
-                let (body, new_var,var,region) = self.in_scope(|this| {
-                let region = this.declare_region(region_name.content.clone());
-                let var = match this.resolve_name(&var_name.content) {
-                    None => {
-                        this.not_in_scope_error(&var_name.content, var_name.line);
-                        None
-                    }
-                    Some(Res::Var(var)) => Some(var),
-                    Some(_) => {
-                        this.cannot_use_as_error(&var_name.content, "variable", var_name.line);
-                        None
-                    }
-                };
+                let (body, new_var, var, region) = self.in_scope(|this| {
+                    let region = this.declare_region(region_name.content.clone());
+                    let var = match this.resolve_name(&var_name.content) {
+                        None => {
+                            this.not_in_scope_error(&var_name.content, var_name.line);
+                            None
+                        }
+                        Some(Res::Var(var)) => Some(var),
+                        Some(_) => {
+                            this.cannot_use_as_error(&var_name.content, "variable", var_name.line);
+                            None
+                        }
+                    };
                     let new_var = this.declare_var(var_name.content.clone());
                     let body = this.resolve_expr(*body);
-                    (body, new_var,var,region)
+                    (body, new_var, var, region)
                 });
                 match var {
                     None => res::ExprKind::Err,
@@ -412,7 +418,7 @@ impl Resolve {
                             .map(|param| {
                                 let var = this.declare_var(param.name.content.clone());
                                 res::Param {
-                                    line : param.name.line,
+                                    line: param.name.line,
                                     var: res::Var(param.name.content, var),
                                     ty: this.resolve_type(param.ty),
                                 }

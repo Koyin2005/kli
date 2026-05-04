@@ -108,6 +108,7 @@ impl<'s> Lexer<'s> {
             && c != '"'
         {
             src.push(c);
+            self.next_char();
         }
 
         if self.match_char('"').is_some() {

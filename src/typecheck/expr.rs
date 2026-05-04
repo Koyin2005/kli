@@ -1,7 +1,5 @@
 use crate::{
-    resolved_ast::{
-        BorrowExpr, Expr, ExprKind, Lambda, Pattern, Place, PlaceKind,
-    },
+    resolved_ast::{BorrowExpr, Expr, ExprKind, Lambda, Pattern, Place, PlaceKind, Var},
     typecheck::root::TypeCheck,
     typed_ast,
     types::{FunctionType, Region, Type},
@@ -89,14 +87,16 @@ impl TypeCheck {
             body,
         } = borrow;
         let var_ty = self.var_type(old_var).clone();
+        let new_ty = var_ty
+                .clone()
+                .reference(mutable, Region::Local(region_name.content.clone(), region));
         self.declare_var(
             new_var,
-            var_ty.clone()
-                .reference(mutable, Region::Local(region_name.content.clone(), region)),
+            new_ty.clone()
         );
         let body = self.check_expr(body, expected_ty);
         typed_ast::Expr {
-            ty:body.ty.clone(),
+            ty: body.ty.clone(),
             line,
             kind: typed_ast::ExprKind::Borrow {
                 var_name,
@@ -104,6 +104,7 @@ impl TypeCheck {
                 new_var,
                 region_name,
                 region,
+                new_ty,
                 body: Box::new(body),
             },
         }
@@ -271,9 +272,14 @@ impl TypeCheck {
                 ty: Type::Bool,
                 kind: typed_ast::ExprKind::Bool(value),
             },
-            ExprKind::Var(var, id) => {
-                make_expr(self.var_type(id).clone(), typed_ast::ExprKind::Var(var, id))
-            }
+            ExprKind::Var(var, id) => make_expr(
+                self.var_type(id).clone(),
+                typed_ast::ExprKind::Load(typed_ast::Place {
+                    ty: self.var_type(id).clone(),
+                    line,
+                    kind: typed_ast::PlaceKind::Var(Var(var, id)),
+                }),
+            ),
             ExprKind::Builtin(builtin) => {
                 let args = self.instantiate_builtin_args(builtin, line);
                 make_expr(

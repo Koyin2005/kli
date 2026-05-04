@@ -1,6 +1,9 @@
 use std::env;
 
-use kli::{parsing::parse::Parser, resolve::Resolve, typecheck::root::TypeCheck};
+use kli::{
+    parsing::parse::Parser, resolve::Resolve, resourcecheck::ResourceCheck,
+    typecheck::root::TypeCheck,
+};
 
 fn main() {
     let mut args = env::args().skip(1).collect::<Vec<_>>();
@@ -31,7 +34,10 @@ fn main() {
         return;
     };
     let program = Resolve::new().resolve(program);
-    let Ok(_program) = TypeCheck::new(&program).check(program) else {
+    let Ok(program) = TypeCheck::new(&program).check(program) else {
         return;
     };
+    for function in &program.functions {
+        ResourceCheck::new().check_function(function);
+    }
 }

@@ -92,7 +92,7 @@ impl TypeCheck {
                     (Some(region), None) => {
                         self.diag
                             .borrow_mut()
-                            .report("Cant borrow without region".to_string(), pattern.line);
+                            .report("Cannot borrow without region".to_string(), pattern.line);
                         Type::reference(expected_type.clone(), mutable, region)
                     }
                     (Some(borrow_region), Some(expected)) => {
