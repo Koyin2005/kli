@@ -140,6 +140,7 @@ impl TypeCheck {
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
         match builtin {
+            Builtin::DestroyString => Scheme::new(FunctionType { params: vec![Type::String], return_type: Box::new(Type::Unit) }, 0),
             Builtin::AllocBox => Scheme::new(
                 FunctionType {
                     params: vec![Type::Param("T".to_string(), 0)],
@@ -228,6 +229,7 @@ impl TypeCheck {
                     GenericArg::Type(self.fresh_ty(line)),
                 ]
             }
+            Builtin::DestroyString => Vec::new()
         }
     }
     pub(super) fn fresh_region(&mut self, line: usize) -> Region {
