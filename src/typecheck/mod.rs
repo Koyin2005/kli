@@ -4,5 +4,5 @@ mod lower;
 mod pattern;
 pub mod root;
 mod scheme;
-mod types;
 mod subst;
+mod types;

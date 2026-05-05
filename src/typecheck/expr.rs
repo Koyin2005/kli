@@ -16,8 +16,8 @@ impl TypeCheck {
                 });
                 let value = self.check_expr(*value, expected_ty);
                 (
-                    match value.ty.clone().as_reference_type() {
-                        Ok((_, _, ty)) => ty,
+                    match value.ty.as_reference_type() {
+                        Ok((_, _, ty)) => ty.clone(),
                         Err(ty) => {
                             self.diag
                                 .borrow_mut()
@@ -88,17 +88,15 @@ impl TypeCheck {
         } = borrow;
         let var_ty = self.var_type(old_var).clone();
         let new_ty = var_ty
-                .clone()
-                .reference(mutable, Region::Local(region_name.content.clone(), region));
-        self.declare_var(
-            new_var,
-            new_ty.clone()
-        );
+            .clone()
+            .reference(mutable, Region::Local(region_name.content.clone(), region));
+        self.declare_var(new_var, new_ty.clone());
         let body = self.check_expr(body, expected_ty);
         typed_ast::Expr {
             ty: body.ty.clone(),
             line,
             kind: typed_ast::ExprKind::Borrow {
+                mutable,
                 var_name,
                 old_var,
                 new_var,
@@ -407,8 +405,8 @@ impl TypeCheck {
             }
             ExprKind::Deref(reference) => {
                 let reference = self.check_expr(*reference, None);
-                let pointee_ty = match reference.ty.clone().as_reference_type() {
-                    Ok((_, _, ty)) => ty,
+                let pointee_ty = match reference.ty.as_reference_type() {
+                    Ok((_, _, ty)) => ty.clone(),
                     Err(ty) => {
                         self.diag
                             .borrow_mut()

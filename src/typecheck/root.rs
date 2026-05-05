@@ -114,14 +114,14 @@ impl TypeCheck {
     pub(super) fn iterator_element(&self, ty: Type) -> Result<Type, Type> {
         match ty {
             Type::Imm(_, _) | Type::Mut(_, _) => {
-                let (mutable,region,ty) = ty.as_reference_type().expect("Should be a reference");
-                let ty = self.simplify_type(ty);
+                let (mutable, region, ty) = ty.as_reference_type().expect("Should be a reference");
+                let ty = self.simplify_type(ty.clone());
                 match ty {
-                Type::List(element) => Ok(Type::reference(*element, mutable, region)),
-                Type::String => todo!("Charssss"),
-                ty => self.iterator_element(ty),
+                    Type::List(element) => Ok(Type::reference(*element, mutable, region.clone())),
+                    Type::String => todo!("Charssss"),
+                    ty => self.iterator_element(ty),
+                }
             }
-        },
             Type::Infer(var) => match self.simplify_type(Type::Infer(var)) {
                 Type::Infer(_) => Err(ty),
                 ty => self.iterator_element(ty),
@@ -195,9 +195,19 @@ impl TypeCheck {
                 },
                 1,
             ),
-            Builtin::Freeze => Scheme::new(FunctionType { params: vec![
-                Type::Mut(Region::Param("r".to_string(), 0), Box::new(Type::Param("T".to_string(), 1))),
-            ], return_type: Box::new(Type::Imm(Region::Param("r".to_string(), 0), Box::new(Type::Param("T".to_string(), 1)))) }, 2)
+            Builtin::Freeze => Scheme::new(
+                FunctionType {
+                    params: vec![Type::Mut(
+                        Region::Param("r".to_string(), 0),
+                        Box::new(Type::Param("T".to_string(), 1)),
+                    )],
+                    return_type: Box::new(Type::Imm(
+                        Region::Param("r".to_string(), 0),
+                        Box::new(Type::Param("T".to_string(), 1)),
+                    )),
+                },
+                2,
+            ),
         }
     }
     pub(super) fn signature_of_function(&self, function: FunctionId) -> Scheme<FunctionType> {
@@ -352,15 +362,14 @@ impl TypeCheck {
             .collect::<Vec<_>>();
         let body = self.check_expr(f.body, Some(*return_type));
         let unsolved_lines = self.infer.unsolved_var_lines();
-        let body = if !unsolved_lines.is_empty(){
+        let body = if !unsolved_lines.is_empty() {
             for line in self.infer.unsolved_var_lines() {
                 self.diag
                     .borrow_mut()
                     .report("type annotations needed".to_string(), line);
             }
             body
-        }
-        else {
+        } else {
             let mut body = body;
             TypeSubst::new(&mut self.infer).subst_expr(&mut body);
             body

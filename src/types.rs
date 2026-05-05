@@ -57,10 +57,10 @@ impl Type {
             Mutable::Mutable => Self::Mut(region, Box::new(self)),
         }
     }
-    pub fn as_reference_type(self) -> Result<(Mutable, Region, Self), Self> {
+    pub fn as_reference_type(&self) -> Result<(Mutable, &Region, &Self), &Self> {
         let (region, mutable, ty) = match self {
-            Self::Imm(region, ty) => (region, Mutable::Immutable, *ty),
-            Self::Mut(region, ty) => (region, Mutable::Mutable, *ty),
+            Self::Imm(region, ty) => (region, Mutable::Immutable, ty),
+            Self::Mut(region, ty) => (region, Mutable::Mutable, ty),
             _ => return Err(self),
         };
         Ok((mutable, region, ty))

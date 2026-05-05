@@ -21,12 +21,12 @@ impl TypeCheck {
                     Ok((mutable, expected_region, ty)) => {
                         let region = match region {
                             Some(region) => {
-                                self.unify_region(region, expected_region, pattern.line)
+                                self.unify_region(region, expected_region.clone(), pattern.line)
                             }
-                            None => expected_region,
+                            None => expected_region.clone(),
                         };
                         (
-                            self.check_pattern(*derefed_pattern, ty, Some(region.clone())),
+                            self.check_pattern(*derefed_pattern, ty.clone(), Some(region.clone())),
                             mutable,
                             region,
                         )

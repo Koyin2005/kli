@@ -48,11 +48,9 @@ impl Resolve {
             ),
             (
                 names::DESTROY_LIST.to_string(),
-                Res::Builtin(Builtin::DestroyList)
+                Res::Builtin(Builtin::DestroyList),
             ),
-            (names::FREEZE.to_string(),
-                Res::Builtin(Builtin::Freeze)
-            )
+            (names::FREEZE.to_string(), Res::Builtin(Builtin::Freeze)),
         ]);
         Self {
             prev_envs: Vec::new(),
