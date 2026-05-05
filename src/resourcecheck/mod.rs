@@ -50,7 +50,7 @@ impl ResourceCheck {
     }
     fn is_resource(&self, ty: &Type) -> bool {
         match ty {
-            Type::Bool | Type::Unit | Type::Unknown | Type::Int | Type::Imm(..) => false,
+            Type::Bool | Type::Unit | Type::Unknown | Type::Int | Type::Imm(..) | Type::Char => false,
             Type::Option(ty) => self.is_resource(ty),
             Type::Mut(..)
             | Type::Function(_)
@@ -69,7 +69,8 @@ impl ResourceCheck {
             | Type::Unit
             | Type::Unknown
             | Type::Param(..)
-            | Type::Function(..) => false,
+            | Type::Function(..)
+            | Type::Char => false,
             Type::List(ty) | Type::Box(ty) | Type::Option(ty) => self.ty_is_expired(ty),
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
                 if let Region::Local(_, local) = region
@@ -90,7 +91,8 @@ impl ResourceCheck {
             | Type::Unit
             | Type::Unknown
             | Type::Param(..)
-            | Type::Function(..) => false,
+            | Type::Function(..)
+            | Type::Char => false,
             Type::List(ty) | Type::Box(ty) | Type::Option(ty) => self.has_regions(ty),
             Type::Imm(..) | Type::Mut(..) => true,
             Type::Infer(_) => unreachable!("All infers should be removed"),

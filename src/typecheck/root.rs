@@ -118,7 +118,7 @@ impl TypeCheck {
                 let ty = self.simplify_type(ty.clone());
                 match ty {
                     Type::List(element) => Ok(Type::reference(*element, mutable, region.clone())),
-                    Type::String => todo!("Charssss"),
+                    Type::String => Ok(Type::Char),
                     ty => self.iterator_element(ty),
                 }
             }
@@ -129,6 +129,7 @@ impl TypeCheck {
             Type::Unknown => Ok(Type::Unknown),
             Type::Bool
             | Type::Int
+            | Type::Char
             | Type::Param(..)
             | Type::Unit
             | Type::List(_)

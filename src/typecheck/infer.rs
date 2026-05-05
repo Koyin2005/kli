@@ -68,6 +68,7 @@ impl TypeInfer {
             | Type::Unit
             | Type::Unknown
             | Type::String
+            | Type::Char
             | Type::Param(..) => ty,
             Type::Box(ty) => Type::Box(Box::new(self.simplify_type(*ty))),
             Type::Option(ty) => Type::Option(Box::new(self.simplify_type(*ty))),
@@ -139,7 +140,8 @@ impl TypeInfer {
             | (ty @ Type::Bool, Type::Bool)
             | (ty @ Type::Unit, Type::Unit)
             | (ty @ Type::Unknown, Type::Unknown)
-            | (ty @ Type::String, Type::String) => Some(ty),
+            | (ty @ Type::String, Type::String)
+            | (ty @ Type::Char,Type::Char) => Some(ty),
             (Type::Param(name1, index1), Type::Param(name2, index2)) if index1 == index2 => {
                 assert_eq!(name1, name2);
                 Some(Type::Param(name1, index1))
@@ -197,7 +199,11 @@ impl TypeInfer {
                     Some(ty)
                 }
             },
-            _ => None,
+            (ty1,ty2) => if ty1 == ty2 {
+                Some(ty1)
+            } else {
+                None
+            },
         }
     }
 }

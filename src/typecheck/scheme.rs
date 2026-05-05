@@ -38,7 +38,7 @@ impl Bind for Region {
 impl Bind for Type {
     fn bind(self, args: &[GenericArg]) -> Self {
         match self {
-            Self::Bool | Self::Int | Self::Unit | Self::Unknown | Self::String | Self::Infer(_) => {
+            Self::Bool | Self::Int | Self::Unit | Self::Unknown | Self::String | Self::Infer(_) | Self::Char => {
                 self
             }
             Self::Imm(region, ty) => Self::Imm(region.bind(args), Box::new((*ty).bind(args))),

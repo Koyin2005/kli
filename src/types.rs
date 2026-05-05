@@ -42,6 +42,7 @@ pub enum Type {
     Int,
     Bool,
     String,
+    Char,
     Param(String, usize),
     Box(Box<Type>),
     List(Box<Type>),
@@ -69,6 +70,7 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Char => f.pad("char"),
             Self::Bool => f.pad("bool"),
             Self::Int => f.pad("int"),
             Self::Unit => f.pad("unit"),
