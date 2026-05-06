@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 
 use crate::{
     ast::Mutable,
@@ -19,15 +19,22 @@ enum VarState {
 }
 
 struct VarInfo {
-    state: VarState,
     ty: Type,
     name: String,
     mutable: Mutable,
     function_level: usize,
 }
+fn unify_state(state1 : VarState, state2 : VarState) -> Option<VarState>{
+    match(state1,state2){
+        (VarState::Moved,VarState::Moved) => Some(VarState::Moved),
+        (VarState::Owned,VarState::Owned) => Some(VarState::Owned),
+        (VarState::Owned,VarState::Moved) | (VarState::Moved,VarState::Owned) => None
+    }
+}
 #[derive(Default)]
 pub struct ResourceCheck {
     vars: HashMap<VarId, VarInfo>,
+    var_states :  HashMap<VarId,VarState>,
     err: DiagnosticReporter,
     expired_regions: HashSet<LocalRegionId>,
     scopes: Vec<Vec<VarId>>,
@@ -39,6 +46,7 @@ impl ResourceCheck {
         Self {
             region_params: HashSet::new(),
             vars: HashMap::new(),
+            var_states : HashMap::new(),
             err: DiagnosticReporter::new(),
             scopes: Vec::new(),
             expired_regions: HashSet::new(),
@@ -98,39 +106,40 @@ impl ResourceCheck {
             Type::Infer(_) => unreachable!("All infers should be removed"),
         }
     }
-    fn in_drop_scope(&mut self, line: usize, f: impl FnOnce(&mut Self)) {
+    fn in_drop_scope(&mut self, line: usize, f: impl FnOnce(&mut Self)) -> Vec<VarId> {
         self.scopes.push(Default::default());
         f(self);
         let Some(scope) = self.scopes.pop() else {
-            return;
+            return Vec::new();
         };
-        for var in scope {
+        for &var in &scope {
             let var_info = &self.vars[&var];
-            if var_info.state == VarState::Owned && self.is_strict_resource(&var_info.ty) {
+            let state = self.var_states[&var];
+            if state == VarState::Owned && self.is_strict_resource(&var_info.ty) {
                 let msg = format!("'{}' cannot go out of scope", var_info.name);
                 self.err.report(msg, line);
             }
         }
+        scope
     }
     fn init_var(&mut self, mutable: Mutable, var: VarId, name: String, ty: Type) {
         self.scopes.last_mut().unwrap().push(var);
         self.vars.insert(
             var,
             VarInfo {
-                state: VarState::Owned,
                 ty,
                 name,
                 mutable,
                 function_level: self.local_function,
             },
         );
+        self.var_states.insert(var,VarState::Owned);
     }
     fn write_to_var(&mut self, var: VarId) {
-        self.vars.get_mut(&var).unwrap().state = VarState::Owned;
+        *self.var_states.get_mut(&var).unwrap() = VarState::Owned;
     }
     fn move_from_var(&mut self, var: VarId) {
-        let info = self.vars.get_mut(&var).unwrap();
-        info.state = VarState::Moved;
+        *self.var_states.get_mut(&var).unwrap() = VarState::Moved;
     }
     fn place_mutable(&self, place: &Place) -> Mutable {
         match &place.kind {
@@ -189,7 +198,7 @@ impl ResourceCheck {
                     }
                     match kind {
                         PlaceUse::Read => {
-                            if let VarState::Moved = this.vars[&var.1].state {
+                            if let VarState::Moved = this.var_states[&var.1] {
                                 this.err.report(
                                     format!("Cannot use variable '{}' after move", var.0),
                                     place.line,
@@ -286,11 +295,13 @@ impl ResourceCheck {
                 pattern,
                 binder,
                 body,
-            } => self.in_drop_scope(body.line, |this| {
+            } => {
+                self.in_drop_scope(body.line, |this| {
                 this.check_expr(binder, None);
                 this.check_pattern(pattern);
                 this.check_expr(body, None);
-            }),
+            });
+        },
             ExprKind::Borrow {
                 var_name,
                 new_var,
@@ -339,12 +350,31 @@ impl ResourceCheck {
             }
             ExprKind::Case(value, arms) => {
                 self.check_expr(value, None);
+                let mut combined_state = HashMap::new();
                 for arm in arms {
+                    let old_state = self.var_states.clone();
                     self.in_drop_scope(arm.pattern.line, |this| {
                         this.check_pattern(&arm.pattern);
                         this.check_expr(&arm.body, None);
                     });
+                    let new_state = std::mem::replace(&mut self.var_states, old_state);
+                    for (var,state) in new_state{
+                        match combined_state.entry(var){
+                            Entry::Occupied(mut entry) => {
+                                let Some(new_state) = unify_state(state, *entry.get()) else {
+                                    let name = &self.vars[&var].name;
+                                    self.err.report(format!("'{name}' should always be moved"), arm.body.line);
+                                    continue;
+                                };
+                                entry.insert(new_state);
+                            },
+                            Entry::Vacant(entry) => {
+                                entry.insert(state);
+                            }
+                        }
+                    }
                 }
+                self.var_states = combined_state;
             }
         }
     }
