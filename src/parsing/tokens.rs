@@ -22,6 +22,7 @@ pub enum TokenKind {
     Semi,
     Colon,
     Fun,
+    Char,
     Print,
     Borrow,
     Ident(String),

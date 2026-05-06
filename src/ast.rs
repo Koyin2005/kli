@@ -99,6 +99,7 @@ pub enum TypeKind {
     Bool,
     String,
     Unit,
+    Char,
     Named(Ident),
     Function(FunctionType),
     Option(Box<Type>),

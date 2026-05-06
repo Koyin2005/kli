@@ -199,11 +199,7 @@ impl TypeInfer {
                     Some(ty)
                 }
             },
-            (ty1,ty2) => if ty1 == ty2 {
-                Some(ty1)
-            } else {
-                None
-            },
+            _ => None,
         }
     }
 }

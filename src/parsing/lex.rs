@@ -150,6 +150,7 @@ impl<'s> Lexer<'s> {
                 "static" => TokenKind::Static,
                 "ref" => TokenKind::Ref,
                 "box" => TokenKind::Box,
+                "char" => TokenKind::Char,
                 _ => TokenKind::Ident(src),
             },
         })

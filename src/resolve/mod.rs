@@ -128,6 +128,7 @@ impl Resolve {
     }
     fn resolve_type(&mut self, ty: ast::Type) -> res::Type {
         let kind = match ty.kind {
+            ast::TypeKind::Char => res::TypeKind::Char,
             ast::TypeKind::Bool => res::TypeKind::Bool,
             ast::TypeKind::Int => res::TypeKind::Int,
             ast::TypeKind::Unit => res::TypeKind::Unit,

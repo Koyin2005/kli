@@ -33,6 +33,7 @@ fn infer_generic_kinds_ty(ty: &res::Type, infer: &mut GenericInfer) {
     match &ty.kind {
         res::TypeKind::Bool
         | res::TypeKind::Int
+        | res::TypeKind::Char
         | res::TypeKind::String
         | res::TypeKind::Unit
         | res::TypeKind::Unknown => (),

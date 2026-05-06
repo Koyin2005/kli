@@ -35,6 +35,7 @@ impl<'a> Lower<'a> {
     pub(super) fn lower_type(&self, ty: &res::Type) -> Type {
         match &ty.kind {
             res::TypeKind::Unknown => Type::Unknown,
+            res::TypeKind::Char => Type::Char,
             res::TypeKind::Bool => Type::Bool,
             res::TypeKind::Int => Type::Int,
             res::TypeKind::Unit => Type::Unit,

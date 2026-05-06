@@ -691,6 +691,10 @@ impl Parser {
                         kind: TypeKind::Box(Box::new(ty)),
                     }))
                 }
+                TokenKind::Char => {
+                    self.next_token();
+                    Ok(Some(Type { line, kind: TypeKind::Char }))
+                }
                 _ => Ok(None),
             },
         }

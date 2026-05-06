@@ -172,6 +172,7 @@ pub enum TypeKind {
     Int,
     Bool,
     String,
+    Char,
     List(Box<Type>),
     Box(Box<Type>),
     Option(Box<Type>),
