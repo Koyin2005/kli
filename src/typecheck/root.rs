@@ -47,7 +47,7 @@ fn infer_generic_kinds_ty(ty: &res::Type, infer: &mut GenericInfer) {
             infer_generic_kinds_region(region, infer);
             infer_generic_kinds_ty(ty, infer);
         }
-        res::TypeKind::Function(params, return_type) => {
+        res::TypeKind::Function(_, params, return_type) => {
             for param in params {
                 infer_generic_kinds_ty(param, infer);
             }
@@ -95,6 +95,7 @@ impl TypeCheck {
             let param_count = kinds.len();
             let signature = Scheme::new(
                 FunctionType {
+                    resource: crate::ast::IsResource::Data,
                     params: lower.lower_types(&mut function.params.iter().map(|param| &param.ty)),
                     return_type: Box::new(lower.lower_type(&function.return_type)),
                 },
@@ -142,9 +143,17 @@ impl TypeCheck {
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
         match builtin {
-            Builtin::DestroyString => Scheme::new(FunctionType { params: vec![Type::String], return_type: Box::new(Type::Unit) }, 0),
+            Builtin::DestroyString => Scheme::new(
+                FunctionType {
+                    resource: crate::ast::IsResource::Data,
+                    params: vec![Type::String],
+                    return_type: Box::new(Type::Unit),
+                },
+                0,
+            ),
             Builtin::AllocBox => Scheme::new(
                 FunctionType {
+                    resource: crate::ast::IsResource::Data,
                     params: vec![Type::Param("T".to_string(), 0)],
                     return_type: Box::new(Type::Box(Box::new(Type::Param("T".to_string(), 0)))),
                 },
@@ -152,6 +161,7 @@ impl TypeCheck {
             ),
             Builtin::DeallocBox => Scheme::new(
                 FunctionType {
+                    resource: crate::ast::IsResource::Data,
                     params: vec![Type::Box(Box::new(Type::Param("T".to_string(), 0)))],
                     return_type: Box::new(Type::Param("T".to_string(), 0)),
                 },
@@ -162,6 +172,7 @@ impl TypeCheck {
                 let t_param = Type::Param("T".to_string(), 1);
                 Scheme::new(
                     FunctionType {
+                        resource: crate::ast::IsResource::Data,
                         params: vec![Type::Imm(
                             r_param.clone(),
                             Box::new(Type::Box(Box::new(t_param.clone()))),
@@ -176,6 +187,7 @@ impl TypeCheck {
                 let t_param = Type::Param("T".to_string(), 1);
                 Scheme::new(
                     FunctionType {
+                        resource: crate::ast::IsResource::Data,
                         params: vec![Type::Mut(
                             r_param.clone(),
                             Box::new(Type::Box(Box::new(t_param.clone()))),
@@ -187,9 +199,11 @@ impl TypeCheck {
             }
             Builtin::DestroyList => Scheme::new(
                 FunctionType {
+                    resource: crate::ast::IsResource::Data,
                     params: vec![
                         Type::List(Box::new(Type::Param("T".to_string(), 0))),
                         Type::Function(FunctionType {
+                            resource: crate::ast::IsResource::Data,
                             params: vec![Type::Param("T".to_string(), 0)],
                             return_type: Box::new(Type::Unit),
                         }),
@@ -200,6 +214,7 @@ impl TypeCheck {
             ),
             Builtin::Freeze => Scheme::new(
                 FunctionType {
+                    resource: crate::ast::IsResource::Data,
                     params: vec![Type::Mut(
                         Region::Param("r".to_string(), 0),
                         Box::new(Type::Param("T".to_string(), 1)),
@@ -231,7 +246,7 @@ impl TypeCheck {
                     GenericArg::Type(self.fresh_ty(line)),
                 ]
             }
-            Builtin::DestroyString => Vec::new()
+            Builtin::DestroyString => Vec::new(),
         }
     }
     pub(super) fn fresh_region(&mut self, line: usize) -> Region {
@@ -345,6 +360,7 @@ impl TypeCheck {
         self.generics
             .clone_from(&self.function_generic_kinds[usize::from(id)]);
         let FunctionType {
+            resource: _,
             params,
             return_type,
         } = self.signature_of_function(id).skip();

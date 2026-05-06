@@ -1,11 +1,11 @@
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 
 use crate::{
-    ast::Mutable,
+    ast::{IsResource, Mutable},
     diagnostics::DiagnosticReporter,
     resolved_ast::{LocalRegionId, VarId},
     typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind},
-    types::{GenericKind, Region, Type},
+    types::{FunctionType, GenericKind, Region, Type},
 };
 #[derive(Debug, Clone, Copy)]
 enum PlaceUse {
@@ -24,18 +24,23 @@ struct VarInfo {
     mutable: Mutable,
     function_level: usize,
 }
-fn unify_state(state1 : VarState, state2 : VarState) -> Option<VarState>{
-    match(state1,state2){
-        (VarState::Moved,VarState::Moved) => Some(VarState::Moved),
-        (VarState::Owned,VarState::Owned) => Some(VarState::Owned),
-        (VarState::Owned,VarState::Moved) | (VarState::Moved,VarState::Owned) => None
+fn unify_state(state1: VarState, state2: VarState) -> Option<VarState> {
+    match (state1, state2) {
+        (VarState::Moved, VarState::Moved) => Some(VarState::Moved),
+        (VarState::Owned, VarState::Owned) => Some(VarState::Owned),
+        (VarState::Owned, VarState::Moved) | (VarState::Moved, VarState::Owned) => None,
     }
 }
-#[derive(Default)]
+impl Default for ResourceCheck {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 pub struct ResourceCheck {
     vars: HashMap<VarId, VarInfo>,
-    var_states :  HashMap<VarId,VarState>,
+    var_states: HashMap<VarId, VarState>,
     err: DiagnosticReporter,
+    is_current_function_resource: IsResource,
     expired_regions: HashSet<LocalRegionId>,
     scopes: Vec<Vec<VarId>>,
     region_params: HashSet<usize>,
@@ -44,9 +49,10 @@ pub struct ResourceCheck {
 impl ResourceCheck {
     pub fn new() -> Self {
         Self {
+            is_current_function_resource: IsResource::Data,
             region_params: HashSet::new(),
             vars: HashMap::new(),
-            var_states : HashMap::new(),
+            var_states: HashMap::new(),
             err: DiagnosticReporter::new(),
             scopes: Vec::new(),
             expired_regions: HashSet::new(),
@@ -58,10 +64,22 @@ impl ResourceCheck {
     }
     fn is_resource(&self, ty: &Type) -> bool {
         match ty {
-            Type::Bool | Type::Unit | Type::Unknown | Type::Int | Type::Imm(..) | Type::Char => false,
+            Type::Bool
+            | Type::Unit
+            | Type::Unknown
+            | Type::Int
+            | Type::Imm(..)
+            | Type::Char
+            | Type::Function(FunctionType {
+                resource: IsResource::Data,
+                ..
+            }) => false,
             Type::Option(ty) => self.is_resource(ty),
             Type::Mut(..)
-            | Type::Function(_)
+            | Type::Function(FunctionType {
+                resource: IsResource::Resource,
+                ..
+            })
             | Type::String
             | Type::Box(_)
             | Type::Param(..)
@@ -133,7 +151,7 @@ impl ResourceCheck {
                 function_level: self.local_function,
             },
         );
-        self.var_states.insert(var,VarState::Owned);
+        self.var_states.insert(var, VarState::Owned);
     }
     fn write_to_var(&mut self, var: VarId) {
         *self.var_states.get_mut(&var).unwrap() = VarState::Owned;
@@ -152,7 +170,7 @@ impl ResourceCheck {
             }
         }
     }
-    fn check_place_mutable(&mut self, place: &Place, kind: PlaceUse){
+    fn check_place_mutable(&mut self, place: &Place, kind: PlaceUse) {
         match (self.place_mutable(place), kind) {
             (Mutable::Immutable | Mutable::Mutable, PlaceUse::Read)
             | (Mutable::Mutable, PlaceUse::Write) => (),
@@ -190,7 +208,9 @@ impl ResourceCheck {
                     {
                         let state = &this.vars[&var.1];
                         if state.function_level != this.local_function
-                            && this.has_regions(&state.ty)
+                            && (this.has_regions(&state.ty)
+                                || (this.is_resource(&state.ty)
+                                    && this.is_current_function_resource != IsResource::Resource))
                         {
                             this.err
                                 .report(format!("Cannot capture variable '{}'", var.0), place.line);
@@ -284,11 +304,16 @@ impl ResourceCheck {
             }
             ExprKind::Lambda(lambda) => {
                 self.in_drop_scope(lambda.body.line, |this| {
+                    let old_resource = std::mem::replace(
+                        &mut this.is_current_function_resource,
+                        lambda.is_resource,
+                    );
                     this.local_function += 1;
                     for (name, var, ty) in lambda.params.iter() {
                         this.init_var(Mutable::Immutable, *var, name.content.clone(), ty.clone());
                     }
                     this.check_expr(&lambda.body, None);
+                    this.is_current_function_resource = old_resource;
                 });
             }
             ExprKind::Let {
@@ -297,11 +322,11 @@ impl ResourceCheck {
                 body,
             } => {
                 self.in_drop_scope(body.line, |this| {
-                this.check_expr(binder, None);
-                this.check_pattern(pattern);
-                this.check_expr(body, None);
-            });
-        },
+                    this.check_expr(binder, None);
+                    this.check_pattern(pattern);
+                    this.check_expr(body, None);
+                });
+            }
             ExprKind::Borrow {
                 var_name,
                 new_var,
@@ -358,16 +383,19 @@ impl ResourceCheck {
                         this.check_expr(&arm.body, None);
                     });
                     let new_state = std::mem::replace(&mut self.var_states, old_state);
-                    for (var,state) in new_state{
-                        match combined_state.entry(var){
+                    for (var, state) in new_state {
+                        match combined_state.entry(var) {
                             Entry::Occupied(mut entry) => {
                                 let Some(new_state) = unify_state(state, *entry.get()) else {
                                     let name = &self.vars[&var].name;
-                                    self.err.report(format!("'{name}' should always be moved"), arm.body.line);
+                                    self.err.report(
+                                        format!("'{name}' should always be moved"),
+                                        arm.body.line,
+                                    );
                                     continue;
                                 };
                                 entry.insert(new_state);
-                            },
+                            }
                             Entry::Vacant(entry) => {
                                 entry.insert(state);
                             }

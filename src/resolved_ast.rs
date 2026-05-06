@@ -1,4 +1,4 @@
-use crate::ast::{BinaryOp, Ident, Mutable};
+use crate::ast::{BinaryOp, Ident, IsResource, Mutable};
 
 #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Copy)]
 pub struct FunctionId(usize);
@@ -52,7 +52,7 @@ pub struct BorrowExpr {
 #[derive(Debug)]
 pub struct Lambda {
     pub params: Vec<(Ident, VarId, Option<Type>)>,
-    pub return_type: Option<Type>,
+    pub resource: IsResource,
     pub body: Expr,
 }
 #[derive(Debug)]
@@ -74,7 +74,7 @@ pub enum Builtin {
     DerefBox,
     DerefBoxMut,
     Freeze,
-    DestroyString
+    DestroyString,
 }
 #[derive(Debug)]
 pub struct LetExpr {
@@ -178,7 +178,7 @@ pub enum TypeKind {
     Option(Box<Type>),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
-    Function(Vec<Type>, Box<Type>),
+    Function(IsResource, Vec<Type>, Box<Type>),
     Param(String, usize),
     Unknown,
 }

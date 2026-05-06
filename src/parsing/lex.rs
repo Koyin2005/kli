@@ -160,7 +160,12 @@ impl<'s> Lexer<'s> {
         let line = self.line;
         let &c = self.chars.peek()?;
         match c {
-            '=' => Some(self.new_token_from_char(line, TokenKind::Equal)),
+            '=' => Some(self.new_token_from_char_or_chars(
+                '>',
+                line,
+                TokenKind::Equal,
+                TokenKind::ThickArrow,
+            )),
             '(' => Some(self.new_token_from_char(line, TokenKind::LeftParen)),
             ')' => Some(self.new_token_from_char(line, TokenKind::RightParen)),
             '{' => Some(self.new_token_from_char(line, TokenKind::LeftBrace)),

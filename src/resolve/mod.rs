@@ -51,7 +51,10 @@ impl Resolve {
                 Res::Builtin(Builtin::DestroyList),
             ),
             (names::FREEZE.to_string(), Res::Builtin(Builtin::Freeze)),
-            (names::DESTROY_STRING.to_string(),Res::Builtin(Builtin::DestroyString))
+            (
+                names::DESTROY_STRING.to_string(),
+                Res::Builtin(Builtin::DestroyString),
+            ),
         ]);
         Self {
             prev_envs: Vec::new(),
@@ -137,9 +140,11 @@ impl Resolve {
             ast::TypeKind::Option(ty) => res::TypeKind::Option(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::List(ty) => res::TypeKind::List(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::Function(ast::FunctionType {
+                resource,
                 params,
                 return_type,
             }) => res::TypeKind::Function(
+                resource,
                 params.into_iter().map(|ty| self.resolve_type(ty)).collect(),
                 Box::new(self.resolve_type(*return_type)),
             ),
@@ -320,7 +325,7 @@ impl Resolve {
                             (name, var, ty)
                         })
                         .collect(),
-                    return_type: lambda.return_type.map(|ty| this.resolve_type(ty)),
+                    resource: lambda.resource,
                     body: this.resolve_expr(*lambda.body),
                 }))
             }),

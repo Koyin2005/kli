@@ -88,8 +88,15 @@ pub struct Generics {
     pub line: usize,
     pub names: Vec<Ident>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum IsResource {
+    Resource,
+    Data,
+}
 #[derive(Debug, Clone)]
 pub struct FunctionType {
+    pub resource: IsResource,
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
 }
@@ -121,7 +128,7 @@ pub struct Param {
 #[derive(Debug)]
 pub struct Lambda {
     pub params: Vec<(Ident, Option<Type>)>,
-    pub return_type: Option<Type>,
+    pub resource: IsResource,
     pub body: Box<Expr>,
 }
 #[derive(Debug)]

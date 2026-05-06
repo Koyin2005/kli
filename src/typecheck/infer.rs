@@ -74,6 +74,7 @@ impl TypeInfer {
             Type::Option(ty) => Type::Option(Box::new(self.simplify_type(*ty))),
             Type::List(ty) => Type::List(Box::new(self.simplify_type(*ty))),
             Type::Function(function) => Type::Function(FunctionType {
+                resource: function.resource,
                 params: function
                     .params
                     .into_iter()
@@ -141,7 +142,7 @@ impl TypeInfer {
             | (ty @ Type::Unit, Type::Unit)
             | (ty @ Type::Unknown, Type::Unknown)
             | (ty @ Type::String, Type::String)
-            | (ty @ Type::Char,Type::Char) => Some(ty),
+            | (ty @ Type::Char, Type::Char) => Some(ty),
             (Type::Param(name1, index1), Type::Param(name2, index2)) if index1 == index2 => {
                 assert_eq!(name1, name2);
                 Some(Type::Param(name1, index1))
@@ -170,7 +171,8 @@ impl TypeInfer {
                 })
                 .map(|(ty, region)| Type::Mut(region, Box::new(ty))),
             (Type::Function(function1), Type::Function(function2))
-                if function1.params.len() == function2.params.len() =>
+                if function1.params.len() == function2.params.len()
+                    && function1.resource == function2.resource =>
             {
                 let params = function1
                     .params
@@ -180,6 +182,7 @@ impl TypeInfer {
                     .collect::<Option<Vec<_>>>()?;
                 let return_ty = self.unify_ty(*function1.return_type, *function2.return_type)?;
                 Some(Type::Function(FunctionType {
+                    resource: function1.resource,
                     params,
                     return_type: Box::new(return_ty),
                 }))

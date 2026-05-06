@@ -1,5 +1,5 @@
 use crate::{
-    ast::{BinaryOp, Ident, Mutable},
+    ast::{BinaryOp, Ident, IsResource, Mutable},
     resolved_ast::{Builtin, FunctionId, LocalRegionId, Var, VarId},
     types::{GenericArg, GenericKind, Type},
 };
@@ -29,6 +29,7 @@ pub enum PlaceKind {
 }
 #[derive(Debug)]
 pub struct Lambda {
+    pub is_resource: IsResource,
     pub params: Vec<(Ident, VarId, Type)>,
     pub return_type: Type,
     pub body: Expr,

@@ -139,12 +139,10 @@ impl TypeCheck {
             .collect::<Vec<_>>();
         let body = self.check_expr(
             lambda.body,
-            match lambda.return_type {
-                Some(ty) => Some(self.lower_type(ty)),
-                None => expected_sig.as_ref().map(|sig| (*sig.return_type).clone()),
-            },
+            expected_sig.as_ref().map(|sig| (*sig.return_type).clone()),
         );
         let function = Type::Function(FunctionType {
+            resource: lambda.resource,
             params: params.iter().map(|(_, _, ty)| ty.clone()).collect(),
             return_type: Box::new(body.ty.clone()),
         });
@@ -152,6 +150,7 @@ impl TypeCheck {
             ty: function,
             line,
             kind: typed_ast::ExprKind::Lambda(Box::new(typed_ast::Lambda {
+                is_resource: lambda.resource,
                 params,
                 return_type: body.ty.clone(),
                 body,
@@ -183,6 +182,7 @@ impl TypeCheck {
         let callee_type = self.simplify_type(callee.ty.clone());
         let (params, return_type) = match callee_type {
             Type::Function(FunctionType {
+                resource: _,
                 params,
                 return_type,
             }) => (params, Some(*return_type)),

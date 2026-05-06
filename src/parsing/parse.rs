@@ -2,8 +2,8 @@ use std::{iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        BinaryOp, CaseArm, Expr, ExprKind, Function, FunctionType, Generics, Ident, Lambda,
-        LetExpr, Mutable, Param, Pattern, PatternKind, Program, Region, Type, TypeKind,
+        BinaryOp, CaseArm, Expr, ExprKind, Function, FunctionType, Generics, Ident, IsResource,
+        Lambda, LetExpr, Mutable, Param, Pattern, PatternKind, Program, Region, Type, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     parsing::{
@@ -444,18 +444,21 @@ impl Parser {
                         }
                     }
                     let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
-                    let return_type = if self.matches_token(&TokenKind::Arrow) {
-                        Some(self.parse_type()?)
+
+                    let resource = if self.matches_token(&TokenKind::Arrow) {
+                        IsResource::Data
+                    } else if self.matches_token(&TokenKind::ThickArrow) {
+                        IsResource::Resource
                     } else {
-                        None
+                        let _ = self.expect("Expected '->' or '=>'".to_string(), &TokenKind::Arrow);
+                        IsResource::Data
                     };
-                    let _ = self.expect("Expected '='".to_string(), &TokenKind::Equal);
                     let body = self.parse_expr()?;
                     Ok(Expr {
                         line,
                         kind: ExprKind::Lambda(Lambda {
                             params,
-                            return_type,
+                            resource,
                             body: Box::new(body),
                         }),
                     })
@@ -579,9 +582,18 @@ impl Parser {
             }
         }
         let _ = self.expect("Expected ')'".to_string(), &TokenKind::RightParen);
-        let _ = self.expect("Expected '->'".to_string(), &TokenKind::Arrow);
+        let is_resource = if self.matches_token(&TokenKind::ThickArrow) {
+            IsResource::Resource
+        } else if self.matches_token(&TokenKind::ThickArrow) {
+            IsResource::Data
+        } else {
+            let _ = self.expect("Expected '->' or '=>'".to_string(), &TokenKind::Arrow);
+            IsResource::Data
+        };
+
         let return_type = self.parse_type()?;
         Ok(FunctionType {
+            resource: is_resource,
             params,
             return_type: Box::new(return_type),
         })
@@ -693,7 +705,10 @@ impl Parser {
                 }
                 TokenKind::Char => {
                     self.next_token();
-                    Ok(Some(Type { line, kind: TypeKind::Char }))
+                    Ok(Some(Type {
+                        line,
+                        kind: TypeKind::Char,
+                    }))
                 }
                 _ => Ok(None),
             },

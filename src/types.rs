@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
-use crate::{ast::Mutable, resolved_ast::LocalRegionId};
+use crate::{
+    ast::{IsResource, Mutable},
+    resolved_ast::LocalRegionId,
+};
 #[derive(Clone, Copy, Debug)]
 pub enum GenericKind {
     Region,
@@ -13,6 +16,7 @@ pub enum GenericArg {
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct FunctionType {
+    pub resource: IsResource,
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
 }
@@ -106,6 +110,7 @@ impl Display for Type {
                 ty.fmt(f)
             }
             Self::Function(FunctionType {
+                resource,
                 params,
                 return_type,
             }) => {
@@ -118,7 +123,10 @@ impl Display for Type {
                     param.fmt(f)?;
                     first = false;
                 }
-                f.pad(") -> ")?;
+                f.pad(match *resource {
+                    IsResource::Data => ") ->",
+                    IsResource::Resource => ") =>",
+                })?;
                 return_type.fmt(f)
             }
         }

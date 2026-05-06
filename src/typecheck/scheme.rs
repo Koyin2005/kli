@@ -38,9 +38,13 @@ impl Bind for Region {
 impl Bind for Type {
     fn bind(self, args: &[GenericArg]) -> Self {
         match self {
-            Self::Bool | Self::Int | Self::Unit | Self::Unknown | Self::String | Self::Infer(_) | Self::Char => {
-                self
-            }
+            Self::Bool
+            | Self::Int
+            | Self::Unit
+            | Self::Unknown
+            | Self::String
+            | Self::Infer(_)
+            | Self::Char => self,
             Self::Imm(region, ty) => Self::Imm(region.bind(args), Box::new((*ty).bind(args))),
             Self::Mut(region, ty) => Self::Mut(region.bind(args), Box::new((*ty).bind(args))),
             Self::Function(function) => Self::Function(function.bind(args)),
@@ -60,6 +64,7 @@ impl Bind for Type {
 impl Bind for FunctionType {
     fn bind(self, args: &[GenericArg]) -> Self {
         Self {
+            resource: self.resource,
             params: self.params.into_iter().map(|ty| ty.bind(args)).collect(),
             return_type: Box::new(self.return_type.bind(args)),
         }
