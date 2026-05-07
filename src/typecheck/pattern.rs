@@ -17,11 +17,11 @@ impl TypeCheck {
         let expected_type = self.simplify_type(expected_type);
         match pattern.kind {
             PatternKind::Bool(value) => {
-                self.unify(expected_type, Type::Bool,pattern.line);
-                typed_ast::Pattern{
-                    line:pattern.line,
-                    ty:Type::Bool,
-                    kind:typed_ast::PatternKind::Bool(value)
+                self.unify(expected_type, Type::Bool, pattern.line);
+                typed_ast::Pattern {
+                    line: pattern.line,
+                    ty: Type::Bool,
+                    kind: typed_ast::PatternKind::Bool(value),
                 }
             }
             PatternKind::Deref(derefed_pattern) => {

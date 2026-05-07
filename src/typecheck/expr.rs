@@ -260,6 +260,7 @@ impl TypeCheck {
         let Expr { line, kind } = expr;
         let make_expr = move |ty, kind| typed_ast::Expr { ty, kind, line };
         let mut expr = match kind {
+            ExprKind::Annotate(expr, ty) => self.check_expr(*expr, Some(self.lower_type(*ty))),
             ExprKind::Err => typed_ast::Expr {
                 line,
                 ty: Type::Unknown,
@@ -431,15 +432,23 @@ impl TypeCheck {
             }
             ExprKind::Case(matched, case_arms) => {
                 let matched = self.check_expr(*matched, None);
+                let mut prev_ty = None::<Type>;
                 let arms = case_arms
                     .into_iter()
                     .map(|arm| {
                         let pattern = self.check_pattern(arm.pattern, matched.ty.clone(), None);
                         let body = self.check_expr(arm.body, expected_ty.clone());
+                        if expected_ty.is_none() {
+                            if let Some(ref prev_ty) = prev_ty {
+                                self.unify(prev_ty.clone(), body.ty.clone(), body.line);
+                            } else {
+                                prev_ty = Some(body.ty.clone());
+                            }
+                        }
                         typed_ast::CaseArm { pattern, body }
                     })
                     .collect();
-                let ty = expected_ty.unwrap_or_else(|| {
+                let ty = expected_ty.or(prev_ty).unwrap_or_else(|| {
                     self.type_annotations_needed(expr.line);
                     Type::Unknown
                 });

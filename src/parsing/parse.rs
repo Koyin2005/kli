@@ -178,19 +178,19 @@ impl Parser {
             Some(&Token { line, ref kind }) => match kind {
                 TokenKind::Ref => {
                     self.next_token();
-                    let region = if self.matches_token(&TokenKind::LeftBracket) {
-                        let region = self.parse_region()?;
-                        let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
-                        Some(region)
-                    } else {
-                        None
-                    };
+                    let _ = self.expect(
+                        "Expected '[' after 'ref'".to_string(),
+                        &TokenKind::LeftBracket,
+                    );
+                    let region = self.parse_region()?;
+                    let _ = self.expect("Expected ']'".to_string(), &TokenKind::RightBracket);
+
                     let mutable = if self.matches_token(&TokenKind::Mut) {
                         Mutable::Mutable
                     } else {
                         Mutable::Immutable
                     };
-                    self.parse_pattern_ident(region, line, mutable)
+                    self.parse_pattern_ident(Some(region), line, mutable)
                 }
                 TokenKind::Ident(_) => self.parse_pattern_ident(None, line, Mutable::Immutable),
                 TokenKind::Mut => {
@@ -212,6 +212,20 @@ impl Parser {
                     Ok(Pattern {
                         line,
                         kind: PatternKind::None,
+                    })
+                }
+                TokenKind::True => {
+                    self.next_token();
+                    Ok(Pattern {
+                        line,
+                        kind: PatternKind::Bool(true),
+                    })
+                }
+                TokenKind::False => {
+                    self.next_token();
+                    Ok(Pattern {
+                        line,
+                        kind: PatternKind::Bool(false),
                     })
                 }
                 TokenKind::Caret => {
@@ -251,8 +265,20 @@ impl Parser {
                         kind: ExprKind::Number(num),
                     })
                 }
-                TokenKind::True => {self.next_token(); Ok(Expr { line, kind: ExprKind::Bool(true) })},
-                TokenKind::False => {self.next_token(); Ok(Expr { line, kind: ExprKind::Bool(false) })},
+                TokenKind::True => {
+                    self.next_token();
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::Bool(true),
+                    })
+                }
+                TokenKind::False => {
+                    self.next_token();
+                    Ok(Expr {
+                        line,
+                        kind: ExprKind::Bool(false),
+                    })
+                }
                 TokenKind::LeftParen => {
                     self.next_token();
                     let expr = if self.check_token(&TokenKind::RightParen) {
@@ -503,6 +529,14 @@ impl Parser {
                         Expr {
                             line: expr.line,
                             kind: ExprKind::Deref(Box::new(expr)),
+                        }
+                    }
+                    TokenKind::Colon => {
+                        self.next_token();
+                        let ty = self.parse_type()?;
+                        Expr {
+                            line: expr.line,
+                            kind: ExprKind::Annotate(Box::new(expr), Box::new(ty)),
                         }
                     }
                     _ => break Ok(expr),

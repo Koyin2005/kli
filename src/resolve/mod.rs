@@ -274,6 +274,10 @@ impl Resolve {
             ast::ExprKind::Print(arg) => {
                 res::ExprKind::Print(arg.map(|arg| Box::new(self.resolve_expr(*arg))))
             }
+            ast::ExprKind::Annotate(expr, ty) => res::ExprKind::Annotate(
+                Box::new(self.resolve_expr(*expr)),
+                Box::new(self.resolve_type(*ty)),
+            ),
             ast::ExprKind::Panic(ty) => res::ExprKind::Panic(ty.map(|ty| self.resolve_type(ty))),
             ast::ExprKind::Sequence(first, second) => res::ExprKind::Sequence(
                 Box::new(self.resolve_expr(*first)),

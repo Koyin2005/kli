@@ -93,6 +93,7 @@ pub struct CaseArm {
 pub enum ExprKind {
     Unit,
     Err,
+    Annotate(Box<Expr>, Box<Type>),
     Int(i64),
     Bool(bool),
     String(String),

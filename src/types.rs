@@ -124,8 +124,8 @@ impl Display for Type {
                     first = false;
                 }
                 f.pad(match *resource {
-                    IsResource::Data => ") ->",
-                    IsResource::Resource => ") =>",
+                    IsResource::Data => ") -> ",
+                    IsResource::Resource => ") => ",
                 })?;
                 return_type.fmt(f)
             }

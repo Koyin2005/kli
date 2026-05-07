@@ -20,6 +20,7 @@ enum VarState {
 
 struct VarInfo {
     ty: Type,
+    line: usize,
     name: String,
     mutable: Mutable,
     function_level: usize,
@@ -45,7 +46,7 @@ pub struct ResourceCheck {
     scopes: Vec<Vec<VarId>>,
     region_params: HashSet<usize>,
     local_functions: usize,
-    local_function: usize
+    local_function: usize,
 }
 impl ResourceCheck {
     pub fn new() -> Self {
@@ -58,7 +59,7 @@ impl ResourceCheck {
             scopes: Vec::new(),
             expired_regions: HashSet::new(),
             local_functions: 0,
-            local_function : 0
+            local_function: 0,
         }
     }
     fn is_strict_resource(&self, ty: &Type) -> bool {
@@ -136,17 +137,22 @@ impl ResourceCheck {
             let var_info = &self.vars[&var];
             let state = self.var_states[&var];
             if state == VarState::Owned && self.is_strict_resource(&var_info.ty) {
-                let msg = format!("'{}' cannot go out of scope", var_info.name);
+                let line = var_info.line;
+                let msg = format!(
+                    "'{}' cannot go out of scope",
+                    var_info.name
+                );
                 self.err.report(msg, line);
             }
         }
         scope
     }
-    fn init_var(&mut self, mutable: Mutable, var: VarId, name: String, ty: Type) {
+    fn init_var(&mut self, mutable: Mutable, var: VarId, line: usize, name: String, ty: Type) {
         self.scopes.last_mut().unwrap().push(var);
         self.vars.insert(
             var,
             VarInfo {
+                line,
                 ty,
                 name,
                 mutable,
@@ -220,7 +226,14 @@ impl ResourceCheck {
                     }
                     match kind {
                         PlaceUse::Read => {
-                            if let VarState::Moved = this.var_states[&var.1] {
+                            if let VarState::Moved =
+                                this.var_states.get(&var.1).unwrap_or_else(|| {
+                                    panic!(
+                                        "Variable '{}' doesn't have state '{}'",
+                                        var.0, place.line
+                                    )
+                                })
+                            {
                                 this.err.report(
                                     format!("Cannot use variable '{}' after move", var.0),
                                     place.line,
@@ -244,7 +257,7 @@ impl ResourceCheck {
                 self.check_pattern(sub_pattern);
             }
             PatternKind::Binding(mutable, var, ty) => {
-                self.init_var(*mutable, var.1, var.0.clone(), (**ty).clone());
+                self.init_var(*mutable, var.1, pattern.line, var.0.clone(), (**ty).clone());
             }
         }
     }
@@ -317,7 +330,13 @@ impl ResourceCheck {
                     };
                     let old_function = std::mem::replace(&mut this.local_function, function);
                     for (name, var, ty) in lambda.params.iter() {
-                        this.init_var(Mutable::Immutable, *var, name.content.clone(), ty.clone());
+                        this.init_var(
+                            Mutable::Immutable,
+                            *var,
+                            name.line,
+                            name.content.clone(),
+                            ty.clone(),
+                        );
                     }
                     this.check_expr(&lambda.body, None);
                     this.is_current_function_resource = old_resource;
@@ -360,6 +379,7 @@ impl ResourceCheck {
                 self.init_var(
                     Mutable::Immutable,
                     *new_var,
+                    var_name.line,
                     var_name.content.clone(),
                     new_ty.clone(),
                 );
@@ -383,7 +403,11 @@ impl ResourceCheck {
             }
             ExprKind::Case(value, arms) => {
                 self.check_expr(value, None);
-                let mut combined_state = HashMap::new();
+                let mut combined_state = if arms.is_empty() {
+                    self.var_states.clone()
+                } else {
+                    HashMap::new()
+                };
                 for arm in arms {
                     let old_state = self.var_states.clone();
                     self.in_drop_scope(arm.pattern.line, |this| {
@@ -430,6 +454,7 @@ impl ResourceCheck {
                 this.init_var(
                     Mutable::Immutable,
                     param.var,
+                    param.name.line,
                     param.name.content.clone(),
                     param.ty.clone(),
                 );
