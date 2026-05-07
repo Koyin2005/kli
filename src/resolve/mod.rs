@@ -203,6 +203,7 @@ impl Resolve {
     fn resolve_pattern(&mut self, pattern: ast::Pattern) -> res::Pattern {
         let line = pattern.line;
         let kind = match pattern.kind {
+            ast::PatternKind::Bool(value) => res::PatternKind::Bool(value),
             ast::PatternKind::None => res::PatternKind::None,
             ast::PatternKind::Deref(pattern) => {
                 res::PatternKind::Deref(Box::new(self.resolve_pattern(*pattern)))
@@ -267,6 +268,7 @@ impl Resolve {
             ast::ExprKind::Unit => res::ExprKind::Unit,
             ast::ExprKind::String(value) => res::ExprKind::String(value),
             ast::ExprKind::Number(value) => res::ExprKind::Int(value as i64),
+            ast::ExprKind::Bool(value) => res::ExprKind::Bool(value),
             ast::ExprKind::None(ty) => res::ExprKind::None(ty.map(|ty| self.resolve_type(ty))),
             ast::ExprKind::Some(arg) => res::ExprKind::Some(Box::new(self.resolve_expr(*arg))),
             ast::ExprKind::Print(arg) => {

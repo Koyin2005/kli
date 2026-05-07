@@ -131,6 +131,7 @@ pub struct Region {
 
 #[derive(Debug)]
 pub enum PatternKind {
+    Bool(bool),
     Some(Box<Pattern>),
     None,
     Binding(Mutable, Ident, VarId, Option<Region>),

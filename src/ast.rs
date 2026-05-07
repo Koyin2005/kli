@@ -44,6 +44,7 @@ pub struct Pattern {
 }
 #[derive(Debug)]
 pub enum PatternKind {
+    Bool(bool),
     Binding(Mutable, Ident, Option<Region>),
     Some(Box<Pattern>),
     None,
@@ -81,6 +82,7 @@ pub enum ExprKind {
     Ident(Ident),
     Lambda(Lambda),
     Deref(Box<Expr>),
+    Bool(bool),
     Number(u64),
 }
 #[derive(Debug, Clone)]

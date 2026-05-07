@@ -46,5 +46,7 @@ pub enum TokenKind {
     For,
     Arrow,
     ThickArrow,
+    True,
+    False,
     Error,
 }

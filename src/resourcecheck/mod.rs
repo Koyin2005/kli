@@ -239,7 +239,7 @@ impl ResourceCheck {
     }
     fn check_pattern(&mut self, pattern: &Pattern) {
         match &pattern.kind {
-            PatternKind::None => (),
+            PatternKind::None | PatternKind::Bool(_) => (),
             PatternKind::Some(sub_pattern) | PatternKind::Deref(sub_pattern) => {
                 self.check_pattern(sub_pattern);
             }

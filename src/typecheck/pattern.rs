@@ -16,6 +16,14 @@ impl TypeCheck {
     ) -> typed_ast::Pattern {
         let expected_type = self.simplify_type(expected_type);
         match pattern.kind {
+            PatternKind::Bool(value) => {
+                self.unify(expected_type, Type::Bool,pattern.line);
+                typed_ast::Pattern{
+                    line:pattern.line,
+                    ty:Type::Bool,
+                    kind:typed_ast::PatternKind::Bool(value)
+                }
+            }
             PatternKind::Deref(derefed_pattern) => {
                 let (derefed_pattern, mutable, region) = match expected_type.as_reference_type() {
                     Ok((mutable, expected_region, ty)) => {

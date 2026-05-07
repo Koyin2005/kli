@@ -251,6 +251,8 @@ impl Parser {
                         kind: ExprKind::Number(num),
                     })
                 }
+                TokenKind::True => {self.next_token(); Ok(Expr { line, kind: ExprKind::Bool(true) })},
+                TokenKind::False => {self.next_token(); Ok(Expr { line, kind: ExprKind::Bool(false) })},
                 TokenKind::LeftParen => {
                     self.next_token();
                     let expr = if self.check_token(&TokenKind::RightParen) {

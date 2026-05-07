@@ -151,6 +151,8 @@ impl<'s> Lexer<'s> {
                 "ref" => TokenKind::Ref,
                 "box" => TokenKind::Box,
                 "char" => TokenKind::Char,
+                "true" => TokenKind::True,
+                "false" => TokenKind::False,
                 _ => TokenKind::Ident(src),
             },
         })
