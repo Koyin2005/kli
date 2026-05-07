@@ -5,4 +5,3 @@ mod pattern;
 pub mod root;
 mod scheme;
 mod subst;
-mod types;
