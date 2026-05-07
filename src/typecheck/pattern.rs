@@ -33,7 +33,7 @@ impl TypeCheck {
                     }
                     Err(ty) => {
                         self.diag.borrow_mut().report(
-                            format!("Expected a reference type '{}' but got", ty),
+                            format!("Expected a reference type but got '{}'", ty),
                             pattern.line,
                         );
                         (
@@ -100,6 +100,7 @@ impl TypeCheck {
                         Type::reference(expected_type.clone(), mutable, region)
                     }
                 };
+
                 self.declare_var(var, var_ty.clone());
                 typed_ast::Pattern {
                     ty: expected_type,

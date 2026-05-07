@@ -44,7 +44,8 @@ pub struct ResourceCheck {
     expired_regions: HashSet<LocalRegionId>,
     scopes: Vec<Vec<VarId>>,
     region_params: HashSet<usize>,
-    local_function: usize,
+    local_functions: usize,
+    local_function: usize
 }
 impl ResourceCheck {
     pub fn new() -> Self {
@@ -56,7 +57,8 @@ impl ResourceCheck {
             err: DiagnosticReporter::new(),
             scopes: Vec::new(),
             expired_regions: HashSet::new(),
-            local_function: 0,
+            local_functions: 0,
+            local_function : 0
         }
     }
     fn is_strict_resource(&self, ty: &Type) -> bool {
@@ -308,12 +310,18 @@ impl ResourceCheck {
                         &mut this.is_current_function_resource,
                         lambda.is_resource,
                     );
-                    this.local_function += 1;
+                    let function = {
+                        let old_function_count = this.local_functions;
+                        this.local_functions += 1;
+                        old_function_count
+                    };
+                    let old_function = std::mem::replace(&mut this.local_function, function);
                     for (name, var, ty) in lambda.params.iter() {
                         this.init_var(Mutable::Immutable, *var, name.content.clone(), ty.clone());
                     }
                     this.check_expr(&lambda.body, None);
                     this.is_current_function_resource = old_resource;
+                    this.local_function = old_function;
                 });
             }
             ExprKind::Let {
