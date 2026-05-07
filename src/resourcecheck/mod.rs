@@ -127,7 +127,7 @@ impl ResourceCheck {
             Type::Infer(_) => unreachable!("All infers should be removed"),
         }
     }
-    fn in_drop_scope(&mut self, line: usize, f: impl FnOnce(&mut Self)) -> Vec<VarId> {
+    fn in_drop_scope(&mut self, f: impl FnOnce(&mut Self)) -> Vec<VarId> {
         self.scopes.push(Default::default());
         f(self);
         let Some(scope) = self.scopes.pop() else {
@@ -318,7 +318,7 @@ impl ResourceCheck {
                 self.check_expr(second, None);
             }
             ExprKind::Lambda(lambda) => {
-                self.in_drop_scope(lambda.body.line, |this| {
+                self.in_drop_scope(|this| {
                     let old_resource = std::mem::replace(
                         &mut this.is_current_function_resource,
                         lambda.is_resource,
@@ -348,7 +348,7 @@ impl ResourceCheck {
                 binder,
                 body,
             } => {
-                self.in_drop_scope(body.line, |this| {
+                self.in_drop_scope(|this| {
                     this.check_expr(binder, None);
                     this.check_pattern(pattern);
                     this.check_expr(body, None);
@@ -395,7 +395,7 @@ impl ResourceCheck {
                 iterator,
                 body,
             } => {
-                self.in_drop_scope(pattern.line, |this| {
+                self.in_drop_scope(|this| {
                     this.check_expr(iterator, None);
                     this.check_pattern(pattern);
                     this.check_expr(body, None);
@@ -410,7 +410,7 @@ impl ResourceCheck {
                 };
                 for arm in arms {
                     let old_state = self.var_states.clone();
-                    self.in_drop_scope(arm.pattern.line, |this| {
+                    self.in_drop_scope(|this| {
                         this.check_pattern(&arm.pattern);
                         this.check_expr(&arm.body, None);
                     });
@@ -449,7 +449,7 @@ impl ResourceCheck {
                     _ => None,
                 }),
         );
-        self.in_drop_scope(function.body.line, |this| {
+        self.in_drop_scope(|this| {
             for param in function.params.iter() {
                 this.init_var(
                     Mutable::Immutable,
