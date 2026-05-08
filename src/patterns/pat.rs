@@ -6,7 +6,6 @@ use crate::{
 };
 #[derive(Clone)]
 pub struct Pat {
-    pub ty: Type,
     pub constructor: Constructor,
     pub fields: Vec<Pat>,
 }
@@ -65,8 +64,7 @@ fn specialize(constructor: Constructor, fields: &[Type], matrix: Vec<Vec<Pat>>) 
             } else if first.constructor == Constructor::Wildcard {
                 let mut new_row = fields
                     .iter()
-                    .map(|ty| Pat {
-                        ty: ty.clone(),
+                    .map(|_| Pat {
                         constructor: Constructor::Wildcard,
                         fields: Vec::new(),
                     })
@@ -96,7 +94,6 @@ fn missing_patterns_inner(tys: &[Type], matrix: Vec<Vec<Pat>>) -> Vec<Vec<Pat>> 
         for row in missing {
             let mut row = row.into_iter();
             let head_pat = Pat {
-                ty: head.clone(),
                 constructor: c,
                 fields: row.by_ref().take(fields.len()).collect(),
             };

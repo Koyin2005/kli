@@ -1,7 +1,7 @@
 use crate::{
     diagnostics::DiagnosticReporter, patterns::{
         convert,
-        pat::{self, missing_patterns},
+        pat::missing_patterns,
     }, typed_ast::{Expr, ExprKind, Pattern}, typed_ast_visitor::{Visitor, walk_expr}, types::Type
 };
 #[derive(Default)]
