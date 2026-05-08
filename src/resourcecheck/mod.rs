@@ -45,7 +45,7 @@ pub struct ResourceCheck {
     expired_regions: HashSet<LocalRegionId>,
     scopes: Vec<Vec<VarId>>,
     region_params: HashSet<usize>,
-    function_level : usize,
+    function_level: usize,
 }
 impl ResourceCheck {
     pub fn new() -> Self {
@@ -57,7 +57,7 @@ impl ResourceCheck {
             err: DiagnosticReporter::new(),
             scopes: Vec::new(),
             expired_regions: HashSet::new(),
-            function_level : 0
+            function_level: 0,
         }
     }
     fn is_strict_resource(&self, ty: &Type) -> bool {
@@ -136,10 +136,7 @@ impl ResourceCheck {
             let state = self.var_states[&var];
             if state == VarState::Owned && self.is_strict_resource(&var_info.ty) {
                 let line = var_info.line;
-                let msg = format!(
-                    "'{}' cannot go out of scope",
-                    var_info.name
-                );
+                let msg = format!("'{}' cannot go out of scope", var_info.name);
                 self.err.report(msg, line);
             }
         }
@@ -269,8 +266,7 @@ impl ResourceCheck {
             | ExprKind::String(_)
             | ExprKind::Int(_)
             | ExprKind::Builtin(..) => (),
-            ExprKind::Function(..) => {
-            }
+            ExprKind::Function(..) => {}
             ExprKind::Some(value) => {
                 self.check_expr(value, None);
             }
