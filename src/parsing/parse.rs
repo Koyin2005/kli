@@ -162,7 +162,7 @@ impl Parser {
         line: usize,
         mutable: Mutable,
     ) -> Result<Pattern, ParseError> {
-        let name = self.match_ident().expect("Expected a name");
+        let name = self.expect_ident("Expected a name".to_string())?;
         Ok(Pattern {
             line,
             kind: PatternKind::Binding(mutable, name, region),

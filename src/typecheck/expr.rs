@@ -16,7 +16,7 @@ impl TypeCheck {
                 });
                 let value = self.check_expr(*value, expected_ty);
                 (
-                    match value.ty.as_reference_type() {
+                    match self.simplify_type(value.ty.clone()).as_reference_type() {
                         Ok((_, _, ty)) => ty.clone(),
                         Err(ty) => {
                             self.diag

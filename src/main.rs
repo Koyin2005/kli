@@ -1,8 +1,8 @@
 use std::env;
 
 use kli::{
-    parsing::parse::Parser, resolve::Resolve, resourcecheck::ResourceCheck,
-    typecheck::root::TypeCheck,
+    parsing::parse::Parser, patterns::visit::PatternCheck, resolve::Resolve,
+    resourcecheck::ResourceCheck, typecheck::root::TypeCheck,
 };
 
 fn main() {
@@ -37,6 +37,9 @@ fn main() {
     let Ok(program) = TypeCheck::new(&program).check(program) else {
         return;
     };
+    for function in &program.functions {
+        PatternCheck::new().check(&function.body);
+    }
     for function in &program.functions {
         ResourceCheck::new().check_function(function);
     }
