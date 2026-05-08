@@ -45,8 +45,7 @@ pub struct ResourceCheck {
     expired_regions: HashSet<LocalRegionId>,
     scopes: Vec<Vec<VarId>>,
     region_params: HashSet<usize>,
-    local_functions: usize,
-    local_function: usize,
+    function_level : usize,
 }
 impl ResourceCheck {
     pub fn new() -> Self {
@@ -58,8 +57,7 @@ impl ResourceCheck {
             err: DiagnosticReporter::new(),
             scopes: Vec::new(),
             expired_regions: HashSet::new(),
-            local_functions: 0,
-            local_function: 0,
+            function_level : 0
         }
     }
     fn is_strict_resource(&self, ty: &Type) -> bool {
@@ -156,7 +154,7 @@ impl ResourceCheck {
                 ty,
                 name,
                 mutable,
-                function_level: self.local_function,
+                function_level: self.function_level,
             },
         );
         self.var_states.insert(var, VarState::Owned);
@@ -215,7 +213,7 @@ impl ResourceCheck {
                 PlaceKind::Var(var) => {
                     {
                         let state = &this.vars[&var.1];
-                        if state.function_level != this.local_function
+                        if state.function_level != this.function_level
                             && (this.has_regions(&state.ty)
                                 || (this.is_resource(&state.ty)
                                     && this.is_current_function_resource != IsResource::Resource))
@@ -270,8 +268,9 @@ impl ResourceCheck {
             | ExprKind::Unit
             | ExprKind::String(_)
             | ExprKind::Int(_)
-            | ExprKind::Function(..)
             | ExprKind::Builtin(..) => (),
+            ExprKind::Function(..) => {
+            }
             ExprKind::Some(value) => {
                 self.check_expr(value, None);
             }
@@ -323,12 +322,7 @@ impl ResourceCheck {
                         &mut this.is_current_function_resource,
                         lambda.is_resource,
                     );
-                    let function = {
-                        let old_function_count = this.local_functions;
-                        this.local_functions += 1;
-                        old_function_count
-                    };
-                    let old_function = std::mem::replace(&mut this.local_function, function);
+                    this.function_level += 1;
                     for (name, var, ty) in lambda.params.iter() {
                         this.init_var(
                             Mutable::Immutable,
@@ -340,7 +334,7 @@ impl ResourceCheck {
                     }
                     this.check_expr(&lambda.body, None);
                     this.is_current_function_resource = old_resource;
-                    this.local_function = old_function;
+                    this.function_level -= 1;
                 });
             }
             ExprKind::Let {
