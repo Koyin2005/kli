@@ -6,3 +6,4 @@ pub const FREEZE: &str = "freeze";
 pub const DESTROY_LIST: &str = "destroy_list";
 pub const DESTROY_STRING: &str = "destroy_string";
 pub const REPLACE: &str = "replace";
+pub const SWAP: &str = "swap";
