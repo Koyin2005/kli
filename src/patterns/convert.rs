@@ -1,8 +1,5 @@
 use crate::{
-    patterns::{
-        ctors::Constructor,
-        pat::Pat,
-    },
+    patterns::{ctors::Constructor, pat::Pat},
     typed_ast::{Pattern, PatternKind},
 };
 

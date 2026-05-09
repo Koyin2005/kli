@@ -10,11 +10,7 @@ impl TypeCheck {
         let (ty, kind) = match place.kind {
             PlaceKind::Var(var) => (self.var_type(var.1).clone(), typed_ast::PlaceKind::Var(var)),
             PlaceKind::Deref(value) => {
-                let expected_ty = expected_ty.as_ref().and_then(|ty| match ty {
-                    Type::Imm(_, ty) | Type::Mut(_, ty) => Some((**ty).clone()),
-                    _ => None,
-                });
-                let value = self.check_expr(*value, expected_ty);
+                let value = self.check_expr(*value, None);
                 (
                     match self.simplify_type(value.ty.clone()).as_reference_type() {
                         Ok((_, _, ty)) => ty.clone(),

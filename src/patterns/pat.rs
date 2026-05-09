@@ -9,27 +9,29 @@ pub struct Pat {
     pub constructor: Constructor,
     pub fields: Vec<Pat>,
 }
-impl Display for Pat{
+impl Display for Pat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.constructor{
-            Constructor::Bool(value) => if value{
-                f.write_str("true")
-            } else {
-                f.write_str("false")
-            },
+        match self.constructor {
+            Constructor::Bool(value) => {
+                if value {
+                    f.write_str("true")
+                } else {
+                    f.write_str("false")
+                }
+            }
             Constructor::Deref => {
                 let pat = &self.fields[0];
                 f.write_str("^")?;
-                write!(f,"{}",pat)
-            },
+                write!(f, "{}", pat)
+            }
             Constructor::None => f.write_str("None"),
             Constructor::Some => {
                 f.write_str("Some(")?;
-                write!(f,"{}",self.fields[0])?;
+                write!(f, "{}", self.fields[0])?;
                 f.write_str(")")
-            },
+            }
             Constructor::Wildcard => f.write_str("_"),
-            Constructor::NonExhaustive => f.write_str("_")
+            Constructor::NonExhaustive => f.write_str("_"),
         }
     }
 }

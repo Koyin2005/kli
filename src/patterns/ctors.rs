@@ -40,7 +40,7 @@ pub fn fields_of(ty: &Type, constructor: Constructor) -> &[Type] {
             std::slice::from_ref(ty)
         }
         Constructor::Deref => {
-            let (Type::Imm(_,ty) | Type::Mut(_,ty)) = ty else {
+            let (Type::Imm(_, ty) | Type::Mut(_, ty)) = ty else {
                 unreachable!("Should be a type")
             };
             std::slice::from_ref(ty)
