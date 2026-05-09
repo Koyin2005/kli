@@ -226,8 +226,8 @@ impl ResourceCheck {
     fn can_capture_var(&mut self, var: VarId) -> bool {
         let info = &self.vars[&var];
         info.function_level == self.function_level
-            || (!self.is_resource(&info.ty)
-                && self.is_current_function_resource == IsResource::Resource)
+            || !self.is_resource(&info.ty)
+            || self.is_current_function_resource == IsResource::Resource
     }
     fn check_place_use(&mut self, place: &Place, place_use: PlaceUse) {
         match &place.kind {

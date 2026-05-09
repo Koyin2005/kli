@@ -143,6 +143,27 @@ impl TypeCheck {
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
         match builtin {
+            Builtin::Replace => Scheme::new(
+                FunctionType {
+                    resource: crate::ast::IsResource::Data,
+                    params: vec![
+                        Type::Mut(
+                            Region::Param("r".to_string(), 0),
+                            Box::new(Type::Param("T".to_string(), 1)),
+                        ),
+                        Type::Function(FunctionType {
+                            resource: crate::ast::IsResource::Resource,
+                            params: vec![Type::Param("T".to_string(), 1)],
+                            return_type: (Box::new(Type::Param("T".to_string(), 1))),
+                        }),
+                    ],
+                    return_type: Box::new(Type::Mut(
+                        Region::Param("r".to_string(), 0),
+                        Box::new(Type::Param("T".to_string(), 1)),
+                    )),
+                },
+                2,
+            ),
             Builtin::DestroyString => Scheme::new(
                 FunctionType {
                     resource: crate::ast::IsResource::Data,
@@ -240,7 +261,7 @@ impl TypeCheck {
             Builtin::AllocBox | Builtin::DeallocBox | Builtin::DestroyList => {
                 vec![GenericArg::Type(self.fresh_ty(line))]
             }
-            Builtin::DerefBox | Builtin::DerefBoxMut | Builtin::Freeze => {
+            Builtin::DerefBox | Builtin::DerefBoxMut | Builtin::Freeze | Builtin::Replace => {
                 vec![
                     GenericArg::Region(self.fresh_region(line)),
                     GenericArg::Type(self.fresh_ty(line)),

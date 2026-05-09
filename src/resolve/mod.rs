@@ -55,6 +55,7 @@ impl Resolve {
                 names::DESTROY_STRING.to_string(),
                 Res::Builtin(Builtin::DestroyString),
             ),
+            (names::REPLACE.to_string(), Res::Builtin(Builtin::Replace)),
         ]);
         Self {
             prev_envs: Vec::new(),

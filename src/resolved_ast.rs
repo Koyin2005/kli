@@ -75,6 +75,7 @@ pub enum Builtin {
     DerefBoxMut,
     Freeze,
     DestroyString,
+    Replace,
 }
 #[derive(Debug)]
 pub struct LetExpr {
