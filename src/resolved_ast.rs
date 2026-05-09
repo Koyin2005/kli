@@ -76,7 +76,7 @@ pub enum Builtin {
     Freeze,
     DestroyString,
     Replace,
-    Swap
+    Swap,
 }
 #[derive(Debug)]
 pub struct LetExpr {

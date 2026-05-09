@@ -172,7 +172,7 @@ impl TypeCheck {
                             Region::Param("r".to_string(), 0),
                             Box::new(Type::Param("T".to_string(), 1)),
                         ),
-                        Type::Param("T".to_string(), 1)
+                        Type::Param("T".to_string(), 1),
                     ],
                     return_type: Box::new(Type::Param("T".to_string(), 1)),
                 },
@@ -275,7 +275,11 @@ impl TypeCheck {
             Builtin::AllocBox | Builtin::DeallocBox | Builtin::DestroyList => {
                 vec![GenericArg::Type(self.fresh_ty(line))]
             }
-            Builtin::DerefBox | Builtin::DerefBoxMut | Builtin::Freeze | Builtin::Replace | Builtin::Swap => {
+            Builtin::DerefBox
+            | Builtin::DerefBoxMut
+            | Builtin::Freeze
+            | Builtin::Replace
+            | Builtin::Swap => {
                 vec![
                     GenericArg::Region(self.fresh_region(line)),
                     GenericArg::Type(self.fresh_ty(line)),

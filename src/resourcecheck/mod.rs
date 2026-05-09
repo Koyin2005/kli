@@ -211,6 +211,32 @@ impl ResourceCheck {
             }
         }
     }
+    fn outlives_non_static(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Bool
+            | Type::Char
+            | Type::Int
+            | Type::String
+            | Type::Unit
+            | Type::Param(..)
+            | Type::Unknown => true,
+            Type::Infer(_) => unreachable!("Cannot infer here"),
+            Type::Box(ty) | Type::List(ty) | Type::Option(ty) => self.outlives_non_static(ty),
+            Type::Function(function) => {
+                function
+                    .params
+                    .iter()
+                    .all(|param| self.outlives_non_static(param))
+                    && self.outlives_non_static(&function.return_type)
+            }
+            Type::Imm(region, ty) | Type::Mut(region, ty) => {
+                if *region != Region::Static && *region != Region::Unknown {
+                    return false;
+                }
+                self.outlives_non_static(ty)
+            }
+        }
+    }
     fn var_of(&self, place: &Place) -> Option<VarId> {
         match place.kind {
             PlaceKind::Var(ref var) => Some(var.1),
@@ -226,8 +252,9 @@ impl ResourceCheck {
     fn can_capture_var(&mut self, var: VarId) -> bool {
         let info = &self.vars[&var];
         info.function_level == self.function_level
-            || !self.is_resource(&info.ty)
-            || self.is_current_function_resource == IsResource::Resource
+            || ((!self.is_resource(&info.ty)
+                || self.is_current_function_resource == IsResource::Resource)
+                && self.outlives_non_static(&info.ty))
     }
     fn check_place_use(&mut self, place: &Place, place_use: PlaceUse) {
         match &place.kind {
