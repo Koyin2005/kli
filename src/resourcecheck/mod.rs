@@ -236,15 +236,23 @@ impl ResourceCheck {
             }
         }
     }
+    fn can_capture_var(&mut self, var: VarId) -> bool{
+        let info = &self.vars[&var];
+        info.function_level == self.function_level || (!self.is_resource(&info.ty) && self.is_current_function_resource == IsResource::Resource)
+    }
     fn check_place_use(&mut self, place: &Place, place_use: PlaceUse){
         match &place.kind{
             PlaceKind::Var(var) => {
+                let var = var.1;
+                if !self.can_capture_var(var){
+                    self.err.report(format!("Cannot capture '{}'",self.vars[&var].name),place.line);
+                }
                 match place_use{
                     PlaceUse::Write => {
-                        self.write_to_var(var.1, place.line);
+                        self.write_to_var(var, place.line);
                     },
                     PlaceUse::Read => {
-                        self.move_from_var(var.1, place.line);
+                        self.move_from_var(var, place.line);
                     }
                 }
             },
@@ -253,9 +261,12 @@ impl ResourceCheck {
                     let Ok((_,_,ty)) = place.ty.as_reference_type() else {
                         unreachable!()
                     };
-                    let Some(_) = self.var_of(place) else{
+                    let Some(var) = self.var_of(place) else{
                         return self.check_place_use(place, place_use);
                     };
+                    if !self.can_capture_var(var){
+                        self.err.report(format!("Cannot capture '{}'",self.vars[&var].name),place.line);
+                    }
                     if !self.is_resource(ty){
                         return;
                     }
