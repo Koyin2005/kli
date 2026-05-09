@@ -24,7 +24,6 @@ struct VarInfo {
     name: String,
     mutable: Mutable,
     function_level: usize,
-    is_param: bool,
 }
 fn unify_state(state1: VarState, state2: VarState) -> Option<VarState> {
     match (state1, state2) {
@@ -128,15 +127,7 @@ impl ResourceCheck {
         }
         scope
     }
-    fn init_var(
-        &mut self,
-        mutable: Mutable,
-        var: VarId,
-        line: usize,
-        name: String,
-        ty: Type,
-        is_param: bool,
-    ) {
+    fn init_var(&mut self, mutable: Mutable, var: VarId, line: usize, name: String, ty: Type) {
         self.scopes.last_mut().unwrap().push(var);
         self.vars.insert(
             var,
@@ -146,7 +137,6 @@ impl ResourceCheck {
                 name,
                 mutable,
                 function_level: self.function_level,
-                is_param,
             },
         );
         self.var_states.insert(var, VarState::Owned);
@@ -187,10 +177,10 @@ impl ResourceCheck {
             PlaceKind::Deref(_) => {
                 let mut place = place;
                 while let PlaceKind::Deref(value) = &place.kind {
-                    let Ok((mutable,_,_)) = value.ty.as_reference_type() else {
+                    let Ok((mutable, _, _)) = value.ty.as_reference_type() else {
                         unreachable!()
                     };
-                    if mutable == Mutable::Immutable{
+                    if mutable == Mutable::Immutable {
                         return Mutable::Immutable;
                     }
                     let ExprKind::Load(new_place) = &value.kind else {
@@ -203,10 +193,12 @@ impl ResourceCheck {
         }
     }
     fn check_place_mutable(&mut self, place: &Place) {
-         match self.place_mutable(place){
-            Mutable::Immutable => self.err.report(format!("Cannot write to immutable place"), place.line),
-            Mutable::Mutable => ()
-         }
+        match self.place_mutable(place) {
+            Mutable::Immutable => self
+                .err
+                .report("Cannot write to immutable place".to_string(), place.line),
+            Mutable::Mutable => (),
+        }
     }
     fn check_pattern(&mut self, pattern: &Pattern) {
         match &pattern.kind {
@@ -215,68 +207,75 @@ impl ResourceCheck {
                 self.check_pattern(sub_pattern);
             }
             PatternKind::Binding(mutable, var, ty) => {
-                self.init_var(
-                    *mutable,
-                    var.1,
-                    pattern.line,
-                    var.0.clone(),
-                    (**ty).clone(),
-                    false,
-                );
+                self.init_var(*mutable, var.1, pattern.line, var.0.clone(), (**ty).clone());
             }
         }
     }
     fn var_of(&self, place: &Place) -> Option<VarId> {
-        match place.kind{
+        match place.kind {
             PlaceKind::Var(ref var) => Some(var.1),
-            PlaceKind::Deref(ref value) => if let ExprKind::Load(ref place) = value.kind {
-                self.var_of(place)
-            } else {
-                None
+            PlaceKind::Deref(ref value) => {
+                if let ExprKind::Load(ref place) = value.kind {
+                    self.var_of(place)
+                } else {
+                    None
+                }
             }
         }
     }
-    fn can_capture_var(&mut self, var: VarId) -> bool{
+    fn can_capture_var(&mut self, var: VarId) -> bool {
         let info = &self.vars[&var];
-        info.function_level == self.function_level || (!self.is_resource(&info.ty) && self.is_current_function_resource == IsResource::Resource)
+        info.function_level == self.function_level
+            || (!self.is_resource(&info.ty)
+                && self.is_current_function_resource == IsResource::Resource)
     }
-    fn check_place_use(&mut self, place: &Place, place_use: PlaceUse){
-        match &place.kind{
+    fn check_place_use(&mut self, place: &Place, place_use: PlaceUse) {
+        match &place.kind {
             PlaceKind::Var(var) => {
                 let var = var.1;
-                if !self.can_capture_var(var){
-                    self.err.report(format!("Cannot capture '{}'",self.vars[&var].name),place.line);
+                if !self.can_capture_var(var) {
+                    self.err.report(
+                        format!("Cannot capture '{}'", self.vars[&var].name),
+                        place.line,
+                    );
                 }
-                match place_use{
+                match place_use {
                     PlaceUse::Write => {
                         self.write_to_var(var, place.line);
-                    },
+                    }
                     PlaceUse::Read => {
                         self.move_from_var(var, place.line);
                     }
                 }
-            },
-            PlaceKind::Deref(expr) => match &expr.kind{
+            }
+            PlaceKind::Deref(expr) => match &expr.kind {
                 ExprKind::Load(place) => {
-                    let Ok((_,_,ty)) = place.ty.as_reference_type() else {
+                    let Ok((_, _, ty)) = place.ty.as_reference_type() else {
                         unreachable!()
                     };
-                    let Some(var) = self.var_of(place) else{
+                    let Some(var) = self.var_of(place) else {
                         return self.check_place_use(place, place_use);
                     };
-                    if !self.can_capture_var(var){
-                        self.err.report(format!("Cannot capture '{}'",self.vars[&var].name),place.line);
+                    if !self.can_capture_var(var) {
+                        self.err.report(
+                            format!("Cannot capture '{}'", self.vars[&var].name),
+                            place.line,
+                        );
                     }
-                    if !self.is_resource(ty){
+                    if !self.is_resource(ty) {
                         return;
                     }
-                    match place_use{
-                        PlaceUse::Read => self.err.report(format!("Cannot move out of reference"), place.line),
-                        PlaceUse::Write => self.err.report(format!("Cannot re-assign reference"), place.line),
+                    match place_use {
+                        PlaceUse::Read => self
+                            .err
+                            .report("Cannot move out of reference".to_string(), place.line),
+                        PlaceUse::Write => self
+                            .err
+                            .report("Cannot re-assign reference".to_string(), place.line),
                     }
-                },
+                }
                 _ => self.check_expr(expr),
-            }
+            },
         }
     }
     fn check_expr(&mut self, expr: &Expr) {
@@ -347,7 +346,6 @@ impl ResourceCheck {
                             name.line,
                             name.content.clone(),
                             ty.clone(),
-                            true,
                         );
                     }
                     this.check_expr(&lambda.body);
@@ -394,7 +392,6 @@ impl ResourceCheck {
                     var_name.line,
                     var_name.content.clone(),
                     new_ty.clone(),
-                    false,
                 );
                 self.check_expr(body);
                 self.expired_regions.insert(*region);
@@ -470,7 +467,6 @@ impl ResourceCheck {
                     param.name.line,
                     param.name.content.clone(),
                     param.ty.clone(),
-                    true,
                 );
             }
             this.check_expr(&function.body);

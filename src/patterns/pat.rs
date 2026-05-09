@@ -51,13 +51,11 @@ fn specialize(constructor: Constructor, fields: &[Type], matrix: Vec<Vec<Pat>>) 
     matrix
         .into_iter()
         .filter_map(|mut row| {
-            let Some(first) = (if row.is_empty() {
+            let first = (if row.is_empty() {
                 None
             } else {
                 Some(row.remove(0))
-            }) else {
-                return None;
-            };
+            })?;
             if first.constructor == constructor {
                 let mut new_row = first.fields;
                 new_row.reserve(row.len());
@@ -80,7 +78,7 @@ fn specialize(constructor: Constructor, fields: &[Type], matrix: Vec<Vec<Pat>>) 
         .collect()
 }
 fn missing_patterns_inner(tys: &[Type], matrix: Vec<Vec<Pat>>) -> Vec<Vec<Pat>> {
-    let Some(head) = tys.get(0) else {
+    let Some(head) = tys.first() else {
         return if matrix.is_empty() {
             vec![Vec::new()]
         } else {
