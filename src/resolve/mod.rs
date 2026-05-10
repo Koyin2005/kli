@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::ast::Ident;
 use crate::diagnostics::DiagnosticReporter;
-use crate::resolved_ast::{Builtin, FunctionId, LocalRegionId, VarId};
+use crate::resolved_ast::{Builtin, FunctionId, GenericKind, LocalRegionId, VarId};
 use crate::{ast, names, resolved_ast as res};
 
 #[derive(Clone, Copy, Debug)]
@@ -17,9 +17,13 @@ pub struct Resolve {
     env: HashMap<String, Res>,
     prev_envs: Vec<HashMap<String, Res>>,
     functions: Vec<Option<res::Function>>,
+    binder: usize,
+    binder_start: usize,
     vars: usize,
     regions: usize,
     generics: usize,
+    prev_kinds: Vec<HashMap<String, GenericKind>>,
+    generic_kinds: HashMap<String, GenericKind>,
     diag: DiagnosticReporter,
 }
 impl Default for Resolve {
@@ -65,7 +69,11 @@ impl Resolve {
             regions: 0,
             functions: Vec::new(),
             generics: 0,
+            binder: 0,
+            binder_start: 0,
             diag: DiagnosticReporter::new(),
+            generic_kinds: HashMap::new(),
+            prev_kinds: Vec::new(),
         }
     }
     fn resolve_name(&self, name: &str) -> Option<Res> {
@@ -118,7 +126,25 @@ impl Resolve {
                         res::RegionKind::Unknown
                     }
                     Some(Res::LocalRegion(region)) => res::RegionKind::Local(name.content, region),
-                    Some(Res::Param(index)) => res::RegionKind::Param(name.content, index),
+                    Some(Res::Param(index)) => {
+                        if self
+                            .generic_kinds
+                            .insert(name.content.clone(), res::GenericKind::Region)
+                            .is_some_and(|kind| kind != res::GenericKind::Region)
+                        {
+                            self.diag.report(
+                                format!("Generic kind mismatch for '{}'", name.content),
+                                name.line,
+                            );
+                        }
+                        if let Some(new_index) = index.checked_sub(self.binder_start)
+                            && self.binder > 0
+                        {
+                            res::RegionKind::BoundParam(name.content, new_index, self.binder)
+                        } else {
+                            res::RegionKind::Param(name.content, index)
+                        }
+                    }
                     Some(Res::Builtin(_) | Res::Function(_) | Res::Var(_)) => {
                         self.cannot_use_as_error(&name.content, "region", name.line);
                         res::RegionKind::Unknown
@@ -131,6 +157,46 @@ impl Resolve {
             },
         }
     }
+    fn resolve_generics<T>(
+        &mut self,
+        generics: ast::Generics,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> (res::Generics, T) {
+        let names = generics
+            .names
+            .into_iter()
+            .inspect(|param| {
+                self.declare_param(param.content.clone());
+            })
+            .collect::<Vec<_>>();
+        let old_kinds = std::mem::replace(&mut self.generic_kinds, HashMap::new());
+        self.prev_kinds.push(old_kinds);
+        let value = f(self);
+        fn get_generic_kind(this: &Resolve, name: &str) -> Option<GenericKind> {
+            this.generic_kinds.get(name).copied().or_else(|| {
+                this.prev_kinds
+                    .iter()
+                    .rev()
+                    .find_map(|kinds| kinds.get(name).copied())
+            })
+        }
+        let kinds = names
+            .iter()
+            .map(|name| &name.content)
+            .map(|name| get_generic_kind(self, name).unwrap_or(GenericKind::Type))
+            .collect();
+        if let Some(old_kinds) = self.prev_kinds.pop() {
+            self.generic_kinds = old_kinds;
+        }
+        (
+            res::Generics {
+                line: generics.line,
+                names,
+                kinds,
+            },
+            value,
+        )
+    }
     fn resolve_type(&mut self, ty: ast::Type) -> res::Type {
         let kind = match ty.kind {
             ast::TypeKind::Char => res::TypeKind::Char,
@@ -141,15 +207,53 @@ impl Resolve {
             ast::TypeKind::Box(ty) => res::TypeKind::Box(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::Option(ty) => res::TypeKind::Option(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::List(ty) => res::TypeKind::List(Box::new(self.resolve_type(*ty))),
-            ast::TypeKind::Function(ast::FunctionType {
-                resource,
-                params,
-                return_type,
-            }) => res::TypeKind::Function(
-                resource,
-                params.into_iter().map(|ty| self.resolve_type(ty)).collect(),
-                Box::new(self.resolve_type(*return_type)),
-            ),
+            ast::TypeKind::Function(
+                generics,
+                ast::FunctionType {
+                    resource,
+                    params,
+                    return_type,
+                },
+            ) => {
+                if let Some(generics) = generics
+                    && !generics.names.is_empty()
+                {
+                    let new_binder = self.binder + 1;
+                    let old_binder = std::mem::replace(&mut self.binder, new_binder);
+                    let old_binder_start = std::mem::replace(&mut self.binder_start, self.generics);
+                    let (generics, (params, return_type)) =
+                        self.resolve_generics(generics, |this| {
+                            (
+                                params
+                                    .into_iter()
+                                    .map(|param| this.resolve_type(param))
+                                    .collect(),
+                                this.resolve_type(*return_type),
+                            )
+                        });
+                    if let Some(index) = generics.kinds.iter().position(|kind| *kind != GenericKind::Region){
+                        let name = &generics.names[index];
+                        let line = name.line;
+                        let msg = format!("Cannot use type '{}' with forall",name.content);
+                        self.diag.report(msg, line);
+                    }
+                    self.binder_start = old_binder_start;
+                    self.binder = old_binder;
+                    res::TypeKind::Function(
+                        Some((new_binder, generics)),
+                        resource,
+                        params,
+                        Box::new(return_type),
+                    )
+                } else {
+                    res::TypeKind::Function(
+                        None,
+                        resource,
+                        params.into_iter().map(|ty| self.resolve_type(ty)).collect(),
+                        Box::new(self.resolve_type(*return_type)),
+                    )
+                }
+            }
             ast::TypeKind::Imm(region, ty) => res::TypeKind::Imm(
                 self.resolve_region(region),
                 Box::new(self.resolve_type(*ty)),
@@ -163,7 +267,24 @@ impl Resolve {
                     self.not_in_scope_error(&name.content, name.line);
                     res::TypeKind::Unknown
                 }
-                Some(Res::Param(index)) => res::TypeKind::Param(name.content, index),
+                Some(Res::Param(index)) => {
+                    if self
+                        .generic_kinds
+                        .insert(name.content.clone(), res::GenericKind::Type)
+                        .is_some_and(|kind| kind != res::GenericKind::Type)
+                    {
+                        self.diag.report(
+                            format!("Generic kind mismatch for '{}'", name.content),
+                            name.line,
+                        );
+                    }
+                    if self.binder > 0 && index.checked_sub(self.binder_start).is_some(){
+                        res::TypeKind::Unknown
+                    }
+                    else{
+                        res::TypeKind::Param(name.content, index)
+                    }
+                }
                 Some(Res::Builtin(_) | Res::Function(_) | Res::LocalRegion(_) | Res::Var(_)) => {
                     self.cannot_use_as_error(&name.content, "type", name.line);
                     res::TypeKind::Unknown
@@ -267,6 +388,9 @@ impl Resolve {
     fn resolve_expr(&mut self, expr: ast::Expr) -> res::Expr {
         let line = expr.line;
         let kind = match expr.kind {
+            ast::ExprKind::Instantiate(expr) => {
+                res::ExprKind::Instantiate(Box::new(self.resolve_expr(*expr)))
+            }
             ast::ExprKind::Unit => res::ExprKind::Unit,
             ast::ExprKind::String(value) => res::ExprKind::String(value),
             ast::ExprKind::Number(value) => res::ExprKind::Int(value as i64),
@@ -402,6 +526,25 @@ impl Resolve {
         };
         res::Expr { line, kind }
     }
+    fn resolve_signature(
+        &mut self,
+        params: Vec<ast::Param>,
+        return_type: ast::Type,
+    ) -> (Vec<res::Param>, res::Type) {
+        let params = params
+            .into_iter()
+            .map(|param| {
+                let var = self.declare_var(param.name.content.clone());
+                res::Param {
+                    line: param.name.line,
+                    var: res::Var(param.name.content, var),
+                    ty: self.resolve_type(param.ty),
+                }
+            })
+            .collect::<Vec<_>>();
+        let return_type = self.resolve_type(return_type);
+        (params, return_type)
+    }
     pub fn resolve(mut self, program: ast::Program) -> res::Program {
         for function in &program.functions {
             self.declare_function(function.name.clone());
@@ -412,32 +555,18 @@ impl Resolve {
                 .zip(program.functions)
                 .map(|(_, function)| {
                     let function = self.in_scope(|this| {
-                        let generics = function.generics.map(|generics| {
-                            let names = generics
-                                .names
-                                .into_iter()
-                                .inspect(|param| {
-                                    this.declare_param(param.content.clone());
-                                })
-                                .collect();
-                            res::Generics {
-                                line: generics.line,
-                                names,
-                            }
-                        });
-                        let params = function
-                            .params
-                            .into_iter()
-                            .map(|param| {
-                                let var = this.declare_var(param.name.content.clone());
-                                res::Param {
-                                    line: param.name.line,
-                                    var: res::Var(param.name.content, var),
-                                    ty: this.resolve_type(param.ty),
-                                }
-                            })
-                            .collect::<Vec<_>>();
-                        let return_type = this.resolve_type(function.return_type);
+                        let (generics, (params, return_type)) =
+                            if let Some(generics) = function.generics {
+                                let (generics, sig) = this.resolve_generics(generics, |this| {
+                                    this.resolve_signature(function.params, function.return_type)
+                                });
+                                (Some(generics), sig)
+                            } else {
+                                (
+                                    None,
+                                    this.resolve_signature(function.params, function.return_type),
+                                )
+                            };
                         let body = this.resolve_expr(function.body);
                         res::Function {
                             line: function.line,

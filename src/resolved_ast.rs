@@ -117,9 +117,11 @@ pub enum ExprKind {
     Print(Option<Box<Expr>>),
     List(Vec<Expr>),
     Call(Box<Expr>, Vec<Expr>),
+    Instantiate(Box<Expr>),
 }
 #[derive(Debug, Clone)]
 pub enum RegionKind {
+    BoundParam(String, usize, usize),
     Param(String, usize),
     Local(String, LocalRegionId),
     Static,
@@ -150,16 +152,22 @@ pub struct Expr {
     pub line: usize,
     pub kind: ExprKind,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Param {
     pub line: usize,
     pub var: Var,
     pub ty: Type,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GenericKind {
+    Region,
+    Type,
+}
 #[derive(Debug)]
 pub struct Generics {
     pub line: usize,
     pub names: Vec<Ident>,
+    pub kinds: Vec<GenericKind>,
 }
 #[derive(Debug)]
 pub struct Function {
@@ -170,7 +178,7 @@ pub struct Function {
     pub return_type: Type,
     pub body: Expr,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum TypeKind {
     Unit,
     Int,
@@ -182,11 +190,11 @@ pub enum TypeKind {
     Option(Box<Type>),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
-    Function(IsResource, Vec<Type>, Box<Type>),
+    Function(Option<(usize, Generics)>, IsResource, Vec<Type>, Box<Type>),
     Param(String, usize),
     Unknown,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Type {
     pub line: usize,
     pub kind: TypeKind,

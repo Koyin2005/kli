@@ -543,6 +543,14 @@ impl Parser {
                             kind: ExprKind::Annotate(Box::new(expr), Box::new(ty)),
                         }
                     }
+                    TokenKind::LeftBracket => {
+                        self.next_token();
+                        self.expect(&TokenKind::RightBracket)?;
+                        Expr {
+                            line: expr.line,
+                            kind: ExprKind::Instantiate(Box::new(expr)),
+                        }
+                    }
                     _ => break Ok(expr),
                 },
             }
@@ -624,9 +632,9 @@ impl Parser {
         }
         let _ = self.expect(&TokenKind::RightParen);
         let is_resource = if self.matches_token(&TokenKind::Arrow) {
-            IsResource::Resource
-        } else if self.matches_token(&TokenKind::ThickArrow) {
             IsResource::Data
+        } else if self.matches_token(&TokenKind::ThickArrow) {
+            IsResource::Resource
         } else {
             let _ = self.expect_error(|kind| match kind {
                 Some(kind) => format!("Expected '->' or '=>' but got '{kind}'"),
@@ -733,7 +741,7 @@ impl Parser {
                     let function = self.parse_type_function()?;
                     Ok(Some(Type {
                         line,
-                        kind: TypeKind::Function(function),
+                        kind: TypeKind::Function(None, function),
                     }))
                 }
                 TokenKind::Box => {
@@ -757,11 +765,14 @@ impl Parser {
                     self.next_token();
                     let generics = self.parse_optional_generics()?;
                     let function_type = self.parse_type_function()?;
-                    let Some(_generics) = generics else {
+                    let Some(generics) = generics else {
                         self.diag.report(format!("Expected regions"), line);
                         return Err(ParseError);
                     };
-                    Ok(Some(Type { line, kind: TypeKind::Function(function_type) }))
+                    Ok(Some(Type {
+                        line,
+                        kind: TypeKind::Function(Some(generics), function_type),
+                    }))
                 }
                 _ => Ok(None),
             },

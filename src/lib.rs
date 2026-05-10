@@ -10,3 +10,5 @@ pub mod typecheck;
 pub mod typed_ast;
 mod typed_ast_visitor;
 pub mod types;
+
+mod scheme;

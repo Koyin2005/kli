@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     resolved_ast::{BorrowExpr, Expr, ExprKind, Lambda, Pattern, Place, PlaceKind, Var},
     typecheck::root::TypeCheck,
@@ -138,6 +140,7 @@ impl TypeCheck {
             expected_sig.as_ref().map(|sig| (*sig.return_type).clone()),
         );
         let function = Type::Function(FunctionType {
+            binder: None,
             resource: lambda.resource,
             params: params.iter().map(|(_, _, ty)| ty.clone()).collect(),
             return_type: Box::new(body.ty.clone()),
@@ -178,6 +181,7 @@ impl TypeCheck {
         let callee_type = self.simplify_type(callee.ty.clone());
         let (params, return_type) = match callee_type {
             Type::Function(FunctionType {
+                binder: None,
                 resource: _,
                 params,
                 return_type,
@@ -256,6 +260,29 @@ impl TypeCheck {
         let Expr { line, kind } = expr;
         let make_expr = move |ty, kind| typed_ast::Expr { ty, kind, line };
         let mut expr = match kind {
+            ExprKind::Instantiate(expr) => {
+                let mut expr = self.check_expr(*expr, None);
+                expr.ty = self.simplify_type(expr.ty);
+                let binder = match &mut expr.ty {
+                    &mut Type::Function(FunctionType {
+                        binder: ref mut full_binder @ Some((binder, _)),
+                        ..
+                    }) => {
+                        *full_binder = None;
+                        Some(binder)
+                    }
+                    ty => {
+                        self.diag
+                            .borrow_mut()
+                            .report(format!("Expected a poly type but got '{}'.", ty), line);
+                        None
+                    }
+                };
+                if let Some(binder) = binder{
+                    self.instantiate_bound_vars(binder, &mut expr.ty, &mut HashMap::new(), line);
+                }
+                expr
+            }
             ExprKind::Annotate(expr, ty) => self.check_expr(*expr, Some(self.lower_type(*ty))),
             ExprKind::Err => typed_ast::Expr {
                 line,

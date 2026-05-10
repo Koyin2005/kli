@@ -26,6 +26,7 @@ impl<'a> TypeSubst<'a> {
                 self.subst_type(ty);
             }
             Type::Function(FunctionType {
+                binder: _,
                 resource: _,
                 params,
                 return_type,
@@ -40,7 +41,11 @@ impl<'a> TypeSubst<'a> {
     }
     pub fn subst_region(&mut self, region: &mut Region) {
         match region {
-            Region::Static | Region::Unknown | Region::Param(..) | Region::Local(..) => (),
+            Region::Static
+            | Region::Unknown
+            | Region::Param(..)
+            | Region::Local(..)
+            | Region::Bound(..) => (),
             Region::Infer(var) => *region = self.infer.simplify_region(Region::Infer(*var)),
         }
     }

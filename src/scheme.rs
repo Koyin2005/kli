@@ -1,15 +1,11 @@
 use crate::types::{FunctionType, GenericArg, Region, Type};
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Scheme<T> {
     value: T,
-    _param_count: usize,
 }
 impl<T: Bind> Scheme<T> {
-    pub fn new(value: T, param_count: usize) -> Self {
-        Self {
-            value,
-            _param_count: param_count,
-        }
+    pub fn new(value: T) -> Self {
+        Self { value }
     }
     pub fn bind(self, args: &[GenericArg]) -> T {
         self.value.bind(args)
@@ -24,7 +20,9 @@ pub trait Bind {
 impl Bind for Region {
     fn bind(self, args: &[GenericArg]) -> Self {
         match self {
-            Self::Static | Self::Unknown | Self::Infer(_) | Self::Local(..) => self,
+            Self::Static | Self::Unknown | Self::Infer(_) | Self::Local(..) | Self::Bound(..) => {
+                self
+            }
             Self::Param(_, index) => {
                 if let Some(GenericArg::Region(region)) = args.get(index) {
                     region.clone()
@@ -64,6 +62,7 @@ impl Bind for Type {
 impl Bind for FunctionType {
     fn bind(self, args: &[GenericArg]) -> Self {
         Self {
+            binder: self.binder,
             resource: self.resource,
             params: self.params.into_iter().map(|ty| ty.bind(args)).collect(),
             return_type: Box::new(self.return_type.bind(args)),

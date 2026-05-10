@@ -24,6 +24,7 @@ struct VarInfo {
     name: String,
     mutable: Mutable,
     function_level: usize,
+    in_loop : bool
 }
 fn unify_state(state1: VarState, state2: VarState) -> Option<VarState> {
     match (state1, state2) {
@@ -46,6 +47,7 @@ pub struct ResourceCheck {
     scopes: Vec<Vec<VarId>>,
     region_params: HashSet<usize>,
     function_level: usize,
+    in_loop : bool
 }
 impl ResourceCheck {
     pub fn new() -> Self {
@@ -58,6 +60,7 @@ impl ResourceCheck {
             scopes: Vec::new(),
             expired_regions: HashSet::new(),
             function_level: 0,
+            in_loop : false
         }
     }
     fn is_strict_resource(&self, ty: &Type) -> bool {
@@ -137,6 +140,7 @@ impl ResourceCheck {
                 name,
                 mutable,
                 function_level: self.function_level,
+                in_loop : self.in_loop
             },
         );
         self.var_states.insert(var, VarState::Owned);
@@ -161,6 +165,10 @@ impl ResourceCheck {
             VarState::Owned => {
                 if is_resource {
                     *state = VarState::Moved;
+                    let info = &self.vars[&var];
+                    if self.in_loop != info.in_loop{
+                        self.err.report(format!("Cannot move from '{}' in a loop",info.name), line);
+                    }
                 }
             }
             VarState::Moved => {
@@ -432,11 +440,13 @@ impl ResourceCheck {
                 iterator,
                 body,
             } => {
-                self.in_drop_scope(|this| {
-                    this.check_expr(iterator);
+                self.check_expr(iterator);
+                let old_in_loop = std::mem::replace(&mut self.in_loop, true);
+                self.in_drop_scope(|this|{
                     this.check_pattern(pattern);
                     this.check_expr(body);
                 });
+                self.in_loop = old_in_loop;
             }
             ExprKind::Case(value, arms) => {
                 self.check_expr(value);

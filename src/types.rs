@@ -16,6 +16,7 @@ pub enum GenericArg {
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct FunctionType {
+    pub binder: Option<(usize, Vec<String>)>,
     pub resource: IsResource,
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
@@ -24,6 +25,7 @@ pub struct FunctionType {
 pub enum Region {
     Unknown,
     Static,
+    Bound(String, usize, usize),
     Param(String, usize),
     Local(String, LocalRegionId),
     Infer(usize),
@@ -31,6 +33,7 @@ pub enum Region {
 impl Display for Region {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Bound(name, ..) => f.pad(name),
             Self::Unknown => f.pad("{unknown}"),
             Self::Static => f.pad("static"),
             Self::Infer(_) => f.pad("_"),
@@ -110,10 +113,23 @@ impl Display for Type {
                 ty.fmt(f)
             }
             Self::Function(FunctionType {
+                binder,
                 resource,
                 params,
                 return_type,
             }) => {
+                if let Some((_, names)) = binder {
+                    f.pad("forall [")?;
+                    let mut first = true;
+                    for name in names {
+                        if !first {
+                            f.pad(",")?;
+                        }
+                        f.pad(name)?;
+                        first = false;
+                    }
+                    f.pad("] ")?;
+                }
                 f.pad("fun(")?;
                 let mut first = true;
                 for param in params {

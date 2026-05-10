@@ -58,7 +58,11 @@ impl TypeInfer {
                     region
                 }
             }
-            Region::Local(..) | Region::Static | Region::Param(..) | Region::Unknown => region,
+            Region::Local(..)
+            | Region::Static
+            | Region::Param(..)
+            | Region::Unknown
+            | Region::Bound(..) => region,
         }
     }
     pub fn simplify_type(&self, ty: Type) -> Type {
@@ -74,6 +78,7 @@ impl TypeInfer {
             Type::Option(ty) => Type::Option(Box::new(self.simplify_type(*ty))),
             Type::List(ty) => Type::List(Box::new(self.simplify_type(*ty))),
             Type::Function(function) => Type::Function(FunctionType {
+                binder: function.binder,
                 resource: function.resource,
                 params: function
                     .params
@@ -132,6 +137,13 @@ impl TypeInfer {
                     Some(r)
                 }
             },
+            (region1 @ Region::Bound(..), region2 @ Region::Bound(..)) => {
+                if region1 == region2 {
+                    Some(region1)
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -171,7 +183,8 @@ impl TypeInfer {
                 })
                 .map(|(ty, region)| Type::Mut(region, Box::new(ty))),
             (Type::Function(function1), Type::Function(function2))
-                if function1.params.len() == function2.params.len()
+                if function1.binder == function2.binder
+                    && function1.params.len() == function2.params.len()
                     && function1.resource == function2.resource =>
             {
                 let params = function1
@@ -182,6 +195,7 @@ impl TypeInfer {
                     .collect::<Option<Vec<_>>>()?;
                 let return_ty = self.unify_ty(*function1.return_type, *function2.return_type)?;
                 Some(Type::Function(FunctionType {
+                    binder: function1.binder,
                     resource: function1.resource,
                     params,
                     return_type: Box::new(return_ty),
