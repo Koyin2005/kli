@@ -638,7 +638,7 @@ impl Parser {
         } else {
             let _ = self.expect_error(|kind| match kind {
                 Some(kind) => format!("Expected '->' or '=>' but got '{kind}'"),
-                None => format!("Expected '->' or '=>' but got 'EOF'"),
+                None => "Expected '->' or '=>' but got 'EOF'".to_string(),
             });
             IsResource::Data
         };
@@ -766,7 +766,7 @@ impl Parser {
                     let generics = self.parse_optional_generics()?;
                     let function_type = self.parse_type_function()?;
                     let Some(generics) = generics else {
-                        self.diag.report(format!("Expected regions"), line);
+                        self.diag.report("Expected regions".to_string(), line);
                         return Err(ParseError);
                     };
                     Ok(Some(Type {

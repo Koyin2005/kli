@@ -1,7 +1,4 @@
-use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet, hash_map::Entry},
-};
+use std::{cell::RefCell, collections::HashMap};
 
 use crate::{
     ast::Ident,
@@ -220,16 +217,13 @@ impl TypeCheck {
                 self.instantiate_bound_vars(binder, ty, vars, line);
             }
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
-                match region {
-                    Region::Bound(_, var, var_binder) => {
-                        if binder == *var_binder {
-                            let region_index = vars
-                                .entry(*var)
-                                .or_insert_with(|| self.infer.fresh_region(line));
-                            *region = Region::Infer(*region_index);
-                        }
-                    }
-                    _ => (),
+                if let Region::Bound(_, var, var_binder) = region
+                    && binder == *var_binder
+                {
+                    let region_index = vars
+                        .entry(*var)
+                        .or_insert_with(|| self.infer.fresh_region(line));
+                    *region = Region::Infer(*region_index);
                 }
                 self.instantiate_bound_vars(binder, ty, vars, line);
             }

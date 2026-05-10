@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
 
 use crate::diagnostics::DiagnosticReporter;
 use crate::resolved_ast as res;

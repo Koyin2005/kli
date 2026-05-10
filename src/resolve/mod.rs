@@ -157,6 +157,14 @@ impl Resolve {
             },
         }
     }
+    fn get_generic_kind(&self, name: &str) -> Option<GenericKind> {
+        self.generic_kinds.get(name).copied().or_else(|| {
+            self.prev_kinds
+                .iter()
+                .rev()
+                .find_map(|kinds| kinds.get(name).copied())
+        })
+    }
     fn resolve_generics<T>(
         &mut self,
         generics: ast::Generics,
@@ -169,21 +177,13 @@ impl Resolve {
                 self.declare_param(param.content.clone());
             })
             .collect::<Vec<_>>();
-        let old_kinds = std::mem::replace(&mut self.generic_kinds, HashMap::new());
+        let old_kinds = std::mem::take(&mut self.generic_kinds);
         self.prev_kinds.push(old_kinds);
         let value = f(self);
-        fn get_generic_kind(this: &Resolve, name: &str) -> Option<GenericKind> {
-            this.generic_kinds.get(name).copied().or_else(|| {
-                this.prev_kinds
-                    .iter()
-                    .rev()
-                    .find_map(|kinds| kinds.get(name).copied())
-            })
-        }
         let kinds = names
             .iter()
             .map(|name| &name.content)
-            .map(|name| get_generic_kind(self, name).unwrap_or(GenericKind::Type))
+            .map(|name| self.get_generic_kind(name).unwrap_or(GenericKind::Type))
             .collect();
         if let Some(old_kinds) = self.prev_kinds.pop() {
             self.generic_kinds = old_kinds;
@@ -231,10 +231,14 @@ impl Resolve {
                                 this.resolve_type(*return_type),
                             )
                         });
-                    if let Some(index) = generics.kinds.iter().position(|kind| *kind != GenericKind::Region){
+                    if let Some(index) = generics
+                        .kinds
+                        .iter()
+                        .position(|kind| *kind != GenericKind::Region)
+                    {
                         let name = &generics.names[index];
                         let line = name.line;
-                        let msg = format!("Cannot use type '{}' with forall",name.content);
+                        let msg = format!("Cannot use type '{}' with forall", name.content);
                         self.diag.report(msg, line);
                     }
                     self.binder_start = old_binder_start;
@@ -278,10 +282,9 @@ impl Resolve {
                             name.line,
                         );
                     }
-                    if self.binder > 0 && index.checked_sub(self.binder_start).is_some(){
+                    if self.binder > 0 && index.checked_sub(self.binder_start).is_some() {
                         res::TypeKind::Unknown
-                    }
-                    else{
+                    } else {
                         res::TypeKind::Param(name.content, index)
                     }
                 }

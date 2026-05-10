@@ -278,7 +278,7 @@ impl TypeCheck {
                         None
                     }
                 };
-                if let Some(binder) = binder{
+                if let Some(binder) = binder {
                     self.instantiate_bound_vars(binder, &mut expr.ty, &mut HashMap::new(), line);
                 }
                 expr
