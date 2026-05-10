@@ -756,7 +756,12 @@ impl Parser {
             Some(ty) => Ok(ty),
             None => Err({
                 let line = self.current_line();
-                self.diag.report("Expected a type".to_string(), line);
+                let msg = if let Some(kind) = self.peek_token().map(|token| &token.kind) {
+                    format!("Expected a type but got '{kind}'",)
+                } else {
+                    "Expected a type but got eof".to_string()
+                };
+                self.diag.report(msg, line);
                 ParseError
             }),
         }

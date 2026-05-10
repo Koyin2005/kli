@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Debug)]
 pub struct Token {
     pub line: usize,
@@ -50,4 +52,61 @@ pub enum TokenKind {
     True,
     False,
     Error,
+}
+
+impl Display for TokenKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let txt = match self {
+            Self::Semi => ";",
+            Self::LeftBrace => "{",
+            Self::RightBrace => "}",
+            Self::Coma => ",",
+            Self::Arrow => "->",
+            Self::ThickArrow => "=>",
+            Self::Bool => "bool",
+            Self::False => "false",
+            Self::Minus => "-",
+            Self::True => "true",
+            Self::Star => "*",
+            Self::Plus => "+",
+            Self::Equal => "=",
+            Self::StringLiteral(literal) => {
+                f.write_str("\"")?;
+                f.write_str(literal)?;
+                return f.write_str("\"");
+            }
+            Self::LeftParen => "(",
+            Self::RightParen => ")",
+            Self::LeftBracket => "[",
+            Self::RightBracket => "]",
+            Self::Caret => "^",
+            Self::Panic => "panic",
+            Self::None => "None",
+            Self::For => "for",
+            Self::Static => "static",
+            Self::Colon => ":",
+            Self::Slash => "/",
+            Self::Some => "Some",
+            Self::Char => "char",
+            Self::Print => "print",
+            Self::Fun => "fun",
+            Self::Borrow => "borrow",
+            Self::In => "in",
+            Self::Int => "int",
+            Self::String => "string",
+            Self::Imm => "imm",
+            Self::Ref => "ref",
+            Self::Number(number) => return write!(f, "{number}"),
+            Self::Box => "box",
+            Self::List => "list",
+            Self::Mut => "mut",
+            Self::Let => "let",
+            Self::Case => "case",
+            Self::Option => "option",
+            Self::Forall => "forall",
+            Self::Ident(name) => name,
+            Self::Error => "{error}",
+        };
+        f.write_str(txt)
+    }
 }
