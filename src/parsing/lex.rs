@@ -130,6 +130,7 @@ impl<'s> Lexer<'s> {
         Some(Token {
             line,
             kind: match src.as_str() {
+                "forall" => TokenKind::Forall,
                 "fun" => TokenKind::Fun,
                 "imm" => TokenKind::Imm,
                 "mut" => TokenKind::Mut,

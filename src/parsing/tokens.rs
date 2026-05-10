@@ -44,6 +44,7 @@ pub enum TokenKind {
     None,
     Panic,
     For,
+    Forall,
     Arrow,
     ThickArrow,
     True,
