@@ -46,7 +46,6 @@ pub enum TokenKind {
     None,
     Panic,
     For,
-    Forall,
     Arrow,
     ThickArrow,
     True,
@@ -103,7 +102,6 @@ impl Display for TokenKind {
             Self::Let => "let",
             Self::Case => "case",
             Self::Option => "option",
-            Self::Forall => "forall",
             Self::Ident(name) => name,
             Self::Error => "{error}",
         };

@@ -761,19 +761,6 @@ impl Parser {
                         kind: TypeKind::Char,
                     }))
                 }
-                TokenKind::Forall => {
-                    self.next_token();
-                    let generics = self.parse_optional_generics()?;
-                    let function_type = self.parse_type_function()?;
-                    let Some(generics) = generics else {
-                        self.diag.report("Expected regions".to_string(), line);
-                        return Err(ParseError);
-                    };
-                    Ok(Some(Type {
-                        line,
-                        kind: TypeKind::Function(Some(generics), function_type),
-                    }))
-                }
                 _ => Ok(None),
             },
         }
