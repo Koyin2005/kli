@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::{
     resolved_ast::{BorrowExpr, Expr, ExprKind, Lambda, Pattern, Place, PlaceKind, Var},
     typecheck::root::TypeCheck,
