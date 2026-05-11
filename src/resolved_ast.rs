@@ -190,7 +190,7 @@ pub enum TypeKind {
     Option(Box<Type>),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
-    Function(Option<(usize, Generics)>, IsResource, Vec<Type>, Box<Type>),
+    Function(IsResource, Vec<Type>, Box<Type>),
     Param(String, usize),
     Unknown,
 }

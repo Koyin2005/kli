@@ -56,20 +56,11 @@ impl<'a> Lower<'a> {
                 let ty = self.lower_type(ty);
                 Type::Mut(region, Box::new(ty))
             }
-            res::TypeKind::Function(generics, resource, params, return_ty) => {
+            res::TypeKind::Function(resource, params, return_ty) => {
                 let params = self.lower_types(&mut params.iter());
                 let return_type = self.lower_type(return_ty);
                 Type::Function(FunctionType {
-                    binder: generics.as_ref().map(|&(binder, ref generics)| {
-                        (
-                            binder,
-                            generics
-                                .names
-                                .iter()
-                                .map(|name| name.content.clone())
-                                .collect(),
-                        )
-                    }),
+                    binder:None,
                     resource: *resource,
                     params,
                     return_type: Box::new(return_type),

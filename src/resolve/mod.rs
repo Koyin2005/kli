@@ -215,7 +215,6 @@ impl Resolve {
                 },
             ) => {
                     res::TypeKind::Function(
-                        None,
                         resource,
                         params.into_iter().map(|ty| self.resolve_type(ty)).collect(),
                         Box::new(self.resolve_type(*return_type)),
