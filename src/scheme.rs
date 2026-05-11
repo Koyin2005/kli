@@ -20,9 +20,7 @@ pub trait Bind {
 impl Bind for Region {
     fn bind(self, args: &[GenericArg]) -> Self {
         match self {
-            Self::Static | Self::Unknown | Self::Infer(_) | Self::Local(..) | Self::Bound(..) => {
-                self
-            }
+            Self::Static | Self::Unknown | Self::Infer(_) | Self::Local(..) => self,
             Self::Param(_, index) => {
                 if let Some(GenericArg::Region(region)) = args.get(index) {
                     region.clone()

@@ -58,11 +58,7 @@ impl TypeInfer {
                     region
                 }
             }
-            Region::Local(..)
-            | Region::Static
-            | Region::Param(..)
-            | Region::Unknown
-            | Region::Bound(..) => region,
+            Region::Local(..) | Region::Static | Region::Param(..) | Region::Unknown => region,
         }
     }
     pub fn simplify_type(&self, ty: Type) -> Type {
@@ -136,13 +132,6 @@ impl TypeInfer {
                     Some(r)
                 }
             },
-            (region1 @ Region::Bound(..), region2 @ Region::Bound(..)) => {
-                if region1 == region2 {
-                    Some(region1)
-                } else {
-                    None
-                }
-            }
             _ => None,
         }
     }

@@ -40,11 +40,7 @@ impl<'a> TypeSubst<'a> {
     }
     pub fn subst_region(&mut self, region: &mut Region) {
         match region {
-            Region::Static
-            | Region::Unknown
-            | Region::Param(..)
-            | Region::Local(..)
-            | Region::Bound(..) => (),
+            Region::Static | Region::Unknown | Region::Param(..) | Region::Local(..) => (),
             Region::Infer(var) => *region = self.infer.simplify_region(Region::Infer(*var)),
         }
     }
