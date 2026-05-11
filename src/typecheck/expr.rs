@@ -260,29 +260,6 @@ impl TypeCheck {
         let Expr { line, kind } = expr;
         let make_expr = move |ty, kind| typed_ast::Expr { ty, kind, line };
         let mut expr = match kind {
-            ExprKind::Instantiate(expr) => {
-                let mut expr = self.check_expr(*expr, None);
-                expr.ty = self.simplify_type(expr.ty);
-                let binder = match &mut expr.ty {
-                    &mut Type::Function(FunctionType {
-                        binder: ref mut full_binder @ Some((binder, _)),
-                        ..
-                    }) => {
-                        *full_binder = None;
-                        Some(binder)
-                    }
-                    ty => {
-                        self.diag
-                            .borrow_mut()
-                            .report(format!("Expected a poly type but got '{}'.", ty), line);
-                        None
-                    }
-                };
-                if let Some(binder) = binder {
-                    self.instantiate_bound_vars(binder, &mut expr.ty, &mut HashMap::new(), line);
-                }
-                expr
-            }
             ExprKind::Annotate(expr, ty) => self.check_expr(*expr, Some(self.lower_type(*ty))),
             ExprKind::Err => typed_ast::Expr {
                 line,
