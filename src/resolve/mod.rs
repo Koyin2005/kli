@@ -391,9 +391,6 @@ impl Resolve {
     fn resolve_expr(&mut self, expr: ast::Expr) -> res::Expr {
         let line = expr.line;
         let kind = match expr.kind {
-            ast::ExprKind::Instantiate(expr) => {
-                res::ExprKind::Instantiate(Box::new(self.resolve_expr(*expr)))
-            }
             ast::ExprKind::Unit => res::ExprKind::Unit,
             ast::ExprKind::String(value) => res::ExprKind::String(value),
             ast::ExprKind::Number(value) => res::ExprKind::Int(value as i64),

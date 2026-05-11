@@ -65,7 +65,6 @@ pub struct LetExpr {
 #[derive(Debug)]
 pub enum ExprKind {
     Unit,
-    Instantiate(Box<Expr>),
     Annotate(Box<Expr>, Box<Type>),
     List(Vec<Expr>),
     String(String),

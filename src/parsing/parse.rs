@@ -543,14 +543,6 @@ impl Parser {
                             kind: ExprKind::Annotate(Box::new(expr), Box::new(ty)),
                         }
                     }
-                    TokenKind::LeftBracket => {
-                        self.next_token();
-                        self.expect(&TokenKind::RightBracket)?;
-                        Expr {
-                            line: expr.line,
-                            kind: ExprKind::Instantiate(Box::new(expr)),
-                        }
-                    }
                     _ => break Ok(expr),
                 },
             }
