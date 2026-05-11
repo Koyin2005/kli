@@ -197,44 +197,6 @@ impl TypeCheck {
     pub(super) fn signature_of_function(&self, function: FunctionId) -> Scheme<FunctionType> {
         self.signatures[usize::from(function)].clone()
     }
-    pub(super) fn instantiate_bound_vars(
-        &mut self,
-        binder: usize,
-        ty: &mut Type,
-        vars: &mut HashMap<usize, usize>,
-        line: usize,
-    ) {
-        match ty {
-            Type::Bool
-            | Type::Int
-            | Type::Char
-            | Type::String
-            | Type::Unit
-            | Type::Unknown
-            | Type::Param(..)
-            | Type::Infer(..) => (),
-            Type::Option(ty) | Type::Box(ty) | Type::List(ty) => {
-                self.instantiate_bound_vars(binder, ty, vars, line);
-            }
-            Type::Imm(region, ty) | Type::Mut(region, ty) => {
-                if let Region::Bound(_, var, var_binder) = region
-                    && binder == *var_binder
-                {
-                    let region_index = vars
-                        .entry(*var)
-                        .or_insert_with(|| self.infer.fresh_region(line));
-                    *region = Region::Infer(*region_index);
-                }
-                self.instantiate_bound_vars(binder, ty, vars, line);
-            }
-            Type::Function(function) => {
-                for param in &mut function.params {
-                    self.instantiate_bound_vars(binder, param, vars, line);
-                }
-                self.instantiate_bound_vars(binder, &mut function.return_type, vars, line);
-            }
-        }
-    }
     pub(super) fn instantiate_builtin_args(
         &mut self,
         builtin: Builtin,
