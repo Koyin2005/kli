@@ -24,7 +24,7 @@ struct VarInfo {
     name: String,
     mutable: Mutable,
     function_level: usize,
-    in_loop: bool,
+    loop_count: usize,
 }
 fn unify_state(state1: VarState, state2: VarState) -> Option<VarState> {
     match (state1, state2) {
@@ -47,7 +47,7 @@ pub struct ResourceCheck {
     scopes: Vec<Vec<VarId>>,
     region_params: HashSet<usize>,
     function_level: usize,
-    in_loop: bool,
+    loops: usize,
 }
 impl ResourceCheck {
     pub fn new() -> Self {
@@ -60,7 +60,7 @@ impl ResourceCheck {
             scopes: Vec::new(),
             expired_regions: HashSet::new(),
             function_level: 0,
-            in_loop: false,
+            loops:0
         }
     }
     fn is_strict_resource(&self, ty: &Type) -> bool {
@@ -140,7 +140,7 @@ impl ResourceCheck {
                 name,
                 mutable,
                 function_level: self.function_level,
-                in_loop: self.in_loop,
+                loop_count:self.loops
             },
         );
         self.var_states.insert(var, VarState::Owned);
@@ -166,7 +166,7 @@ impl ResourceCheck {
                 if is_resource {
                     *state = VarState::Moved;
                     let info = &self.vars[&var];
-                    if self.in_loop != info.in_loop {
+                    if self.loops > 0 && info.loop_count != self.loops{
                         self.err
                             .report(format!("Cannot move from '{}' in a loop", info.name), line);
                     }
@@ -442,12 +442,14 @@ impl ResourceCheck {
                 body,
             } => {
                 self.check_expr(iterator);
-                let old_in_loop = std::mem::replace(&mut self.in_loop, true);
+                let new_loop = self.loops + 1;
+                let old_loop = std::mem::replace(&mut self.loops, new_loop);
+
                 self.in_drop_scope(|this| {
                     this.check_pattern(pattern);
                     this.check_expr(body);
                 });
-                self.in_loop = old_in_loop;
+                self.loops = old_loop;
             }
             ExprKind::Case(value, arms) => {
                 self.check_expr(value);
