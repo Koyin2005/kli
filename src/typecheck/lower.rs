@@ -14,9 +14,6 @@ impl<'a> Lower<'a> {
 
     pub(super) fn lower_region(&self, region: &res::Region) -> Region {
         match &region.kind {
-            &res::RegionKind::BoundParam(ref name, index, binder) => {
-                Region::Bound(name.clone(), index, binder)
-            }
             res::RegionKind::Param(name, param) => {
                 if let GenericKind::Region = self.kinds[*param] {
                     Region::Param(name.clone(), *param)
@@ -60,7 +57,7 @@ impl<'a> Lower<'a> {
                 let params = self.lower_types(&mut params.iter());
                 let return_type = self.lower_type(return_ty);
                 Type::Function(FunctionType {
-                    binder:None,
+                    binder: None,
                     resource: *resource,
                     params,
                     return_type: Box::new(return_type),

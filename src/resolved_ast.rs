@@ -121,7 +121,6 @@ pub enum ExprKind {
 }
 #[derive(Debug, Clone)]
 pub enum RegionKind {
-    BoundParam(String, usize, usize),
     Param(String, usize),
     Local(String, LocalRegionId),
     Static,

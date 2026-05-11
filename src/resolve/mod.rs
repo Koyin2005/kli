@@ -17,8 +17,6 @@ pub struct Resolve {
     env: HashMap<String, Res>,
     prev_envs: Vec<HashMap<String, Res>>,
     functions: Vec<Option<res::Function>>,
-    binder: usize,
-    binder_start: usize,
     vars: usize,
     regions: usize,
     generics: usize,
@@ -69,8 +67,6 @@ impl Resolve {
             regions: 0,
             functions: Vec::new(),
             generics: 0,
-            binder: 0,
-            binder_start: 0,
             diag: DiagnosticReporter::new(),
             generic_kinds: HashMap::new(),
             prev_kinds: Vec::new(),
@@ -137,13 +133,7 @@ impl Resolve {
                                 name.line,
                             );
                         }
-                        if let Some(new_index) = index.checked_sub(self.binder_start)
-                            && self.binder > 0
-                        {
-                            res::RegionKind::BoundParam(name.content, new_index, self.binder)
-                        } else {
-                            res::RegionKind::Param(name.content, index)
-                        }
+                        res::RegionKind::Param(name.content, index)
                     }
                     Some(Res::Builtin(_) | Res::Function(_) | Res::Var(_)) => {
                         self.cannot_use_as_error(&name.content, "region", name.line);
@@ -207,19 +197,15 @@ impl Resolve {
             ast::TypeKind::Box(ty) => res::TypeKind::Box(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::Option(ty) => res::TypeKind::Option(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::List(ty) => res::TypeKind::List(Box::new(self.resolve_type(*ty))),
-            ast::TypeKind::Function(
-                ast::FunctionType {
-                    resource,
-                    params,
-                    return_type,
-                },
-            ) => {
-                    res::TypeKind::Function(
-                        resource,
-                        params.into_iter().map(|ty| self.resolve_type(ty)).collect(),
-                        Box::new(self.resolve_type(*return_type)),
-                    )
-            }
+            ast::TypeKind::Function(ast::FunctionType {
+                resource,
+                params,
+                return_type,
+            }) => res::TypeKind::Function(
+                resource,
+                params.into_iter().map(|ty| self.resolve_type(ty)).collect(),
+                Box::new(self.resolve_type(*return_type)),
+            ),
             ast::TypeKind::Imm(region, ty) => res::TypeKind::Imm(
                 self.resolve_region(region),
                 Box::new(self.resolve_type(*ty)),
@@ -244,11 +230,7 @@ impl Resolve {
                             name.line,
                         );
                     }
-                    if self.binder > 0 && index.checked_sub(self.binder_start).is_some() {
-                        res::TypeKind::Unknown
-                    } else {
-                        res::TypeKind::Param(name.content, index)
-                    }
+                    res::TypeKind::Param(name.content, index)
                 }
                 Some(Res::Builtin(_) | Res::Function(_) | Res::LocalRegion(_) | Res::Var(_)) => {
                     self.cannot_use_as_error(&name.content, "type", name.line);

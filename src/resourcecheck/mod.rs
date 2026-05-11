@@ -60,7 +60,7 @@ impl ResourceCheck {
             scopes: Vec::new(),
             expired_regions: HashSet::new(),
             function_level: 0,
-            loops:0
+            loops: 0,
         }
     }
     fn is_strict_resource(&self, ty: &Type) -> bool {
@@ -140,7 +140,7 @@ impl ResourceCheck {
                 name,
                 mutable,
                 function_level: self.function_level,
-                loop_count:self.loops
+                loop_count: self.loops,
             },
         );
         self.var_states.insert(var, VarState::Owned);
@@ -166,7 +166,7 @@ impl ResourceCheck {
                 if is_resource {
                     *state = VarState::Moved;
                     let info = &self.vars[&var];
-                    if self.loops > 0 && info.loop_count != self.loops{
+                    if self.loops > 0 && info.loop_count != self.loops {
                         self.err
                             .report(format!("Cannot move from '{}' in a loop", info.name), line);
                     }
