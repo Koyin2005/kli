@@ -208,55 +208,18 @@ impl Resolve {
             ast::TypeKind::Option(ty) => res::TypeKind::Option(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::List(ty) => res::TypeKind::List(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::Function(
-                generics,
                 ast::FunctionType {
                     resource,
                     params,
                     return_type,
                 },
             ) => {
-                if let Some(generics) = generics
-                    && !generics.names.is_empty()
-                {
-                    let new_binder = self.binder + 1;
-                    let old_binder = std::mem::replace(&mut self.binder, new_binder);
-                    let old_binder_start = std::mem::replace(&mut self.binder_start, self.generics);
-                    let (generics, (params, return_type)) =
-                        self.resolve_generics(generics, |this| {
-                            (
-                                params
-                                    .into_iter()
-                                    .map(|param| this.resolve_type(param))
-                                    .collect(),
-                                this.resolve_type(*return_type),
-                            )
-                        });
-                    if let Some(index) = generics
-                        .kinds
-                        .iter()
-                        .position(|kind| *kind != GenericKind::Region)
-                    {
-                        let name = &generics.names[index];
-                        let line = name.line;
-                        let msg = format!("Cannot use type '{}' with forall", name.content);
-                        self.diag.report(msg, line);
-                    }
-                    self.binder_start = old_binder_start;
-                    self.binder = old_binder;
-                    res::TypeKind::Function(
-                        Some((new_binder, generics)),
-                        resource,
-                        params,
-                        Box::new(return_type),
-                    )
-                } else {
                     res::TypeKind::Function(
                         None,
                         resource,
                         params.into_iter().map(|ty| self.resolve_type(ty)).collect(),
                         Box::new(self.resolve_type(*return_type)),
                     )
-                }
             }
             ast::TypeKind::Imm(region, ty) => res::TypeKind::Imm(
                 self.resolve_region(region),

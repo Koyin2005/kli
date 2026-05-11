@@ -733,7 +733,7 @@ impl Parser {
                     let function = self.parse_type_function()?;
                     Ok(Some(Type {
                         line,
-                        kind: TypeKind::Function(None, function),
+                        kind: TypeKind::Function(function),
                     }))
                 }
                 TokenKind::Box => {

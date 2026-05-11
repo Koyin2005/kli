@@ -111,7 +111,7 @@ pub enum TypeKind {
     Unit,
     Char,
     Named(Ident),
-    Function(Option<Generics>, FunctionType),
+    Function(FunctionType),
     Option(Box<Type>),
     List(Box<Type>),
     Box(Box<Type>),
