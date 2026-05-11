@@ -116,7 +116,7 @@ pub enum ExprKind {
     Case(Box<Expr>, Vec<CaseArm>),
     Print(Option<Box<Expr>>),
     List(Vec<Expr>),
-    Call(Box<Expr>, Vec<Expr>)
+    Call(Box<Expr>, Vec<Expr>),
 }
 #[derive(Debug, Clone)]
 pub enum RegionKind {

@@ -57,7 +57,6 @@ impl<'a> Lower<'a> {
                 let params = self.lower_types(&mut params.iter());
                 let return_type = self.lower_type(return_ty);
                 Type::Function(FunctionType {
-                    binder: None,
                     resource: *resource,
                     params,
                     return_type: Box::new(return_type),

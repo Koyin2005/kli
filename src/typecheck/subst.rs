@@ -26,7 +26,6 @@ impl<'a> TypeSubst<'a> {
                 self.subst_type(ty);
             }
             Type::Function(FunctionType {
-                binder: _,
                 resource: _,
                 params,
                 return_type,

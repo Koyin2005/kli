@@ -42,12 +42,10 @@ impl TypeCheck {
                     .collect::<Vec<_>>(),
             };
             let lower = Lower::new(&kinds, &diag);
-            let signature = Scheme::new(FunctionType {
-                binder: None,
-                resource: crate::ast::IsResource::Data,
-                params: lower.lower_types(&mut function.params.iter().map(|param| &param.ty)),
-                return_type: Box::new(lower.lower_type(&function.return_type)),
-            });
+            let signature = Scheme::new(FunctionType::new_data(
+                lower.lower_types(&mut function.params.iter().map(|param| &param.ty)),
+                lower.lower_type(&function.return_type),
+            ));
             signatures.push(signature);
             function_kinds.push(kinds);
         }
@@ -91,7 +89,6 @@ impl TypeCheck {
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
         match builtin {
             Builtin::Replace => Scheme::new(FunctionType {
-                binder: None,
                 resource: crate::ast::IsResource::Data,
                 params: vec![
                     Type::Mut(
@@ -99,7 +96,6 @@ impl TypeCheck {
                         Box::new(Type::Param("T".to_string(), 1)),
                     ),
                     Type::Function(FunctionType {
-                        binder: None,
                         resource: crate::ast::IsResource::Resource,
                         params: vec![Type::Param("T".to_string(), 1)],
                         return_type: (Box::new(Type::Param("T".to_string(), 1))),
@@ -111,7 +107,6 @@ impl TypeCheck {
                 )),
             }),
             Builtin::Swap => Scheme::new(FunctionType {
-                binder: None,
                 resource: crate::ast::IsResource::Data,
                 params: vec![
                     Type::Mut(
@@ -123,19 +118,16 @@ impl TypeCheck {
                 return_type: Box::new(Type::Param("T".to_string(), 1)),
             }),
             Builtin::DestroyString => Scheme::new(FunctionType {
-                binder: None,
                 resource: crate::ast::IsResource::Data,
                 params: vec![Type::String],
                 return_type: Box::new(Type::Unit),
             }),
             Builtin::AllocBox => Scheme::new(FunctionType {
-                binder: None,
                 resource: crate::ast::IsResource::Data,
                 params: vec![Type::Param("T".to_string(), 0)],
                 return_type: Box::new(Type::Box(Box::new(Type::Param("T".to_string(), 0)))),
             }),
             Builtin::DeallocBox => Scheme::new(FunctionType {
-                binder: None,
                 resource: crate::ast::IsResource::Data,
                 params: vec![Type::Box(Box::new(Type::Param("T".to_string(), 0)))],
                 return_type: Box::new(Type::Param("T".to_string(), 0)),
@@ -144,7 +136,6 @@ impl TypeCheck {
                 let r_param = Region::Param("r".to_string(), 0);
                 let t_param = Type::Param("T".to_string(), 1);
                 Scheme::new(FunctionType {
-                    binder: None,
                     resource: crate::ast::IsResource::Data,
                     params: vec![Type::Imm(
                         r_param.clone(),
@@ -157,7 +148,6 @@ impl TypeCheck {
                 let r_param = Region::Param("r".to_string(), 0);
                 let t_param = Type::Param("T".to_string(), 1);
                 Scheme::new(FunctionType {
-                    binder: None,
                     resource: crate::ast::IsResource::Data,
                     params: vec![Type::Mut(
                         r_param.clone(),
@@ -167,12 +157,10 @@ impl TypeCheck {
                 })
             }
             Builtin::DestroyList => Scheme::new(FunctionType {
-                binder: None,
                 resource: crate::ast::IsResource::Data,
                 params: vec![
                     Type::List(Box::new(Type::Param("T".to_string(), 0))),
                     Type::Function(FunctionType {
-                        binder: None,
                         resource: crate::ast::IsResource::Data,
                         params: vec![Type::Param("T".to_string(), 0)],
                         return_type: Box::new(Type::Unit),
@@ -181,7 +169,6 @@ impl TypeCheck {
                 return_type: Box::new(Type::Unit),
             }),
             Builtin::Freeze => Scheme::new(FunctionType {
-                binder: None,
                 resource: crate::ast::IsResource::Data,
                 params: vec![Type::Mut(
                     Region::Param("r".to_string(), 0),
@@ -330,7 +317,6 @@ impl TypeCheck {
         self.generics
             .clone_from(&self.function_generic_kinds[usize::from(id)]);
         let FunctionType {
-            binder: _,
             resource: _,
             params,
             return_type,

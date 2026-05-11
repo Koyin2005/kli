@@ -140,7 +140,6 @@ impl TypeCheck {
             expected_sig.as_ref().map(|sig| (*sig.return_type).clone()),
         );
         let function = Type::Function(FunctionType {
-            binder: None,
             resource: lambda.resource,
             params: params.iter().map(|(_, _, ty)| ty.clone()).collect(),
             return_type: Box::new(body.ty.clone()),
@@ -181,7 +180,6 @@ impl TypeCheck {
         let callee_type = self.simplify_type(callee.ty.clone());
         let (params, return_type) = match callee_type {
             Type::Function(FunctionType {
-                binder: None,
                 resource: _,
                 params,
                 return_type,

@@ -62,7 +62,6 @@ impl Bind for Type {
 impl Bind for FunctionType {
     fn bind(self, args: &[GenericArg]) -> Self {
         Self {
-            binder: self.binder,
             resource: self.resource,
             params: self.params.into_iter().map(|ty| ty.bind(args)).collect(),
             return_type: Box::new(self.return_type.bind(args)),

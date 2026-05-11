@@ -16,10 +16,25 @@ pub enum GenericArg {
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct FunctionType {
-    pub binder: Option<(usize, Vec<String>)>,
     pub resource: IsResource,
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
+}
+impl FunctionType {
+    pub fn new_data(params: Vec<Type>, return_type: Type) -> Self {
+        Self {
+            resource: IsResource::Data,
+            params,
+            return_type: Box::new(return_type),
+        }
+    }
+    pub fn new_resource(params: Vec<Type>, return_type: Type) -> Self {
+        Self {
+            resource: IsResource::Resource,
+            params,
+            return_type: Box::new(return_type),
+        }
+    }
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Region {
@@ -113,23 +128,10 @@ impl Display for Type {
                 ty.fmt(f)
             }
             Self::Function(FunctionType {
-                binder,
                 resource,
                 params,
                 return_type,
             }) => {
-                if let Some((_, names)) = binder {
-                    f.pad("forall [")?;
-                    let mut first = true;
-                    for name in names {
-                        if !first {
-                            f.pad(",")?;
-                        }
-                        f.pad(name)?;
-                        first = false;
-                    }
-                    f.pad("] ")?;
-                }
                 f.pad("fun(")?;
                 let mut first = true;
                 for param in params {
