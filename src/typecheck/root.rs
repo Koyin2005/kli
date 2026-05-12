@@ -87,78 +87,66 @@ impl TypeCheck {
         }
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
-        match builtin {
-            Builtin::Replace => Scheme::new(FunctionType {
-                resource: crate::ast::IsResource::Data,
-                params: vec![
+        let (params, return_type) = match builtin {
+            Builtin::Replace => (
+                vec![
                     Type::Mut(
                         Region::Param("r".to_string(), 0),
                         Box::new(Type::Param("T".to_string(), 1)),
                     ),
-                    Type::Function(FunctionType {
-                        resource: crate::ast::IsResource::Resource,
-                        params: vec![Type::Param("T".to_string(), 1)],
-                        return_type: (Box::new(Type::Param("T".to_string(), 1))),
-                    }),
+                    Type::Function(FunctionType::new_resource(
+                        vec![Type::Param("T".to_string(), 1)],
+                        Type::Param("T".to_string(), 1),
+                    )),
                 ],
-                return_type: Box::new(Type::Mut(
+                Type::Mut(
                     Region::Param("r".to_string(), 0),
                     Box::new(Type::Param("T".to_string(), 1)),
-                )),
-            }),
-            Builtin::Swap => Scheme::new(FunctionType {
-                resource: crate::ast::IsResource::Data,
-                params: vec![
+                ),
+            ),
+            Builtin::Swap => (
+                vec![
                     Type::Mut(
                         Region::Param("r".to_string(), 0),
                         Box::new(Type::Param("T".to_string(), 1)),
                     ),
                     Type::Param("T".to_string(), 1),
                 ],
-                return_type: Box::new(Type::Param("T".to_string(), 1)),
-            }),
-            Builtin::DestroyString => Scheme::new(FunctionType {
-                resource: crate::ast::IsResource::Data,
-                params: vec![Type::String],
-                return_type: Box::new(Type::Unit),
-            }),
-            Builtin::AllocBox => Scheme::new(FunctionType {
-                resource: crate::ast::IsResource::Data,
-                params: vec![Type::Param("T".to_string(), 0)],
-                return_type: Box::new(Type::Box(Box::new(Type::Param("T".to_string(), 0)))),
-            }),
-            Builtin::DeallocBox => Scheme::new(FunctionType {
-                resource: crate::ast::IsResource::Data,
-                params: vec![Type::Box(Box::new(Type::Param("T".to_string(), 0)))],
-                return_type: Box::new(Type::Param("T".to_string(), 0)),
-            }),
+                Type::Param("T".to_string(), 1),
+            ),
+            Builtin::DestroyString => (vec![Type::String], Type::Unit),
+            Builtin::AllocBox => (
+                vec![Type::Param("T".to_string(), 0)],
+                (Type::Box(Box::new(Type::Param("T".to_string(), 0)))),
+            ),
+            Builtin::DeallocBox => (
+                vec![Type::Box(Box::new(Type::Param("T".to_string(), 0)))],
+                (Type::Param("T".to_string(), 0)),
+            ),
             Builtin::DerefBox => {
                 let r_param = Region::Param("r".to_string(), 0);
                 let t_param = Type::Param("T".to_string(), 1);
-                Scheme::new(FunctionType {
-                    resource: crate::ast::IsResource::Data,
-                    params: vec![Type::Imm(
+                (
+                    vec![Type::Imm(
                         r_param.clone(),
                         Box::new(Type::Box(Box::new(t_param.clone()))),
                     )],
-                    return_type: Box::new(Type::Imm(r_param, Box::new(t_param))),
-                })
+                    (Type::Imm(r_param, Box::new(t_param))),
+                )
             }
             Builtin::DerefBoxMut => {
                 let r_param = Region::Param("r".to_string(), 0);
                 let t_param = Type::Param("T".to_string(), 1);
-                Scheme::new(FunctionType {
-                    resource: crate::ast::IsResource::Data,
-                    params: vec![Type::Mut(
+                (
+                    vec![Type::Mut(
                         r_param.clone(),
                         Box::new(Type::Box(Box::new(t_param.clone()))),
                     )],
-                    return_type: Box::new(Type::Mut(r_param, Box::new(t_param))),
-                })
+                    (Type::Mut(r_param, Box::new(t_param))),
+                )
             }
-            Builtin::DestroyList => Scheme::new(FunctionType {
-                resource: crate::ast::IsResource::Data,
-                params: vec![
+            Builtin::DestroyList => (
+                vec![
                     Type::List(Box::new(Type::Param("T".to_string(), 0))),
                     Type::Function(FunctionType {
                         resource: crate::ast::IsResource::Data,
@@ -166,20 +154,20 @@ impl TypeCheck {
                         return_type: Box::new(Type::Unit),
                     }),
                 ],
-                return_type: Box::new(Type::Unit),
-            }),
-            Builtin::Freeze => Scheme::new(FunctionType {
-                resource: crate::ast::IsResource::Data,
-                params: vec![Type::Mut(
+                (Type::Unit),
+            ),
+            Builtin::Freeze => (
+                vec![Type::Mut(
                     Region::Param("r".to_string(), 0),
                     Box::new(Type::Param("T".to_string(), 1)),
                 )],
-                return_type: Box::new(Type::Imm(
+                (Type::Imm(
                     Region::Param("r".to_string(), 0),
                     Box::new(Type::Param("T".to_string(), 1)),
                 )),
-            }),
-        }
+            ),
+        };
+        Scheme::new(FunctionType::new_data(params, return_type))
     }
     pub(super) fn signature_of_function(&self, function: FunctionId) -> Scheme<FunctionType> {
         self.signatures[usize::from(function)].clone()
