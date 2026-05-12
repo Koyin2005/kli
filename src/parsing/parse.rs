@@ -251,6 +251,19 @@ impl Parser {
         let body = self.parse_expr()?;
         Ok(CaseArm { pat: pattern, body })
     }
+    fn parse_resource_arrow(&mut self) -> Result<IsResource,ParseError>{
+if self.matches_token(&TokenKind::Arrow) {
+                        Ok(IsResource::Data)
+                    } else if self.matches_token(&TokenKind::ThickArrow) {
+                        Ok(IsResource::Resource)
+                    } else {
+                        let _ = self.expect_error(|msg| match msg {
+                            Some(kind) => format!("Expected '->' or '=>' but got '{kind}'"),
+                            None => "Expected '->' or '=>' but got EOF".to_string(),
+                        });
+                        Err(ParseError)
+                    }
+    }
     fn parse_expr_prefix(&mut self) -> Result<Expr, ParseError> {
         match self.peek_token() {
             None => {
@@ -474,17 +487,7 @@ impl Parser {
                     }
                     let _ = self.expect(&TokenKind::RightParen);
 
-                    let resource = if self.matches_token(&TokenKind::Arrow) {
-                        IsResource::Data
-                    } else if self.matches_token(&TokenKind::ThickArrow) {
-                        IsResource::Resource
-                    } else {
-                        let _ = self.expect_error(|msg| match msg {
-                            Some(kind) => format!("Expected '->' or '=>' but got '{kind}'"),
-                            None => "Expected '->' or '=>' but got EOF".to_string(),
-                        });
-                        IsResource::Data
-                    };
+                    let resource = self.parse_resource_arrow()?;
                     let body = self.parse_expr()?;
                     Ok(Expr {
                         line,
@@ -623,17 +626,7 @@ impl Parser {
             }
         }
         let _ = self.expect(&TokenKind::RightParen);
-        let is_resource = if self.matches_token(&TokenKind::Arrow) {
-            IsResource::Data
-        } else if self.matches_token(&TokenKind::ThickArrow) {
-            IsResource::Resource
-        } else {
-            let _ = self.expect_error(|kind| match kind {
-                Some(kind) => format!("Expected '->' or '=>' but got '{kind}'"),
-                None => "Expected '->' or '=>' but got 'EOF'".to_string(),
-            });
-            IsResource::Data
-        };
+        let is_resource = self.parse_resource_arrow().unwrap_or(IsResource::Data);
 
         let return_type = self.parse_type()?;
         Ok(FunctionType {
