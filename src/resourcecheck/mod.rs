@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, hash_map::Entry};
+use std::{collections::{HashMap, HashSet, hash_map::Entry}, io::StderrLock};
 
 use crate::{
     ast::{IsResource, Mutable},
@@ -7,6 +7,13 @@ use crate::{
     typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind},
     types::{FunctionType, GenericKind, Region, Type},
 };
+
+#[derive(Debug, Clone, Copy)]
+enum CaptureError{
+    NotAnUpvar,
+    BorrowsLocal,
+    DataFunction
+}
 #[derive(Debug, Clone, Copy)]
 enum PlaceUse {
     Read,
@@ -25,6 +32,7 @@ struct VarInfo {
     mutable: Mutable,
     function_level: usize,
     loop_count: usize,
+    is_param : bool
 }
 fn unify_state(state1: VarState, state2: VarState) -> Option<VarState> {
     match (state1, state2) {
@@ -130,7 +138,7 @@ impl ResourceCheck {
         }
         scope
     }
-    fn init_var(&mut self, mutable: Mutable, var: VarId, line: usize, name: String, ty: Type) {
+    fn init_var(&mut self, mutable: Mutable, var: VarId, line: usize, name: String, ty: Type, is_param : bool) {
         self.scopes.last_mut().unwrap().push(var);
         self.vars.insert(
             var,
@@ -141,6 +149,7 @@ impl ResourceCheck {
                 mutable,
                 function_level: self.function_level,
                 loop_count: self.loops,
+                is_param
             },
         );
         self.var_states.insert(var, VarState::Owned);
@@ -216,13 +225,12 @@ impl ResourceCheck {
                 self.check_pattern(sub_pattern);
             }
             PatternKind::Binding(mutable, var, ty) => {
-                self.init_var(*mutable, var.1, pattern.line, var.0.clone(), (**ty).clone());
+                self.init_var(*mutable, var.1, pattern.line, var.0.clone(), (**ty).clone(),false);
             }
         }
     }
-    fn outlives_non_static(&self, ty: &Type) -> bool {
-        match ty {
-            Type::Bool
+    fn outlives_generic_regions(&self, ty: &Type) -> bool{ 
+        match ty {Type::Bool
             | Type::Char
             | Type::Int
             | Type::String
@@ -230,19 +238,19 @@ impl ResourceCheck {
             | Type::Param(..)
             | Type::Unknown => true,
             Type::Infer(_) => unreachable!("Cannot infer here"),
-            Type::Box(ty) | Type::List(ty) | Type::Option(ty) => self.outlives_non_static(ty),
+            Type::Box(ty) | Type::List(ty) | Type::Option(ty) => self.outlives_generic_regions(ty),
             Type::Function(function) => {
                 function
                     .params
                     .iter()
-                    .all(|param| self.outlives_non_static(param))
-                    && self.outlives_non_static(&function.return_type)
+                    .all(|param| self.outlives_generic_regions(param))
+                    && self.outlives_generic_regions(&function.return_type)
             }
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
-                if *region != Region::Static && *region != Region::Unknown {
+                if !matches!(region,Region::Unknown|Region::Static|Region::Param(..)) {
                     return false;
                 }
-                self.outlives_non_static(ty)
+                self.outlives_generic_regions(ty)
             }
         }
     }
@@ -258,23 +266,41 @@ impl ResourceCheck {
             }
         }
     }
-    fn can_capture_var(&mut self, var: VarId) -> bool {
+    fn capture_valid(&self, var: VarId) -> Result<(),CaptureError> {
         let info = &self.vars[&var];
-        info.function_level == self.function_level
-            || ((!self.is_resource(&info.ty)
-                || self.is_current_function_resource == IsResource::Resource)
-                && self.outlives_non_static(&info.ty))
+        if info.function_level == self.function_level{
+            return Err(CaptureError::NotAnUpvar);
+        }
+        //Function is not a resource, can't capture anything
+        if self.is_current_function_resource == IsResource::Data{
+            return Err(CaptureError::DataFunction);
+        }
+        let info = &self.vars[&var];
+        if !self.outlives_generic_regions(&info.ty){
+            return Err(CaptureError::BorrowsLocal);
+        }
+        Ok(())
+    }
+    fn capture_if_upvar(&mut self, var: VarId, line: usize) {
+        let cause = match self.capture_valid(var){
+            Err(CaptureError::NotAnUpvar) | Ok(()) => return,
+            Err(CaptureError::DataFunction) => {
+                "because 'data' functions cannot capture"
+            },
+            Err(CaptureError::BorrowsLocal) => {
+                "because borrowed content cannot be captured"
+            }
+        };
+        self.err.report(
+                format!("Cannot capture '{}' {}", self.vars[&var].name,cause),
+                line,
+            );
     }
     fn check_place_use(&mut self, place: &Place, place_use: PlaceUse) {
         match &place.kind {
             PlaceKind::Var(var) => {
                 let var = var.1;
-                if !self.can_capture_var(var) {
-                    self.err.report(
-                        format!("Cannot capture '{}'", self.vars[&var].name),
-                        place.line,
-                    );
-                }
+                self.capture_if_upvar(var, place.line);
                 match place_use {
                     PlaceUse::Write => {
                         self.write_to_var(var, place.line);
@@ -292,12 +318,7 @@ impl ResourceCheck {
                     let Some(var) = self.var_of(place) else {
                         return self.check_place_use(place, place_use);
                     };
-                    if !self.can_capture_var(var) {
-                        self.err.report(
-                            format!("Cannot capture '{}'", self.vars[&var].name),
-                            place.line,
-                        );
-                    }
+                    self.capture_if_upvar(var, place.line);
                     if !self.is_resource(ty) {
                         return;
                     }
@@ -382,6 +403,7 @@ impl ResourceCheck {
                             name.line,
                             name.content.clone(),
                             ty.clone(),
+                            true
                         );
                     }
                     this.check_expr(&lambda.body);
@@ -428,6 +450,7 @@ impl ResourceCheck {
                     var_name.line,
                     var_name.content.clone(),
                     new_ty.clone(),
+                    false
                 );
                 self.check_expr(body);
                 self.expired_regions.insert(*region);
@@ -507,6 +530,7 @@ impl ResourceCheck {
                     param.name.line,
                     param.name.content.clone(),
                     param.ty.clone(),
+                    true
                 );
             }
             this.check_expr(&function.body);
