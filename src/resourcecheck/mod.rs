@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet, hash_map::Entry}, io::StderrLock};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 
 use crate::{
     ast::{IsResource, Mutable},
@@ -24,15 +24,13 @@ enum VarState {
     Owned,
     Moved,
 }
-
 struct VarInfo {
     ty: Type,
     line: usize,
     name: String,
     mutable: Mutable,
     function_level: usize,
-    loop_count: usize,
-    is_param : bool
+    loop_count: usize
 }
 fn unify_state(state1: VarState, state2: VarState) -> Option<VarState> {
     match (state1, state2) {
@@ -55,6 +53,7 @@ pub struct ResourceCheck {
     scopes: Vec<Vec<VarId>>,
     region_params: HashSet<usize>,
     function_level: usize,
+    capture_set : Option<HashMap<VarId,usize>>,
     loops: usize,
 }
 impl ResourceCheck {
@@ -68,6 +67,7 @@ impl ResourceCheck {
             scopes: Vec::new(),
             expired_regions: HashSet::new(),
             function_level: 0,
+            capture_set : None,
             loops: 0,
         }
     }
@@ -138,7 +138,7 @@ impl ResourceCheck {
         }
         scope
     }
-    fn init_var(&mut self, mutable: Mutable, var: VarId, line: usize, name: String, ty: Type, is_param : bool) {
+    fn init_var(&mut self, mutable: Mutable, var: VarId, line: usize, name: String, ty: Type, _is_param : bool) {
         self.scopes.last_mut().unwrap().push(var);
         self.vars.insert(
             var,
@@ -148,8 +148,7 @@ impl ResourceCheck {
                 name,
                 mutable,
                 function_level: self.function_level,
-                loop_count: self.loops,
-                is_param
+                loop_count: self.loops
             },
         );
         self.var_states.insert(var, VarState::Owned);
@@ -229,6 +228,34 @@ impl ResourceCheck {
             }
         }
     }
+    fn regions_in(&self, ty: &Type) -> HashSet<Region>{
+        match ty {Type::Bool
+            | Type::Char
+            | Type::Int
+            | Type::String
+            | Type::Unit
+            | Type::Param(..)
+            | Type::Unknown => HashSet::new(),
+            Type::Infer(_) => unreachable!("Cannot infer here"),
+            Type::Box(ty) | Type::List(ty) | Type::Option(ty) => self.regions_in(ty),
+            Type::Function(function) => {
+                function
+                    .params
+                    .iter()
+                    .fold(HashSet::new(),|old,param|{ 
+                        let mut old = old;
+                        old.extend(self.regions_in(param));
+                        old
+                    })
+            }
+            Type::Imm(region, ty) | Type::Mut(region, ty) => {
+                let mut regions = HashSet::new();
+                regions.insert(region.clone());
+                regions.extend(self.regions_in(ty));
+                regions
+            }
+        }
+    }
     fn outlives_generic_regions(&self, ty: &Type) -> bool{ 
         match ty {Type::Bool
             | Type::Char
@@ -275,7 +302,6 @@ impl ResourceCheck {
         if self.is_current_function_resource == IsResource::Data{
             return Err(CaptureError::DataFunction);
         }
-        let info = &self.vars[&var];
         if !self.outlives_generic_regions(&info.ty){
             return Err(CaptureError::BorrowsLocal);
         }
@@ -283,7 +309,12 @@ impl ResourceCheck {
     }
     fn capture_if_upvar(&mut self, var: VarId, line: usize) {
         let cause = match self.capture_valid(var){
-            Err(CaptureError::NotAnUpvar) | Ok(()) => return,
+             Ok(()) => {
+                let capture_set = self.capture_set.as_mut().expect("Should have capture set");
+                capture_set.insert(var,line);
+                return;
+             }
+            Err(CaptureError::NotAnUpvar)  => return,
             Err(CaptureError::DataFunction) => {
                 "because 'data' functions cannot capture"
             },
@@ -391,6 +422,7 @@ impl ResourceCheck {
             }
             ExprKind::Lambda(lambda) => {
                 self.in_drop_scope(|this| {
+                    let capture_info =  this.capture_set.replace(Default::default());
                     let old_resource = std::mem::replace(
                         &mut this.is_current_function_resource,
                         lambda.is_resource,
@@ -407,8 +439,26 @@ impl ResourceCheck {
                         );
                     }
                     this.check_expr(&lambda.body);
+                    if let Some(captures) = this.capture_set.as_ref(){
+                        let mut errors = Vec::new();
+                        for (var,line) in captures{
+                            let var_info = &this.vars[var];
+                            if this.regions_in(&var_info.ty).iter().any(|region|{
+                                *region != Region::Static || *region != Region::Unknown
+                            }) {
+                                errors.push((var_info.name.as_str(),*line));
+                            }
+                        }
+                        errors.sort_by_key(|(_,line)|{
+                            *line
+                        });
+                        for (name,line) in errors{
+                                this.err.report(format!("Cannot capture '{}' that contains borrows",name),line);
+                        }
+                    }
                     this.is_current_function_resource = old_resource;
                     this.function_level -= 1;
+                    this.capture_set = capture_info;
                 });
             }
             ExprKind::Let {
