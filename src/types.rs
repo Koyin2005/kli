@@ -36,7 +36,7 @@ impl FunctionType {
         }
     }
 }
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug,Hash)]
 pub enum Region {
     Unknown,
     Static,
