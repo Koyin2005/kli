@@ -9,10 +9,10 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy)]
-enum CaptureError{
+enum CaptureError {
     NotAnUpvar,
     BorrowsLocal,
-    DataFunction
+    DataFunction,
 }
 #[derive(Debug, Clone, Copy)]
 enum PlaceUse {
@@ -30,7 +30,7 @@ struct VarInfo {
     name: String,
     mutable: Mutable,
     function_level: usize,
-    loop_count: usize
+    loop_count: usize,
 }
 fn unify_state(state1: VarState, state2: VarState) -> Option<VarState> {
     match (state1, state2) {
@@ -53,7 +53,7 @@ pub struct ResourceCheck {
     scopes: Vec<Vec<VarId>>,
     region_params: HashSet<usize>,
     function_level: usize,
-    capture_set : Option<HashMap<VarId,usize>>,
+    capture_set: Option<HashMap<VarId, usize>>,
     loops: usize,
 }
 impl ResourceCheck {
@@ -67,7 +67,7 @@ impl ResourceCheck {
             scopes: Vec::new(),
             expired_regions: HashSet::new(),
             function_level: 0,
-            capture_set : None,
+            capture_set: None,
             loops: 0,
         }
     }
@@ -138,7 +138,15 @@ impl ResourceCheck {
         }
         scope
     }
-    fn init_var(&mut self, mutable: Mutable, var: VarId, line: usize, name: String, ty: Type, _is_param : bool) {
+    fn init_var(
+        &mut self,
+        mutable: Mutable,
+        var: VarId,
+        line: usize,
+        name: String,
+        ty: Type,
+        _is_param: bool,
+    ) {
         self.scopes.last_mut().unwrap().push(var);
         self.vars.insert(
             var,
@@ -148,7 +156,7 @@ impl ResourceCheck {
                 name,
                 mutable,
                 function_level: self.function_level,
-                loop_count: self.loops
+                loop_count: self.loops,
             },
         );
         self.var_states.insert(var, VarState::Owned);
@@ -224,12 +232,20 @@ impl ResourceCheck {
                 self.check_pattern(sub_pattern);
             }
             PatternKind::Binding(mutable, var, ty) => {
-                self.init_var(*mutable, var.1, pattern.line, var.0.clone(), (**ty).clone(),false);
+                self.init_var(
+                    *mutable,
+                    var.1,
+                    pattern.line,
+                    var.0.clone(),
+                    (**ty).clone(),
+                    false,
+                );
             }
         }
     }
-    fn regions_in(&self, ty: &Type) -> HashSet<Region>{
-        match ty {Type::Bool
+    fn regions_in(&self, ty: &Type) -> HashSet<Region> {
+        match ty {
+            Type::Bool
             | Type::Char
             | Type::Int
             | Type::String
@@ -239,14 +255,11 @@ impl ResourceCheck {
             Type::Infer(_) => unreachable!("Cannot infer here"),
             Type::Box(ty) | Type::List(ty) | Type::Option(ty) => self.regions_in(ty),
             Type::Function(function) => {
-                function
-                    .params
-                    .iter()
-                    .fold(HashSet::new(),|old,param|{ 
-                        let mut old = old;
-                        old.extend(self.regions_in(param));
-                        old
-                    })
+                function.params.iter().fold(HashSet::new(), |old, param| {
+                    let mut old = old;
+                    old.extend(self.regions_in(param));
+                    old
+                })
             }
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
                 let mut regions = HashSet::new();
@@ -256,8 +269,9 @@ impl ResourceCheck {
             }
         }
     }
-    fn outlives_generic_regions(&self, ty: &Type) -> bool{ 
-        match ty {Type::Bool
+    fn outlives_generic_regions(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Bool
             | Type::Char
             | Type::Int
             | Type::String
@@ -274,7 +288,7 @@ impl ResourceCheck {
                     && self.outlives_generic_regions(&function.return_type)
             }
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
-                if !matches!(region,Region::Unknown|Region::Static|Region::Param(..)) {
+                if !matches!(region, Region::Unknown | Region::Static | Region::Param(..)) {
                     return false;
                 }
                 self.outlives_generic_regions(ty)
@@ -293,39 +307,35 @@ impl ResourceCheck {
             }
         }
     }
-    fn capture_valid(&self, var: VarId) -> Result<(),CaptureError> {
+    fn capture_valid(&self, var: VarId) -> Result<(), CaptureError> {
         let info = &self.vars[&var];
-        if info.function_level == self.function_level{
+        if info.function_level == self.function_level {
             return Err(CaptureError::NotAnUpvar);
         }
         //Function is not a resource, can't capture anything
-        if self.is_current_function_resource == IsResource::Data{
+        if self.is_current_function_resource == IsResource::Data {
             return Err(CaptureError::DataFunction);
         }
-        if !self.outlives_generic_regions(&info.ty){
+        if !self.outlives_generic_regions(&info.ty) {
             return Err(CaptureError::BorrowsLocal);
         }
         Ok(())
     }
     fn capture_if_upvar(&mut self, var: VarId, line: usize) {
-        let cause = match self.capture_valid(var){
-             Ok(()) => {
+        let cause = match self.capture_valid(var) {
+            Ok(()) => {
                 let capture_set = self.capture_set.as_mut().expect("Should have capture set");
-                capture_set.insert(var,line);
+                capture_set.insert(var, line);
                 return;
-             }
-            Err(CaptureError::NotAnUpvar)  => return,
-            Err(CaptureError::DataFunction) => {
-                "because 'data' functions cannot capture"
-            },
-            Err(CaptureError::BorrowsLocal) => {
-                "because borrowed content cannot be captured"
             }
+            Err(CaptureError::NotAnUpvar) => return,
+            Err(CaptureError::DataFunction) => "because 'data' functions cannot capture",
+            Err(CaptureError::BorrowsLocal) => "because borrowed content cannot be captured",
         };
         self.err.report(
-                format!("Cannot capture '{}' {}", self.vars[&var].name,cause),
-                line,
-            );
+            format!("Cannot capture '{}' {}", self.vars[&var].name, cause),
+            line,
+        );
     }
     fn check_place_use(&mut self, place: &Place, place_use: PlaceUse) {
         match &place.kind {
@@ -422,7 +432,7 @@ impl ResourceCheck {
             }
             ExprKind::Lambda(lambda) => {
                 self.in_drop_scope(|this| {
-                    let capture_info =  this.capture_set.replace(Default::default());
+                    let capture_info = this.capture_set.replace(Default::default());
                     let old_resource = std::mem::replace(
                         &mut this.is_current_function_resource,
                         lambda.is_resource,
@@ -435,25 +445,26 @@ impl ResourceCheck {
                             name.line,
                             name.content.clone(),
                             ty.clone(),
-                            true
+                            true,
                         );
                     }
                     this.check_expr(&lambda.body);
-                    if let Some(captures) = this.capture_set.as_ref(){
+                    if let Some(captures) = this.capture_set.as_ref() {
                         let mut errors = Vec::new();
-                        for (var,line) in captures{
+                        for (var, line) in captures {
                             let var_info = &this.vars[var];
-                            if this.regions_in(&var_info.ty).iter().any(|region|{
+                            if this.regions_in(&var_info.ty).iter().any(|region| {
                                 *region != Region::Static || *region != Region::Unknown
                             }) {
-                                errors.push((var_info.name.as_str(),*line));
+                                errors.push((var_info.name.as_str(), *line));
                             }
                         }
-                        errors.sort_by_key(|(_,line)|{
-                            *line
-                        });
-                        for (name,line) in errors{
-                                this.err.report(format!("Cannot capture '{}' that contains borrows",name),line);
+                        errors.sort_by_key(|(_, line)| *line);
+                        for (name, line) in errors {
+                            this.err.report(
+                                format!("Cannot capture '{}' that contains borrows", name),
+                                line,
+                            );
                         }
                     }
                     this.is_current_function_resource = old_resource;
@@ -500,7 +511,7 @@ impl ResourceCheck {
                     var_name.line,
                     var_name.content.clone(),
                     new_ty.clone(),
-                    false
+                    false,
                 );
                 self.check_expr(body);
                 self.expired_regions.insert(*region);
@@ -580,7 +591,7 @@ impl ResourceCheck {
                     param.name.line,
                     param.name.content.clone(),
                     param.ty.clone(),
-                    true
+                    true,
                 );
             }
             this.check_expr(&function.body);
