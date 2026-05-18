@@ -251,18 +251,86 @@ impl Parser {
         let body = self.parse_expr()?;
         Ok(CaseArm { pat: pattern, body })
     }
-    fn parse_resource_arrow(&mut self) -> Result<IsResource,ParseError>{
-if self.matches_token(&TokenKind::Arrow) {
-                        Ok(IsResource::Data)
-                    } else if self.matches_token(&TokenKind::ThickArrow) {
-                        Ok(IsResource::Resource)
-                    } else {
-                        let _ = self.expect_error(|msg| match msg {
-                            Some(kind) => format!("Expected '->' or '=>' but got '{kind}'"),
-                            None => "Expected '->' or '=>' but got EOF".to_string(),
-                        });
-                        Err(ParseError)
-                    }
+    fn parse_resource_arrow(&mut self) -> Result<IsResource, ParseError> {
+        if self.matches_token(&TokenKind::Arrow) {
+            Ok(IsResource::Data)
+        } else if self.matches_token(&TokenKind::ThickArrow) {
+            Ok(IsResource::Resource)
+        } else {
+            let _ = self.expect_error(|msg| match msg {
+                Some(kind) => format!("Expected '->' or '=>' but got '{kind}'"),
+                None => "Expected '->' or '=>' but got EOF".to_string(),
+            });
+            Err(ParseError)
+        }
+    }
+    fn parse_block_body(&mut self) -> Result<Expr,ParseError>{
+        self.parse_expr()
+    }
+    fn parse_block_expr(&mut self, _line: usize) -> Result<Expr,ParseError>{
+        self.next_token();
+        let body = self.parse_block_body()?;
+        self.expect(&TokenKind::End)?;
+        Ok(body)
+    }
+    fn parse_case_expr(&mut self, line: usize) -> Result<Expr,ParseError>{
+        self.next_token();
+        let matchee = self.parse_expr()?;
+        let _ = self.expect(&TokenKind::Of);
+        let mut arms = Vec::new();
+        while self.matches_token(&TokenKind::Pipe) {
+            arms.push(self.parse_case_arm()?);
+        }
+        let _ = self.expect(&TokenKind::End);
+        Ok(Expr { line, kind: ExprKind::Case(Box::new(matchee), arms) })
+    }
+    fn parse_let_stmt(&mut self, line: usize) -> Result<(),ParseError>{
+        todo!("Parse let stmt")
+    }
+    fn parse_let_expr(&mut self, line: usize) -> Result<Expr, ParseError> {
+        self.next_token();
+        let pattern = self.parse_pattern()?;
+        let ty = if self.matches_token(&TokenKind::Colon) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+        let _ = self.expect(&TokenKind::Equal);
+        let expr = self.parse_single_expr()?;
+        let _ = self.expect(&TokenKind::Semi);
+        let body = self.parse_expr()?;
+        Ok(Expr {
+            line,
+            kind: ExprKind::Let(Box::new(LetExpr {
+                pattern,
+                ty,
+                binder: expr,
+                body,
+            })),
+        })
+    }
+    fn parse_paren_expr(&mut self, line: usize) -> Result<Expr, ParseError> {
+        self.next_token();
+        if self.check_token(&TokenKind::RightParen) {
+            self.next_token();
+            return Ok(Expr {
+                line,
+                kind: ExprKind::Unit,
+            });
+        }
+        let expr = {
+            let mut expr = self.parse_expr()?;
+            if self.matches_token(&TokenKind::Colon) {
+                let ty = self.parse_type()?;
+                expr = Expr {
+                    line,
+                    kind: ExprKind::Annotate(Box::new(expr), Box::new(ty)),
+                };
+            };
+            expr
+        };
+        let _ = self.expect(&TokenKind::RightParen);
+        Ok(expr)
     }
     fn parse_expr_prefix(&mut self) -> Result<Expr, ParseError> {
         match self.peek_token() {
@@ -293,19 +361,7 @@ if self.matches_token(&TokenKind::Arrow) {
                         kind: ExprKind::Bool(false),
                     })
                 }
-                TokenKind::LeftParen => {
-                    self.next_token();
-                    let expr = if self.check_token(&TokenKind::RightParen) {
-                        Expr {
-                            line,
-                            kind: ExprKind::Unit,
-                        }
-                    } else {
-                        self.parse_expr()?
-                    };
-                    let _ = self.expect(&TokenKind::RightParen);
-                    Ok(expr)
-                }
+                TokenKind::LeftParen => self.parse_paren_expr(line),
                 TokenKind::For => {
                     self.next_token();
                     let _ = self.expect(&TokenKind::LeftParen);
@@ -334,28 +390,6 @@ if self.matches_token(&TokenKind::Arrow) {
                     Ok(Expr {
                         line,
                         kind: ExprKind::Borrow(mutable, name, region, Box::new(body)),
-                    })
-                }
-                TokenKind::Let => {
-                    self.next_token();
-                    let pattern = self.parse_pattern()?;
-                    let ty = if self.matches_token(&TokenKind::Colon) {
-                        Some(self.parse_type()?)
-                    } else {
-                        None
-                    };
-                    let _ = self.expect(&TokenKind::Equal);
-                    let expr = self.parse_expr()?;
-                    let _ = self.expect(&TokenKind::In);
-                    let body = self.parse_expr()?;
-                    Ok(Expr {
-                        line,
-                        kind: ExprKind::Let(Box::new(LetExpr {
-                            pattern,
-                            ty,
-                            binder: expr,
-                            body,
-                        })),
                     })
                 }
                 TokenKind::Ident(_) => {
@@ -423,23 +457,10 @@ if self.matches_token(&TokenKind::Arrow) {
                     })
                 }
                 TokenKind::Case => {
-                    self.next_token();
-                    let _ = self.expect(&TokenKind::LeftParen);
-                    let matchee = self.parse_expr()?;
-                    let _ = self.expect(&TokenKind::RightParen);
-                    let _ = self.expect(&TokenKind::LeftBrace);
-                    let mut arms = Vec::new();
-                    while !self.check_token(&TokenKind::RightBrace) {
-                        arms.push(self.parse_case_arm()?);
-                        if self.match_token(&TokenKind::Coma).is_none() {
-                            break;
-                        }
-                    }
-                    let _ = self.expect(&TokenKind::RightBrace);
-                    Ok(Expr {
-                        line,
-                        kind: ExprKind::Case(Box::new(matchee), arms),
-                    })
+                    self.parse_case_expr(line)
+                }
+                TokenKind::Do => {
+                    self.parse_block_expr(line)
                 }
                 TokenKind::StringLiteral(_) => {
                     let Some(Token {
@@ -488,7 +509,7 @@ if self.matches_token(&TokenKind::Arrow) {
                     let _ = self.expect(&TokenKind::RightParen);
 
                     let resource = self.parse_resource_arrow()?;
-                    let body = self.parse_expr()?;
+                    let body = self.parse_expr_with_sequence::<false>()?;
                     Ok(Expr {
                         line,
                         kind: ExprKind::Lambda(Lambda {
@@ -499,7 +520,7 @@ if self.matches_token(&TokenKind::Arrow) {
                     })
                 }
                 ref kind => {
-                    let msg = format!("Expected valid expr but got {kind:?}");
+                    let msg = format!("Expected valid expr but got {kind}");
                     let line = self.current_line();
                     self.diag.report(msg, line);
                     Err(ParseError)
@@ -536,14 +557,6 @@ if self.matches_token(&TokenKind::Arrow) {
                         Expr {
                             line: expr.line,
                             kind: ExprKind::Deref(Box::new(expr)),
-                        }
-                    }
-                    TokenKind::Colon => {
-                        self.next_token();
-                        let ty = self.parse_type()?;
-                        Expr {
-                            line: expr.line,
-                            kind: ExprKind::Annotate(Box::new(expr), Box::new(ty)),
                         }
                     }
                     _ => break Ok(expr),
@@ -588,14 +601,45 @@ if self.matches_token(&TokenKind::Arrow) {
         Ok(lhs)
     }
     fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        let mut first = self.parse_assign()?;
+        let Some(&Token { line, ref kind }) = self.peek_token() else {
+            let line = self.current_line();
+            self.diag
+                .report("Expected an expression but got EOF".to_string(), line);
+            return Err(ParseError);
+        };
+        match kind {
+            TokenKind::Let => self.parse_let_expr(line),
+            _ => self.parse_sequence_expr(),
+        }
+    }
+    fn parse_sequence_expr(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.parse_single_expr()?;
         while self.matches_token(&TokenKind::Semi) {
-            first = Expr {
-                line: first.line,
-                kind: ExprKind::Sequence(Box::new(first), Box::new(self.parse_assign()?)),
+            expr = Expr {
+                line: expr.line,
+                kind: ExprKind::Sequence(Box::new(expr), Box::new(self.parse_expr_with_sequence::<false>()?)),
             };
         }
-        Ok(first)
+        Ok(expr)
+    }
+    fn parse_expr_with_sequence<const SEQ:bool>(&mut self) -> Result<Expr, ParseError> {
+        let Some(&Token { line, ref kind }) = self.peek_token() else {
+            let line = self.current_line();
+            self.diag
+                .report("Expected an expression but got EOF".to_string(), line);
+            return Err(ParseError);
+        };
+        match kind {
+            TokenKind::Let => self.parse_let_expr(line),
+            _ => if SEQ {
+                self.parse_sequence_expr()
+            } else {
+                self.parse_single_expr()
+            },
+        }
+    }
+    fn parse_single_expr(&mut self) -> Result<Expr, ParseError> {
+        self.parse_assign()
     }
     fn parse_optional_generics(&mut self) -> Result<Option<Generics>, ParseError> {
         if let Some(Token { line, .. }) = self.match_token(&TokenKind::LeftBracket) {

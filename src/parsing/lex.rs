@@ -153,6 +153,9 @@ impl<'s> Lexer<'s> {
                 "char" => TokenKind::Char,
                 "true" => TokenKind::True,
                 "false" => TokenKind::False,
+                "end" => TokenKind::End,
+                "of" => TokenKind::Of,
+                "do" => TokenKind::Do,
                 _ => TokenKind::Ident(src),
             },
         })
@@ -187,6 +190,7 @@ impl<'s> Lexer<'s> {
             ';' => Some(self.new_token_from_char(line, TokenKind::Semi)),
             ':' => Some(self.new_token_from_char(line, TokenKind::Colon)),
             '^' => Some(self.new_token_from_char(line, TokenKind::Caret)),
+            '|' => Some(self.new_token_from_char(line, TokenKind::Pipe)),
             c if Self::is_start_char(c) => self.ident_token(line),
             c if c.is_numeric() => self.num_token(line),
             '"' => self.string_token(line),
