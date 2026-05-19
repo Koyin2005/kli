@@ -36,18 +36,24 @@ pub struct Lambda {
     pub body: Expr,
 }
 #[derive(Debug)]
+pub struct LetBinding {
+    pub pattern: Pattern,
+    pub value: Expr,
+}
+#[derive(Debug)]
 pub enum StmtKind {
-    
+    Let(LetBinding),
+    Expr(Expr),
 }
 #[derive(Debug)]
 pub struct Stmt {
-    pub line : usize,
-    pub kind : StmtKind
+    pub line: usize,
+    pub kind: StmtKind,
 }
 #[derive(Debug)]
-pub struct BlockBody{
-    pub stmts : Vec<Stmt>,
-    pub expr : Box<Expr>
+pub struct BlockBody {
+    pub stmts: Vec<Stmt>,
+    pub expr: Box<Expr>,
 }
 #[derive(Debug)]
 pub struct Expr {

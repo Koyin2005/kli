@@ -3,5 +3,5 @@ mod infer;
 mod lower;
 mod pattern;
 pub mod root;
-mod subst;
 mod stmt;
+mod subst;

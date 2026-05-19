@@ -6,7 +6,7 @@ use crate::{
     resolved_ast::{self as res, Builtin, FunctionId, Program, VarId},
     scheme::Scheme,
     typecheck::{infer::TypeInfer, lower::Lower, subst::TypeSubst},
-    typed_ast::{self, Function, GenericParam},
+    typed_ast::{self, Function, GenericParam, LetBinding},
     types::{FunctionType, GenericArg, GenericKind, Region, Type},
 };
 pub struct TypeError;
@@ -300,6 +300,12 @@ impl TypeCheck {
     }
     pub(super) fn lower_type(&self, ty: res::Type) -> Type {
         Lower::new(&self.generics, &self.diag).lower_type(&ty)
+    }
+    pub(super) fn check_binding(&mut self, binding: res::LetBinding) -> LetBinding {
+        let ty = binding.ty.map(|ty| self.lower_type(ty));
+        let value = self.check_expr(binding.value, ty);
+        let pattern = self.check_pattern(binding.pattern, value.ty.clone(), None);
+        LetBinding { pattern, value }
     }
     pub(super) fn check_function(&mut self, id: FunctionId, f: res::Function) -> Function {
         self.generics

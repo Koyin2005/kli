@@ -4,7 +4,7 @@ use crate::{
     ast::{IsResource, Mutable},
     diagnostics::DiagnosticReporter,
     resolved_ast::{LocalRegionId, VarId},
-    typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind, Stmt},
+    typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
     types::{FunctionType, GenericKind, Region, Type},
 };
 
@@ -376,18 +376,22 @@ impl ResourceCheck {
             },
         }
     }
-    fn check_stmt(&mut self, stmt: &Stmt){
-        match stmt.kind{
-            
+    fn check_stmt(&mut self, stmt: &Stmt) {
+        match &stmt.kind {
+            StmtKind::Expr(expr) => self.check_expr(expr),
+            StmtKind::Let(let_binding) => {
+                self.check_pattern(&let_binding.pattern);
+                self.check_expr(&let_binding.value);
+            }
         }
     }
     fn check_expr(&mut self, expr: &Expr) {
         match &expr.kind {
             ExprKind::Block(body) => {
-                for stmt in &body.stmts{
+                for stmt in &body.stmts {
                     self.check_stmt(stmt);
                 }
-                self.check_expr(expr);
+                self.check_expr(&body.expr);
             }
             ExprKind::Bool(_)
             | ExprKind::Err

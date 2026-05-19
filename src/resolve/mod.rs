@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::Ident;
+use crate::ast::{Ident, StmtKind};
 use crate::diagnostics::DiagnosticReporter;
 use crate::resolved_ast::{Builtin, FunctionId, GenericKind, LocalRegionId, VarId};
 use crate::{ast, names, resolved_ast as res};
@@ -293,18 +293,17 @@ impl Resolve {
         };
         res::Pattern { line, kind }
     }
+    fn resolve_let_binding(&mut self, let_binding: ast::LetBinding) -> res::LetBinding {
+        let value = self.resolve_expr(let_binding.value);
+        let ty = let_binding.ty.map(|ty| self.resolve_type(ty));
+        let pattern = self.resolve_pattern(let_binding.pattern);
+        res::LetBinding { pattern, ty, value }
+    }
     fn resolve_let_expr(&mut self, let_expr: ast::LetExpr) -> res::LetExpr {
-        let binder = self.resolve_expr(let_expr.binder);
-        let ty = let_expr.ty.map(|ty| self.resolve_type(ty));
         self.in_scope(|this| {
-            let pattern = this.resolve_pattern(let_expr.pattern);
+            let binding = this.resolve_let_binding(let_expr.binding);
             let body = this.resolve_expr(let_expr.body);
-            res::LetExpr {
-                pattern,
-                ty,
-                body,
-                binder,
-            }
+            res::LetExpr { binding, body }
         })
     }
     fn resolve_place(&mut self, place: ast::Place) -> Option<res::Place> {
@@ -332,19 +331,39 @@ impl Resolve {
             }),
         }
     }
-    fn resolve_stmt(&mut self, stmt: ast::Stmt) -> res::Stmt{
+    fn resolve_stmt(&mut self, stmt: ast::Stmt) -> res::Stmt {
         let line = stmt.line;
-        match stmt.kind{
-            
+        match stmt.kind {
+            StmtKind::Let(let_binding) => {
+                let let_binding = self.resolve_let_binding(let_binding);
+                res::Stmt {
+                    line,
+                    kind: res::StmtKind::Let(let_binding),
+                }
+            }
+            StmtKind::Expr(expr) => {
+                let expr = self.resolve_expr(expr);
+                res::Stmt {
+                    line,
+                    kind: res::StmtKind::Expr(expr),
+                }
+            }
         }
     }
     fn resolve_expr(&mut self, expr: ast::Expr) -> res::Expr {
         let line = expr.line;
         let kind = match expr.kind {
-            ast::ExprKind::Block(block) => res::ExprKind::Block(res::BlockBody{
-                stmts : block.stmts.into_iter().map(|stmt| self.resolve_stmt(stmt)).collect(),
-                expr : Box::new(self.resolve_expr(*block.expr))
+            ast::ExprKind::Block(block) => self.in_scope(|this| {
+                res::ExprKind::Block(res::BlockBody {
+                    stmts: block
+                        .stmts
+                        .into_iter()
+                        .map(|stmt| this.resolve_stmt(stmt))
+                        .collect(),
+                    expr: Box::new(this.resolve_expr(*block.expr)),
+                })
             }),
+
             ast::ExprKind::Unit => res::ExprKind::Unit,
             ast::ExprKind::String(value) => res::ExprKind::String(value),
             ast::ExprKind::Number(value) => res::ExprKind::Int(value as i64),

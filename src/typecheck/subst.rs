@@ -1,6 +1,6 @@
 use crate::{
     typecheck::infer::TypeInfer,
-    typed_ast::{Expr, ExprKind, Pattern, PatternKind, Place, PlaceKind, Stmt},
+    typed_ast::{Expr, ExprKind, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
     types::{FunctionType, GenericArg, Region, Type},
 };
 
@@ -70,13 +70,19 @@ impl<'a> TypeSubst<'a> {
         }
         self.subst_type(&mut place.ty);
     }
-    pub fn subst_stmt(&mut self, stmt: &mut Stmt){
-
+    pub fn subst_stmt(&mut self, stmt: &mut Stmt) {
+        match &mut stmt.kind {
+            StmtKind::Expr(expr) => self.subst_expr(expr),
+            StmtKind::Let(let_binding) => {
+                self.subst_pattern(&mut let_binding.pattern);
+                self.subst_expr(&mut let_binding.value);
+            }
+        }
     }
     pub fn subst_expr(&mut self, expr: &mut Expr) {
         match &mut expr.kind {
             ExprKind::Block(block) => {
-                for stmt in &mut block.stmts{
+                for stmt in &mut block.stmts {
                     self.subst_stmt(stmt);
                 }
                 self.subst_expr(&mut block.expr);

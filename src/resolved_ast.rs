@@ -79,10 +79,14 @@ pub enum Builtin {
     Swap,
 }
 #[derive(Debug)]
-pub struct LetExpr {
+pub struct LetBinding {
     pub pattern: Pattern,
     pub ty: Option<Type>,
-    pub binder: Expr,
+    pub value: Expr,
+}
+#[derive(Debug)]
+pub struct LetExpr {
+    pub binding: LetBinding,
     pub body: Expr,
 }
 #[derive(Debug)]
@@ -92,17 +96,18 @@ pub struct CaseArm {
 }
 #[derive(Debug)]
 pub enum StmtKind {
-    
+    Let(LetBinding),
+    Expr(Expr),
 }
 #[derive(Debug)]
-pub struct Stmt{
-    pub line : usize,
-    pub kind : StmtKind
+pub struct Stmt {
+    pub line: usize,
+    pub kind: StmtKind,
 }
 #[derive(Debug)]
-pub struct BlockBody{
-    pub stmts : Vec<Stmt>,
-    pub expr : Box<Expr>
+pub struct BlockBody {
+    pub stmts: Vec<Stmt>,
+    pub expr: Box<Expr>,
 }
 #[derive(Debug)]
 pub enum ExprKind {
