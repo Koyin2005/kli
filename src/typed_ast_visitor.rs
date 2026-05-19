@@ -77,7 +77,7 @@ where
             args.iter().for_each(|expr| v.visit_expr(expr));
         }
         ExprKind::List(values) => values.iter().for_each(|expr| v.visit_expr(expr)),
-        ExprKind::Binary(_, first, second) | ExprKind::Sequence(first, second) => {
+        ExprKind::Binary(_, first, second) => {
             v.visit_expr(first);
             v.visit_expr(second)
         }

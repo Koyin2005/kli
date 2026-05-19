@@ -94,7 +94,7 @@ impl<'a> TypeSubst<'a> {
             | ExprKind::String(_)
             | ExprKind::Panic
             | ExprKind::None => (),
-            ExprKind::Sequence(first, second) | ExprKind::Binary(_, first, second) => {
+            ExprKind::Binary(_, first, second) => {
                 self.subst_expr(first);
                 self.subst_expr(second);
             }

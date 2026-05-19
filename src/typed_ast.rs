@@ -100,7 +100,6 @@ pub enum ExprKind {
         body: Box<Expr>,
     },
     Case(Box<Expr>, Vec<CaseArm>),
-    Sequence(Box<Expr>, Box<Expr>),
     Assign(Place, Box<Expr>),
     Lambda(Box<Lambda>),
 }

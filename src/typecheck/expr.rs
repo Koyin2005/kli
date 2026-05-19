@@ -153,20 +153,6 @@ impl TypeCheck {
             })),
         }
     }
-    fn check_sequence(
-        &mut self,
-        first: Expr,
-        rest: Expr,
-        expected_ty: Option<Type>,
-    ) -> typed_ast::Expr {
-        let first = self.check_expr(first, None);
-        let second = self.check_expr(rest, expected_ty);
-        typed_ast::Expr {
-            ty: second.ty.clone(),
-            line: first.line,
-            kind: typed_ast::ExprKind::Sequence(Box::new(first), Box::new(second)),
-        }
-    }
     fn check_call(
         &mut self,
         line: usize,
@@ -373,9 +359,6 @@ impl TypeCheck {
             }
             ExprKind::Call(callee, args) => {
                 return self.check_call(expr.line, *callee, args, expected_ty);
-            }
-            ExprKind::Sequence(first, rest) => {
-                return self.check_sequence(*first, *rest, expected_ty);
             }
             ExprKind::Panic(ty) => {
                 let ty = match (ty.map(|ty| self.lower_type(ty)), expected_ty) {

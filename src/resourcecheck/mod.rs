@@ -443,16 +443,6 @@ impl ResourceCheck {
                 self.check_place_mutable(place);
                 self.check_place_use(place, PlaceUse::Write);
             }
-            ExprKind::Sequence(first, second) => {
-                self.check_expr(first);
-                if self.is_strict_resource(&first.ty) {
-                    self.err.report(
-                        format!("Cannot let '{}' out of scope", first.ty),
-                        first.line,
-                    );
-                }
-                self.check_expr(second);
-            }
             ExprKind::Lambda(lambda) => {
                 self.in_drop_scope(|this| {
                     let capture_info = this.capture_set.replace(Default::default());

@@ -130,7 +130,6 @@ pub enum ExprKind {
     Deref(Box<Expr>),
     Assign(Place, Box<Expr>),
     For(Pattern, Box<Expr>, Box<Expr>),
-    Sequence(Box<Expr>, Box<Expr>),
     Builtin(Builtin),
     Case(Box<Expr>, Vec<CaseArm>),
     Print(Option<Box<Expr>>),

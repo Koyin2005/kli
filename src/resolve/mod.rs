@@ -378,10 +378,6 @@ impl Resolve {
                 Box::new(self.resolve_type(*ty)),
             ),
             ast::ExprKind::Panic(ty) => res::ExprKind::Panic(ty.map(|ty| self.resolve_type(ty))),
-            ast::ExprKind::Sequence(first, second) => res::ExprKind::Sequence(
-                Box::new(self.resolve_expr(*first)),
-                Box::new(self.resolve_expr(*second)),
-            ),
             ast::ExprKind::Call(callee, args) => res::ExprKind::Call(
                 Box::new(self.resolve_expr(*callee)),
                 args.into_iter().map(|arg| self.resolve_expr(arg)).collect(),
