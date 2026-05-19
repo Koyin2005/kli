@@ -106,14 +106,5 @@ where
                 v.visit_expr(&arm.body);
             }
         }
-        ExprKind::Let {
-            pattern,
-            binder,
-            body,
-        } => {
-            v.visit_expr(binder);
-            v.visit_pattern(pattern);
-            v.visit_expr(body);
-        }
     }
 }

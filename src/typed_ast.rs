@@ -84,11 +84,6 @@ pub enum ExprKind {
         iterator: Box<Expr>,
         body: Box<Expr>,
     },
-    Let {
-        pattern: Pattern,
-        binder: Box<Expr>,
-        body: Box<Expr>,
-    },
     Borrow {
         mutable: Mutable,
         var_name: Ident,

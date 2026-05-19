@@ -121,7 +121,6 @@ pub enum ExprKind {
     Var(String, VarId),
     Function(String, FunctionId),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
-    Let(Box<LetExpr>),
     Borrow(Box<BorrowExpr>),
     Some(Box<Expr>),
     None(Option<Type>),

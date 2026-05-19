@@ -94,7 +94,6 @@ pub enum ExprKind {
     Call(Box<Expr>, Vec<Expr>),
     Borrow(Mutable, Ident, Ident, Box<Expr>),
     Case(Box<Expr>, Vec<CaseArm>),
-    Let(Box<LetExpr>),
     For(Pattern, Box<Expr>, Box<Expr>),
     Assign(Place, Box<Expr>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),

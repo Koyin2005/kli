@@ -216,28 +216,6 @@ impl TypeCheck {
             kind: typed_ast::ExprKind::Call(Box::new(callee), args),
         }
     }
-    fn check_let(
-        &mut self,
-        line: usize,
-        pattern: Pattern,
-        ty: Option<Type>,
-        value: Expr,
-        body: Expr,
-        expected_ty: Option<Type>,
-    ) -> typed_ast::Expr {
-        let binder = self.check_expr(value, ty);
-        let pattern = self.check_pattern(pattern, binder.ty.clone(), None);
-        let body = self.check_expr(body, expected_ty);
-        typed_ast::Expr {
-            ty: body.ty.clone(),
-            line,
-            kind: typed_ast::ExprKind::Let {
-                pattern,
-                binder: Box::new(binder),
-                body: Box::new(body),
-            },
-        }
-    }
     fn check_block(
         &mut self,
         line: usize,
@@ -347,16 +325,6 @@ impl TypeCheck {
             ExprKind::Unit => make_expr(Type::Unit, typed_ast::ExprKind::Unit),
             ExprKind::Int(value) => make_expr(Type::Int, typed_ast::ExprKind::Int(value)),
             ExprKind::String(value) => make_expr(Type::String, typed_ast::ExprKind::String(value)),
-            ExprKind::Let(let_expr) => {
-                return self.check_let(
-                    expr.line,
-                    let_expr.binding.pattern,
-                    let_expr.binding.ty.map(|ty| self.lower_type(ty)),
-                    let_expr.binding.value,
-                    let_expr.body,
-                    expected_ty,
-                );
-            }
             ExprKind::Call(callee, args) => {
                 return self.check_call(expr.line, *callee, args, expected_ty);
             }

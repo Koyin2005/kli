@@ -485,17 +485,6 @@ impl ResourceCheck {
                     this.capture_set = capture_info;
                 });
             }
-            ExprKind::Let {
-                pattern,
-                binder,
-                body,
-            } => {
-                self.in_drop_scope(|this| {
-                    this.check_expr(binder);
-                    this.check_pattern(pattern);
-                    this.check_expr(body);
-                });
-            }
             ExprKind::Borrow {
                 var_name,
                 new_var,

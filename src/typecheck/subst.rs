@@ -131,15 +131,6 @@ impl<'a> TypeSubst<'a> {
                 self.subst_place(place);
                 self.subst_expr(expr);
             }
-            ExprKind::Let {
-                pattern,
-                binder,
-                body,
-            } => {
-                self.subst_pattern(pattern);
-                self.subst_expr(binder);
-                self.subst_expr(body);
-            }
             ExprKind::Borrow { new_ty, body, .. } => {
                 self.subst_type(new_ty);
                 self.subst_expr(body);

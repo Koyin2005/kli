@@ -412,9 +412,6 @@ impl Resolve {
                     }
                 },
             },
-            ast::ExprKind::Let(let_expr) => {
-                res::ExprKind::Let(Box::new(self.resolve_let_expr(*let_expr)))
-            }
             ast::ExprKind::Lambda(lambda) => self.in_scope(|this| {
                 res::ExprKind::Lambda(Box::new(res::Lambda {
                     params: lambda
