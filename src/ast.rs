@@ -8,6 +8,20 @@ pub enum Mutable {
     Mutable,
     Immutable,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StmtKind {
+    
+}
+#[derive(Debug)]
+pub struct Stmt{
+    pub line : usize,
+    pub kind : StmtKind
+}
+#[derive(Debug)]
+pub struct BlockBody{
+    pub stmts : Vec<Stmt>,
+    pub expr : Box<Expr>
+}
 #[derive(Debug)]
 pub struct Expr {
     pub line: usize,
@@ -82,6 +96,7 @@ pub enum ExprKind {
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Ident(Ident),
     Lambda(Lambda),
+    Block(BlockBody),
     Deref(Box<Expr>),
     Bool(bool),
     Number(u64),

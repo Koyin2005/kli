@@ -2,8 +2,7 @@ use std::{iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        BinaryOp, CaseArm, Expr, ExprKind, Function, FunctionType, Generics, Ident, IsResource,
-        Lambda, LetExpr, Mutable, Param, Pattern, PatternKind, Program, Region, Type, TypeKind,
+        BinaryOp, BlockBody, CaseArm, Expr, ExprKind, Function, FunctionType, Generics, Ident, IsResource, Lambda, LetExpr, Mutable, Param, Pattern, PatternKind, Program, Region, Stmt, Type, TypeKind
     },
     diagnostics::DiagnosticReporter,
     parsing::{
@@ -264,14 +263,31 @@ impl Parser {
             Err(ParseError)
         }
     }
-    fn parse_block_body(&mut self) -> Result<Expr,ParseError>{
-        self.parse_expr()
+    fn parse_block_body(&mut self) -> Result<BlockBody,ParseError>{
+        let mut stmts = Vec::new();
+        loop {
+            let stmt = if let Some(stmt) = self.parse_definition_stmt()?{
+                stmt
+            }
+            else {
+                let expr = self.parse_expr()?;
+                if !self.matches_token(&TokenKind::Semi){
+                    break Ok(BlockBody{
+                        stmts,
+                        expr:Box::new(expr)
+                    });
+                }
+                todo!("Add expr statement")
+            };
+            stmts.push(stmt);
+
+        }
     }
-    fn parse_block_expr(&mut self, _line: usize) -> Result<Expr,ParseError>{
+    fn parse_block_expr(&mut self, line: usize) -> Result<Expr,ParseError>{
         self.next_token();
         let body = self.parse_block_body()?;
         self.expect(&TokenKind::End)?;
-        Ok(body)
+        Ok(Expr { line, kind: ExprKind::Block(body) })
     }
     fn parse_case_expr(&mut self, line: usize) -> Result<Expr,ParseError>{
         self.next_token();
@@ -284,7 +300,18 @@ impl Parser {
         let _ = self.expect(&TokenKind::End);
         Ok(Expr { line, kind: ExprKind::Case(Box::new(matchee), arms) })
     }
-    fn parse_let_stmt(&mut self, line: usize) -> Result<(),ParseError>{
+    fn parse_definition_stmt(&mut self) -> Result<Option<Stmt>,ParseError>{
+        let Some(&Token { line, ref kind }) = self.peek_token() else {
+            return Ok(None);
+        };
+        match kind{
+            TokenKind::Let => {
+                self.parse_let_stmt(line).map(Some)
+            },
+            _ => Ok(None)
+        }
+    }
+    fn parse_let_stmt(&mut self, line: usize) -> Result<Stmt,ParseError>{
         todo!("Parse let stmt")
     }
     fn parse_let_expr(&mut self, line: usize) -> Result<Expr, ParseError> {

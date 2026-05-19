@@ -332,9 +332,19 @@ impl Resolve {
             }),
         }
     }
+    fn resolve_stmt(&mut self, stmt: ast::Stmt) -> res::Stmt{
+        let line = stmt.line;
+        match stmt.kind{
+            
+        }
+    }
     fn resolve_expr(&mut self, expr: ast::Expr) -> res::Expr {
         let line = expr.line;
         let kind = match expr.kind {
+            ast::ExprKind::Block(block) => res::ExprKind::Block(res::BlockBody{
+                stmts : block.stmts.into_iter().map(|stmt| self.resolve_stmt(stmt)).collect(),
+                expr : Box::new(self.resolve_expr(*block.expr))
+            }),
             ast::ExprKind::Unit => res::ExprKind::Unit,
             ast::ExprKind::String(value) => res::ExprKind::String(value),
             ast::ExprKind::Number(value) => res::ExprKind::Int(value as i64),

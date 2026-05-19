@@ -36,6 +36,20 @@ pub struct Lambda {
     pub body: Expr,
 }
 #[derive(Debug)]
+pub enum StmtKind {
+    
+}
+#[derive(Debug)]
+pub struct Stmt {
+    pub line : usize,
+    pub kind : StmtKind
+}
+#[derive(Debug)]
+pub struct BlockBody{
+    pub stmts : Vec<Stmt>,
+    pub expr : Box<Expr>
+}
+#[derive(Debug)]
 pub struct Expr {
     pub ty: Type,
     pub line: usize,
@@ -43,6 +57,7 @@ pub struct Expr {
 }
 #[derive(Debug)]
 pub enum ExprKind {
+    Block(BlockBody),
     String(String),
     Bool(bool),
     Int(i64),

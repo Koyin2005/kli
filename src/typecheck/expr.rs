@@ -1,5 +1,5 @@
 use crate::{
-    resolved_ast::{BorrowExpr, Expr, ExprKind, Lambda, Pattern, Place, PlaceKind, Var},
+    resolved_ast::{BlockBody, BorrowExpr, Expr, ExprKind, Lambda, Pattern, Place, PlaceKind, Var},
     typecheck::root::TypeCheck,
     typed_ast,
     types::{FunctionType, Region, Type},
@@ -252,10 +252,21 @@ impl TypeCheck {
             },
         }
     }
+    fn check_block(&mut self, line: usize, body: BlockBody, expected_ty: Option<Type>) -> typed_ast::Expr {
+        let stmts = body.stmts.into_iter().map(|stmt| self.check_stmt(stmt)).collect();
+        let expr = self.check_expr(*body.expr, expected_ty);
+        let ty = expr.ty.clone();
+        let body = typed_ast::BlockBody{
+            stmts ,
+            expr : Box::new(expr)
+        };
+        typed_ast::Expr { ty, line, kind: typed_ast::ExprKind::Block(body) }
+    }
     pub(super) fn check_expr(&mut self, expr: Expr, expected_ty: Option<Type>) -> typed_ast::Expr {
         let Expr { line, kind } = expr;
         let make_expr = move |ty, kind| typed_ast::Expr { ty, kind, line };
         let mut expr = match kind {
+            ExprKind::Block(block) => return self.check_block(line,block,expected_ty),
             ExprKind::Annotate(expr, ty) => self.check_expr(*expr, Some(self.lower_type(*ty))),
             ExprKind::Err => typed_ast::Expr {
                 line,

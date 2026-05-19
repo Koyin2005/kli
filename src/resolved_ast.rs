@@ -90,9 +90,23 @@ pub struct CaseArm {
     pub pattern: Pattern,
     pub body: Expr,
 }
-
+#[derive(Debug)]
+pub enum StmtKind {
+    
+}
+#[derive(Debug)]
+pub struct Stmt{
+    pub line : usize,
+    pub kind : StmtKind
+}
+#[derive(Debug)]
+pub struct BlockBody{
+    pub stmts : Vec<Stmt>,
+    pub expr : Box<Expr>
+}
 #[derive(Debug)]
 pub enum ExprKind {
+    Block(BlockBody),
     Unit,
     Err,
     Annotate(Box<Expr>, Box<Type>),

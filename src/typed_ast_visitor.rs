@@ -1,4 +1,4 @@
-use crate::typed_ast::{Expr, ExprKind, Pattern, PatternKind, Place, PlaceKind};
+use crate::typed_ast::{Expr, ExprKind, Pattern, PatternKind, Place, PlaceKind, Stmt};
 
 pub trait Visitor {
     fn visit_expr(&mut self, expr: &Expr) {
@@ -9,6 +9,9 @@ pub trait Visitor {
     }
     fn visit_pattern(&mut self, pattern: &Pattern) {
         walk_pattern(self, pattern);
+    }
+    fn visit_stmt(&mut self, stmt: &Stmt){
+        walk_stmt(self,stmt);
     }
 }
 pub fn walk_pattern<V>(v: &mut V, pattern: &Pattern)
@@ -29,11 +32,26 @@ where
         PlaceKind::Deref(value) => v.visit_expr(value),
     }
 }
+pub fn walk_stmt<V>(_v: &mut V, stmt: &Stmt)
+where 
+    V:Visitor + ?Sized
+{
+    match stmt.kind{
+
+    }
+    
+}
 pub fn walk_expr<V>(v: &mut V, expr: &Expr)
 where
     V: Visitor + ?Sized,
 {
     match &expr.kind {
+        ExprKind::Block(body) => {
+            for stmt in &body.stmts{
+                v.visit_stmt(stmt);
+            }
+            v.visit_expr(&body.expr);
+        }
         ExprKind::Err
         | ExprKind::Int(_)
         | ExprKind::Bool(_)
