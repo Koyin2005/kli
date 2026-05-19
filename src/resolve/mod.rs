@@ -299,13 +299,6 @@ impl Resolve {
         let pattern = self.resolve_pattern(let_binding.pattern);
         res::LetBinding { pattern, ty, value }
     }
-    fn resolve_let_expr(&mut self, let_expr: ast::LetExpr) -> res::LetExpr {
-        self.in_scope(|this| {
-            let binding = this.resolve_let_binding(let_expr.binding);
-            let body = this.resolve_expr(let_expr.body);
-            res::LetExpr { binding, body }
-        })
-    }
     fn resolve_place(&mut self, place: ast::Place) -> Option<res::Place> {
         match place {
             ast::Place::Deref(expr, line) => Some(res::Place {

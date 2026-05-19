@@ -85,11 +85,6 @@ pub struct LetBinding {
     pub value: Expr,
 }
 #[derive(Debug)]
-pub struct LetExpr {
-    pub binding: LetBinding,
-    pub body: Expr,
-}
-#[derive(Debug)]
 pub struct CaseArm {
     pub pattern: Pattern,
     pub body: Expr,
