@@ -3,7 +3,7 @@ use std::{iter::Peekable, vec::IntoIter};
 use crate::{
     ast::{
         BinaryOp, BlockBody, CaseArm, Expr, ExprKind, Function, FunctionType, Generics, Ident,
-        IsResource, Lambda, LetBinding, LetExpr, Mutable, Param, Pattern, PatternKind, Program,
+        IsResource, Lambda, LetBinding, Mutable, Param, Pattern, PatternKind, Program,
         Region, Stmt, StmtKind, Type, TypeKind,
     },
     diagnostics::DiagnosticReporter,
@@ -342,14 +342,6 @@ impl Parser {
             kind: StmtKind::Let(binding),
         })
     }
-    fn parse_let_expr(&mut self, line: usize) -> Result<Expr, ParseError> {
-        let binding = self.parse_let_binding()?;
-        let body = self.parse_expr()?;
-        Ok(Expr {
-            line,
-            kind: ExprKind::Let(Box::new(LetExpr { binding, body })),
-        })
-    }
     fn parse_paren_expr(&mut self, line: usize) -> Result<Expr, ParseError> {
         self.next_token();
         if self.check_token(&TokenKind::RightParen) {
@@ -546,7 +538,7 @@ impl Parser {
                     let _ = self.expect(&TokenKind::RightParen);
 
                     let resource = self.parse_resource_arrow()?;
-                    let body = self.parse_expr_with_sequence::<false>()?;
+                    let body = self.parse_expr()?;
                     Ok(Expr {
                         line,
                         kind: ExprKind::Lambda(Lambda {
@@ -638,47 +630,7 @@ impl Parser {
         Ok(lhs)
     }
     fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        let Some(&Token { line, ref kind }) = self.peek_token() else {
-            let line = self.current_line();
-            self.diag
-                .report("Expected an expression but got EOF".to_string(), line);
-            return Err(ParseError);
-        };
-        match kind {
-            TokenKind::Let => self.parse_let_expr(line),
-            _ => self.parse_sequence_expr(),
-        }
-    }
-    fn parse_sequence_expr(&mut self) -> Result<Expr, ParseError> {
-        let mut expr = self.parse_single_expr()?;
-        while self.matches_token(&TokenKind::Semi) {
-            expr = Expr {
-                line: expr.line,
-                kind: ExprKind::Sequence(
-                    Box::new(expr),
-                    Box::new(self.parse_expr_with_sequence::<false>()?),
-                ),
-            };
-        }
-        Ok(expr)
-    }
-    fn parse_expr_with_sequence<const SEQ: bool>(&mut self) -> Result<Expr, ParseError> {
-        let Some(&Token { line, ref kind }) = self.peek_token() else {
-            let line = self.current_line();
-            self.diag
-                .report("Expected an expression but got EOF".to_string(), line);
-            return Err(ParseError);
-        };
-        match kind {
-            TokenKind::Let => self.parse_let_expr(line),
-            _ => {
-                if SEQ {
-                    self.parse_sequence_expr()
-                } else {
-                    self.parse_single_expr()
-                }
-            }
-        }
+        self.parse_single_expr()
     }
     fn parse_single_expr(&mut self) -> Result<Expr, ParseError> {
         self.parse_assign()
