@@ -380,13 +380,11 @@ impl ResourceCheck {
         match &stmt.kind {
             StmtKind::Expr(expr) => {
                 self.check_expr(expr);
-                if self.is_strict_resource(&expr.ty){
-                    self.err.report(
-                        format!("Cannot let '{}' out of scope", expr.ty),
-                        expr.line,
-                    );
+                if self.is_strict_resource(&expr.ty) {
+                    self.err
+                        .report(format!("Cannot let '{}' out of scope", expr.ty), expr.line);
                 }
-            },
+            }
             StmtKind::Let(let_binding) => {
                 self.check_pattern(&let_binding.pattern);
                 self.check_expr(&let_binding.value);

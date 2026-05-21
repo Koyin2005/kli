@@ -33,7 +33,9 @@ fn main() {
     let Ok(program) = parser.parse_program() else {
         return;
     };
-    let program = Resolve::new().resolve(program);
+    let Ok(program) = Resolve::new().resolve(program) else {
+        return;
+    };
     let Ok(program) = TypeCheck::new(&program).check(program) else {
         return;
     };

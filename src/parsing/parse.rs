@@ -3,8 +3,8 @@ use std::{iter::Peekable, vec::IntoIter};
 use crate::{
     ast::{
         BinaryOp, BlockBody, CaseArm, Expr, ExprKind, Function, FunctionType, Generics, Ident,
-        IsResource, Lambda, LetBinding, Mutable, Param, Pattern, PatternKind, Program,
-        Region, Stmt, StmtKind, Type, TypeKind,
+        IsResource, Lambda, LetBinding, Mutable, Param, Pattern, PatternKind, Program, Region,
+        Stmt, StmtKind, Type, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     parsing::{
@@ -90,7 +90,12 @@ impl Parser {
             Ok(ident)
         } else {
             let line = self.current_line();
-            self.diag.report(format!("Expected '{kind}'"), line);
+            let msg = if let Some(token) = self.peek_token() {
+                format!("Expected '{kind}' but got '{}'", token.kind)
+            } else {
+                format!("Expected '{kind}' but got 'EOF'")
+            };
+            self.diag.report(msg, line);
             Err(ParseError)
         }
     }
@@ -287,7 +292,7 @@ impl Parser {
         }
     }
     fn parse_block_expr(&mut self, line: usize) -> Result<Expr, ParseError> {
-        self.next_token();
+        self.expect(&TokenKind::Do)?;
         let body = self.parse_block_body()?;
         self.expect(&TokenKind::End)?;
         Ok(Expr {
@@ -397,14 +402,11 @@ impl Parser {
                 TokenKind::LeftParen => self.parse_paren_expr(line),
                 TokenKind::For => {
                     self.next_token();
-                    let _ = self.expect(&TokenKind::LeftParen);
                     let pattern = self.parse_pattern()?;
                     let _ = self.expect(&TokenKind::In);
                     let iterator = self.parse_expr()?;
-                    let _ = self.expect(&TokenKind::RightParen);
-                    let _ = self.expect(&TokenKind::LeftBrace);
-                    let body = self.parse_expr()?;
-                    let _ = self.expect(&TokenKind::RightBrace);
+                    let line = self.current_line();
+                    let body = self.parse_block_expr(line)?;
                     Ok(Expr {
                         line,
                         kind: ExprKind::For(pattern, Box::new(iterator), Box::new(body)),
@@ -412,14 +414,13 @@ impl Parser {
                 }
                 TokenKind::Borrow => {
                     self.next_token();
-                    let _ = self.expect(&TokenKind::LeftParen);
                     let (mutable, name) = self.parse_binding()?;
                     let _ = self.expect(&TokenKind::In);
                     let region = self.expect_ident("region name")?;
-                    let _ = self.expect(&TokenKind::RightParen);
-                    let _ = self.expect(&TokenKind::LeftBrace);
-                    let body = self.parse_expr()?;
-                    let _ = self.expect(&TokenKind::RightBrace);
+                    let body = {
+                        let line = self.current_line();
+                        self.parse_block_expr(line)?
+                    };
                     Ok(Expr {
                         line,
                         kind: ExprKind::Borrow(mutable, name, region, Box::new(body)),

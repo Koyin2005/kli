@@ -5,6 +5,7 @@ use crate::diagnostics::DiagnosticReporter;
 use crate::resolved_ast::{Builtin, FunctionId, GenericKind, LocalRegionId, VarId};
 use crate::{ast, names, resolved_ast as res};
 
+pub struct ResolveErrored;
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Res {
     LocalRegion(LocalRegionId),
@@ -504,7 +505,7 @@ impl Resolve {
         let return_type = self.resolve_type(return_type);
         (params, return_type)
     }
-    pub fn resolve(mut self, program: ast::Program) -> res::Program {
+    pub fn resolve(mut self, program: ast::Program) -> Result<res::Program, ResolveErrored> {
         for function in &program.functions {
             self.declare_function(function.name.clone());
         }
@@ -542,7 +543,10 @@ impl Resolve {
                 })
                 .collect(),
         };
-        self.diag.finish();
-        program
+        if !self.diag.finish() {
+            Ok(program)
+        } else {
+            Err(ResolveErrored)
+        }
     }
 }
