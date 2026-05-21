@@ -19,6 +19,7 @@ pub enum TokenKind {
     Caret,
     Of,
     Do,
+    Dot,
     LeftParen,
     RightParen,
     LeftBracket,
@@ -76,6 +77,7 @@ impl Display for TokenKind {
             Self::Pipe => "|",
             Self::Of => "of",
             Self::Do => "do",
+            Self::Dot => ".",
             Self::StringLiteral(literal) => {
                 f.write_str("\"")?;
                 f.write_str(literal)?;

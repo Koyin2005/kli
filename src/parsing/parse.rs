@@ -3,7 +3,7 @@ use std::{iter::Peekable, vec::IntoIter};
 use crate::{
     ast::{
         BinaryOp, BlockBody, CaseArm, Expr, ExprKind, Function, FunctionType, Generics, Ident,
-        IsResource, Lambda, LetBinding, Mutable, Param, Pattern, PatternKind, Program, Region,
+        IsResource, Lambda, LetBinding, Module, Mutable, Param, Path, Pattern, PatternKind, Region,
         Stmt, StmtKind, Type, TypeKind,
     },
     diagnostics::DiagnosticReporter,
@@ -430,9 +430,14 @@ impl Parser {
                     let Some(name) = self.match_ident() else {
                         unreachable!("Should be an ident on {line}")
                     };
+                    let mut path = vec![name];
+                    while self.matches_token(&TokenKind::Dot) {
+                        let name = self.expect_ident("field name or sub path")?;
+                        path.push(name);
+                    }
                     Ok(Expr {
                         line,
-                        kind: ExprKind::Ident(name),
+                        kind: ExprKind::Path(Path::new(path)),
                     })
                 }
                 TokenKind::Some => {
@@ -839,7 +844,7 @@ impl Parser {
             body,
         })
     }
-    pub fn parse_program(mut self) -> Result<Program, ParseError> {
+    pub fn parse_module(mut self) -> Result<Module, ParseError> {
         let mut functions = Vec::new();
         while self.peek_token().is_some() {
             let Ok(function) = self.parse_function() else {
@@ -853,6 +858,6 @@ impl Parser {
             functions.push(function);
         }
         self.diag.finish();
-        Ok(Program { functions })
+        Ok(Module { functions })
     }
 }

@@ -1,10 +1,50 @@
-use std::env;
+use std::{collections::BTreeMap, env, path::Path};
 
 use kli::{
-    parsing::parse::Parser, patterns::visit::PatternCheck, resolve::Resolve,
+    ast, parsing::parse::Parser, patterns::visit::PatternCheck, resolve::Resolve,
     resourcecheck::ResourceCheck, typecheck::root::TypeCheck,
 };
-
+enum ModuleError {
+    Io(std::io::Error),
+    InvalidModule,
+}
+const EXTENSION: &str = "kli";
+fn parse_source_file(name: String, src: &str) -> Option<(String, ast::Module)> {
+    Some((name, Parser::new(src).parse_module().ok()?))
+}
+fn read_source_file(path: &Path, file_name: String) -> Result<(String, String), ModuleError> {
+    let mut name = file_name;
+    if path
+        .extension()
+        .is_none_or(|ext| ext.to_str() != Some(EXTENSION))
+    {
+        return Err(ModuleError::InvalidModule);
+    }
+    name.truncate(name.len() - EXTENSION.chars().count() - 1);
+    let src = std::fs::read_to_string(path).map_err(ModuleError::Io)?;
+    Ok((name, src))
+}
+fn read_source_files(path: String) -> std::io::Result<BTreeMap<String, String>> {
+    let dir = std::fs::read_dir(&path)?;
+    let mut files = BTreeMap::default();
+    for entry in dir {
+        let entry = entry?;
+        if entry.metadata()?.is_file() {
+            let Ok(name) = entry.file_name().into_string() else {
+                continue;
+            };
+            let (name, src) = match read_source_file(&entry.path(), name) {
+                Ok((name, src)) => (name, src),
+                Err(e) => match e {
+                    ModuleError::InvalidModule => continue,
+                    ModuleError::Io(e) => return Err(e),
+                },
+            };
+            files.insert(name, src);
+        }
+    }
+    Ok(files)
+}
 fn main() {
     let mut args = env::args().skip(1).collect::<Vec<_>>();
     let path = if args.len() == 1
@@ -16,11 +56,11 @@ fn main() {
         eprintln!("Expected 'program_path'");
         return;
     };
-    let src = match std::fs::read_to_string(&path) {
-        Ok(src) => src,
+    let meta = match std::fs::metadata(&path) {
+        Ok(meta) => meta,
         Err(e) => match e.kind() {
             std::io::ErrorKind::NotFound => {
-                eprintln!("File at '{}' not found", path);
+                eprintln!("File or folder at '{}' not found", path);
                 return;
             }
             _ => {
@@ -29,11 +69,63 @@ fn main() {
             }
         },
     };
-    let parser = Parser::new(&src);
-    let Ok(program) = parser.parse_program() else {
-        return;
+    let modules = if meta.is_file() {
+        if !Path::new(&path).exists() {
+            eprintln!("File at '{}' not found", path);
+            return;
+        }
+
+        let (name, src) = match read_source_file(
+            Path::new(&path),
+            Path::new(&path)
+                .file_name()
+                .expect("Should be a file")
+                .to_string_lossy()
+                .into_owned(),
+        ) {
+            Ok((name, src)) => (name, src),
+            Err(ModuleError::InvalidModule) => {
+                eprintln!("Cannot compile non kli file at {}", path);
+                return;
+            }
+            Err(ModuleError::Io(error)) => {
+                eprintln!("Unkown error : {:?}", error);
+                return;
+            }
+        };
+        let parser = Parser::new(&src);
+        let Ok(module) = parser.parse_module() else {
+            return;
+        };
+        BTreeMap::from([(name, module)])
+    } else {
+        let files = match read_source_files(path) {
+            Ok(files) => files,
+            Err(err) => {
+                eprintln!("Unknown error '{:?}'", err);
+                return;
+            }
+        };
+        let mut had_error = false;
+        let modules = files
+            .into_iter()
+            .filter_map(|(name, source)| {
+                let Some(program) = parse_source_file(name, &source) else {
+                    had_error = true;
+                    return None;
+                };
+                if had_error {
+                    return None;
+                };
+                Some(program)
+            })
+            .collect::<BTreeMap<_, _>>();
+        if had_error {
+            return;
+        }
+        modules
     };
-    let Ok(program) = Resolve::new().resolve(program) else {
+    let Ok(program) = Resolve::new().resolve(modules) else {
         return;
     };
     let Ok(program) = TypeCheck::new(&program).check(program) else {

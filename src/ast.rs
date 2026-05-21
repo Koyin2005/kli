@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Debug, Clone)]
 pub struct Ident {
     pub content: String,
@@ -31,7 +33,13 @@ pub struct Expr {
 impl Expr {
     pub fn as_place(self) -> Result<Place, Expr> {
         match self.kind {
-            ExprKind::Ident(name) => Ok(Place::Ident(name)),
+            ExprKind::Path(path) => match path.into_head() {
+                Ok(head) => Ok(Place::Ident(head)),
+                Err(path) => Err(Expr {
+                    line: self.line,
+                    kind: ExprKind::Path(path),
+                }),
+            },
             ExprKind::Deref(expr) => {
                 let line = expr.line;
                 Ok(Place::Deref(Box::new(*expr), line))
@@ -82,6 +90,77 @@ pub struct LetExpr {
     pub body: Expr,
 }
 #[derive(Debug)]
+pub struct Path {
+    segments: Vec<Ident>,
+}
+impl Path {
+    pub fn new(segments: Vec<Ident>) -> Self {
+        assert!(
+            segments.len() > 0,
+            "Path must always have more than 1 segment"
+        );
+        Self { segments }
+    }
+    pub fn segments(&self) -> &[Ident] {
+        &self.segments
+    }
+    pub fn head(&self) -> &Ident {
+        self.segments.first().unwrap()
+    }
+    pub fn into_last(mut self) -> Ident {
+        self.segments.pop().expect("Should have at least 1")
+    }
+    pub fn expect_head(self) -> Ident {
+        self.into_head().expect("Expected only head")
+    }
+    pub fn into_head(mut self) -> Result<Ident, Self> {
+        if self.segments.len() == 1 {
+            Ok(self.segments.remove(0))
+        } else {
+            Err(self)
+        }
+    }
+    pub fn into_segments(self) -> Vec<Ident> {
+        self.segments
+    }
+    pub fn split_head(self) -> (Ident, Vec<Ident>) {
+        let mut segments = self.into_segments();
+        let head = segments.remove(0);
+        (head, segments)
+    }
+    pub fn segments_iter(&self) -> impl IntoIterator<Item = &Ident> {
+        self.segments.iter()
+    }
+    pub fn tail_iter(&self) -> impl IntoIterator<Item = &Ident> {
+        self.segments[1..].iter()
+    }
+    pub fn display(&self) -> impl Display {
+        struct DisplayPath<'a> {
+            path: &'a Path,
+        }
+        impl Display for DisplayPath<'_> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                let head = self.path.head();
+                f.write_str(&head.content)?;
+                for segment in self.path.tail_iter() {
+                    f.write_str(".")?;
+                    f.write_str(&segment.content)?;
+                }
+                Ok(())
+            }
+        }
+        DisplayPath { path: self }
+    }
+}
+impl IntoIterator for Path {
+    type IntoIter = std::vec::IntoIter<Ident>;
+    type Item = Ident;
+    fn into_iter(self) -> Self::IntoIter {
+        self.segments.into_iter()
+    }
+}
+
+#[derive(Debug)]
 pub enum ExprKind {
     Unit,
     Annotate(Box<Expr>, Box<Type>),
@@ -97,7 +176,7 @@ pub enum ExprKind {
     For(Pattern, Box<Expr>, Box<Expr>),
     Assign(Place, Box<Expr>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
-    Ident(Ident),
+    Path(Path),
     Lambda(Lambda),
     Block(BlockBody),
     Deref(Box<Expr>),
@@ -168,6 +247,6 @@ pub enum Region {
 }
 
 #[derive(Debug)]
-pub struct Program {
+pub struct Module {
     pub functions: Vec<Function>,
 }

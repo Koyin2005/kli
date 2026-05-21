@@ -1,11 +1,16 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
-use crate::ast::{Ident, StmtKind};
+use crate::ast::{Ident, Path, StmtKind};
 use crate::diagnostics::DiagnosticReporter;
 use crate::resolved_ast::{Builtin, FunctionId, GenericKind, LocalRegionId, VarId};
 use crate::{ast, names, resolved_ast as res};
 
 pub struct ResolveErrored;
+
+enum NameResolutionError {
+    NotInScope,
+    InvalidPathStart,
+}
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Res {
     LocalRegion(LocalRegionId),
@@ -13,8 +18,10 @@ pub(super) enum Res {
     Builtin(Builtin),
     Function(FunctionId),
     Var(VarId),
+    Module(usize),
 }
 pub struct Resolve {
+    modules: Vec<(String, HashMap<String, Res>)>,
     env: HashMap<String, Res>,
     prev_envs: Vec<HashMap<String, Res>>,
     functions: Vec<Option<res::Function>>,
@@ -62,6 +69,7 @@ impl Resolve {
             (names::SWAP.to_string(), Res::Builtin(Builtin::Swap)),
         ]);
         Self {
+            modules: Vec::new(),
             prev_envs: Vec::new(),
             env,
             vars: 0,
@@ -85,6 +93,14 @@ impl Resolve {
         }
 
         None
+    }
+    fn invalid_path_start_error(&mut self, path: &Path, line: usize) {
+        self.diag
+            .report(format!("Invalid path '{}'", path.display()), line);
+    }
+    fn path_not_in_scope_error(&mut self, path: &Path, line: usize) {
+        self.diag
+            .report(format!("'{}' not in scope", path.display()), line);
     }
     fn not_in_scope_error(&mut self, name: &str, line: usize) {
         self.diag.report(format!("'{}' not in scope", name), line);
@@ -136,7 +152,7 @@ impl Resolve {
                         }
                         res::RegionKind::Param(name.content, index)
                     }
-                    Some(Res::Builtin(_) | Res::Function(_) | Res::Var(_)) => {
+                    Some(Res::Builtin(_) | Res::Function(_) | Res::Var(_) | Res::Module(_)) => {
                         self.cannot_use_as_error(&name.content, "region", name.line);
                         res::RegionKind::Unknown
                     }
@@ -233,7 +249,13 @@ impl Resolve {
                     }
                     res::TypeKind::Param(name.content, index)
                 }
-                Some(Res::Builtin(_) | Res::Function(_) | Res::LocalRegion(_) | Res::Var(_)) => {
+                Some(
+                    Res::Builtin(_)
+                    | Res::Function(_)
+                    | Res::LocalRegion(_)
+                    | Res::Var(_)
+                    | Res::Module(_),
+                ) => {
                     self.cannot_use_as_error(&name.content, "type", name.line);
                     res::TypeKind::Unknown
                 }
@@ -256,6 +278,12 @@ impl Resolve {
         self.env.insert(var, Res::Var(var_id));
         var_id
     }
+    fn declare_module(&mut self, name: String) -> usize {
+        let new_module = self.modules.len();
+        self.modules.push((name.clone(), HashMap::new()));
+        self.env.insert(name, Res::Module(new_module));
+        new_module
+    }
     fn declare_param(&mut self, name: String) -> usize {
         let generic = self.generics;
         self.generics += 1;
@@ -270,6 +298,26 @@ impl Resolve {
             .pop()
             .expect("There should be a pushed scope");
         value
+    }
+    fn with_scope<T>(&mut self, scope: HashMap<String, Res>, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.prev_envs.push(std::mem::replace(&mut self.env, scope));
+        let value = f(self);
+        self.env = self
+            .prev_envs
+            .pop()
+            .expect("There should be a pushed scope");
+        value
+    }
+    fn take_new_scope(&mut self, f: impl FnOnce(&mut Self)) -> HashMap<String, Res> {
+        self.prev_envs.push(std::mem::take(&mut self.env));
+        f(self);
+        let env = std::mem::replace(
+            &mut self.env,
+            self.prev_envs
+                .pop()
+                .expect("There should be a pushed scope"),
+        );
+        env
     }
     fn resolve_pattern(&mut self, pattern: ast::Pattern) -> res::Pattern {
         let line = pattern.line;
@@ -315,7 +363,11 @@ impl Resolve {
                     }
                     Some(Res::Var(var)) => res::PlaceKind::Var(res::Var(name.content, var)),
                     Some(
-                        Res::Builtin(_) | Res::Function(..) | Res::Param(_) | Res::LocalRegion(_),
+                        Res::Builtin(_)
+                        | Res::Function(..)
+                        | Res::Param(_)
+                        | Res::LocalRegion(_)
+                        | Res::Module(_),
                     ) => {
                         self.diag
                             .report(format!("Can't use '{}' as place", name.content), name.line);
@@ -343,6 +395,31 @@ impl Resolve {
                 }
             }
         }
+    }
+
+    fn resolve_path(&mut self, path: &Path) -> Result<Res, NameResolutionError> {
+        let Some(head) = self.resolve_name(&path.head().content) else {
+            return Err(NameResolutionError::NotInScope);
+        };
+        let mut curr = head;
+        for segment in path.segments_iter().into_iter().skip(1) {
+            curr = match curr {
+                Res::Module(module) => {
+                    let env = &self.modules[module].1;
+                    if let Some(&res) = env.get(&segment.content) {
+                        res
+                    } else {
+                        return Err(NameResolutionError::NotInScope);
+                    }
+                }
+                Res::Builtin(_)
+                | Res::Function(_)
+                | Res::Param(_)
+                | Res::Var(_)
+                | Res::LocalRegion(_) => return Err(NameResolutionError::InvalidPathStart),
+            }
+        }
+        Ok(curr)
     }
     fn resolve_expr(&mut self, expr: ast::Expr) -> res::Expr {
         let line = expr.line;
@@ -390,22 +467,35 @@ impl Resolve {
                 Box::new(self.resolve_expr(*left)),
                 Box::new(self.resolve_expr(*right)),
             ),
-            ast::ExprKind::Ident(name) => match self.resolve_name(&name.content) {
-                None => {
-                    self.not_in_scope_error(&name.content, name.line);
-                    res::ExprKind::Err
-                }
-                Some(res) => match res {
-                    Res::Builtin(builtin) => res::ExprKind::Builtin(builtin),
-                    Res::Var(id) => res::ExprKind::Var(name.content, id),
-                    Res::Function(function) => res::ExprKind::Function(name.content, function),
-                    Res::Param(_) | Res::LocalRegion(_) => {
-                        self.diag
-                            .report(format!("Can't use '{}' as a value", name.content), line);
+            ast::ExprKind::Path(path) => {
+                let line = expr.line;
+                match self.resolve_path(&path) {
+                    Err(error) => {
+                        match error {
+                            NameResolutionError::NotInScope => {
+                                self.path_not_in_scope_error(&path, line);
+                            }
+                            NameResolutionError::InvalidPathStart => {
+                                self.invalid_path_start_error(&path, line);
+                            }
+                        }
                         res::ExprKind::Err
                     }
-                },
-            },
+                    Ok(res) => match res {
+                        Res::Builtin(builtin) => res::ExprKind::Builtin(builtin),
+                        Res::Var(id) => res::ExprKind::Var(path.into_last().content, id),
+                        Res::Function(function) => {
+                            res::ExprKind::Function(path.into_last().content, function)
+                        }
+                        Res::Param(_) | Res::LocalRegion(_) => {
+                            self.diag
+                                .report(format!("Can't use '{}' as a value", path.display()), line);
+                            res::ExprKind::Err
+                        }
+                        Res::Module(_) => todo!("Handle module"),
+                    },
+                }
+            }
             ast::ExprKind::Lambda(lambda) => self.in_scope(|this| {
                 res::ExprKind::Lambda(Box::new(res::Lambda {
                     params: lambda
@@ -505,16 +595,32 @@ impl Resolve {
         let return_type = self.resolve_type(return_type);
         (params, return_type)
     }
-    pub fn resolve(mut self, program: ast::Program) -> Result<res::Program, ResolveErrored> {
-        for function in &program.functions {
-            self.declare_function(function.name.clone());
+    pub fn resolve(
+        mut self,
+        modules: BTreeMap<String, ast::Module>,
+    ) -> Result<res::Program, ResolveErrored> {
+        let mut module_info = modules
+            .iter()
+            .map(|(name, _)| {
+                self.declare_module(name.clone());
+                Vec::new()
+            })
+            .collect::<Vec<Vec<FunctionId>>>();
+
+        for (i, (function_ids, (_, module))) in module_info.iter_mut().zip(&modules).enumerate() {
+            let scope = self.take_new_scope(|this| {
+                for function in &module.functions {
+                    function_ids.push(this.declare_function(function.name.clone()));
+                }
+            });
+            self.modules[i].1.extend(scope);
         }
-        let program = res::Program {
-            functions: (0..program.functions.len())
-                .map(FunctionId::new)
-                .zip(program.functions)
-                .map(|(_, function)| {
-                    let function = self.in_scope(|this| {
+
+        let mut functions = Vec::new();
+        for (i, (module, function_ids)) in modules.into_values().zip(module_info).enumerate() {
+            self.with_scope(self.modules[i].1.clone(), |this| {
+                for (_, function) in function_ids.into_iter().zip(module.functions) {
+                    let function = this.in_scope(|this| {
                         let (generics, (params, return_type)) =
                             if let Some(generics) = function.generics {
                                 let (generics, sig) = this.resolve_generics(generics, |this| {
@@ -537,12 +643,13 @@ impl Resolve {
                             body,
                         }
                     });
-                    self.generics = 0;
-                    self.vars = 0;
-                    function
-                })
-                .collect(),
-        };
+                    this.generics = 0;
+                    this.vars = 0;
+                    functions.push(function);
+                }
+            });
+        }
+        let program = res::Program { functions };
         if !self.diag.finish() {
             Ok(program)
         } else {
