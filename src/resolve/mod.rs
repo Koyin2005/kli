@@ -304,8 +304,12 @@ impl Resolve {
             .expect("There should be a pushed scope");
         value
     }
-    fn with_scope<T>(&mut self, scope: HashMap<String, Res>, f: impl FnOnce(&mut Self) -> T) -> T {
-        self.prev_envs.push(std::mem::replace(&mut self.env, scope));
+    fn in_module_scope<T>(&mut self, module: usize, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.prev_envs.push({
+            let old_env = std::mem::take(&mut self.env);
+            self.env.clone_from(&self.modules[module].env);
+            old_env
+        });
         let value = f(self);
         self.env = self
             .prev_envs
@@ -641,11 +645,11 @@ impl Resolve {
             });
             self.modules[i].env.extend(scope);
         }
-        
+
         //Second pass : Resolve
         let mut functions = Vec::new();
         for (i, module) in modules.into_values().enumerate() {
-            self.with_scope(self.modules[i].env.clone(), |this| {
+            self.in_module_scope(i, |this| {
                 for function in module.functions {
                     functions.push(this.resolve_function(function));
                 }
