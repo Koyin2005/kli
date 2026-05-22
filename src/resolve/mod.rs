@@ -11,6 +11,11 @@ enum NameResolutionError {
     NotInScope,
     InvalidPathStart,
 }
+#[derive(Default)]
+struct ModuleInfo {
+    env: HashMap<String, Res>,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Res {
     LocalRegion(LocalRegionId),
@@ -21,7 +26,7 @@ pub(super) enum Res {
     Module(usize),
 }
 pub struct Resolve {
-    modules: Vec<(String, HashMap<String, Res>)>,
+    modules: Vec<ModuleInfo>,
     env: HashMap<String, Res>,
     prev_envs: Vec<HashMap<String, Res>>,
     functions: Vec<Option<res::Function>>,
@@ -280,7 +285,7 @@ impl Resolve {
     }
     fn declare_module(&mut self, name: String) -> usize {
         let new_module = self.modules.len();
-        self.modules.push((name.clone(), HashMap::new()));
+        self.modules.push(Default::default());
         self.env.insert(name, Res::Module(new_module));
         new_module
     }
@@ -405,7 +410,7 @@ impl Resolve {
         for segment in path.segments_iter().into_iter().skip(1) {
             curr = match curr {
                 Res::Module(module) => {
-                    let env = &self.modules[module].1;
+                    let env = &self.modules[module].env;
                     if let Some(&res) = env.get(&segment.content) {
                         res
                     } else {
@@ -595,57 +600,51 @@ impl Resolve {
         let return_type = self.resolve_type(return_type);
         (params, return_type)
     }
+    fn resolve_function(&mut self, function: ast::Function) -> res::Function {
+        let function = self.in_scope(|this| {
+            let (generics, (params, return_type)) = if let Some(generics) = function.generics {
+                let (generics, sig) = this.resolve_generics(generics, |this| {
+                    this.resolve_signature(function.params, function.return_type)
+                });
+                (Some(generics), sig)
+            } else {
+                (
+                    None,
+                    this.resolve_signature(function.params, function.return_type),
+                )
+            };
+            let body = this.resolve_expr(function.body);
+            res::Function {
+                line: function.line,
+                name: function.name,
+                generics,
+                params,
+                return_type,
+                body,
+            }
+        });
+        self.generics = 0;
+        self.vars = 0;
+        function
+    }
     pub fn resolve(
         mut self,
         modules: BTreeMap<String, ast::Module>,
     ) -> Result<res::Program, ResolveErrored> {
-        let mut module_info = modules
-            .iter()
-            .map(|(name, _)| {
-                self.declare_module(name.clone());
-                Vec::new()
-            })
-            .collect::<Vec<Vec<FunctionId>>>();
-
-        for (i, (function_ids, (_, module))) in module_info.iter_mut().zip(&modules).enumerate() {
+        for (i, (name, module)) in modules.iter().enumerate() {
+            self.declare_module(name.clone());
             let scope = self.take_new_scope(|this| {
                 for function in &module.functions {
-                    function_ids.push(this.declare_function(function.name.clone()));
+                    this.declare_function(function.name.clone());
                 }
             });
-            self.modules[i].1.extend(scope);
+            self.modules[i].env.extend(scope);
         }
-
         let mut functions = Vec::new();
-        for (i, (module, function_ids)) in modules.into_values().zip(module_info).enumerate() {
-            self.with_scope(self.modules[i].1.clone(), |this| {
-                for (_, function) in function_ids.into_iter().zip(module.functions) {
-                    let function = this.in_scope(|this| {
-                        let (generics, (params, return_type)) =
-                            if let Some(generics) = function.generics {
-                                let (generics, sig) = this.resolve_generics(generics, |this| {
-                                    this.resolve_signature(function.params, function.return_type)
-                                });
-                                (Some(generics), sig)
-                            } else {
-                                (
-                                    None,
-                                    this.resolve_signature(function.params, function.return_type),
-                                )
-                            };
-                        let body = this.resolve_expr(function.body);
-                        res::Function {
-                            line: function.line,
-                            name: function.name,
-                            generics,
-                            params,
-                            return_type,
-                            body,
-                        }
-                    });
-                    this.generics = 0;
-                    this.vars = 0;
-                    functions.push(function);
+        for (i, module) in modules.into_values().enumerate() {
+            self.with_scope(self.modules[i].env.clone(), |this| {
+                for function in module.functions {
+                    functions.push(this.resolve_function(function));
                 }
             });
         }
