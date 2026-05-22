@@ -631,6 +631,7 @@ impl Resolve {
         mut self,
         modules: BTreeMap<String, ast::Module>,
     ) -> Result<res::Program, ResolveErrored> {
+        //First pass : Declare everything
         for (i, (name, module)) in modules.iter().enumerate() {
             self.declare_module(name.clone());
             let scope = self.take_new_scope(|this| {
@@ -640,6 +641,8 @@ impl Resolve {
             });
             self.modules[i].env.extend(scope);
         }
+        
+        //Second pass : Resolve
         let mut functions = Vec::new();
         for (i, module) in modules.into_values().enumerate() {
             self.with_scope(self.modules[i].env.clone(), |this| {
