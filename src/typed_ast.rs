@@ -1,12 +1,16 @@
+use std::rc::Rc;
+
 use crate::{
-    ast::{BinaryOp, Ident, IsResource, Mutable},
+    ast::{BinaryOp, IsResource, Mutable},
+    ident::Ident,
     resolved_ast::{Builtin, FunctionId, LocalRegionId, Var, VarId},
+    src_loc::SrcLoc,
     types::{GenericArg, GenericKind, Type},
 };
 #[derive(Debug)]
 pub struct Pattern {
     pub ty: Type,
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: PatternKind,
 }
 #[derive(Debug)]
@@ -20,7 +24,7 @@ pub enum PatternKind {
 #[derive(Debug)]
 pub struct Place {
     pub ty: Type,
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: PlaceKind,
 }
 #[derive(Debug)]
@@ -47,7 +51,7 @@ pub enum StmtKind {
 }
 #[derive(Debug)]
 pub struct Stmt {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: StmtKind,
 }
 #[derive(Debug)]
@@ -58,13 +62,13 @@ pub struct BlockBody {
 #[derive(Debug)]
 pub struct Expr {
     pub ty: Type,
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: ExprKind,
 }
 #[derive(Debug)]
 pub enum ExprKind {
     Block(BlockBody),
-    String(String),
+    String(Rc<str>),
     Bool(bool),
     Int(i64),
     Unit,
@@ -73,7 +77,7 @@ pub enum ExprKind {
     Panic,
     Some(Box<Expr>),
     Builtin(Builtin, Vec<GenericArg>),
-    Function(String, FunctionId, Vec<GenericArg>),
+    Function(Rc<str>, FunctionId, Vec<GenericArg>),
     Print(Option<Box<Expr>>),
     List(Vec<Expr>),
     Call(Box<Expr>, Vec<Expr>),

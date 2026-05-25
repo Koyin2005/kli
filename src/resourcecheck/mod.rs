@@ -1,9 +1,13 @@
-use std::collections::{HashMap, HashSet, hash_map::Entry};
+use std::{
+    collections::{HashMap, HashSet, hash_map::Entry},
+    rc::Rc,
+};
 
 use crate::{
     ast::{IsResource, Mutable},
     diagnostics::DiagnosticReporter,
     resolved_ast::{LocalRegionId, VarId},
+    src_loc::SrcLoc,
     typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
     types::{FunctionType, GenericKind, Region, Type},
 };
@@ -26,8 +30,8 @@ enum VarState {
 }
 struct VarInfo {
     ty: Type,
-    line: usize,
-    name: String,
+    loc: SrcLoc,
+    name: Rc<str>,
     mutable: Mutable,
     function_level: usize,
     loop_count: usize,
@@ -53,7 +57,7 @@ pub struct ResourceCheck {
     scopes: Vec<Vec<VarId>>,
     region_params: HashSet<usize>,
     function_level: usize,
-    capture_set: Option<HashMap<VarId, usize>>,
+    capture_set: Option<HashMap<VarId, SrcLoc>>,
     loops: usize,
 }
 impl ResourceCheck {
@@ -131,9 +135,9 @@ impl ResourceCheck {
             let var_info = &self.vars[&var];
             let state = self.var_states[&var];
             if state == VarState::Owned && self.is_strict_resource(&var_info.ty) {
-                let line = var_info.line;
+                let loc = var_info.loc.clone();
                 let msg = format!("'{}' cannot go out of scope", var_info.name);
-                self.err.report(msg, line);
+                self.err.report(msg, loc);
             }
         }
         scope
@@ -142,8 +146,8 @@ impl ResourceCheck {
         &mut self,
         mutable: Mutable,
         var: VarId,
-        line: usize,
-        name: String,
+        loc: SrcLoc,
+        name: Rc<str>,
         ty: Type,
         _is_param: bool,
     ) {
@@ -151,7 +155,7 @@ impl ResourceCheck {
         self.vars.insert(
             var,
             VarInfo {
-                line,
+                loc,
                 ty,
                 name,
                 mutable,
@@ -161,19 +165,19 @@ impl ResourceCheck {
         );
         self.var_states.insert(var, VarState::Owned);
     }
-    fn write_to_var(&mut self, var: VarId, line: usize) {
+    fn write_to_var(&mut self, var: VarId, loc: SrcLoc) {
         let info = &self.vars[&var];
         let is_resource = self.is_strict_resource(&info.ty);
         let state = self.var_states.get_mut(&var).unwrap();
         if is_resource && *state != VarState::Moved {
             self.err.report(
                 format!("Cant assign to '{}' while not moved", info.name),
-                line,
+                loc,
             );
         }
         *state = VarState::Owned;
     }
-    fn move_from_var(&mut self, var: VarId, line: usize) {
+    fn move_from_var(&mut self, var: VarId, loc: SrcLoc) {
         let info = &self.vars[&var];
         let is_resource = self.is_resource(&info.ty);
         let state = self.var_states.get_mut(&var).unwrap();
@@ -184,14 +188,14 @@ impl ResourceCheck {
                     let info = &self.vars[&var];
                     if self.loops > 0 && info.loop_count != self.loops {
                         self.err
-                            .report(format!("Cannot move from '{}' in a loop", info.name), line);
+                            .report(format!("Cannot move from '{}' in a loop", info.name), loc);
                     }
                 }
             }
             VarState::Moved => {
                 self.err.report(
                     format!("Cannot use '{}' after move", self.vars[&var].name),
-                    line,
+                    loc,
                 );
             }
         }
@@ -219,9 +223,10 @@ impl ResourceCheck {
     }
     fn check_place_mutable(&mut self, place: &Place) {
         match self.place_mutable(place) {
-            Mutable::Immutable => self
-                .err
-                .report("Cannot write to immutable place".to_string(), place.line),
+            Mutable::Immutable => self.err.report(
+                "Cannot write to immutable place".to_string(),
+                place.loc.clone(),
+            ),
             Mutable::Mutable => (),
         }
     }
@@ -235,7 +240,7 @@ impl ResourceCheck {
                 self.init_var(
                     *mutable,
                     var.1,
-                    pattern.line,
+                    pattern.loc.clone(),
                     var.0.clone(),
                     (**ty).clone(),
                     false,
@@ -321,11 +326,11 @@ impl ResourceCheck {
         }
         Ok(())
     }
-    fn capture_if_upvar(&mut self, var: VarId, line: usize) {
+    fn capture_if_upvar(&mut self, var: VarId, loc: SrcLoc) {
         let cause = match self.capture_valid(var) {
             Ok(()) => {
                 let capture_set = self.capture_set.as_mut().expect("Should have capture set");
-                capture_set.insert(var, line);
+                capture_set.insert(var, loc);
                 return;
             }
             Err(CaptureError::NotAnUpvar) => return,
@@ -334,20 +339,20 @@ impl ResourceCheck {
         };
         self.err.report(
             format!("Cannot capture '{}' {}", self.vars[&var].name, cause),
-            line,
+            loc,
         );
     }
     fn check_place_use(&mut self, place: &Place, place_use: PlaceUse) {
         match &place.kind {
             PlaceKind::Var(var) => {
                 let var = var.1;
-                self.capture_if_upvar(var, place.line);
+                self.capture_if_upvar(var, place.loc.clone());
                 match place_use {
                     PlaceUse::Write => {
-                        self.write_to_var(var, place.line);
+                        self.write_to_var(var, place.loc.clone());
                     }
                     PlaceUse::Read => {
-                        self.move_from_var(var, place.line);
+                        self.move_from_var(var, place.loc.clone());
                     }
                 }
             }
@@ -359,17 +364,18 @@ impl ResourceCheck {
                     let Some(var) = self.var_of(place) else {
                         return self.check_place_use(place, place_use);
                     };
-                    self.capture_if_upvar(var, place.line);
+                    self.capture_if_upvar(var, place.loc.clone());
                     if !self.is_resource(ty) {
                         return;
                     }
                     match place_use {
-                        PlaceUse::Read => self
-                            .err
-                            .report("Cannot move out of reference".to_string(), place.line),
+                        PlaceUse::Read => self.err.report(
+                            "Cannot move out of reference".to_string(),
+                            place.loc.clone(),
+                        ),
                         PlaceUse::Write => self
                             .err
-                            .report("Cannot re-assign reference".to_string(), place.line),
+                            .report("Cannot re-assign reference".to_string(), place.loc.clone()),
                     }
                 }
                 _ => self.check_expr(expr),
@@ -381,8 +387,10 @@ impl ResourceCheck {
             StmtKind::Expr(expr) => {
                 self.check_expr(expr);
                 if self.is_strict_resource(&expr.ty) {
-                    self.err
-                        .report(format!("Cannot let '{}' out of scope", expr.ty), expr.line);
+                    self.err.report(
+                        format!("Cannot let '{}' out of scope", expr.ty),
+                        expr.loc.clone(),
+                    );
                 }
             }
             StmtKind::Let(let_binding) => {
@@ -415,8 +423,10 @@ impl ResourceCheck {
                 if let Some(value) = value {
                     self.check_expr(value);
                     if self.is_resource(&value.ty) {
-                        self.err
-                            .report(format!("Cannot print resource '{}'", value.ty), value.line);
+                        self.err.report(
+                            format!("Cannot print resource '{}'", value.ty),
+                            value.loc.clone(),
+                        );
                     }
                 }
             }
@@ -453,7 +463,7 @@ impl ResourceCheck {
                         this.init_var(
                             Mutable::Immutable,
                             *var,
-                            name.line,
+                            name.loc.clone(),
                             name.content.clone(),
                             ty.clone(),
                             true,
@@ -462,19 +472,19 @@ impl ResourceCheck {
                     this.check_expr(&lambda.body);
                     if let Some(captures) = this.capture_set.as_ref() {
                         let mut errors = Vec::new();
-                        for (var, line) in captures {
+                        for (var, loc) in captures {
                             let var_info = &this.vars[var];
                             if this.regions_in(&var_info.ty).iter().any(|region| {
                                 *region != Region::Static || *region != Region::Unknown
                             }) {
-                                errors.push((var_info.name.as_str(), *line));
+                                errors.push((var_info.name.clone(), loc));
                             }
                         }
-                        errors.sort_by_key(|(_, line)| *line);
-                        for (name, line) in errors {
+                        errors.sort_by_key(|(_, loc)| loc.line);
+                        for (name, loc) in errors {
                             this.err.report(
                                 format!("Cannot capture '{}' that contains borrows", name),
-                                line,
+                                loc.clone(),
                             );
                         }
                     }
@@ -501,14 +511,14 @@ impl ResourceCheck {
                     (Mutable::Immutable, Mutable::Mutable) => {
                         self.err.report(
                             format!("Cannot borrow '{}' as mut", var_name.content),
-                            var_name.line,
+                            var_name.loc.clone(),
                         );
                     }
                 }
                 self.init_var(
                     Mutable::Immutable,
                     *new_var,
-                    var_name.line,
+                    var_name.loc.clone(),
                     var_name.content.clone(),
                     new_ty.clone(),
                     false,
@@ -517,7 +527,7 @@ impl ResourceCheck {
                 self.expired_regions.insert(*region);
                 if self.ty_is_expired(&body.ty) {
                     self.err
-                        .report(format!("Cannot let '{}' escape", body.ty), body.line);
+                        .report(format!("Cannot let '{}' escape", body.ty), body.loc.clone());
                 }
             }
             ExprKind::For {
@@ -556,7 +566,7 @@ impl ResourceCheck {
                                     let name = &self.vars[&var].name;
                                     self.err.report(
                                         format!("'{name}' should always be moved"),
-                                        arm.body.line,
+                                        arm.body.loc.clone(),
                                     );
                                     continue;
                                 };
@@ -588,7 +598,7 @@ impl ResourceCheck {
                 this.init_var(
                     Mutable::Immutable,
                     param.var,
-                    param.name.line,
+                    param.name.loc.clone(),
                     param.name.content.clone(),
                     param.ty.clone(),
                     true,

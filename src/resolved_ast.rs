@@ -1,4 +1,10 @@
-use crate::ast::{BinaryOp, Ident, IsResource, Mutable};
+use std::rc::Rc;
+
+use crate::{
+    ast::{BinaryOp, IsResource, Mutable},
+    ident::Ident,
+    src_loc::SrcLoc,
+};
 
 #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Copy)]
 pub struct FunctionId(usize);
@@ -38,7 +44,7 @@ impl From<LocalRegionId> for usize {
     }
 }
 #[derive(Debug, Clone)]
-pub struct Var(pub String, pub VarId);
+pub struct Var(pub Rc<str>, pub VarId);
 #[derive(Debug)]
 pub struct BorrowExpr {
     pub mutable: Mutable,
@@ -57,7 +63,7 @@ pub struct Lambda {
 }
 #[derive(Debug)]
 pub struct Place {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: PlaceKind,
 }
 #[derive(Debug)]
@@ -91,12 +97,12 @@ pub struct CaseArm {
 }
 #[derive(Debug)]
 pub enum StmtKind {
-    Let(LetBinding),
+    Let(Box<LetBinding>),
     Expr(Expr),
 }
 #[derive(Debug)]
 pub struct Stmt {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: StmtKind,
 }
 #[derive(Debug)]
@@ -112,9 +118,9 @@ pub enum ExprKind {
     Annotate(Box<Expr>, Box<Type>),
     Int(i64),
     Bool(bool),
-    String(String),
-    Var(String, VarId),
-    Function(String, FunctionId),
+    String(Rc<str>),
+    Var(Rc<str>, VarId),
+    Function(Rc<str>, FunctionId),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Borrow(Box<BorrowExpr>),
     Some(Box<Expr>),
@@ -132,15 +138,15 @@ pub enum ExprKind {
 }
 #[derive(Debug, Clone)]
 pub enum RegionKind {
-    Param(String, usize),
-    Local(String, LocalRegionId),
+    Param(Rc<str>, usize),
+    Local(Rc<str>, LocalRegionId),
     Static,
     Unknown,
 }
 
 #[derive(Debug, Clone)]
 pub struct Region {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: RegionKind,
 }
 
@@ -154,17 +160,17 @@ pub enum PatternKind {
 }
 #[derive(Debug)]
 pub struct Pattern {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: PatternKind,
 }
 #[derive(Debug)]
 pub struct Expr {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: ExprKind,
 }
 #[derive(Debug)]
 pub struct Param {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub var: Var,
     pub ty: Type,
 }
@@ -175,13 +181,13 @@ pub enum GenericKind {
 }
 #[derive(Debug)]
 pub struct Generics {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub names: Vec<Ident>,
     pub kinds: Vec<GenericKind>,
 }
 #[derive(Debug)]
 pub struct Function {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub name: Ident,
     pub generics: Option<Generics>,
     pub params: Vec<Param>,
@@ -201,12 +207,12 @@ pub enum TypeKind {
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
     Function(IsResource, Vec<Type>, Box<Type>),
-    Param(String, usize),
+    Param(Rc<str>, usize),
     Unknown,
 }
 #[derive(Debug)]
 pub struct Type {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: TypeKind,
 }
 #[derive(Debug)]

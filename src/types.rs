@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 use crate::{
     ast::{IsResource, Mutable},
@@ -40,8 +40,8 @@ impl FunctionType {
 pub enum Region {
     Unknown,
     Static,
-    Param(String, usize),
-    Local(String, LocalRegionId),
+    Param(Rc<str>, usize),
+    Local(Rc<str>, LocalRegionId),
     Infer(usize),
 }
 impl Display for Region {
@@ -63,7 +63,7 @@ pub enum Type {
     Bool,
     String,
     Char,
-    Param(String, usize),
+    Param(Rc<str>, usize),
     Box(Box<Type>),
     List(Box<Type>),
     Option(Box<Type>),

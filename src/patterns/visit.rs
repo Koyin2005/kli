@@ -1,6 +1,7 @@
 use crate::{
     diagnostics::DiagnosticReporter,
     patterns::{convert, pat::missing_patterns},
+    src_loc::SrcLoc,
     typed_ast::{Expr, ExprKind, Pattern},
     typed_ast_visitor::{Visitor, walk_expr},
     types::Type,
@@ -27,7 +28,7 @@ impl Visitor for PatternCheck {
                 self.visit_expr(matchee);
                 check_patterns(
                     &mut self.diag,
-                    matchee.line,
+                    matchee.loc.clone(),
                     &matchee.ty,
                     &arms.iter().map(|arm| &arm.pattern).collect::<Vec<_>>(),
                 );
@@ -39,11 +40,11 @@ impl Visitor for PatternCheck {
         }
     }
     fn visit_pattern(&mut self, pattern: &crate::typed_ast::Pattern) {
-        check_patterns(&mut self.diag, pattern.line, &pattern.ty, &[pattern]);
+        check_patterns(&mut self.diag, pattern.loc.clone(), &pattern.ty, &[pattern]);
     }
 }
 
-fn check_patterns(diag: &mut DiagnosticReporter, line: usize, ty: &Type, patterns: &[&Pattern]) {
+fn check_patterns(diag: &mut DiagnosticReporter, loc: SrcLoc, ty: &Type, patterns: &[&Pattern]) {
     let missing = missing_patterns(
         ty,
         &mut patterns
@@ -51,6 +52,6 @@ fn check_patterns(diag: &mut DiagnosticReporter, line: usize, ty: &Type, pattern
             .map(|pattern| convert::pattern_to_pat(pattern)),
     );
     for pat in missing {
-        diag.report(format!("Missing pattern: {}", pat), line);
+        diag.report(format!("Missing pattern: {}", pat), loc.clone());
     }
 }

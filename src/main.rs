@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, env, path::Path};
+use std::{collections::BTreeMap, env, path::Path, rc::Rc};
 
 use kli::{
     ast, parsing::parse::Parser, patterns::visit::PatternCheck, resolve::Resolve,
@@ -9,10 +9,10 @@ enum ModuleError {
     InvalidModule,
 }
 const EXTENSION: &str = "kli";
-fn parse_source_file(name: String, src: &str) -> Option<(String, ast::Module)> {
-    Some((name, Parser::new(src).parse_module().ok()?))
+fn parse_source_file(name: Rc<str>, src: &str) -> Option<(Rc<str>, ast::Module)> {
+    Some((name.clone(), Parser::new(name, src).parse_module().ok()?))
 }
-fn read_source_file(path: &Path, file_name: String) -> Result<(String, String), ModuleError> {
+fn read_source_file(path: &Path, file_name: String) -> Result<(Rc<str>, String), ModuleError> {
     let mut name = file_name;
     if path
         .extension()
@@ -22,9 +22,9 @@ fn read_source_file(path: &Path, file_name: String) -> Result<(String, String), 
     }
     name.truncate(name.len() - EXTENSION.chars().count() - 1);
     let src = std::fs::read_to_string(path).map_err(ModuleError::Io)?;
-    Ok((name, src))
+    Ok((name.into(), src))
 }
-fn read_source_files(path: String) -> std::io::Result<BTreeMap<String, String>> {
+fn read_source_files(path: String) -> std::io::Result<BTreeMap<Rc<str>, String>> {
     let dir = std::fs::read_dir(&path)?;
     let mut files = BTreeMap::default();
     for entry in dir {
@@ -93,7 +93,7 @@ fn main() {
                 return;
             }
         };
-        let parser = Parser::new(&src);
+        let parser = Parser::new(name.clone(), &src);
         let Ok(module) = parser.parse_module() else {
             return;
         };

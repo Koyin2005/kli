@@ -18,9 +18,10 @@ impl<'a> Lower<'a> {
                 if let GenericKind::Region = self.kinds[*param] {
                     Region::Param(name.clone(), *param)
                 } else {
-                    self.diag
-                        .borrow_mut()
-                        .report(format!("Cannot use '{}' as region", name), region.line);
+                    self.diag.borrow_mut().report(
+                        format!("Cannot use '{}' as region", name),
+                        region.loc.clone(),
+                    );
                     Region::Unknown
                 }
             }
@@ -68,7 +69,7 @@ impl<'a> Lower<'a> {
                 } else {
                     self.diag
                         .borrow_mut()
-                        .report(format!("Cannot use '{}' as a type", name), ty.line);
+                        .report(format!("Cannot use '{}' as a type", name), ty.loc.clone());
                     Type::Unknown
                 }
             }

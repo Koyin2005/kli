@@ -1,8 +1,10 @@
 use std::fmt::Display;
 
+use crate::src_loc::SrcLoc;
+
 #[derive(Debug)]
 pub struct Token {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: TokenKind,
 }
 #[derive(PartialEq, Eq, Debug)]

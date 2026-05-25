@@ -1,5 +1,6 @@
 use crate::{
     resolved_ast::{BlockBody, BorrowExpr, Expr, ExprKind, Lambda, Pattern, Place, PlaceKind, Var},
+    src_loc::SrcLoc,
     typecheck::root::TypeCheck,
     typed_ast,
     types::{FunctionType, Region, Type},
@@ -15,9 +16,10 @@ impl TypeCheck {
                     match self.simplify_type(value.ty.clone()).as_reference_type() {
                         Ok((_, _, ty)) => ty.clone(),
                         Err(ty) => {
-                            self.diag
-                                .borrow_mut()
-                                .report(format!("Expected a reference but got '{ty}'"), value.line);
+                            self.diag.borrow_mut().report(
+                                format!("Expected a reference but got '{ty}'"),
+                                value.loc.clone(),
+                            );
                             Type::Unknown
                         }
                     },
@@ -26,19 +28,19 @@ impl TypeCheck {
             }
         };
         let ty = if let Some(expected) = expected_ty {
-            self.unify(expected, ty, place.line)
+            self.unify(expected, ty, place.loc.clone())
         } else {
             ty
         };
         typed_ast::Place {
             ty,
-            line: place.line,
+            loc: place.loc,
             kind,
         }
     }
     fn check_for_loop(
         &mut self,
-        line: usize,
+        loc: SrcLoc,
         pattern: Pattern,
         iterator: Expr,
         body: Expr,
@@ -50,7 +52,7 @@ impl TypeCheck {
             Err(_) => {
                 self.diag.borrow_mut().report(
                     format!("Cannot use '{}' as an iterator", iterator.ty),
-                    iterator.line,
+                    iterator.loc.clone(),
                 );
                 Type::Unknown
             }
@@ -59,7 +61,7 @@ impl TypeCheck {
         let body = self.check_expr(body, Some(Type::Unit));
         typed_ast::Expr {
             ty: Type::Unit,
-            line,
+            loc,
             kind: typed_ast::ExprKind::For {
                 pattern,
                 iterator: Box::new(iterator),
@@ -69,7 +71,7 @@ impl TypeCheck {
     }
     fn check_borrow(
         &mut self,
-        line: usize,
+        loc: SrcLoc,
         borrow: BorrowExpr,
         expected_ty: Option<Type>,
     ) -> typed_ast::Expr {
@@ -90,7 +92,7 @@ impl TypeCheck {
         let body = self.check_expr(body, expected_ty);
         typed_ast::Expr {
             ty: body.ty.clone(),
-            line,
+            loc,
             kind: typed_ast::ExprKind::Borrow {
                 mutable,
                 var_name,
@@ -103,7 +105,7 @@ impl TypeCheck {
             },
         }
     }
-    fn check_lambda(&mut self, line: usize, lambda: Lambda, hint: Option<Type>) -> typed_ast::Expr {
+    fn check_lambda(&mut self, loc: SrcLoc, lambda: Lambda, hint: Option<Type>) -> typed_ast::Expr {
         let expected_sig = match hint.clone().map(|ty| self.simplify_type(ty)) {
             Some(Type::Function(ref function)) => Some(function.clone()),
             _ => None,
@@ -119,14 +121,14 @@ impl TypeCheck {
                         if let Some(sig) = &expected_sig
                             && let Some(expect) = sig.params.get(i)
                         {
-                            self.unify(expect.clone(), ty.clone(), name.line);
+                            self.unify(expect.clone(), ty.clone(), name.loc.clone());
                         }
                         ty
                     }
                     None => expected_sig
                         .as_ref()
                         .and_then(|sig| sig.params.get(i).cloned())
-                        .unwrap_or_else(|| self.fresh_ty(name.line)),
+                        .unwrap_or_else(|| self.fresh_ty(name.loc.clone())),
                 };
 
                 self.declare_var(var, ty.clone());
@@ -144,7 +146,7 @@ impl TypeCheck {
         });
         typed_ast::Expr {
             ty: function,
-            line,
+            loc,
             kind: typed_ast::ExprKind::Lambda(Box::new(typed_ast::Lambda {
                 is_resource: lambda.resource,
                 params,
@@ -155,7 +157,7 @@ impl TypeCheck {
     }
     fn check_call(
         &mut self,
-        line: usize,
+        loc: SrcLoc,
         callee: Expr,
         args: Vec<Expr>,
         expected_ty: Option<Type>,
@@ -171,7 +173,7 @@ impl TypeCheck {
             ty => {
                 self.diag.borrow_mut().report(
                     format!("Expected a function type but got '{ty}'"),
-                    callee.line,
+                    callee.loc.clone(),
                 );
                 (Vec::new(), None)
             }
@@ -183,7 +185,7 @@ impl TypeCheck {
                     params.len(),
                     args.len()
                 ),
-                callee.line,
+                callee.loc.clone(),
             );
         }
 
@@ -208,17 +210,17 @@ impl TypeCheck {
         let ty = match (expected_ty, return_type) {
             (None, None) => Type::Unknown,
             (None, Some(ty)) | (Some(ty), None) => ty,
-            (Some(ty), Some(return_type)) => self.unify(ty, return_type, callee.line),
+            (Some(ty), Some(return_type)) => self.unify(ty, return_type, callee.loc.clone()),
         };
         typed_ast::Expr {
             ty,
-            line,
+            loc,
             kind: typed_ast::ExprKind::Call(Box::new(callee), args),
         }
     }
     fn check_block(
         &mut self,
-        line: usize,
+        loc: SrcLoc,
         body: BlockBody,
         expected_ty: Option<Type>,
     ) -> typed_ast::Expr {
@@ -235,23 +237,23 @@ impl TypeCheck {
         };
         typed_ast::Expr {
             ty,
-            line,
+            loc,
             kind: typed_ast::ExprKind::Block(body),
         }
     }
     pub(super) fn check_expr(&mut self, expr: Expr, expected_ty: Option<Type>) -> typed_ast::Expr {
-        let Expr { line, kind } = expr;
-        let make_expr = move |ty, kind| typed_ast::Expr { ty, kind, line };
+        let Expr { loc, kind } = expr;
+        let make_expr = |ty, kind, loc| typed_ast::Expr { ty, kind, loc };
         let mut expr = match kind {
-            ExprKind::Block(block) => return self.check_block(line, block, expected_ty),
+            ExprKind::Block(block) => return self.check_block(loc, block, expected_ty),
             ExprKind::Annotate(expr, ty) => self.check_expr(*expr, Some(self.lower_type(*ty))),
             ExprKind::Err => typed_ast::Expr {
-                line,
+                loc,
                 ty: Type::Unknown,
                 kind: typed_ast::ExprKind::Err,
             },
             ExprKind::Bool(value) => typed_ast::Expr {
-                line,
+                loc,
                 ty: Type::Bool,
                 kind: typed_ast::ExprKind::Bool(value),
             },
@@ -259,29 +261,32 @@ impl TypeCheck {
                 self.var_type(id).clone(),
                 typed_ast::ExprKind::Load(typed_ast::Place {
                     ty: self.var_type(id).clone(),
-                    line,
+                    loc: loc.clone(),
                     kind: typed_ast::PlaceKind::Var(Var(var, id)),
                 }),
+                loc,
             ),
             ExprKind::Builtin(builtin) => {
-                let args = self.instantiate_builtin_args(builtin, line);
+                let args = self.instantiate_builtin_args(builtin, loc.clone());
                 make_expr(
                     Type::Function(self.signature_of_builtin(builtin).bind(&args)),
                     typed_ast::ExprKind::Builtin(builtin, args),
+                    loc,
                 )
             }
             ExprKind::Function(name, function) => {
-                let args = self.instantiate_function_args(function, line);
+                let args = self.instantiate_function_args(function, loc.clone());
                 make_expr(
                     Type::Function(self.signature_of_function(function).bind(&args)),
                     typed_ast::ExprKind::Function(name, function, args),
+                    loc,
                 )
             }
             ExprKind::None(ty) => {
                 let given = ty.map(|ty| self.lower_type(ty));
                 let ty = match (given, expected_ty.clone()) {
                     (None, None) => {
-                        self.type_annotations_needed(expr.line);
+                        self.type_annotations_needed(loc.clone());
                         Type::Unknown
                     }
                     (Some(ty), None) => ty,
@@ -292,20 +297,20 @@ impl TypeCheck {
                         } else {
                             self.diag.borrow_mut().report(
                                 format!("Expected option type but got '{}'", expected),
-                                expr.line,
+                                loc.clone(),
                             );
                             Type::Unknown
                         }
                     }
                     (Some(ty), Some(expected)) => {
                         if let Type::Option(expected) = expected {
-                            self.unify(ty, *expected, expr.line)
+                            self.unify(ty, *expected, loc.clone())
                         } else {
                             Type::Unknown
                         }
                     }
                 };
-                make_expr(Type::Option(Box::new(ty)), typed_ast::ExprKind::None)
+                make_expr(Type::Option(Box::new(ty)), typed_ast::ExprKind::None, loc)
             }
             ExprKind::Some(value) => {
                 let expected_inner = expected_ty.as_ref().and_then(|ty| match ty {
@@ -316,29 +321,32 @@ impl TypeCheck {
                 make_expr(
                     Type::Option(Box::new(value.ty.clone())),
                     typed_ast::ExprKind::Some(Box::new(value)),
+                    loc,
                 )
             }
             ExprKind::Print(arg) => {
                 let arg = arg.map(|arg| Box::new(self.check_expr(*arg, None)));
-                make_expr(Type::Unit, typed_ast::ExprKind::Print(arg))
+                make_expr(Type::Unit, typed_ast::ExprKind::Print(arg), loc)
             }
-            ExprKind::Unit => make_expr(Type::Unit, typed_ast::ExprKind::Unit),
-            ExprKind::Int(value) => make_expr(Type::Int, typed_ast::ExprKind::Int(value)),
-            ExprKind::String(value) => make_expr(Type::String, typed_ast::ExprKind::String(value)),
+            ExprKind::Unit => make_expr(Type::Unit, typed_ast::ExprKind::Unit, loc),
+            ExprKind::Int(value) => make_expr(Type::Int, typed_ast::ExprKind::Int(value), loc),
+            ExprKind::String(value) => {
+                make_expr(Type::String, typed_ast::ExprKind::String(value), loc)
+            }
             ExprKind::Call(callee, args) => {
-                return self.check_call(expr.line, *callee, args, expected_ty);
+                return self.check_call(loc, *callee, args, expected_ty);
             }
             ExprKind::Panic(ty) => {
                 let ty = match (ty.map(|ty| self.lower_type(ty)), expected_ty) {
                     (None, None) => {
-                        self.type_annotations_needed(expr.line);
+                        self.type_annotations_needed(loc.clone());
                         Type::Unknown
                     }
                     (Some(ty), None) | (None, Some(ty)) => ty,
-                    (Some(given), Some(expected)) => self.unify(expected, given, expr.line),
+                    (Some(given), Some(expected)) => self.unify(expected, given, loc.clone()),
                 };
                 return typed_ast::Expr {
-                    line: expr.line,
+                    loc,
                     ty,
                     kind: typed_ast::ExprKind::Panic,
                 };
@@ -347,7 +355,7 @@ impl TypeCheck {
                 let left = self.check_expr(*left, Some(Type::Int));
                 let right = self.check_expr(*right, Some(Type::Int));
                 typed_ast::Expr {
-                    line: expr.line,
+                    loc,
                     ty: Type::Int,
                     kind: typed_ast::ExprKind::Binary(binary_op, Box::new(left), Box::new(right)),
                 }
@@ -366,12 +374,12 @@ impl TypeCheck {
                     })
                     .collect();
                 let ty = Type::List(Box::new(expected_element.unwrap_or_else(|| {
-                    self.type_annotations_needed(expr.line);
+                    self.type_annotations_needed(loc.clone());
                     Type::Unknown
                 })));
                 typed_ast::Expr {
                     ty,
-                    line: expr.line,
+                    loc,
                     kind: typed_ast::ExprKind::List(elements),
                 }
             }
@@ -382,24 +390,24 @@ impl TypeCheck {
                     Err(ty) => {
                         self.diag
                             .borrow_mut()
-                            .report(format!("Cannot deref '{ty}'"), expr.line);
+                            .report(format!("Cannot deref '{ty}'"), loc.clone());
                         Type::Unknown
                     }
                 };
                 typed_ast::Expr {
                     ty: pointee_ty.clone(),
-                    line,
+                    loc,
                     kind: typed_ast::ExprKind::Load(typed_ast::Place {
                         ty: pointee_ty,
-                        line: reference.line,
+                        loc: reference.loc.clone(),
                         kind: typed_ast::PlaceKind::Deref(Box::new(reference)),
                     }),
                 }
             }
-            ExprKind::Lambda(lambda) => self.check_lambda(expr.line, *lambda, expected_ty.clone()),
-            ExprKind::Borrow(borrow) => return self.check_borrow(expr.line, *borrow, expected_ty),
+            ExprKind::Lambda(lambda) => self.check_lambda(loc, *lambda, expected_ty.clone()),
+            ExprKind::Borrow(borrow) => return self.check_borrow(loc, *borrow, expected_ty),
             ExprKind::For(pattern, iterator, body) => {
-                self.check_for_loop(expr.line, pattern, *iterator, *body)
+                self.check_for_loop(loc, pattern, *iterator, *body)
             }
             ExprKind::Case(matched, case_arms) => {
                 let matched = self.check_expr(*matched, None);
@@ -411,7 +419,7 @@ impl TypeCheck {
                         let body = self.check_expr(arm.body, expected_ty.clone());
                         if expected_ty.is_none() {
                             if let Some(ref prev_ty) = prev_ty {
-                                self.unify(prev_ty.clone(), body.ty.clone(), body.line);
+                                self.unify(prev_ty.clone(), body.ty.clone(), body.loc.clone());
                             } else {
                                 prev_ty = Some(body.ty.clone());
                             }
@@ -420,12 +428,12 @@ impl TypeCheck {
                     })
                     .collect();
                 let ty = expected_ty.or(prev_ty).unwrap_or_else(|| {
-                    self.type_annotations_needed(expr.line);
+                    self.type_annotations_needed(loc.clone());
                     Type::Unknown
                 });
                 return typed_ast::Expr {
                     ty,
-                    line: expr.line,
+                    loc,
                     kind: typed_ast::ExprKind::Case(Box::new(matched), arms),
                 };
             }
@@ -433,14 +441,14 @@ impl TypeCheck {
                 let value = self.check_expr(*value, None);
                 let place = self.check_place(place, Some(value.ty.clone()));
                 typed_ast::Expr {
-                    line: expr.line,
+                    loc,
                     ty: Type::Unit,
                     kind: typed_ast::ExprKind::Assign(place, Box::new(value)),
                 }
             }
         };
         if let Some(expected) = expected_ty {
-            expr.ty = self.unify(expected, expr.ty, expr.line)
+            expr.ty = self.unify(expected, expr.ty, expr.loc.clone())
         };
         expr
     }

@@ -1,10 +1,11 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ast::Ident,
     diagnostics::DiagnosticReporter,
+    ident::Ident,
     resolved_ast::{self as res, Builtin, FunctionId, Program, VarId},
     scheme::Scheme,
+    src_loc::SrcLoc,
     typecheck::{infer::TypeInfer, lower::Lower, subst::TypeSubst},
     typed_ast::{self, Function, GenericParam, LetBinding},
     types::{FunctionType, GenericArg, GenericKind, Region, Type},
@@ -91,41 +92,41 @@ impl TypeCheck {
             Builtin::Replace => (
                 vec![
                     Type::Mut(
-                        Region::Param("r".to_string(), 0),
-                        Box::new(Type::Param("T".to_string(), 1)),
+                        Region::Param(Rc::from("r"), 0),
+                        Box::new(Type::Param(Rc::from("T"), 1)),
                     ),
                     Type::Function(FunctionType::new_resource(
-                        vec![Type::Param("T".to_string(), 1)],
-                        Type::Param("T".to_string(), 1),
+                        vec![Type::Param(Rc::from("T"), 1)],
+                        Type::Param(Rc::from("T"), 1),
                     )),
                 ],
                 Type::Mut(
-                    Region::Param("r".to_string(), 0),
-                    Box::new(Type::Param("T".to_string(), 1)),
+                    Region::Param(Rc::from("r"), 0),
+                    Box::new(Type::Param(Rc::from("T"), 1)),
                 ),
             ),
             Builtin::Swap => (
                 vec![
                     Type::Mut(
-                        Region::Param("r".to_string(), 0),
-                        Box::new(Type::Param("T".to_string(), 1)),
+                        Region::Param(Rc::from("r"), 0),
+                        Box::new(Type::Param(Rc::from("T"), 1)),
                     ),
-                    Type::Param("T".to_string(), 1),
+                    Type::Param(Rc::from("T"), 1),
                 ],
-                Type::Param("T".to_string(), 1),
+                Type::Param(Rc::from("T"), 1),
             ),
             Builtin::DestroyString => (vec![Type::String], Type::Unit),
             Builtin::AllocBox => (
-                vec![Type::Param("T".to_string(), 0)],
-                (Type::Box(Box::new(Type::Param("T".to_string(), 0)))),
+                vec![Type::Param(Rc::from("T"), 0)],
+                (Type::Box(Box::new(Type::Param(Rc::from("T"), 0)))),
             ),
             Builtin::DeallocBox => (
-                vec![Type::Box(Box::new(Type::Param("T".to_string(), 0)))],
-                (Type::Param("T".to_string(), 0)),
+                vec![Type::Box(Box::new(Type::Param(Rc::from("T"), 0)))],
+                (Type::Param(Rc::from("T"), 0)),
             ),
             Builtin::DerefBox => {
-                let r_param = Region::Param("r".to_string(), 0);
-                let t_param = Type::Param("T".to_string(), 1);
+                let r_param = Region::Param(Rc::from("r"), 0);
+                let t_param = Type::Param(Rc::from("T"), 1);
                 (
                     vec![Type::Imm(
                         r_param.clone(),
@@ -135,8 +136,8 @@ impl TypeCheck {
                 )
             }
             Builtin::DerefBoxMut => {
-                let r_param = Region::Param("r".to_string(), 0);
-                let t_param = Type::Param("T".to_string(), 1);
+                let r_param = Region::Param(Rc::from("r"), 0);
+                let t_param = Type::Param(Rc::from("T"), 1);
                 (
                     vec![Type::Mut(
                         r_param.clone(),
@@ -147,10 +148,10 @@ impl TypeCheck {
             }
             Builtin::DestroyList => (
                 vec![
-                    Type::List(Box::new(Type::Param("T".to_string(), 0))),
+                    Type::List(Box::new(Type::Param(Rc::from("T"), 0))),
                     Type::Function(FunctionType {
                         resource: crate::ast::IsResource::Data,
-                        params: vec![Type::Param("T".to_string(), 0)],
+                        params: vec![Type::Param(Rc::from("T"), 0)],
                         return_type: Box::new(Type::Unit),
                     }),
                 ],
@@ -158,12 +159,12 @@ impl TypeCheck {
             ),
             Builtin::Freeze => (
                 vec![Type::Mut(
-                    Region::Param("r".to_string(), 0),
-                    Box::new(Type::Param("T".to_string(), 1)),
+                    Region::Param(Rc::from("r"), 0),
+                    Box::new(Type::Param(Rc::from("T"), 1)),
                 )],
                 (Type::Imm(
-                    Region::Param("r".to_string(), 0),
-                    Box::new(Type::Param("T".to_string(), 1)),
+                    Region::Param(Rc::from("r"), 0),
+                    Box::new(Type::Param(Rc::from("T"), 1)),
                 )),
             ),
         };
@@ -175,11 +176,11 @@ impl TypeCheck {
     pub(super) fn instantiate_builtin_args(
         &mut self,
         builtin: Builtin,
-        line: usize,
+        loc: SrcLoc,
     ) -> Vec<GenericArg> {
         match builtin {
             Builtin::AllocBox | Builtin::DeallocBox | Builtin::DestroyList => {
-                vec![GenericArg::Type(self.fresh_ty(line))]
+                vec![GenericArg::Type(self.fresh_ty(loc))]
             }
             Builtin::DerefBox
             | Builtin::DerefBoxMut
@@ -187,31 +188,33 @@ impl TypeCheck {
             | Builtin::Replace
             | Builtin::Swap => {
                 vec![
-                    GenericArg::Region(self.fresh_region(line)),
-                    GenericArg::Type(self.fresh_ty(line)),
+                    GenericArg::Region(self.fresh_region(loc.clone())),
+                    GenericArg::Type(self.fresh_ty(loc)),
                 ]
             }
             Builtin::DestroyString => Vec::new(),
         }
     }
-    pub(super) fn fresh_region(&mut self, line: usize) -> Region {
-        Region::Infer(self.infer.fresh_region(line))
+    pub(super) fn fresh_region(&mut self, loc: SrcLoc) -> Region {
+        Region::Infer(self.infer.fresh_region(loc))
     }
-    pub(super) fn fresh_ty(&mut self, line: usize) -> Type {
-        Type::Infer(self.infer.fresh_ty(line))
+    pub(super) fn fresh_ty(&mut self, loc: SrcLoc) -> Type {
+        Type::Infer(self.infer.fresh_ty(loc))
     }
     pub(super) fn instantiate_function_args(
         &mut self,
         function: FunctionId,
-        line: usize,
+        loc: SrcLoc,
     ) -> Vec<GenericArg> {
         self.function_generic_kinds[usize::from(function)]
             .iter()
             .map(|kind| match *kind {
                 GenericKind::Region => {
-                    GenericArg::Region(Region::Infer(self.infer.fresh_region(line)))
+                    GenericArg::Region(Region::Infer(self.infer.fresh_region(loc.clone())))
                 }
-                GenericKind::Type => GenericArg::Type(Type::Infer(self.infer.fresh_ty(line))),
+                GenericKind::Type => {
+                    GenericArg::Type(Type::Infer(self.infer.fresh_ty(loc.clone())))
+                }
             })
             .collect()
     }
@@ -232,7 +235,7 @@ impl TypeCheck {
     pub(super) fn simplify_region(&self, region: Region) -> Region {
         self.infer.simplify_region(region)
     }
-    pub(super) fn unify_region(&mut self, region1: Region, region2: Region, line: usize) -> Region {
+    pub(super) fn unify_region(&mut self, region1: Region, region2: Region, loc: SrcLoc) -> Region {
         if let Some(region) = self.infer.unify_region(region1.clone(), region2.clone()) {
             region
         } else {
@@ -240,11 +243,11 @@ impl TypeCheck {
             let region2 = self.simplify_region(region2);
             self.diag
                 .borrow_mut()
-                .report(format!("Expected '{region1}' but got '{region2}'"), line);
+                .report(format!("Expected '{region1}' but got '{region2}'"), loc);
             Region::Unknown
         }
     }
-    pub(super) fn unify(&mut self, ty1: Type, ty2: Type, line: usize) -> Type {
+    pub(super) fn unify(&mut self, ty1: Type, ty2: Type, loc: SrcLoc) -> Type {
         if let Some(ty) = self.infer.unify_ty(ty1.clone(), ty2.clone()) {
             ty
         } else {
@@ -252,46 +255,43 @@ impl TypeCheck {
             let ty2 = self.simplify_type(ty2);
             self.diag
                 .borrow_mut()
-                .report(format!("Expected '{ty1}' but got '{ty2}'"), line);
+                .report(format!("Expected '{ty1}' but got '{ty2}'"), loc);
             Type::Unknown
         }
     }
 
-    pub(super) fn type_annotations_needed(&self, line: usize) {
+    pub(super) fn type_annotations_needed(&self, loc: SrcLoc) {
         self.diag
             .borrow_mut()
-            .report("type annotations needed".to_string(), line);
+            .report("type annotations needed".to_string(), loc);
     }
     fn validate_main(&mut self, program: &res::Program) {
         let Some(main) = program
             .functions
             .iter()
-            .position(|f| f.name.content == "main")
+            .position(|f| f.name.content.as_ref() == "main")
         else {
-            return self.diag.borrow_mut().report(
-                "Missing main".to_string(),
-                program
-                    .functions
-                    .last()
-                    .map(|function| function.name.line)
-                    .unwrap_or(1),
-            );
+            return self
+                .diag
+                .borrow_mut()
+                .report("Missing main".to_string(), SrcLoc::dummy());
         };
         let main = &program.functions[main];
         if main.generics.as_ref().is_some_and(|g| g.names.is_empty()) {
             self.diag
                 .borrow_mut()
-                .report("'main' should not be generic".to_string(), main.line);
+                .report("'main' should not be generic".to_string(), main.loc.clone());
         }
         if !main.params.is_empty() {
-            self.diag
-                .borrow_mut()
-                .report("'main' should have no parameters".to_string(), main.line);
+            self.diag.borrow_mut().report(
+                "'main' should have no parameters".to_string(),
+                main.loc.clone(),
+            );
         }
         if !matches!(main.return_type.kind, res::TypeKind::Unit) {
             self.diag.borrow_mut().report(
                 "'main' should have '()' as return type".to_string(),
-                main.line,
+                main.loc.clone(),
             );
         }
     }
@@ -324,7 +324,7 @@ impl TypeCheck {
                 typed_ast::Param {
                     name: Ident {
                         content: param.var.0,
-                        line: param.line,
+                        loc: param.loc,
                     },
                     var: param.var.1,
                     ty,
@@ -332,9 +332,9 @@ impl TypeCheck {
             })
             .collect::<Vec<_>>();
         let body = self.check_expr(f.body, Some(*return_type));
-        let unsolved_lines = self.infer.unsolved_var_lines();
-        let body = if !unsolved_lines.is_empty() {
-            for line in self.infer.unsolved_var_lines() {
+        let unsolved = self.infer.unsolved_locs();
+        let body = if !unsolved.is_empty() {
+            for line in unsolved {
                 self.diag
                     .borrow_mut()
                     .report("type annotations needed".to_string(), line);

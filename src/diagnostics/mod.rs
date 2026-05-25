@@ -1,6 +1,8 @@
+use crate::src_loc::SrcLoc;
+
 struct Diagnostic {
     msg: String,
-    line: usize,
+    loc: SrcLoc,
 }
 #[derive(Default)]
 pub struct DiagnosticReporter {
@@ -12,15 +14,22 @@ impl DiagnosticReporter {
             diagnostics: Vec::new(),
         }
     }
-    pub fn report(&mut self, msg: String, line: usize) {
-        self.diagnostics.push(Diagnostic { msg, line });
+    pub fn report(&mut self, msg: String, loc: SrcLoc) {
+        self.diagnostics.push(Diagnostic { msg, loc });
     }
 
     pub fn finish(self) -> bool {
         let mut emit_diagnostic = false;
         for diagnostic in self.diagnostics {
             emit_diagnostic = true;
-            eprintln!("Line [{}] : {}", diagnostic.line, diagnostic.msg);
+            if diagnostic.loc.line > 0 {
+                eprintln!(
+                    "Line [{}] in '{}': {}",
+                    diagnostic.loc.line, diagnostic.loc.file, diagnostic.msg
+                );
+            } else {
+                eprintln!("Error : {}", diagnostic.msg);
+            }
         }
         emit_diagnostic
     }

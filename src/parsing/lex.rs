@@ -1,20 +1,25 @@
-use std::{iter::Peekable, num::IntErrorKind, str::Chars};
+use std::{iter::Peekable, num::IntErrorKind, rc::Rc, str::Chars};
 
 use crate::{
     diagnostics::DiagnosticReporter,
     parsing::tokens::{Token, TokenKind},
+    src_loc::SrcLoc,
 };
 
 pub struct Lexer<'src> {
     chars: Peekable<Chars<'src>>,
+    file: Rc<str>,
     line: usize,
+    start_line: usize,
     diag: DiagnosticReporter,
 }
 impl<'s> Lexer<'s> {
-    pub fn new(src: &'s str) -> Self {
+    pub fn new(file: Rc<str>, src: &'s str) -> Self {
         Self {
+            file,
             chars: src.chars().peekable(),
             line: 1,
+            start_line: 1,
             diag: DiagnosticReporter::new(),
         }
     }
@@ -49,28 +54,34 @@ impl<'s> Lexer<'s> {
             self.next_char();
         }
     }
-    fn new_token_from_char(&mut self, line: usize, kind: TokenKind) -> Token {
-        self.next_char();
-        Token { line, kind }
+    fn current_loc(&self) -> SrcLoc {
+        SrcLoc {
+            line: self.start_line,
+            file: self.file.clone(),
+        }
     }
-    fn new_token_from_char_or_chars(
+    fn next_token_from_char(&mut self, kind: TokenKind) -> Token {
+        self.next_char();
+        self.new_token(kind)
+    }
+    fn next_token_from_char_or_chars(
         &mut self,
         next_char: char,
-        line: usize,
         single_kind: TokenKind,
         double_kind: TokenKind,
     ) -> Token {
         self.next_char();
-        if self.match_char(next_char).is_some() {
-            Token {
-                line,
-                kind: double_kind,
-            }
+        let kind = if self.match_char(next_char).is_some() {
+            double_kind
         } else {
-            Token {
-                line,
-                kind: single_kind,
-            }
+            single_kind
+        };
+        self.new_token(kind)
+    }
+    fn new_token(&self, kind: TokenKind) -> Token {
+        Token {
+            loc: self.current_loc(),
+            kind,
         }
     }
     fn is_start_char(c: char) -> bool {
@@ -79,21 +90,20 @@ impl<'s> Lexer<'s> {
     fn is_ident_char(c: char) -> bool {
         c.is_ascii_alphanumeric() || c == '_'
     }
-    fn num_token(&mut self, line: usize) -> Option<Token> {
+    fn num_token(&mut self) -> Option<Token> {
         let mut src = String::new();
         while let Some(c) = self.match_char_with(|c| char::is_digit(c, 10)) {
             src.push(c);
         }
         match src.parse::<u64>() {
-            Ok(n) => Some(Token {
-                line,
-                kind: TokenKind::Number(n),
-            }),
+            Ok(n) => Some(self.new_token(TokenKind::Number(n))),
             Err(e) => match e.kind() {
                 IntErrorKind::PosOverflow => {
-                    self.diag.report("Integer too large".to_string(), line);
+                    let loc = self.current_loc();
+                    self.diag
+                        .report("Integer too large".to_string(), loc.clone());
                     Some(Token {
-                        line,
+                        loc,
                         kind: TokenKind::Number(u64::MAX),
                     })
                 }
@@ -101,7 +111,7 @@ impl<'s> Lexer<'s> {
             },
         }
     }
-    fn string_token(&mut self, line: usize) -> Option<Token> {
+    fn string_token(&mut self) -> Option<Token> {
         self.next_char();
         let mut src = String::new();
         while let Some(c) = self.peek_char()
@@ -113,22 +123,23 @@ impl<'s> Lexer<'s> {
 
         if self.match_char('"').is_some() {
             Some(Token {
-                line,
+                loc: self.current_loc(),
                 kind: TokenKind::StringLiteral(src),
             })
         } else {
+            let loc = self.current_loc();
             self.diag
-                .report("Expected '\"' at end of string".to_string(), line);
+                .report("Expected '\"' at end of string".to_string(), loc);
             None
         }
     }
-    fn ident_token(&mut self, line: usize) -> Option<Token> {
+    fn ident_token(&mut self) -> Option<Token> {
         let mut src = self.next_char()?.to_string();
         while let Some(c) = self.match_char_with(Self::is_ident_char) {
             src.push(c);
         }
         Some(Token {
-            line,
+            loc: self.current_loc(),
             kind: match src.as_str() {
                 "fun" => TokenKind::Fun,
                 "imm" => TokenKind::Imm,
@@ -164,40 +175,38 @@ impl<'s> Lexer<'s> {
         self.skip_whitespace();
         let line = self.line;
         let &c = self.chars.peek()?;
+        self.start_line = line;
         match c {
-            '.' => Some(self.new_token_from_char(line, TokenKind::Dot)),
-            '=' => Some(self.new_token_from_char_or_chars(
+            '.' => Some(self.next_token_from_char(TokenKind::Dot)),
+            '=' => Some(self.next_token_from_char_or_chars(
                 '>',
-                line,
                 TokenKind::Equal,
                 TokenKind::ThickArrow,
             )),
-            '(' => Some(self.new_token_from_char(line, TokenKind::LeftParen)),
-            ')' => Some(self.new_token_from_char(line, TokenKind::RightParen)),
-            '{' => Some(self.new_token_from_char(line, TokenKind::LeftBrace)),
-            '}' => Some(self.new_token_from_char(line, TokenKind::RightBrace)),
-            '[' => Some(self.new_token_from_char(line, TokenKind::LeftBracket)),
-            ']' => Some(self.new_token_from_char(line, TokenKind::RightBracket)),
-            '+' => Some(self.new_token_from_char(line, TokenKind::Plus)),
-            '-' => Some(self.new_token_from_char_or_chars(
-                '>',
-                line,
-                TokenKind::Minus,
-                TokenKind::Arrow,
-            )),
-            '/' => Some(self.new_token_from_char(line, TokenKind::Slash)),
-            '*' => Some(self.new_token_from_char(line, TokenKind::Star)),
-            ',' => Some(self.new_token_from_char(line, TokenKind::Coma)),
-            ';' => Some(self.new_token_from_char(line, TokenKind::Semi)),
-            ':' => Some(self.new_token_from_char(line, TokenKind::Colon)),
-            '^' => Some(self.new_token_from_char(line, TokenKind::Caret)),
-            '|' => Some(self.new_token_from_char(line, TokenKind::Pipe)),
-            c if Self::is_start_char(c) => self.ident_token(line),
-            c if c.is_numeric() => self.num_token(line),
-            '"' => self.string_token(line),
+            '(' => Some(self.next_token_from_char(TokenKind::LeftParen)),
+            ')' => Some(self.next_token_from_char(TokenKind::RightParen)),
+            '{' => Some(self.next_token_from_char(TokenKind::LeftBrace)),
+            '}' => Some(self.next_token_from_char(TokenKind::RightBrace)),
+            '[' => Some(self.next_token_from_char(TokenKind::LeftBracket)),
+            ']' => Some(self.next_token_from_char(TokenKind::RightBracket)),
+            '+' => Some(self.next_token_from_char(TokenKind::Plus)),
+            '-' => {
+                Some(self.next_token_from_char_or_chars('>', TokenKind::Minus, TokenKind::Arrow))
+            }
+            '/' => Some(self.next_token_from_char(TokenKind::Slash)),
+            '*' => Some(self.next_token_from_char(TokenKind::Star)),
+            ',' => Some(self.next_token_from_char(TokenKind::Coma)),
+            ';' => Some(self.next_token_from_char(TokenKind::Semi)),
+            ':' => Some(self.next_token_from_char(TokenKind::Colon)),
+            '^' => Some(self.next_token_from_char(TokenKind::Caret)),
+            '|' => Some(self.next_token_from_char(TokenKind::Pipe)),
+            c if Self::is_start_char(c) => self.ident_token(),
+            c if c.is_numeric() => self.num_token(),
+            '"' => self.string_token(),
             _ => {
-                self.diag.report(format!("Unrecognised char '{}'", c), line);
-                Some(self.new_token_from_char(line, TokenKind::Error))
+                self.diag
+                    .report(format!("Unrecognised char '{}'", c), self.current_loc());
+                Some(self.next_token_from_char(TokenKind::Error))
             }
         }
     }

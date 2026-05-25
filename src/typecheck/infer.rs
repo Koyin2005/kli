@@ -1,13 +1,16 @@
-use crate::types::{FunctionType, Region, Type};
+use crate::{
+    src_loc::SrcLoc,
+    types::{FunctionType, Region, Type},
+};
 #[derive(Debug)]
 pub struct TypeVarInfo {
     ty: Option<Type>,
-    line: usize,
+    loc: SrcLoc,
 }
 #[derive(Debug)]
 pub struct RegionVarInfo {
     region: Option<Region>,
-    line: usize,
+    loc: SrcLoc,
 }
 pub struct TypeInfer {
     pub type_vars: Vec<TypeVarInfo>,
@@ -24,24 +27,24 @@ impl TypeInfer {
         self.type_vars.clear();
         self.region_vars.clear();
     }
-    pub fn fresh_region(&mut self, line: usize) -> usize {
+    pub fn fresh_region(&mut self, loc: SrcLoc) -> usize {
         let next_var = self.region_vars.len();
-        self.region_vars.push(RegionVarInfo { region: None, line });
+        self.region_vars.push(RegionVarInfo { region: None, loc });
         next_var
     }
-    pub fn fresh_ty(&mut self, line: usize) -> usize {
+    pub fn fresh_ty(&mut self, loc: SrcLoc) -> usize {
         let next_var = self.type_vars.len();
-        self.type_vars.push(TypeVarInfo { ty: None, line });
+        self.type_vars.push(TypeVarInfo { ty: None, loc });
         next_var
     }
-    pub fn unsolved_var_lines(&self) -> Vec<usize> {
+    pub fn unsolved_locs(&self) -> Vec<SrcLoc> {
         self.type_vars
             .iter()
-            .filter_map(|var| var.ty.is_none().then_some(var.line))
+            .filter_map(|var| var.ty.is_none().then_some(var.loc.clone()))
             .chain(
                 self.region_vars
                     .iter()
-                    .filter_map(|var| var.region.is_none().then_some(var.line)),
+                    .filter_map(|var| var.region.is_none().then_some(var.loc.clone())),
             )
             .collect()
     }
@@ -50,7 +53,7 @@ impl TypeInfer {
             Region::Infer(var) => {
                 if let RegionVarInfo {
                     region: Some(region),
-                    line: _,
+                    loc: _,
                 } = &self.region_vars[var]
                 {
                     self.simplify_region(region.clone())
@@ -85,7 +88,7 @@ impl TypeInfer {
             Type::Infer(var) => {
                 if let TypeVarInfo {
                     ty: Some(ty),
-                    line: _,
+                    loc: _,
                 } = &self.type_vars[var]
                 {
                     self.simplify_type(ty.clone())

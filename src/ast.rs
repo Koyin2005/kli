@@ -1,10 +1,7 @@
 use std::fmt::Display;
 
-#[derive(Debug, Clone)]
-pub struct Ident {
-    pub content: String,
-    pub line: usize,
-}
+use crate::{ident::Ident, src_loc::SrcLoc};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mutable {
     Mutable,
@@ -17,7 +14,7 @@ pub enum StmtKind {
 }
 #[derive(Debug)]
 pub struct Stmt {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: StmtKind,
 }
 #[derive(Debug)]
@@ -27,7 +24,7 @@ pub struct BlockBody {
 }
 #[derive(Debug)]
 pub struct Expr {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: ExprKind,
 }
 impl Expr {
@@ -36,13 +33,13 @@ impl Expr {
             ExprKind::Path(path) => match path.into_head() {
                 Ok(head) => Ok(Place::Ident(head)),
                 Err(path) => Err(Expr {
-                    line: self.line,
+                    loc: self.loc,
                     kind: ExprKind::Path(path),
                 }),
             },
             ExprKind::Deref(expr) => {
-                let line = expr.line;
-                Ok(Place::Deref(Box::new(*expr), line))
+                let loc = expr.loc.clone();
+                Ok(Place::Deref(Box::new(*expr), loc))
             }
             _ => Err(self),
         }
@@ -58,11 +55,11 @@ pub enum BinaryOp {
 #[derive(Debug)]
 pub enum Place {
     Ident(Ident),
-    Deref(Box<Expr>, usize),
+    Deref(Box<Expr>, SrcLoc),
 }
 #[derive(Debug)]
 pub struct Pattern {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: PatternKind,
 }
 #[derive(Debug)]
@@ -96,7 +93,7 @@ pub struct Path {
 impl Path {
     pub fn new(segments: Vec<Ident>) -> Self {
         assert!(
-            segments.len() > 0,
+            !segments.is_empty(),
             "Path must always have more than 1 segment"
         );
         Self { segments }
@@ -161,6 +158,13 @@ impl IntoIterator for Path {
 }
 
 #[derive(Debug)]
+pub struct BorrowExpr {
+    pub mutable: Mutable,
+    pub var_name: Ident,
+    pub region: Ident,
+    pub body: Box<Expr>,
+}
+#[derive(Debug)]
 pub enum ExprKind {
     Unit,
     Annotate(Box<Expr>, Box<Type>),
@@ -171,13 +175,13 @@ pub enum ExprKind {
     Some(Box<Expr>),
     None(Option<Type>),
     Call(Box<Expr>, Vec<Expr>),
-    Borrow(Mutable, Ident, Ident, Box<Expr>),
+    Borrow(Box<BorrowExpr>),
     Case(Box<Expr>, Vec<CaseArm>),
-    For(Pattern, Box<Expr>, Box<Expr>),
+    For(Box<Pattern>, Box<Expr>, Box<Expr>),
     Assign(Place, Box<Expr>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Path(Path),
-    Lambda(Lambda),
+    Lambda(Box<Lambda>),
     Block(BlockBody),
     Deref(Box<Expr>),
     Bool(bool),
@@ -185,7 +189,7 @@ pub enum ExprKind {
 }
 #[derive(Debug, Clone)]
 pub struct Generics {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub names: Vec<Ident>,
 }
 
@@ -217,7 +221,7 @@ pub enum TypeKind {
 }
 #[derive(Debug, Clone)]
 pub struct Type {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub kind: TypeKind,
 }
 #[derive(Debug, Clone)]
@@ -233,7 +237,7 @@ pub struct Lambda {
 }
 #[derive(Debug)]
 pub struct Function {
-    pub line: usize,
+    pub loc: SrcLoc,
     pub name: Ident,
     pub generics: Option<Generics>,
     pub params: Vec<Param>,
@@ -242,7 +246,7 @@ pub struct Function {
 }
 #[derive(Debug, Clone)]
 pub enum Region {
-    Static(usize),
+    Static(SrcLoc),
     Named(Ident),
 }
 

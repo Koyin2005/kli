@@ -1,8 +1,11 @@
 use std::collections::{BTreeMap, HashMap};
+use std::rc::Rc;
 
-use crate::ast::{Ident, Path, StmtKind};
+use crate::ast::{BorrowExpr, Path, StmtKind};
 use crate::diagnostics::DiagnosticReporter;
+use crate::ident::Ident;
 use crate::resolved_ast::{Builtin, FunctionId, GenericKind, LocalRegionId, VarId};
+use crate::src_loc::SrcLoc;
 use crate::{ast, names, resolved_ast as res};
 
 pub struct ResolveErrored;
@@ -13,9 +16,10 @@ enum NameResolutionError {
 }
 #[derive(Default)]
 struct ModuleInfo {
-    env: HashMap<String, Res>,
+    env: Scope,
 }
 
+type Scope = HashMap<Rc<str>, Res>;
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Res {
     LocalRegion(LocalRegionId),
@@ -27,14 +31,14 @@ pub(super) enum Res {
 }
 pub struct Resolve {
     modules: Vec<ModuleInfo>,
-    env: HashMap<String, Res>,
-    prev_envs: Vec<HashMap<String, Res>>,
+    env: Scope,
+    prev_envs: Vec<Scope>,
     functions: Vec<Option<res::Function>>,
     vars: usize,
     regions: usize,
     generics: usize,
-    prev_kinds: Vec<HashMap<String, GenericKind>>,
-    generic_kinds: HashMap<String, GenericKind>,
+    prev_kinds: Vec<HashMap<Rc<str>, GenericKind>>,
+    generic_kinds: HashMap<Rc<str>, GenericKind>,
     diag: DiagnosticReporter,
 }
 impl Default for Resolve {
@@ -44,34 +48,25 @@ impl Default for Resolve {
 }
 impl Resolve {
     pub fn new() -> Self {
-        let env = HashMap::from([
+        let env = Scope::from([
+            (names::ALLOC_BOX.into(), Res::Builtin(Builtin::AllocBox)),
+            (names::DEALLOC_BOX.into(), Res::Builtin(Builtin::DeallocBox)),
+            (names::DEREF_BOX.into(), Res::Builtin(Builtin::DerefBox)),
             (
-                names::ALLOC_BOX.to_string(),
-                Res::Builtin(Builtin::AllocBox),
-            ),
-            (
-                names::DEALLOC_BOX.to_string(),
-                Res::Builtin(Builtin::DeallocBox),
-            ),
-            (
-                names::DEREF_BOX.to_string(),
-                Res::Builtin(Builtin::DerefBox),
-            ),
-            (
-                names::DEREF_BOX_MUT.to_string(),
+                names::DEREF_BOX_MUT.into(),
                 Res::Builtin(Builtin::DerefBoxMut),
             ),
             (
-                names::DESTROY_LIST.to_string(),
+                names::DESTROY_LIST.into(),
                 Res::Builtin(Builtin::DestroyList),
             ),
-            (names::FREEZE.to_string(), Res::Builtin(Builtin::Freeze)),
+            (names::FREEZE.into(), Res::Builtin(Builtin::Freeze)),
             (
-                names::DESTROY_STRING.to_string(),
+                names::DESTROY_STRING.into(),
                 Res::Builtin(Builtin::DestroyString),
             ),
-            (names::REPLACE.to_string(), Res::Builtin(Builtin::Replace)),
-            (names::SWAP.to_string(), Res::Builtin(Builtin::Swap)),
+            (names::REPLACE.into(), Res::Builtin(Builtin::Replace)),
+            (names::SWAP.into(), Res::Builtin(Builtin::Swap)),
         ]);
         Self {
             modules: Vec::new(),
@@ -99,20 +94,20 @@ impl Resolve {
 
         None
     }
-    fn invalid_path_start_error(&mut self, path: &Path, line: usize) {
+    fn invalid_path_start_error(&mut self, path: &Path, loc: SrcLoc) {
         self.diag
-            .report(format!("Invalid path '{}'", path.display()), line);
+            .report(format!("Invalid path '{}'", path.display()), loc);
     }
-    fn path_not_in_scope_error(&mut self, path: &Path, line: usize) {
+    fn path_not_in_scope_error(&mut self, path: &Path, loc: SrcLoc) {
         self.diag
-            .report(format!("'{}' not in scope", path.display()), line);
+            .report(format!("'{}' not in scope", path.display()), loc);
     }
-    fn not_in_scope_error(&mut self, name: &str, line: usize) {
-        self.diag.report(format!("'{}' not in scope", name), line);
+    fn not_in_scope_error(&mut self, name: &str, loc: SrcLoc) {
+        self.diag.report(format!("'{}' not in scope", name), loc);
     }
-    fn cannot_use_as_error(&mut self, name: &str, expected: &str, line: usize) {
+    fn cannot_use_as_error(&mut self, name: &str, expected: &str, loc: SrcLoc) {
         self.diag
-            .report(format!("Cannot use '{}' as {}", name, expected), line);
+            .report(format!("Cannot use '{}' as {}", name, expected), loc);
     }
     fn declare_function(&mut self, name: Ident) -> FunctionId {
         let function = FunctionId::new(self.functions.len());
@@ -122,7 +117,7 @@ impl Resolve {
                 if let Res::Function(_) = occupied.get() {
                     self.diag.report(
                         format!("Cannot redeclare function '{}'", occupied.key()),
-                        name.line,
+                        name.loc.clone(),
                     );
                 } else {
                     occupied.insert(Res::Function(function));
@@ -137,10 +132,10 @@ impl Resolve {
     fn resolve_region(&mut self, region: ast::Region) -> res::Region {
         match region {
             ast::Region::Named(name) => res::Region {
-                line: name.line,
+                loc: name.loc.clone(),
                 kind: match self.resolve_name(&name.content) {
                     None => {
-                        self.not_in_scope_error(&name.content, name.line);
+                        self.not_in_scope_error(&name.content, name.loc);
                         res::RegionKind::Unknown
                     }
                     Some(Res::LocalRegion(region)) => res::RegionKind::Local(name.content, region),
@@ -152,19 +147,19 @@ impl Resolve {
                         {
                             self.diag.report(
                                 format!("Generic kind mismatch for '{}'", name.content),
-                                name.line,
+                                name.loc,
                             );
                         }
                         res::RegionKind::Param(name.content, index)
                     }
                     Some(Res::Builtin(_) | Res::Function(_) | Res::Var(_) | Res::Module(_)) => {
-                        self.cannot_use_as_error(&name.content, "region", name.line);
+                        self.cannot_use_as_error(&name.content, "region", name.loc);
                         res::RegionKind::Unknown
                     }
                 },
             },
-            ast::Region::Static(line) => res::Region {
-                line,
+            ast::Region::Static(loc) => res::Region {
+                loc,
                 kind: res::RegionKind::Static,
             },
         }
@@ -202,7 +197,7 @@ impl Resolve {
         }
         (
             res::Generics {
-                line: generics.line,
+                loc: generics.loc,
                 names,
                 kinds,
             },
@@ -238,7 +233,7 @@ impl Resolve {
             ),
             ast::TypeKind::Named(name) => match self.resolve_name(&name.content) {
                 None => {
-                    self.not_in_scope_error(&name.content, name.line);
+                    self.not_in_scope_error(&name.content, name.loc);
                     res::TypeKind::Unknown
                 }
                 Some(Res::Param(index)) => {
@@ -249,7 +244,7 @@ impl Resolve {
                     {
                         self.diag.report(
                             format!("Generic kind mismatch for '{}'", name.content),
-                            name.line,
+                            name.loc,
                         );
                     }
                     res::TypeKind::Param(name.content, index)
@@ -261,35 +256,32 @@ impl Resolve {
                     | Res::Var(_)
                     | Res::Module(_),
                 ) => {
-                    self.cannot_use_as_error(&name.content, "type", name.line);
+                    self.cannot_use_as_error(&name.content, "type", name.loc);
                     res::TypeKind::Unknown
                 }
             },
         };
-        res::Type {
-            line: ty.line,
-            kind,
-        }
+        res::Type { loc: ty.loc, kind }
     }
-    fn declare_region(&mut self, region: String) -> LocalRegionId {
+    fn declare_region(&mut self, region: Rc<str>) -> LocalRegionId {
         let region_id = LocalRegionId::new(self.vars);
         self.regions += 1;
         self.env.insert(region, Res::LocalRegion(region_id));
         region_id
     }
-    fn declare_var(&mut self, var: String) -> VarId {
+    fn declare_var(&mut self, var: Rc<str>) -> VarId {
         let var_id = VarId::new(self.vars);
         self.vars += 1;
         self.env.insert(var, Res::Var(var_id));
         var_id
     }
-    fn declare_module(&mut self, name: String) -> usize {
+    fn declare_module(&mut self, name: Rc<str>) -> usize {
         let new_module = self.modules.len();
         self.modules.push(Default::default());
         self.env.insert(name, Res::Module(new_module));
         new_module
     }
-    fn declare_param(&mut self, name: String) -> usize {
+    fn declare_param(&mut self, name: Rc<str>) -> usize {
         let generic = self.generics;
         self.generics += 1;
         self.env.insert(name, Res::Param(generic));
@@ -317,19 +309,18 @@ impl Resolve {
             .expect("There should be a pushed scope");
         value
     }
-    fn take_new_scope(&mut self, f: impl FnOnce(&mut Self)) -> HashMap<String, Res> {
+    fn take_new_scope(&mut self, f: impl FnOnce(&mut Self)) -> Scope {
         self.prev_envs.push(std::mem::take(&mut self.env));
         f(self);
-        let env = std::mem::replace(
+        std::mem::replace(
             &mut self.env,
             self.prev_envs
                 .pop()
                 .expect("There should be a pushed scope"),
-        );
-        env
+        )
     }
     fn resolve_pattern(&mut self, pattern: ast::Pattern) -> res::Pattern {
-        let line = pattern.line;
+        let loc = pattern.loc;
         let kind = match pattern.kind {
             ast::PatternKind::Bool(value) => res::PatternKind::Bool(value),
             ast::PatternKind::None => res::PatternKind::None,
@@ -349,7 +340,7 @@ impl Resolve {
                 )
             }
         };
-        res::Pattern { line, kind }
+        res::Pattern { loc, kind }
     }
     fn resolve_let_binding(&mut self, let_binding: ast::LetBinding) -> res::LetBinding {
         let value = self.resolve_expr(let_binding.value);
@@ -359,15 +350,15 @@ impl Resolve {
     }
     fn resolve_place(&mut self, place: ast::Place) -> Option<res::Place> {
         match place {
-            ast::Place::Deref(expr, line) => Some(res::Place {
-                line,
+            ast::Place::Deref(expr, loc) => Some(res::Place {
+                loc,
                 kind: res::PlaceKind::Deref(Box::new(self.resolve_expr(*expr))),
             }),
             ast::Place::Ident(name) => Some(res::Place {
-                line: name.line,
+                loc: name.loc.clone(),
                 kind: match self.resolve_name(&name.content) {
                     None => {
-                        self.not_in_scope_error(&name.content, name.line);
+                        self.not_in_scope_error(&name.content, name.loc.clone());
                         return None;
                     }
                     Some(Res::Var(var)) => res::PlaceKind::Var(res::Var(name.content, var)),
@@ -378,8 +369,10 @@ impl Resolve {
                         | Res::LocalRegion(_)
                         | Res::Module(_),
                     ) => {
-                        self.diag
-                            .report(format!("Can't use '{}' as place", name.content), name.line);
+                        self.diag.report(
+                            format!("Can't use '{}' as place", name.content),
+                            name.loc.clone(),
+                        );
                         return None;
                     }
                 },
@@ -387,19 +380,19 @@ impl Resolve {
         }
     }
     fn resolve_stmt(&mut self, stmt: ast::Stmt) -> res::Stmt {
-        let line = stmt.line;
+        let loc = stmt.loc;
         match stmt.kind {
             StmtKind::Let(let_binding) => {
                 let let_binding = self.resolve_let_binding(let_binding);
                 res::Stmt {
-                    line,
-                    kind: res::StmtKind::Let(let_binding),
+                    loc,
+                    kind: res::StmtKind::Let(Box::new(let_binding)),
                 }
             }
             StmtKind::Expr(expr) => {
                 let expr = self.resolve_expr(expr);
                 res::Stmt {
-                    line,
+                    loc,
                     kind: res::StmtKind::Expr(expr),
                 }
             }
@@ -431,7 +424,7 @@ impl Resolve {
         Ok(curr)
     }
     fn resolve_expr(&mut self, expr: ast::Expr) -> res::Expr {
-        let line = expr.line;
+        let loc = expr.loc;
         let kind = match expr.kind {
             ast::ExprKind::Block(block) => self.in_scope(|this| {
                 res::ExprKind::Block(res::BlockBody {
@@ -445,7 +438,7 @@ impl Resolve {
             }),
 
             ast::ExprKind::Unit => res::ExprKind::Unit,
-            ast::ExprKind::String(value) => res::ExprKind::String(value),
+            ast::ExprKind::String(value) => res::ExprKind::String(value.into()),
             ast::ExprKind::Number(value) => res::ExprKind::Int(value as i64),
             ast::ExprKind::Bool(value) => res::ExprKind::Bool(value),
             ast::ExprKind::None(ty) => res::ExprKind::None(ty.map(|ty| self.resolve_type(ty))),
@@ -476,35 +469,34 @@ impl Resolve {
                 Box::new(self.resolve_expr(*left)),
                 Box::new(self.resolve_expr(*right)),
             ),
-            ast::ExprKind::Path(path) => {
-                let line = expr.line;
-                match self.resolve_path(&path) {
-                    Err(error) => {
-                        match error {
-                            NameResolutionError::NotInScope => {
-                                self.path_not_in_scope_error(&path, line);
-                            }
-                            NameResolutionError::InvalidPathStart => {
-                                self.invalid_path_start_error(&path, line);
-                            }
+            ast::ExprKind::Path(path) => match self.resolve_path(&path) {
+                Err(error) => {
+                    match error {
+                        NameResolutionError::NotInScope => {
+                            self.path_not_in_scope_error(&path, loc.clone());
                         }
+                        NameResolutionError::InvalidPathStart => {
+                            self.invalid_path_start_error(&path, loc.clone());
+                        }
+                    }
+                    res::ExprKind::Err
+                }
+                Ok(res) => match res {
+                    Res::Builtin(builtin) => res::ExprKind::Builtin(builtin),
+                    Res::Var(id) => res::ExprKind::Var(path.into_last().content, id),
+                    Res::Function(function) => {
+                        res::ExprKind::Function(path.into_last().content, function)
+                    }
+                    Res::Param(_) | Res::LocalRegion(_) => {
+                        self.diag.report(
+                            format!("Can't use '{}' as a value", path.display()),
+                            loc.clone(),
+                        );
                         res::ExprKind::Err
                     }
-                    Ok(res) => match res {
-                        Res::Builtin(builtin) => res::ExprKind::Builtin(builtin),
-                        Res::Var(id) => res::ExprKind::Var(path.into_last().content, id),
-                        Res::Function(function) => {
-                            res::ExprKind::Function(path.into_last().content, function)
-                        }
-                        Res::Param(_) | Res::LocalRegion(_) => {
-                            self.diag
-                                .report(format!("Can't use '{}' as a value", path.display()), line);
-                            res::ExprKind::Err
-                        }
-                        Res::Module(_) => todo!("Handle module"),
-                    },
-                }
-            }
+                    Res::Module(_) => todo!("Handle module"),
+                },
+            },
             ast::ExprKind::Lambda(lambda) => self.in_scope(|this| {
                 res::ExprKind::Lambda(Box::new(res::Lambda {
                     params: lambda
@@ -525,23 +517,33 @@ impl Resolve {
                 let value = self.resolve_expr(*value);
                 let Some(place) = place else {
                     return res::Expr {
-                        line,
+                        loc: loc.clone(),
                         kind: res::ExprKind::Err,
                     };
                 };
                 res::ExprKind::Assign(place, Box::new(value))
             }
-            ast::ExprKind::Borrow(mutable, var_name, region_name, body) => {
+            ast::ExprKind::Borrow(borrow_expr) => {
+                let BorrowExpr {
+                    mutable,
+                    var_name,
+                    region: region_name,
+                    body,
+                } = *borrow_expr;
                 let (body, new_var, var, region) = self.in_scope(|this| {
                     let region = this.declare_region(region_name.content.clone());
                     let var = match this.resolve_name(&var_name.content) {
                         None => {
-                            this.not_in_scope_error(&var_name.content, var_name.line);
+                            this.not_in_scope_error(&var_name.content, var_name.loc.clone());
                             None
                         }
                         Some(Res::Var(var)) => Some(var),
                         Some(_) => {
-                            this.cannot_use_as_error(&var_name.content, "variable", var_name.line);
+                            this.cannot_use_as_error(
+                                &var_name.content,
+                                "variable",
+                                var_name.loc.clone(),
+                            );
                             None
                         }
                     };
@@ -577,13 +579,13 @@ impl Resolve {
             ast::ExprKind::For(pattern, iterator, body) => {
                 let iterator = self.resolve_expr(*iterator);
                 self.in_scope(|this| {
-                    let pattern = this.resolve_pattern(pattern);
+                    let pattern = this.resolve_pattern(*pattern);
                     let body = this.resolve_expr(*body);
                     res::ExprKind::For(pattern, Box::new(iterator), Box::new(body))
                 })
             }
         };
-        res::Expr { line, kind }
+        res::Expr { loc, kind }
     }
     fn resolve_signature(
         &mut self,
@@ -595,7 +597,7 @@ impl Resolve {
             .map(|param| {
                 let var = self.declare_var(param.name.content.clone());
                 res::Param {
-                    line: param.name.line,
+                    loc: param.name.loc,
                     var: res::Var(param.name.content, var),
                     ty: self.resolve_type(param.ty),
                 }
@@ -619,7 +621,7 @@ impl Resolve {
             };
             let body = this.resolve_expr(function.body);
             res::Function {
-                line: function.line,
+                loc: function.loc,
                 name: function.name,
                 generics,
                 params,
@@ -631,7 +633,7 @@ impl Resolve {
         self.vars = 0;
         function
     }
-    fn declare(&mut self, modules: &BTreeMap<String, ast::Module>) {
+    fn declare(&mut self, modules: &BTreeMap<Rc<str>, ast::Module>) {
         for (i, (name, module)) in modules.iter().enumerate() {
             self.declare_module(name.clone());
             let scope = self.take_new_scope(|this| {
@@ -644,7 +646,7 @@ impl Resolve {
     }
     pub fn resolve(
         mut self,
-        modules: BTreeMap<String, ast::Module>,
+        modules: BTreeMap<Rc<str>, ast::Module>,
     ) -> Result<res::Program, ResolveErrored> {
         //First pass : Declare everything
         self.declare(&modules);
