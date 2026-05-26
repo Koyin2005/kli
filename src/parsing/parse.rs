@@ -2,9 +2,7 @@ use std::{iter::Peekable, rc::Rc, vec::IntoIter};
 
 use crate::{
     ast::{
-        BinaryOp, BlockBody, BorrowExpr, CaseArm, Expr, ExprKind, Function, FunctionType, Generics,
-        IsResource, Lambda, LetBinding, Module, Mutable, Param, Path, Pattern, PatternKind, Region,
-        Stmt, StmtKind, Type, TypeKind,
+        BinaryOp, BlockBody, BorrowExpr, CaseArm, Expr, ExprKind, FieldInit, Function, FunctionType, Generics, IsResource, Lambda, LetBinding, Module, Mutable, Param, Path, Pattern, PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeKind
     },
     diagnostics::DiagnosticReporter,
     ident::Ident,
@@ -55,6 +53,12 @@ impl Parser {
         };
         token.kind == *kind
     }
+    fn check_is_not_token(&mut self, kind: &TokenKind) -> bool{
+        let Some(token) = self.peek_token() else {
+            return false;
+        };
+        token.kind != *kind
+    }
     fn check_token_is_ident(&mut self) -> bool {
         let Some(token) = self.peek_token() else {
             return false;
@@ -75,6 +79,14 @@ impl Parser {
             true
         } else {
             false
+        }
+    }
+    fn not_matches_token(&mut self, kind: &TokenKind) -> bool {
+        if self.check_token(kind) {
+            self.next_token();
+            false
+        } else {
+            true
         }
     }
     fn match_ident(&mut self) -> Option<Ident> {
@@ -359,6 +371,26 @@ impl Parser {
             kind: StmtKind::Let(binding),
         })
     }
+    fn parse_record_expr(&mut self, loc: SrcLoc) -> Result<Expr,ParseError>{
+        self.next_token();
+        let mut fields = Vec::new();
+        while self.check_is_not_token(&TokenKind::RightBrace) {
+            let name = self.expect_ident("field name")?;
+            let _ = self.expect(&TokenKind::Equal);
+            let value = self.parse_expr()?;
+            fields.push(FieldInit{
+                name,
+                value
+            });
+            if self.not_matches_token(&TokenKind::Coma){
+                break;
+            }
+        }
+        self.expect(&TokenKind::RightBrace)?;
+        Ok(Expr { loc, kind: ExprKind::Record(RecordExpr{
+            fields
+        }) })
+    }
     fn parse_paren_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.next_token();
         if self.check_token(&TokenKind::RightParen) {
@@ -533,9 +565,9 @@ impl Parser {
                     self.next_token();
                     let mut values = Vec::new();
                     let _ = self.expect(&TokenKind::LeftBracket);
-                    while !self.check_token(&TokenKind::RightBracket) {
+                    while self.check_is_not_token(&TokenKind::RightBracket) {
                         values.push(self.parse_expr()?);
-                        if !self.matches_token(&TokenKind::Coma) {
+                        if self.not_matches_token(&TokenKind::Coma) {
                             break;
                         }
                     }
@@ -556,7 +588,7 @@ impl Parser {
                             None
                         };
                         params.push((name, param_type));
-                        if self.match_token(&TokenKind::Coma).is_none() {
+                        if self.not_matches_token(&TokenKind::Coma) {
                             break;
                         }
                     }
@@ -572,6 +604,9 @@ impl Parser {
                             body: Box::new(body),
                         })),
                     })
+                }
+                TokenKind::LeftBrace => {
+                    self.parse_record_expr(loc)
                 }
                 ref kind => {
                     let msg = format!("Expected valid expr but got {kind}");
@@ -591,12 +626,10 @@ impl Parser {
                     TokenKind::LeftParen => {
                         self.next_token();
                         let mut args = Vec::new();
-                        while self
-                            .peek_token()
-                            .is_some_and(|token| !matches!(token.kind, TokenKind::RightParen))
+                        while self.check_is_not_token(&TokenKind::RightParen)
                         {
                             args.push(self.parse_expr()?);
-                            if self.match_token(&TokenKind::Coma).is_none() {
+                            if self.not_matches_token(&TokenKind::Coma) {
                                 break;
                             }
                         }
@@ -665,7 +698,7 @@ impl Parser {
             let mut names = Vec::new();
             while let Some(name) = self.match_ident() {
                 names.push(name);
-                if self.match_token(&TokenKind::Coma).is_none() {
+                if self.not_matches_token(&TokenKind::Coma) {
                     break;
                 }
             }
@@ -675,15 +708,32 @@ impl Parser {
             Ok(None)
         }
     }
+    fn parse_record_field(&mut self) -> Result<RecordField,ParseError>{
+        let name = self.expect_ident("record field")?;
+        let _ = self.expect(&TokenKind::Colon);
+        let ty = self.parse_type()?;
+        Ok(RecordField { name, ty })
+    }
+    fn parse_record_type(&mut self) -> Result<RecordType,ParseError>{
+        let _ = self.expect(&TokenKind::LeftBrace);
+        let mut fields = Vec::new();
+        while self.check_is_not_token(&TokenKind::RightBrace) {
+            fields.push(self.parse_record_field()?);
+            if self.not_matches_token(&TokenKind::Coma){
+                break;
+            }
+        }
+        let _ = self.expect(&TokenKind::RightBrace);
+        Ok(RecordType { fields })
+    }
     fn parse_type_function(&mut self) -> Result<FunctionType, ParseError> {
         let _ = self.expect(&TokenKind::Fun);
         let _ = self.expect(&TokenKind::LeftParen);
         let mut params = Vec::new();
-        while let Some(tok) = self.peek_token()
-            && !matches!(tok.kind,TokenKind::RightParen)
+        while self.check_is_not_token(&TokenKind::RightParen)
         {
             params.push(self.parse_type()?);
-            if self.match_token(&TokenKind::Coma).is_none() {
+            if self.not_matches_token(&TokenKind::Coma) {
                 break;
             }
         }
@@ -819,6 +869,10 @@ impl Parser {
                     kind: TypeKind::Char,
                 })
             }
+            TokenKind::LeftBrace => {
+                let record_ty = self.parse_record_type()?;
+                Ok(Type { loc, kind: TypeKind::Record(record_ty)})
+            }
             _ => Err(type_parse_error(self, loc)),
         }
     }
@@ -838,7 +892,7 @@ impl Parser {
         while self.check_token_is_ident() {
             let param = self.parse_param()?;
             params.push(param);
-            if self.match_token(&TokenKind::Coma).is_none() {
+            if self.not_matches_token(&TokenKind::Coma) {
                 break;
             }
         }
@@ -860,8 +914,7 @@ impl Parser {
         let mut functions = Vec::new();
         while self.peek_token().is_some() {
             let Ok(function) = self.parse_function() else {
-                while let Some(token) = self.peek_token()
-                    && !matches!(token.kind, TokenKind::Fun)
+                while self.check_is_not_token(&TokenKind::Fun)
                 {
                     self.next_token();
                 }

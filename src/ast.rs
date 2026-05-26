@@ -156,7 +156,15 @@ impl IntoIterator for Path {
         self.segments.into_iter()
     }
 }
-
+#[derive(Debug)]
+pub struct FieldInit{
+    pub name : Ident,
+    pub value : Expr
+}
+#[derive(Debug)]
+pub struct RecordExpr{
+    pub fields : Vec<FieldInit>
+}
 #[derive(Debug)]
 pub struct BorrowExpr {
     pub mutable: Mutable,
@@ -186,6 +194,7 @@ pub enum ExprKind {
     Deref(Box<Expr>),
     Bool(bool),
     Number(u64),
+    Record(RecordExpr)
 }
 #[derive(Debug, Clone)]
 pub struct Generics {
@@ -205,12 +214,22 @@ pub struct FunctionType {
     pub return_type: Box<Type>,
 }
 #[derive(Debug, Clone)]
+pub struct RecordField{
+    pub name : Ident,
+    pub ty : Type
+}
+#[derive(Debug, Clone)]
+pub struct RecordType{
+    pub fields : Vec<RecordField>
+}
+#[derive(Debug, Clone)]
 pub enum TypeKind {
     Int,
     Bool,
     String,
     Unit,
     Char,
+    Record(RecordType),
     Named(Ident),
     Function(FunctionType),
     Option(Box<Type>),

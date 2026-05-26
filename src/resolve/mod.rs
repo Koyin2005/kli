@@ -214,6 +214,7 @@ impl Resolve {
             ast::TypeKind::Box(ty) => res::TypeKind::Box(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::Option(ty) => res::TypeKind::Option(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::List(ty) => res::TypeKind::List(Box::new(self.resolve_type(*ty))),
+            ast::TypeKind::Record(ast::RecordType{fields}) => todo!("Record resolving"),
             ast::TypeKind::Function(ast::FunctionType {
                 resource,
                 params,
@@ -469,6 +470,7 @@ impl Resolve {
                 Box::new(self.resolve_expr(*left)),
                 Box::new(self.resolve_expr(*right)),
             ),
+            ast::ExprKind::Record(record) => todo!("Record expr"),
             ast::ExprKind::Path(path) => match self.resolve_path(&path) {
                 Err(error) => {
                     match error {
