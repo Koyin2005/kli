@@ -271,10 +271,11 @@ impl TypeCheck {
             .iter()
             .position(|f| f.name.content.as_ref() == "main")
         else {
+            let loc = program.functions.last().map(|function| function.body.loc.clone()).unwrap_or(SrcLoc::dummy());
             return self
                 .diag
                 .borrow_mut()
-                .report("Missing main".to_string(), SrcLoc::dummy());
+                .report("Missing main".to_string(), loc);
         };
         let main = &program.functions[main];
         if main.generics.as_ref().is_some_and(|g| g.names.is_empty()) {
