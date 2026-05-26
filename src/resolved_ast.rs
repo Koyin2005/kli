@@ -111,6 +111,11 @@ pub struct BlockBody {
     pub expr: Box<Expr>,
 }
 #[derive(Debug)]
+pub struct FieldInit {
+    pub name: Ident,
+    pub value: Expr,
+}
+#[derive(Debug)]
 pub enum ExprKind {
     Block(BlockBody),
     Unit,
@@ -135,6 +140,7 @@ pub enum ExprKind {
     Print(Option<Box<Expr>>),
     List(Vec<Expr>),
     Call(Box<Expr>, Vec<Expr>),
+    Record(Vec<FieldInit>),
 }
 #[derive(Debug, Clone)]
 pub enum RegionKind {
@@ -195,6 +201,11 @@ pub struct Function {
     pub body: Expr,
 }
 #[derive(Debug)]
+pub struct RecordFieldType {
+    pub name: Ident,
+    pub ty: Type,
+}
+#[derive(Debug)]
 pub enum TypeKind {
     Unit,
     Int,
@@ -209,6 +220,7 @@ pub enum TypeKind {
     Function(IsResource, Vec<Type>, Box<Type>),
     Param(Rc<str>, usize),
     Unknown,
+    Record(Vec<RecordFieldType>),
 }
 #[derive(Debug)]
 pub struct Type {

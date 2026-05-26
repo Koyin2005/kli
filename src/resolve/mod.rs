@@ -103,7 +103,8 @@ impl Resolve {
             .add_diagnostic(format!("'{}' not in scope", path.display()), loc);
     }
     fn not_in_scope_error(&mut self, name: &str, loc: SrcLoc) {
-        self.diag.add_diagnostic(format!("'{}' not in scope", name), loc);
+        self.diag
+            .add_diagnostic(format!("'{}' not in scope", name), loc);
     }
     fn cannot_use_as_error(&mut self, name: &str, expected: &str, loc: SrcLoc) {
         self.diag
@@ -214,7 +215,16 @@ impl Resolve {
             ast::TypeKind::Box(ty) => res::TypeKind::Box(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::Option(ty) => res::TypeKind::Option(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::List(ty) => res::TypeKind::List(Box::new(self.resolve_type(*ty))),
-            ast::TypeKind::Record(ast::RecordType{fields}) => todo!("Record resolving"),
+            ast::TypeKind::Record(ast::RecordType { fields }) => {
+                let fields = fields
+                    .into_iter()
+                    .map(|ast::RecordField { name, ty }| res::RecordFieldType {
+                        name,
+                        ty: self.resolve_type(ty),
+                    })
+                    .collect();
+                res::TypeKind::Record(fields)
+            }
             ast::TypeKind::Function(ast::FunctionType {
                 resource,
                 params,
@@ -470,7 +480,15 @@ impl Resolve {
                 Box::new(self.resolve_expr(*left)),
                 Box::new(self.resolve_expr(*right)),
             ),
-            ast::ExprKind::Record(record) => todo!("Record expr"),
+            ast::ExprKind::Record(ast::RecordExpr { fields }) => res::ExprKind::Record(
+                fields
+                    .into_iter()
+                    .map(|field| res::FieldInit {
+                        name: field.name,
+                        value: self.resolve_expr(field.value),
+                    })
+                    .collect(),
+            ),
             ast::ExprKind::Path(path) => match self.resolve_path(&path) {
                 Err(error) => {
                     match error {

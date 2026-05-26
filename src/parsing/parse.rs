@@ -2,7 +2,10 @@ use std::{iter::Peekable, rc::Rc, vec::IntoIter};
 
 use crate::{
     ast::{
-        BinaryOp, BlockBody, BorrowExpr, CaseArm, Expr, ExprKind, FieldInit, Function, FunctionType, Generics, IsResource, Lambda, LetBinding, Module, Mutable, Param, Path, Pattern, PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeKind
+        BinaryOp, BlockBody, BorrowExpr, CaseArm, Expr, ExprKind, FieldInit, Function,
+        FunctionType, Generics, IsResource, Lambda, LetBinding, Module, Mutable, Param, Path,
+        Pattern, PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type,
+        TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::Ident,
@@ -53,7 +56,7 @@ impl Parser {
         };
         token.kind == *kind
     }
-    fn check_is_not_token(&mut self, kind: &TokenKind) -> bool{
+    fn check_is_not_token(&mut self, kind: &TokenKind) -> bool {
         let Some(token) = self.peek_token() else {
             return false;
         };
@@ -63,7 +66,7 @@ impl Parser {
         let Some(token) = self.peek_token() else {
             return false;
         };
-        matches!(token.kind,TokenKind::Ident(_))
+        matches!(token.kind, TokenKind::Ident(_))
     }
     fn match_token(&mut self, kind: &TokenKind) -> Option<Token> {
         let token = self.peek_token()?;
@@ -181,7 +184,8 @@ impl Parser {
                 }
                 _ => Err({
                     let loc = self.current_loc();
-                    self.diag.add_diagnostic("Expected a valid region".to_string(), loc);
+                    self.diag
+                        .add_diagnostic("Expected a valid region".to_string(), loc);
                     ParseError
                 }),
             },
@@ -203,7 +207,8 @@ impl Parser {
         let loc = self.current_loc();
         match self.peek_token() {
             None => {
-                self.diag.add_diagnostic("Expected a pattern".to_string(), loc);
+                self.diag
+                    .add_diagnostic("Expected a pattern".to_string(), loc);
                 Err(ParseError)
             }
             Some(Token { loc: _, kind }) => match kind {
@@ -371,25 +376,23 @@ impl Parser {
             kind: StmtKind::Let(binding),
         })
     }
-    fn parse_record_expr(&mut self, loc: SrcLoc) -> Result<Expr,ParseError>{
+    fn parse_record_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.next_token();
         let mut fields = Vec::new();
         while self.check_is_not_token(&TokenKind::RightBrace) {
             let name = self.expect_ident("field name")?;
             let _ = self.expect(&TokenKind::Equal);
             let value = self.parse_expr()?;
-            fields.push(FieldInit{
-                name,
-                value
-            });
-            if self.not_matches_token(&TokenKind::Coma){
+            fields.push(FieldInit { name, value });
+            if self.not_matches_token(&TokenKind::Coma) {
                 break;
             }
         }
         self.expect(&TokenKind::RightBrace)?;
-        Ok(Expr { loc, kind: ExprKind::Record(RecordExpr{
-            fields
-        }) })
+        Ok(Expr {
+            loc,
+            kind: ExprKind::Record(RecordExpr { fields }),
+        })
     }
     fn parse_paren_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.next_token();
@@ -605,9 +608,7 @@ impl Parser {
                         })),
                     })
                 }
-                TokenKind::LeftBrace => {
-                    self.parse_record_expr(loc)
-                }
+                TokenKind::LeftBrace => self.parse_record_expr(loc),
                 ref kind => {
                     let msg = format!("Expected valid expr but got {kind}");
                     let loc = self.current_loc();
@@ -626,8 +627,7 @@ impl Parser {
                     TokenKind::LeftParen => {
                         self.next_token();
                         let mut args = Vec::new();
-                        while self.check_is_not_token(&TokenKind::RightParen)
-                        {
+                        while self.check_is_not_token(&TokenKind::RightParen) {
                             args.push(self.parse_expr()?);
                             if self.not_matches_token(&TokenKind::Coma) {
                                 break;
@@ -708,18 +708,18 @@ impl Parser {
             Ok(None)
         }
     }
-    fn parse_record_field(&mut self) -> Result<RecordField,ParseError>{
+    fn parse_record_field(&mut self) -> Result<RecordField, ParseError> {
         let name = self.expect_ident("record field")?;
         let _ = self.expect(&TokenKind::Colon);
         let ty = self.parse_type()?;
         Ok(RecordField { name, ty })
     }
-    fn parse_record_type(&mut self) -> Result<RecordType,ParseError>{
+    fn parse_record_type(&mut self) -> Result<RecordType, ParseError> {
         let _ = self.expect(&TokenKind::LeftBrace);
         let mut fields = Vec::new();
         while self.check_is_not_token(&TokenKind::RightBrace) {
             fields.push(self.parse_record_field()?);
-            if self.not_matches_token(&TokenKind::Coma){
+            if self.not_matches_token(&TokenKind::Coma) {
                 break;
             }
         }
@@ -730,8 +730,7 @@ impl Parser {
         let _ = self.expect(&TokenKind::Fun);
         let _ = self.expect(&TokenKind::LeftParen);
         let mut params = Vec::new();
-        while self.check_is_not_token(&TokenKind::RightParen)
-        {
+        while self.check_is_not_token(&TokenKind::RightParen) {
             params.push(self.parse_type()?);
             if self.not_matches_token(&TokenKind::Coma) {
                 break;
@@ -871,7 +870,10 @@ impl Parser {
             }
             TokenKind::LeftBrace => {
                 let record_ty = self.parse_record_type()?;
-                Ok(Type { loc, kind: TypeKind::Record(record_ty)})
+                Ok(Type {
+                    loc,
+                    kind: TypeKind::Record(record_ty),
+                })
             }
             _ => Err(type_parse_error(self, loc)),
         }
@@ -914,16 +916,15 @@ impl Parser {
         let mut functions = Vec::new();
         while self.peek_token().is_some() {
             let Ok(function) = self.parse_function() else {
-                while self.check_is_not_token(&TokenKind::Fun)
-                {
+                while self.check_is_not_token(&TokenKind::Fun) {
                     self.next_token();
                 }
                 continue;
             };
             functions.push(function);
         }
-        if self.diag.report_all(){
-            return Err(ParseError)
+        if self.diag.report_all() {
+            return Err(ParseError);
         }
         Ok(Module { functions })
     }

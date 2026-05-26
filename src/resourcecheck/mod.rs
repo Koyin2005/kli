@@ -187,8 +187,10 @@ impl ResourceCheck {
                     *state = VarState::Moved;
                     let info = &self.vars[&var];
                     if self.loops > 0 && info.loop_count != self.loops {
-                        self.err
-                            .add_diagnostic(format!("Cannot move from '{}' in a loop", info.name), loc);
+                        self.err.add_diagnostic(
+                            format!("Cannot move from '{}' in a loop", info.name),
+                            loc,
+                        );
                     }
                 }
             }
@@ -373,9 +375,10 @@ impl ResourceCheck {
                             "Cannot move out of reference".to_string(),
                             place.loc.clone(),
                         ),
-                        PlaceUse::Write => self
-                            .err
-                            .add_diagnostic("Cannot re-assign reference".to_string(), place.loc.clone()),
+                        PlaceUse::Write => self.err.add_diagnostic(
+                            "Cannot re-assign reference".to_string(),
+                            place.loc.clone(),
+                        ),
                     }
                 }
                 _ => self.check_expr(expr),
@@ -526,8 +529,10 @@ impl ResourceCheck {
                 self.check_expr(body);
                 self.expired_regions.insert(*region);
                 if self.ty_is_expired(&body.ty) {
-                    self.err
-                        .add_diagnostic(format!("Cannot let '{}' escape", body.ty), body.loc.clone());
+                    self.err.add_diagnostic(
+                        format!("Cannot let '{}' escape", body.ty),
+                        body.loc.clone(),
+                    );
                 }
             }
             ExprKind::For {

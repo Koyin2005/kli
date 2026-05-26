@@ -245,6 +245,7 @@ impl TypeCheck {
         let Expr { loc, kind } = expr;
         let make_expr = |ty, kind, loc| typed_ast::Expr { ty, kind, loc };
         let mut expr = match kind {
+            ExprKind::Record(..) => todo!("Records"),
             ExprKind::Block(block) => return self.check_block(loc, block, expected_ty),
             ExprKind::Annotate(expr, ty) => self.check_expr(*expr, Some(self.lower_type(*ty))),
             ExprKind::Err => typed_ast::Expr {

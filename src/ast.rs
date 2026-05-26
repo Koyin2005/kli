@@ -157,13 +157,13 @@ impl IntoIterator for Path {
     }
 }
 #[derive(Debug)]
-pub struct FieldInit{
-    pub name : Ident,
-    pub value : Expr
+pub struct FieldInit {
+    pub name: Ident,
+    pub value: Expr,
 }
 #[derive(Debug)]
-pub struct RecordExpr{
-    pub fields : Vec<FieldInit>
+pub struct RecordExpr {
+    pub fields: Vec<FieldInit>,
 }
 #[derive(Debug)]
 pub struct BorrowExpr {
@@ -194,7 +194,7 @@ pub enum ExprKind {
     Deref(Box<Expr>),
     Bool(bool),
     Number(u64),
-    Record(RecordExpr)
+    Record(RecordExpr),
 }
 #[derive(Debug, Clone)]
 pub struct Generics {
@@ -214,13 +214,13 @@ pub struct FunctionType {
     pub return_type: Box<Type>,
 }
 #[derive(Debug, Clone)]
-pub struct RecordField{
-    pub name : Ident,
-    pub ty : Type
+pub struct RecordField {
+    pub name: Ident,
+    pub ty: Type,
 }
 #[derive(Debug, Clone)]
-pub struct RecordType{
-    pub fields : Vec<RecordField>
+pub struct RecordType {
+    pub fields: Vec<RecordField>,
 }
 #[derive(Debug, Clone)]
 pub enum TypeKind {
