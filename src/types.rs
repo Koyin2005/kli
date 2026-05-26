@@ -1,4 +1,7 @@
-use std::{fmt::Display, rc::Rc};
+use std::{
+    fmt::{Display, Pointer},
+    rc::Rc,
+};
 
 use crate::{
     ast::{IsResource, Mutable},
@@ -55,6 +58,11 @@ impl Display for Region {
     }
 }
 #[derive(PartialEq, Eq, Clone, Debug)]
+pub struct RecordField {
+    pub name: Rc<str>,
+    pub ty: Type,
+}
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Type {
     Infer(usize),
     Unknown,
@@ -70,6 +78,7 @@ pub enum Type {
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
     Function(FunctionType),
+    Record(Vec<RecordField>),
 }
 impl Type {
     pub fn reference(self, mutable: Mutable, region: Region) -> Self {
@@ -90,6 +99,18 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Record(fields) => {
+                f.pad("{")?;
+                let mut first = true;
+                for field in fields {
+                    if !first {
+                        f.pad(",")?;
+                    }
+                    write!(f, "{}: {}", field.name, field.ty)?;
+                    first = false;
+                }
+                f.pad("}")
+            }
             Self::Char => f.pad("char"),
             Self::Bool => f.pad("bool"),
             Self::Int => f.pad("int"),
@@ -100,30 +121,30 @@ impl Display for Type {
             Self::Param(name, _) => f.pad(name),
             Self::Box(ty) => {
                 f.pad("box[")?;
-                ty.fmt(f)?;
+                write!(f, "{ty}")?;
                 f.pad("]")
             }
             Self::List(ty) => {
                 f.pad("list[")?;
-                ty.fmt(f)?;
+                write!(f, "{ty}")?;
                 f.pad("]")
             }
             Self::Option(ty) => {
                 f.pad("option[")?;
-                ty.fmt(f)?;
+                write!(f, "{ty}")?;
                 f.pad("]")
             }
             Self::Imm(region, ty) => {
                 f.pad("imm [")?;
                 region.fmt(f)?;
                 f.pad("] ")?;
-                ty.fmt(f)
+                write!(f, "{ty}")
             }
             Self::Mut(region, ty) => {
                 f.pad("mut [")?;
                 region.fmt(f)?;
                 f.pad("] ")?;
-                ty.fmt(f)
+                write!(f, "{ty}")
             }
             Self::Function(FunctionType {
                 resource,
@@ -143,7 +164,7 @@ impl Display for Type {
                     IsResource::Data => ") -> ",
                     IsResource::Resource => ") => ",
                 })?;
-                return_type.fmt(f)
+                write!(f, "{return_type}")
             }
         }
     }

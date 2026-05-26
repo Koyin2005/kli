@@ -84,7 +84,8 @@ impl TypeCheck {
             | Type::String
             | Type::Option(_)
             | Type::Function(_)
-            | Type::Box(_) => Err(ty),
+            | Type::Box(_)
+            | Type::Record(_) => Err(ty),
         }
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {

@@ -1,6 +1,6 @@
 use crate::{
     src_loc::SrcLoc,
-    types::{FunctionType, Region, Type},
+    types::{FunctionType, RecordField, Region, Type},
 };
 #[derive(Debug)]
 pub struct TypeVarInfo {
@@ -85,6 +85,15 @@ impl TypeInfer {
                     .collect(),
                 return_type: Box::new(self.simplify_type(*function.return_type)),
             }),
+            Type::Record(fields) => Type::Record(
+                fields
+                    .into_iter()
+                    .map(|field| RecordField {
+                        name: field.name,
+                        ty: self.simplify_type(field.ty),
+                    })
+                    .collect(),
+            ),
             Type::Infer(var) => {
                 if let TypeVarInfo {
                     ty: Some(ty),

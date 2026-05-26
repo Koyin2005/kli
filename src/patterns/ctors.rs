@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::types::Type;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Constructor {
@@ -6,6 +8,7 @@ pub enum Constructor {
     Bool(bool),
     Wildcard,
     Deref,
+    Record,
     NonExhaustive,
 }
 
@@ -23,27 +26,36 @@ pub fn constructors_of_ty(ty: &Type) -> Vec<Constructor> {
         | Type::Int
         | Type::List(_)
         | Type::Function(..) => vec![Constructor::NonExhaustive],
+        Type::Record(_) => {
+            vec![Constructor::Record]
+        }
         Type::Infer(_) => unreachable!("Cannot have infer here"),
     }
 }
 
-pub fn fields_of(ty: &Type, constructor: Constructor) -> &[Type] {
+pub fn fields_of<'a>(ty: &'a Type, constructor: Constructor) -> Vec<&'a Type> {
     match constructor {
         Constructor::Bool(_)
         | Constructor::None
         | Constructor::NonExhaustive
-        | Constructor::Wildcard => &[],
+        | Constructor::Wildcard => Vec::new(),
         Constructor::Some => {
             let Type::Option(ty) = ty else {
                 unreachable!("Should be an option")
             };
-            std::slice::from_ref(ty)
+            vec![ty]
         }
         Constructor::Deref => {
             let (Type::Imm(_, ty) | Type::Mut(_, ty)) = ty else {
-                unreachable!("Should be a type")
+                unreachable!("Should be a reference")
             };
-            std::slice::from_ref(ty)
+            vec![ty]
+        }
+        Constructor::Record => {
+            let Type::Record(fields) = ty else {
+                unreachable!("Should be a record")
+            };
+            fields.iter().map(|field| &field.ty).collect()
         }
     }
 }

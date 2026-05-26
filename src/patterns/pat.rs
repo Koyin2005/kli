@@ -5,11 +5,12 @@ use crate::{
     types::Type,
 };
 #[derive(Clone)]
-pub struct Pat {
+pub struct Pat<'a> {
+    pub ty: &'a Type,
     pub constructor: Constructor,
-    pub fields: Vec<Pat>,
+    pub fields: Vec<Pat<'a>>,
 }
-impl Display for Pat {
+impl Display for Pat<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.constructor {
             Constructor::Bool(value) => {
@@ -32,22 +33,41 @@ impl Display for Pat {
             }
             Constructor::Wildcard => f.write_str("_"),
             Constructor::NonExhaustive => f.write_str("_"),
+            Constructor::Record => {
+                let Type::Record(fields) = self.ty else {
+                    unreachable!("Should be a record")
+                };
+                f.write_str("{")?;
+                let mut first = true;
+                for (field,pat) in fields.iter().zip(&self.fields){
+                    if !first{
+                        f.write_str(",")?;
+                    }
+                    write!(f,"{}: {}",field.name,pat)?;
+                    first = true;
+                }
+                f.write_str("}")
+            }
         }
     }
 }
 
-pub fn missing_patterns(ty: &Type, patterns: &mut dyn Iterator<Item = Pat>) -> Vec<Pat> {
-    let missing = missing_patterns_inner(
-        core::slice::from_ref(ty),
-        patterns.map(|pat| vec![pat]).collect(),
-    );
+pub fn missing_patterns<'a>(
+    ty: &'a [&'a Type; 1],
+    patterns: &mut dyn Iterator<Item = Pat<'a>>,
+) -> Vec<Pat<'a>> {
+    let missing = missing_patterns_inner(ty, patterns.map(|pat| vec![pat]).collect());
     missing
         .into_iter()
         .map(|mut row| row.swap_remove(0))
         .collect()
 }
 
-fn specialize(constructor: Constructor, fields: &[Type], matrix: Vec<Vec<Pat>>) -> Vec<Vec<Pat>> {
+fn specialize<'a>(
+    constructor: Constructor,
+    fields: &'a [&'a Type],
+    matrix: Vec<Vec<Pat<'a>>>,
+) -> Vec<Vec<Pat<'a>>> {
     matrix
         .into_iter()
         .filter_map(|mut row| {
@@ -64,7 +84,8 @@ fn specialize(constructor: Constructor, fields: &[Type], matrix: Vec<Vec<Pat>>) 
             } else if first.constructor == Constructor::Wildcard {
                 let mut new_row = fields
                     .iter()
-                    .map(|_| Pat {
+                    .map(|&ty| Pat {
+                        ty,
                         constructor: Constructor::Wildcard,
                         fields: Vec::new(),
                     })
@@ -77,7 +98,7 @@ fn specialize(constructor: Constructor, fields: &[Type], matrix: Vec<Vec<Pat>>) 
         })
         .collect()
 }
-fn missing_patterns_inner(tys: &[Type], matrix: Vec<Vec<Pat>>) -> Vec<Vec<Pat>> {
+fn missing_patterns_inner<'b>(tys: &[&'b Type], matrix: Vec<Vec<Pat>>) -> Vec<Vec<Pat<'b>>> {
     let Some(head) = tys.first() else {
         return if matrix.is_empty() {
             vec![Vec::new()]
@@ -89,11 +110,12 @@ fn missing_patterns_inner(tys: &[Type], matrix: Vec<Vec<Pat>>) -> Vec<Vec<Pat>> 
     let mut all_missing = Vec::new();
     for c in constructors {
         let fields = fields_of(head, c);
-        let specialized = specialize(c, fields, matrix.clone());
-        let missing = missing_patterns_inner(fields, specialized);
+        let specialized = specialize(c, &fields, matrix.clone());
+        let missing = missing_patterns_inner(&fields, specialized);
         for row in missing {
             let mut row = row.into_iter();
             let head_pat = Pat {
+                ty: *head,
                 constructor: c,
                 fields: row.by_ref().take(fields.len()).collect(),
             };

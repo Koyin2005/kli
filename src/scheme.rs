@@ -1,4 +1,4 @@
-use crate::types::{FunctionType, GenericArg, Region, Type};
+use crate::types::{FunctionType, GenericArg, RecordField, Region, Type};
 #[derive(Clone, Eq, PartialEq)]
 pub struct Scheme<T> {
     value: T,
@@ -54,6 +54,15 @@ impl Bind for Type {
                     Self::Unknown
                 }
             }
+            Self::Record(fields) => Self::Record(
+                fields
+                    .into_iter()
+                    .map(|field| RecordField {
+                        name: field.name,
+                        ty: field.ty.bind(args),
+                    })
+                    .collect(),
+            ),
         }
     }
 }

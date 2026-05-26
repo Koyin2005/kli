@@ -100,6 +100,7 @@ impl ResourceCheck {
             | Type::Box(_)
             | Type::Param(..)
             | Type::List(_) => true,
+            Type::Record(fields) => fields.iter().any(|field| self.is_resource(&field.ty)),
             Type::Infer(_) => unreachable!("All infers should be removed"),
         }
     }
@@ -122,6 +123,7 @@ impl ResourceCheck {
                 }
                 self.ty_is_expired(ty)
             }
+            Type::Record(fields) => fields.iter().any(|field| self.ty_is_expired(&field.ty)),
             Type::Infer(_) => unreachable!("All infers should be removed"),
         }
     }
@@ -268,6 +270,11 @@ impl ResourceCheck {
                     old
                 })
             }
+            Type::Record(fields) => fields.iter().fold(HashSet::new(), |old, field| {
+                let mut old = old;
+                old.extend(self.regions_in(&field.ty));
+                old
+            }),
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
                 let mut regions = HashSet::new();
                 regions.insert(region.clone());
@@ -285,7 +292,6 @@ impl ResourceCheck {
             | Type::Unit
             | Type::Param(..)
             | Type::Unknown => true,
-            Type::Infer(_) => unreachable!("Cannot infer here"),
             Type::Box(ty) | Type::List(ty) | Type::Option(ty) => self.outlives_generic_regions(ty),
             Type::Function(function) => {
                 function
@@ -300,6 +306,10 @@ impl ResourceCheck {
                 }
                 self.outlives_generic_regions(ty)
             }
+            Type::Record(fields) => fields
+                .iter()
+                .all(|field| self.outlives_generic_regions(&field.ty)),
+            Type::Infer(_) => unreachable!("Cannot infer here"),
         }
     }
     fn var_of(&self, place: &Place) -> Option<VarId> {

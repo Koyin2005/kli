@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use crate::diagnostics::DiagnosticReporter;
 use crate::resolved_ast as res;
-use crate::types::{FunctionType, GenericKind, Region, Type};
+use crate::types::{FunctionType, GenericKind, RecordField, Region, Type};
 pub struct Lower<'a> {
     kinds: &'a [GenericKind],
     diag: &'a RefCell<DiagnosticReporter>,
@@ -35,7 +35,12 @@ impl<'a> Lower<'a> {
     }
     pub(super) fn lower_type(&self, ty: &res::Type) -> Type {
         match &ty.kind {
-            res::TypeKind::Record(..) => todo!("Record"),
+            res::TypeKind::Record(fields) => Type::Record(fields.iter().map(|field|{
+                RecordField{
+                    name:field.name.content.clone(),
+                    ty:self.lower_type(&field.ty)
+                }
+            }).collect()),
             res::TypeKind::Unknown => Type::Unknown,
             res::TypeKind::Char => Type::Char,
             res::TypeKind::Bool => Type::Bool,

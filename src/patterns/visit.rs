@@ -45,8 +45,9 @@ impl Visitor for PatternCheck {
 }
 
 fn check_patterns(diag: &mut DiagnosticReporter, loc: SrcLoc, ty: &Type, patterns: &[&Pattern]) {
+    let tys = [ty];
     let missing = missing_patterns(
-        ty,
+        &tys,
         &mut patterns
             .iter()
             .map(|pattern| convert::pattern_to_pat(pattern)),

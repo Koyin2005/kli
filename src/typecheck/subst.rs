@@ -35,6 +35,11 @@ impl<'a> TypeSubst<'a> {
                 }
                 self.subst_type(return_type);
             }
+            Type::Record(fields) => {
+                for field in fields {
+                    self.subst_type(&mut field.ty);
+                }
+            }
             Type::Infer(var) => *ty = self.infer.simplify_type(Type::Infer(*var)),
         }
     }
