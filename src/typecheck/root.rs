@@ -243,7 +243,7 @@ impl TypeCheck {
             let region2 = self.simplify_region(region2);
             self.diag
                 .borrow_mut()
-                .report(format!("Expected '{region1}' but got '{region2}'"), loc);
+                .add_diagnostic(format!("Expected '{region1}' but got '{region2}'"), loc);
             Region::Unknown
         }
     }
@@ -255,7 +255,7 @@ impl TypeCheck {
             let ty2 = self.simplify_type(ty2);
             self.diag
                 .borrow_mut()
-                .report(format!("Expected '{ty1}' but got '{ty2}'"), loc);
+                .add_diagnostic(format!("Expected '{ty1}' but got '{ty2}'"), loc);
             Type::Unknown
         }
     }
@@ -263,7 +263,7 @@ impl TypeCheck {
     pub(super) fn type_annotations_needed(&self, loc: SrcLoc) {
         self.diag
             .borrow_mut()
-            .report("type annotations needed".to_string(), loc);
+            .add_diagnostic("type annotations needed".to_string(), loc);
     }
     fn validate_main(&mut self, program: &res::Program) {
         let Some(main) = program
@@ -279,22 +279,22 @@ impl TypeCheck {
             return self
                 .diag
                 .borrow_mut()
-                .report("Missing main".to_string(), loc);
+                .add_diagnostic("Missing main".to_string(), loc);
         };
         let main = &program.functions[main];
         if main.generics.as_ref().is_some_and(|g| g.names.is_empty()) {
             self.diag
                 .borrow_mut()
-                .report("'main' should not be generic".to_string(), main.loc.clone());
+                .add_diagnostic("'main' should not be generic".to_string(), main.loc.clone());
         }
         if !main.params.is_empty() {
-            self.diag.borrow_mut().report(
+            self.diag.borrow_mut().add_diagnostic(
                 "'main' should have no parameters".to_string(),
                 main.loc.clone(),
             );
         }
         if !matches!(main.return_type.kind, res::TypeKind::Unit) {
-            self.diag.borrow_mut().report(
+            self.diag.borrow_mut().add_diagnostic(
                 "'main' should have '()' as return type".to_string(),
                 main.loc.clone(),
             );
@@ -342,7 +342,7 @@ impl TypeCheck {
             for line in unsolved {
                 self.diag
                     .borrow_mut()
-                    .report("type annotations needed".to_string(), line);
+                    .add_diagnostic("type annotations needed".to_string(), line);
             }
             body
         } else {
@@ -371,7 +371,7 @@ impl TypeCheck {
         for (function_index, function) in program.functions.into_iter().enumerate() {
             functions.push(self.check_function(FunctionId::new(function_index), function));
         }
-        if !self.diag.into_inner().finish() {
+        if !self.diag.into_inner().report_all() {
             Ok(typed_ast::Program { functions })
         } else {
             Err(TypeError)

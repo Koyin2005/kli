@@ -18,7 +18,7 @@ impl PatternCheck {
     }
     pub fn check(mut self, body: &Expr) {
         self.visit_expr(body);
-        self.diag.finish();
+        self.diag.report_all();
     }
 }
 impl Visitor for PatternCheck {
@@ -52,6 +52,6 @@ fn check_patterns(diag: &mut DiagnosticReporter, loc: SrcLoc, ty: &Type, pattern
             .map(|pattern| convert::pattern_to_pat(pattern)),
     );
     for pat in missing {
-        diag.report(format!("Missing pattern: {}", pat), loc.clone());
+        diag.add_diagnostic(format!("Missing pattern: {}", pat), loc.clone());
     }
 }

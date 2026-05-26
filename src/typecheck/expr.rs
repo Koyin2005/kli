@@ -16,7 +16,7 @@ impl TypeCheck {
                     match self.simplify_type(value.ty.clone()).as_reference_type() {
                         Ok((_, _, ty)) => ty.clone(),
                         Err(ty) => {
-                            self.diag.borrow_mut().report(
+                            self.diag.borrow_mut().add_diagnostic(
                                 format!("Expected a reference but got '{ty}'"),
                                 value.loc.clone(),
                             );
@@ -50,7 +50,7 @@ impl TypeCheck {
         let element = match element {
             Ok(element) => element,
             Err(_) => {
-                self.diag.borrow_mut().report(
+                self.diag.borrow_mut().add_diagnostic(
                     format!("Cannot use '{}' as an iterator", iterator.ty),
                     iterator.loc.clone(),
                 );
@@ -171,7 +171,7 @@ impl TypeCheck {
                 return_type,
             }) => (params, Some(*return_type)),
             ty => {
-                self.diag.borrow_mut().report(
+                self.diag.borrow_mut().add_diagnostic(
                     format!("Expected a function type but got '{ty}'"),
                     callee.loc.clone(),
                 );
@@ -179,7 +179,7 @@ impl TypeCheck {
             }
         };
         if params.len() != args.len() {
-            self.diag.borrow_mut().report(
+            self.diag.borrow_mut().add_diagnostic(
                 format!(
                     "Expected '{}' arguments but got '{}'",
                     params.len(),
@@ -295,7 +295,7 @@ impl TypeCheck {
                         if let Type::Option(ty) = expected {
                             *ty
                         } else {
-                            self.diag.borrow_mut().report(
+                            self.diag.borrow_mut().add_diagnostic(
                                 format!("Expected option type but got '{}'", expected),
                                 loc.clone(),
                             );
@@ -390,7 +390,7 @@ impl TypeCheck {
                     Err(ty) => {
                         self.diag
                             .borrow_mut()
-                            .report(format!("Cannot deref '{ty}'"), loc.clone());
+                            .add_diagnostic(format!("Cannot deref '{ty}'"), loc.clone());
                         Type::Unknown
                     }
                 };

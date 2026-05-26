@@ -42,7 +42,7 @@ impl TypeCheck {
                         )
                     }
                     Err(ty) => {
-                        self.diag.borrow_mut().report(
+                        self.diag.borrow_mut().add_diagnostic(
                             format!("Expected a reference type but got '{}'", ty),
                             pattern.loc.clone(),
                         );
@@ -63,7 +63,7 @@ impl TypeCheck {
                 let inner_ty = match expected_type {
                     Type::Option(ty) => *ty,
                     expected_type => {
-                        self.diag.borrow_mut().report(
+                        self.diag.borrow_mut().add_diagnostic(
                             format!("Expected an option type but got '{}'", expected_type),
                             pattern.loc.clone(),
                         );
@@ -80,7 +80,7 @@ impl TypeCheck {
                 let inner = match expected_type {
                     Type::Option(ty) => self.check_pattern(*inner, *ty, region),
                     expected_type => {
-                        self.diag.borrow_mut().report(
+                        self.diag.borrow_mut().add_diagnostic(
                             format!("Expected an option type but got '{}'", expected_type),
                             pattern.loc.clone(),
                         );
@@ -100,7 +100,7 @@ impl TypeCheck {
                     (None, None) => expected_type.clone(),
                     (None, Some(_)) => expected_type.clone(),
                     (Some(region), None) => {
-                        self.diag.borrow_mut().report(
+                        self.diag.borrow_mut().add_diagnostic(
                             "Cannot borrow without region".to_string(),
                             pattern.loc.clone(),
                         );

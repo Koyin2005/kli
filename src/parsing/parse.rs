@@ -104,7 +104,7 @@ impl Parser {
             } else {
                 format!("Expected '{kind}' but got 'EOF'")
             };
-            self.diag.report(msg, loc);
+            self.diag.add_diagnostic(msg, loc);
             Err(ParseError)
         }
     }
@@ -125,7 +125,7 @@ impl Parser {
         } else {
             format!("Expected '{}' but got EOF", kind)
         };
-        self.diag.report(msg, loc);
+        self.diag.add_diagnostic(msg, loc);
         Err(ParseError)
     }
     fn expect_error(
@@ -134,7 +134,7 @@ impl Parser {
     ) -> Result<(), ParseError> {
         let (loc, kind) = (self.current_loc(), self.peek_token().map(|tok| &tok.kind));
         let msg = msg(kind);
-        self.diag.report(msg, loc);
+        self.diag.add_diagnostic(msg, loc);
         Err(ParseError)
     }
     fn binary_op(&mut self) -> Option<(Precedence, BinaryOp)> {
@@ -169,7 +169,7 @@ impl Parser {
                 }
                 _ => Err({
                     let loc = self.current_loc();
-                    self.diag.report("Expected a valid region".to_string(), loc);
+                    self.diag.add_diagnostic("Expected a valid region".to_string(), loc);
                     ParseError
                 }),
             },
@@ -191,7 +191,7 @@ impl Parser {
         let loc = self.current_loc();
         match self.peek_token() {
             None => {
-                self.diag.report("Expected a pattern".to_string(), loc);
+                self.diag.add_diagnostic("Expected a pattern".to_string(), loc);
                 Err(ParseError)
             }
             Some(Token { loc: _, kind }) => match kind {
@@ -254,7 +254,7 @@ impl Parser {
                 }
                 _ => {
                     self.diag
-                        .report("Expected a valid pattern".to_string(), loc);
+                        .add_diagnostic("Expected a valid pattern".to_string(), loc);
                     Err(ParseError)
                 }
             },
@@ -386,7 +386,7 @@ impl Parser {
         let loc = self.current_loc();
         match self.peek_token() {
             None => {
-                self.diag.report("Expected expr".to_string(), loc);
+                self.diag.add_diagnostic("Expected expr".to_string(), loc);
                 Err(ParseError)
             }
             Some(token) => match token.kind {
@@ -576,7 +576,7 @@ impl Parser {
                 ref kind => {
                     let msg = format!("Expected valid expr but got {kind}");
                     let loc = self.current_loc();
-                    self.diag.report(msg, loc);
+                    self.diag.add_diagnostic(msg, loc);
                     Err(ParseError)
                 }
             },
@@ -647,7 +647,7 @@ impl Parser {
                 Err(non_place) => {
                     lhs = non_place;
                     self.diag
-                        .report("Invalid assignment target".to_string(), loc);
+                        .add_diagnostic("Invalid assignment target".to_string(), loc);
                     break;
                 }
             };
@@ -705,7 +705,7 @@ impl Parser {
             } else {
                 "Expected a type but got eof".to_string()
             };
-            this.diag.report(msg, loc);
+            this.diag.add_diagnostic(msg, loc);
             ParseError
         }
         let Some(Token { loc: _, kind }) = self.peek_token() else {
@@ -869,7 +869,9 @@ impl Parser {
             };
             functions.push(function);
         }
-        self.diag.finish();
+        if self.diag.report_all(){
+            return Err(ParseError)
+        }
         Ok(Module { functions })
     }
 }

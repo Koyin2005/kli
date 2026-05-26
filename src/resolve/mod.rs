@@ -96,18 +96,18 @@ impl Resolve {
     }
     fn invalid_path_start_error(&mut self, path: &Path, loc: SrcLoc) {
         self.diag
-            .report(format!("Invalid path '{}'", path.display()), loc);
+            .add_diagnostic(format!("Invalid path '{}'", path.display()), loc);
     }
     fn path_not_in_scope_error(&mut self, path: &Path, loc: SrcLoc) {
         self.diag
-            .report(format!("'{}' not in scope", path.display()), loc);
+            .add_diagnostic(format!("'{}' not in scope", path.display()), loc);
     }
     fn not_in_scope_error(&mut self, name: &str, loc: SrcLoc) {
-        self.diag.report(format!("'{}' not in scope", name), loc);
+        self.diag.add_diagnostic(format!("'{}' not in scope", name), loc);
     }
     fn cannot_use_as_error(&mut self, name: &str, expected: &str, loc: SrcLoc) {
         self.diag
-            .report(format!("Cannot use '{}' as {}", name, expected), loc);
+            .add_diagnostic(format!("Cannot use '{}' as {}", name, expected), loc);
     }
     fn declare_function(&mut self, name: Ident) -> FunctionId {
         let function = FunctionId::new(self.functions.len());
@@ -115,7 +115,7 @@ impl Resolve {
         match self.env.entry(name.content) {
             std::collections::hash_map::Entry::Occupied(mut occupied) => {
                 if let Res::Function(_) = occupied.get() {
-                    self.diag.report(
+                    self.diag.add_diagnostic(
                         format!("Cannot redeclare function '{}'", occupied.key()),
                         name.loc.clone(),
                     );
@@ -145,7 +145,7 @@ impl Resolve {
                             .insert(name.content.clone(), res::GenericKind::Region)
                             .is_some_and(|kind| kind != res::GenericKind::Region)
                         {
-                            self.diag.report(
+                            self.diag.add_diagnostic(
                                 format!("Generic kind mismatch for '{}'", name.content),
                                 name.loc,
                             );
@@ -242,7 +242,7 @@ impl Resolve {
                         .insert(name.content.clone(), res::GenericKind::Type)
                         .is_some_and(|kind| kind != res::GenericKind::Type)
                     {
-                        self.diag.report(
+                        self.diag.add_diagnostic(
                             format!("Generic kind mismatch for '{}'", name.content),
                             name.loc,
                         );
@@ -369,7 +369,7 @@ impl Resolve {
                         | Res::LocalRegion(_)
                         | Res::Module(_),
                     ) => {
-                        self.diag.report(
+                        self.diag.add_diagnostic(
                             format!("Can't use '{}' as place", name.content),
                             name.loc.clone(),
                         );
@@ -488,7 +488,7 @@ impl Resolve {
                         res::ExprKind::Function(path.into_last().content, function)
                     }
                     Res::Param(_) | Res::LocalRegion(_) => {
-                        self.diag.report(
+                        self.diag.add_diagnostic(
                             format!("Can't use '{}' as a value", path.display()),
                             loc.clone(),
                         );
@@ -660,7 +660,7 @@ impl Resolve {
             });
         }
         let program = res::Program { functions };
-        if !self.diag.finish() {
+        if !self.diag.report_all() {
             Ok(program)
         } else {
             Err(ResolveErrored)

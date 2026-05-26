@@ -101,7 +101,7 @@ impl<'s> Lexer<'s> {
                 IntErrorKind::PosOverflow => {
                     let loc = self.current_loc();
                     self.diag
-                        .report("Integer too large".to_string(), loc.clone());
+                        .add_diagnostic("Integer too large".to_string(), loc.clone());
                     Some(Token {
                         loc,
                         kind: TokenKind::Number(u64::MAX),
@@ -129,7 +129,7 @@ impl<'s> Lexer<'s> {
         } else {
             let loc = self.current_loc();
             self.diag
-                .report("Expected '\"' at end of string".to_string(), loc);
+                .add_diagnostic("Expected '\"' at end of string".to_string(), loc);
             None
         }
     }
@@ -205,7 +205,7 @@ impl<'s> Lexer<'s> {
             '"' => self.string_token(),
             _ => {
                 self.diag
-                    .report(format!("Unrecognised char '{}'", c), self.current_loc());
+                    .add_diagnostic(format!("Unrecognised char '{}'", c), self.current_loc());
                 Some(self.next_token_from_char(TokenKind::Error))
             }
         }
@@ -215,7 +215,7 @@ impl<'s> Lexer<'s> {
         while let Some(token) = self.next_token() {
             tokens.push(token);
         }
-        self.diag.finish();
+        self.diag.report_all();
         tokens
     }
 }

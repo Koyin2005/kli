@@ -14,11 +14,11 @@ impl DiagnosticReporter {
             diagnostics: Vec::new(),
         }
     }
-    pub fn report(&mut self, msg: String, loc: SrcLoc) {
+    pub fn add_diagnostic(&mut self, msg: String, loc: SrcLoc) {
         self.diagnostics.push(Diagnostic { msg, loc });
     }
 
-    pub fn finish(self) -> bool {
+    pub fn report_all(self) -> bool {
         let mut emit_diagnostic = false;
         for diagnostic in self.diagnostics {
             emit_diagnostic = true;

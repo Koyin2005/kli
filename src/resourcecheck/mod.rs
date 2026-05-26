@@ -137,7 +137,7 @@ impl ResourceCheck {
             if state == VarState::Owned && self.is_strict_resource(&var_info.ty) {
                 let loc = var_info.loc.clone();
                 let msg = format!("'{}' cannot go out of scope", var_info.name);
-                self.err.report(msg, loc);
+                self.err.add_diagnostic(msg, loc);
             }
         }
         scope
@@ -170,7 +170,7 @@ impl ResourceCheck {
         let is_resource = self.is_strict_resource(&info.ty);
         let state = self.var_states.get_mut(&var).unwrap();
         if is_resource && *state != VarState::Moved {
-            self.err.report(
+            self.err.add_diagnostic(
                 format!("Cant assign to '{}' while not moved", info.name),
                 loc,
             );
@@ -188,12 +188,12 @@ impl ResourceCheck {
                     let info = &self.vars[&var];
                     if self.loops > 0 && info.loop_count != self.loops {
                         self.err
-                            .report(format!("Cannot move from '{}' in a loop", info.name), loc);
+                            .add_diagnostic(format!("Cannot move from '{}' in a loop", info.name), loc);
                     }
                 }
             }
             VarState::Moved => {
-                self.err.report(
+                self.err.add_diagnostic(
                     format!("Cannot use '{}' after move", self.vars[&var].name),
                     loc,
                 );
@@ -223,7 +223,7 @@ impl ResourceCheck {
     }
     fn check_place_mutable(&mut self, place: &Place) {
         match self.place_mutable(place) {
-            Mutable::Immutable => self.err.report(
+            Mutable::Immutable => self.err.add_diagnostic(
                 "Cannot write to immutable place".to_string(),
                 place.loc.clone(),
             ),
@@ -337,7 +337,7 @@ impl ResourceCheck {
             Err(CaptureError::DataFunction) => "because 'data' functions cannot capture",
             Err(CaptureError::BorrowsLocal) => "because borrowed content cannot be captured",
         };
-        self.err.report(
+        self.err.add_diagnostic(
             format!("Cannot capture '{}' {}", self.vars[&var].name, cause),
             loc,
         );
@@ -369,13 +369,13 @@ impl ResourceCheck {
                         return;
                     }
                     match place_use {
-                        PlaceUse::Read => self.err.report(
+                        PlaceUse::Read => self.err.add_diagnostic(
                             "Cannot move out of reference".to_string(),
                             place.loc.clone(),
                         ),
                         PlaceUse::Write => self
                             .err
-                            .report("Cannot re-assign reference".to_string(), place.loc.clone()),
+                            .add_diagnostic("Cannot re-assign reference".to_string(), place.loc.clone()),
                     }
                 }
                 _ => self.check_expr(expr),
@@ -387,7 +387,7 @@ impl ResourceCheck {
             StmtKind::Expr(expr) => {
                 self.check_expr(expr);
                 if self.is_strict_resource(&expr.ty) {
-                    self.err.report(
+                    self.err.add_diagnostic(
                         format!("Cannot let '{}' out of scope", expr.ty),
                         expr.loc.clone(),
                     );
@@ -423,7 +423,7 @@ impl ResourceCheck {
                 if let Some(value) = value {
                     self.check_expr(value);
                     if self.is_resource(&value.ty) {
-                        self.err.report(
+                        self.err.add_diagnostic(
                             format!("Cannot print resource '{}'", value.ty),
                             value.loc.clone(),
                         );
@@ -482,7 +482,7 @@ impl ResourceCheck {
                         }
                         errors.sort_by_key(|(_, loc)| loc.line);
                         for (name, loc) in errors {
-                            this.err.report(
+                            this.err.add_diagnostic(
                                 format!("Cannot capture '{}' that contains borrows", name),
                                 loc.clone(),
                             );
@@ -509,7 +509,7 @@ impl ResourceCheck {
                     | (Mutable::Mutable, Mutable::Mutable)
                     | (Mutable::Immutable, Mutable::Immutable) => (),
                     (Mutable::Immutable, Mutable::Mutable) => {
-                        self.err.report(
+                        self.err.add_diagnostic(
                             format!("Cannot borrow '{}' as mut", var_name.content),
                             var_name.loc.clone(),
                         );
@@ -527,7 +527,7 @@ impl ResourceCheck {
                 self.expired_regions.insert(*region);
                 if self.ty_is_expired(&body.ty) {
                     self.err
-                        .report(format!("Cannot let '{}' escape", body.ty), body.loc.clone());
+                        .add_diagnostic(format!("Cannot let '{}' escape", body.ty), body.loc.clone());
                 }
             }
             ExprKind::For {
@@ -564,7 +564,7 @@ impl ResourceCheck {
                             Entry::Occupied(mut entry) => {
                                 let Some(new_state) = unify_state(state, *entry.get()) else {
                                     let name = &self.vars[&var].name;
-                                    self.err.report(
+                                    self.err.add_diagnostic(
                                         format!("'{name}' should always be moved"),
                                         arm.body.loc.clone(),
                                     );
@@ -606,6 +606,6 @@ impl ResourceCheck {
             }
             this.check_expr(&function.body);
         });
-        self.err.finish();
+        self.err.report_all();
     }
 }
