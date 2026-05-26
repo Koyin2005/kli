@@ -50,11 +50,16 @@ impl Parser {
         self.tokens.next()
     }
     fn check_token(&mut self, kind: &TokenKind) -> bool {
-        self.peek_token().is_some_and(|token| token.kind == *kind)
+        let Some(token) = self.peek_token() else {
+            return false;
+        };
+        token.kind == *kind
     }
     fn check_token_is_ident(&mut self) -> bool {
-        self.peek_token()
-            .is_some_and(|token| matches!(token.kind, TokenKind::Ident(_)))
+        let Some(token) = self.peek_token() else {
+            return false;
+        };
+        matches!(token.kind,TokenKind::Ident(_))
     }
     fn match_token(&mut self, kind: &TokenKind) -> Option<Token> {
         let token = self.peek_token()?;
@@ -674,9 +679,8 @@ impl Parser {
         let _ = self.expect(&TokenKind::Fun);
         let _ = self.expect(&TokenKind::LeftParen);
         let mut params = Vec::new();
-        while self
-            .peek_token()
-            .is_some_and(|token| !matches!(token.kind, TokenKind::RightParen))
+        while let Some(tok) = self.peek_token()
+            && !matches!(tok.kind,TokenKind::RightParen)
         {
             params.push(self.parse_type()?);
             if self.match_token(&TokenKind::Coma).is_none() {

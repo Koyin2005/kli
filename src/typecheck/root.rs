@@ -271,7 +271,11 @@ impl TypeCheck {
             .iter()
             .position(|f| f.name.content.as_ref() == "main")
         else {
-            let loc = program.functions.last().map(|function| function.body.loc.clone()).unwrap_or(SrcLoc::dummy());
+            let loc = program
+                .functions
+                .last()
+                .map(|function| function.body.loc.clone())
+                .unwrap_or(SrcLoc::dummy());
             return self
                 .diag
                 .borrow_mut()
