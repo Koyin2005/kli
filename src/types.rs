@@ -1,7 +1,4 @@
-use std::{
-    fmt::{Display, Pointer},
-    rc::Rc,
-};
+use std::{fmt::Display, rc::Rc};
 
 use crate::{
     ast::{IsResource, Mutable},
@@ -104,7 +101,7 @@ impl Display for Type {
                 let mut first = true;
                 for field in fields {
                     if !first {
-                        f.pad(",")?;
+                        f.pad(", ")?;
                     }
                     write!(f, "{}: {}", field.name, field.ty)?;
                     first = false;

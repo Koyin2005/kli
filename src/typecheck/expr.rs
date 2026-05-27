@@ -1,9 +1,13 @@
+use std::collections::{HashMap, HashSet};
+
 use crate::{
-    resolved_ast::{BlockBody, BorrowExpr, Expr, ExprKind, Lambda, Pattern, Place, PlaceKind, Var},
+    resolved_ast::{
+        BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, Lambda, Pattern, Place, PlaceKind, Var,
+    },
     src_loc::SrcLoc,
     typecheck::root::TypeCheck,
-    typed_ast,
-    types::{FunctionType, Region, Type},
+    typed_ast::{self, FieldId, RecordFieldInit},
+    types::{FunctionType, RecordField, Region, Type},
 };
 
 impl TypeCheck {
@@ -241,11 +245,88 @@ impl TypeCheck {
             kind: typed_ast::ExprKind::Block(body),
         }
     }
+    fn check_record(
+        &mut self,
+        loc: SrcLoc,
+        field_inits: Vec<FieldInit>,
+        expected_ty: Option<Type>,
+    ) -> typed_ast::Expr {
+        let expected_fields = match expected_ty.map(|ty| self.simplify_type(ty)) {
+            Some(Type::Record(fields)) => Some(fields),
+            _ => None,
+        };
+        let mut fields = Vec::new();
+        let mut seen_fields = HashSet::new();
+        let field_names = expected_fields
+            .iter()
+            .flatten()
+            .enumerate()
+            .map(|(i, field)| (field.name.clone(), i))
+            .collect::<HashMap<_, _>>();
+
+        for (i, FieldInit { name, value }) in field_inits.into_iter().enumerate() {
+            let field_id = field_names.get(&name.content).copied();
+            let value = self.check_expr(
+                value,
+                expected_fields
+                    .as_ref()
+                    .and_then(|fields| field_id.map(|field| fields[field].ty.clone())),
+            );
+            if expected_fields.is_some() && !seen_fields.insert(name.content.clone()) {
+                self.diag.borrow_mut().add_diagnostic(
+                    format!("Repeated field '{}'", name.content),
+                    name.loc.clone(),
+                );
+                continue;
+            }
+
+            let field_id = if let Some(field_id) = field_id {
+                field_id
+            } else if expected_fields.is_some() {
+                self.diag.borrow_mut().add_diagnostic(
+                    format!("'record' has no field '{}'", name.content),
+                    name.loc,
+                );
+                continue;
+            } else {
+                i
+            };
+            fields.push(RecordFieldInit {
+                index: FieldId::new(field_id),
+                name,
+                value,
+            });
+        }
+        let record_fields = if let Some(fields) = expected_fields {
+            let mut field_names = field_names;
+            for field in &fields {
+                if !seen_fields.contains(&field.name) && field_names.remove(&field.name).is_some() {
+                    self.diag
+                        .borrow_mut()
+                        .add_diagnostic(format!("Missing field '{}'", field.name), loc.clone());
+                }
+            }
+            fields
+        } else {
+            fields
+                .iter()
+                .map(|field| RecordField {
+                    name: field.name.content.clone(),
+                    ty: field.value.ty.clone(),
+                })
+                .collect()
+        };
+        typed_ast::Expr {
+            ty: Type::Record(record_fields),
+            loc,
+            kind: typed_ast::ExprKind::Record(fields),
+        }
+    }
     pub(super) fn check_expr(&mut self, expr: Expr, expected_ty: Option<Type>) -> typed_ast::Expr {
         let Expr { loc, kind } = expr;
         let make_expr = |ty, kind, loc| typed_ast::Expr { ty, kind, loc };
         let mut expr = match kind {
-            ExprKind::Record(..) => todo!("Records"),
+            ExprKind::Record(fields) => self.check_record(loc, fields, expected_ty.clone()),
             ExprKind::Block(block) => return self.check_block(loc, block, expected_ty),
             ExprKind::Annotate(expr, ty) => self.check_expr(*expr, Some(self.lower_type(*ty))),
             ExprKind::Err => typed_ast::Expr {

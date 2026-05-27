@@ -65,8 +65,25 @@ pub struct Expr {
     pub loc: SrcLoc,
     pub kind: ExprKind,
 }
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct FieldId(usize);
+impl FieldId {
+    pub fn new(index: usize) -> Self {
+        Self(index)
+    }
+    pub fn into_index(self) -> usize {
+        self.0
+    }
+}
+#[derive(Debug)]
+pub struct RecordFieldInit {
+    pub index: FieldId,
+    pub name: Ident,
+    pub value: Expr,
+}
 #[derive(Debug)]
 pub enum ExprKind {
+    Record(Vec<RecordFieldInit>),
     Block(BlockBody),
     String(Rc<str>),
     Bool(bool),

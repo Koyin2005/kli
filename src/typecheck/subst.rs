@@ -159,6 +159,11 @@ impl<'a> TypeSubst<'a> {
                 self.subst_type(&mut lambda.return_type);
                 self.subst_expr(&mut lambda.body);
             }
+            ExprKind::Record(fields) => {
+                for field in fields {
+                    self.subst_expr(&mut field.value);
+                }
+            }
         }
         self.subst_type(&mut expr.ty);
     }

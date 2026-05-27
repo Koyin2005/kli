@@ -454,6 +454,11 @@ impl ResourceCheck {
                     self.check_expr(value);
                 }
             }
+            ExprKind::Record(fields) => {
+                for field in fields {
+                    self.check_expr(&field.value);
+                }
+            }
             ExprKind::Load(place) => self.check_place_use(place, PlaceUse::Read),
             ExprKind::Binary(_, left, right) => {
                 self.check_expr(left);

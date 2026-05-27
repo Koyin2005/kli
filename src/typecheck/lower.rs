@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashSet;
 
 use crate::diagnostics::DiagnosticReporter;
 use crate::resolved_ast as res;
@@ -35,12 +36,25 @@ impl<'a> Lower<'a> {
     }
     pub(super) fn lower_type(&self, ty: &res::Type) -> Type {
         match &ty.kind {
-            res::TypeKind::Record(fields) => Type::Record(fields.iter().map(|field|{
-                RecordField{
-                    name:field.name.content.clone(),
-                    ty:self.lower_type(&field.ty)
-                }
-            }).collect()),
+            res::TypeKind::Record(fields) => Type::Record({
+                let mut seen_fields = HashSet::new();
+                fields
+                    .iter()
+                    .filter_map(|field| {
+                        if !seen_fields.insert(field.name.content.as_ref()) {
+                            self.diag.borrow_mut().add_diagnostic(
+                                format!("Repeated field '{}'", field.name.content),
+                                field.name.loc.clone(),
+                            );
+                            return None;
+                        }
+                        Some(RecordField {
+                            name: field.name.content.clone(),
+                            ty: self.lower_type(&field.ty),
+                        })
+                    })
+                    .collect()
+            }),
             res::TypeKind::Unknown => Type::Unknown,
             res::TypeKind::Char => Type::Char,
             res::TypeKind::Bool => Type::Bool,

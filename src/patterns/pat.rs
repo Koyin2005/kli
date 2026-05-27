@@ -39,11 +39,11 @@ impl Display for Pat<'_> {
                 };
                 f.write_str("{")?;
                 let mut first = true;
-                for (field,pat) in fields.iter().zip(&self.fields){
-                    if !first{
+                for (field, pat) in fields.iter().zip(&self.fields) {
+                    if !first {
                         f.write_str(",")?;
                     }
-                    write!(f,"{}: {}",field.name,pat)?;
+                    write!(f, "{}: {}", field.name, pat)?;
                     first = true;
                 }
                 f.write_str("}")
@@ -99,7 +99,7 @@ fn specialize<'a>(
         .collect()
 }
 fn missing_patterns_inner<'b>(tys: &[&'b Type], matrix: Vec<Vec<Pat>>) -> Vec<Vec<Pat<'b>>> {
-    let Some(head) = tys.first() else {
+    let Some(&head) = tys.first() else {
         return if matrix.is_empty() {
             vec![Vec::new()]
         } else {
@@ -115,7 +115,7 @@ fn missing_patterns_inner<'b>(tys: &[&'b Type], matrix: Vec<Vec<Pat>>) -> Vec<Ve
         for row in missing {
             let mut row = row.into_iter();
             let head_pat = Pat {
-                ty: *head,
+                ty: head,
                 constructor: c,
                 fields: row.by_ref().take(fields.len()).collect(),
             };

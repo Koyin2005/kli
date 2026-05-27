@@ -3,7 +3,7 @@ use crate::{
     typed_ast::{Pattern, PatternKind},
 };
 
-pub fn pattern_to_pat(pattern: &Pattern) -> Pat {
+pub fn pattern_to_pat<'a>(pattern: &'a Pattern) -> Pat<'a> {
     let ty = &pattern.ty;
     match &pattern.kind {
         PatternKind::None => Pat {

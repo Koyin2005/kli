@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use crate::types::Type;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Constructor {
@@ -33,7 +31,7 @@ pub fn constructors_of_ty(ty: &Type) -> Vec<Constructor> {
     }
 }
 
-pub fn fields_of<'a>(ty: &'a Type, constructor: Constructor) -> Vec<&'a Type> {
+pub fn fields_of(ty: &Type, constructor: Constructor) -> Vec<&Type> {
     match constructor {
         Constructor::Bool(_)
         | Constructor::None

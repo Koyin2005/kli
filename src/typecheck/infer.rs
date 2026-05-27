@@ -168,6 +168,24 @@ impl TypeInfer {
             (Type::List(ty1), Type::List(ty2)) => {
                 self.unify_ty(*ty1, *ty2).map(|ty| Type::List(Box::new(ty)))
             }
+            (Type::Record(fields1), Type::Record(fields2)) if fields1.len() == fields2.len() => {
+                fields1
+                    .into_iter()
+                    .zip(fields2)
+                    .map(|(field1, field2)| {
+                        if field1.name == field2.name {
+                            let ty = self.unify_ty(field1.ty, field2.ty)?;
+                            Some(RecordField {
+                                name: field1.name,
+                                ty,
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Option<Vec<_>>>()
+                    .map(Type::Record)
+            }
             (Type::Imm(region1, ty1), Type::Imm(region2, ty2)) => self
                 .unify_ty(*ty1, *ty2)
                 .and_then(|ty| {
