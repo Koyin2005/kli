@@ -48,9 +48,10 @@ fn check_patterns(diag: &mut DiagnosticReporter, loc: SrcLoc, ty: &Type, pattern
     let tys = [ty];
     let missing = missing_patterns(
         &tys,
-        &mut patterns
-            .iter()
-            .map(|pattern| convert::pattern_to_pat(pattern)),
+        &mut patterns.iter().map(|pattern| {
+            let pat = convert::pattern_to_pat(pattern);
+            pat
+        }),
     );
     for pat in missing {
         diag.add_diagnostic(format!("Missing pattern: {}", pat), loc.clone());

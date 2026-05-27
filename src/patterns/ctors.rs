@@ -1,5 +1,5 @@
 use crate::types::Type;
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Constructor {
     Some,
     None,

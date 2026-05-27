@@ -7,6 +7,13 @@ use crate::{
     src_loc::SrcLoc,
     types::{GenericArg, GenericKind, Type},
 };
+
+#[derive(Debug)]
+pub struct PatternField {
+    pub index: FieldId,
+    pub name: Ident,
+    pub pattern: Pattern,
+}
 #[derive(Debug)]
 pub struct Pattern {
     pub ty: Type,
@@ -20,6 +27,7 @@ pub enum PatternKind {
     None,
     Deref(Box<Pattern>),
     Binding(Mutable, Var, Box<Type>),
+    Record(Vec<PatternField>),
 }
 #[derive(Debug)]
 pub struct Place {

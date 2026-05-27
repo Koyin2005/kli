@@ -63,12 +63,18 @@ pub struct Pattern {
     pub kind: PatternKind,
 }
 #[derive(Debug)]
+pub struct PatternField {
+    pub name: Ident,
+    pub pattern: Pattern,
+}
+#[derive(Debug)]
 pub enum PatternKind {
     Bool(bool),
     Binding(Mutable, Ident, Option<Region>),
     Some(Box<Pattern>),
     None,
     Deref(Box<Pattern>),
+    Record(Vec<PatternField>),
 }
 #[derive(Debug)]
 pub struct CaseArm {

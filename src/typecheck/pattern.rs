@@ -1,8 +1,10 @@
+use std::collections::{HashMap, HashSet};
+
 use crate::{
     ast::Mutable,
-    resolved_ast::{Pattern, PatternKind, Var},
-    typed_ast,
-    types::{Region, Type},
+    resolved_ast::{Pattern, PatternField, PatternKind, Var},
+    typed_ast::{self, FieldId},
+    types::{RecordField, Region, Type},
 };
 
 use super::root::TypeCheck;
@@ -16,6 +18,95 @@ impl TypeCheck {
     ) -> typed_ast::Pattern {
         let expected_type = self.simplify_type(expected_type);
         match pattern.kind {
+            PatternKind::Record(fields) => {
+                let expected_fields = match self.simplify_type(expected_type) {
+                    Type::Record(fields) => Some(fields),
+                    ref ty => {
+                        self.diag.borrow_mut().add_diagnostic(
+                            format!("Expected 'record' type but got '{}'", ty),
+                            pattern.loc.clone(),
+                        );
+                        None
+                    }
+                };
+                let field_names = expected_fields
+                    .iter()
+                    .flatten()
+                    .enumerate()
+                    .map(|(i, field)| (field.name.clone(), i))
+                    .collect::<HashMap<_, _>>();
+                let mut seen_fields = HashSet::new();
+                let fields = fields
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(i, PatternField { name, pattern })| {
+                        let field_id = field_names.get(&name.content).copied();
+                        let pattern = self.check_pattern(
+                            pattern,
+                            field_id
+                                .and_then(|field| {
+                                    expected_fields
+                                        .as_ref()
+                                        .map(|fields| fields[field].ty.clone())
+                                })
+                                .unwrap_or(Type::Unknown),
+                            region.clone(),
+                        );
+                        if expected_fields.is_some() && !seen_fields.insert(name.content.clone()) {
+                            self.diag.borrow_mut().add_diagnostic(
+                                format!("Repeated field '{}'", name.content),
+                                name.loc.clone(),
+                            );
+                            return None;
+                        }
+
+                        let field_id = if let Some(field_id) = field_id {
+                            field_id
+                        } else if expected_fields.is_some() {
+                            self.diag.borrow_mut().add_diagnostic(
+                                format!("'record' has no field '{}'", name.content),
+                                name.loc,
+                            );
+                            return None;
+                        } else {
+                            i
+                        };
+                        Some(typed_ast::PatternField {
+                            name,
+                            pattern,
+                            index: FieldId::new(field_id),
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                let record_fields = if let Some(fields) = expected_fields {
+                    let mut field_names = field_names;
+                    for field in &fields {
+                        if !seen_fields.contains(&field.name)
+                            && field_names.remove(&field.name).is_some()
+                        {
+                            self.diag.borrow_mut().add_diagnostic(
+                                format!("Missing field '{}'", field.name),
+                                pattern.loc.clone(),
+                            );
+                        }
+                    }
+                    fields
+                } else {
+                    fields
+                        .iter()
+                        .map(|field| RecordField {
+                            name: field.name.content.clone(),
+                            ty: field.pattern.ty.clone(),
+                        })
+                        .collect()
+                };
+                let ty = Type::Record(record_fields);
+                typed_ast::Pattern {
+                    ty,
+                    loc: pattern.loc,
+                    kind: typed_ast::PatternKind::Record(fields),
+                }
+            }
             PatternKind::Bool(value) => {
                 self.unify(expected_type, Type::Bool, pattern.loc.clone());
                 typed_ast::Pattern {

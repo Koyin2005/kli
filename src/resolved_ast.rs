@@ -157,12 +157,18 @@ pub struct Region {
 }
 
 #[derive(Debug)]
+pub struct PatternField {
+    pub name: Ident,
+    pub pattern: Pattern,
+}
+#[derive(Debug)]
 pub enum PatternKind {
     Bool(bool),
     Some(Box<Pattern>),
     None,
     Binding(Mutable, Ident, VarId, Option<Region>),
     Deref(Box<Pattern>),
+    Record(Vec<PatternField>),
 }
 #[derive(Debug)]
 pub struct Pattern {

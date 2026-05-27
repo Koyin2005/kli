@@ -350,6 +350,16 @@ impl Resolve {
                     region.map(|region| self.resolve_region(region)),
                 )
             }
+            ast::PatternKind::Record(fields) => {
+                let fields = fields
+                    .into_iter()
+                    .map(|field| res::PatternField {
+                        name: field.name,
+                        pattern: self.resolve_pattern(field.pattern),
+                    })
+                    .collect();
+                res::PatternKind::Record(fields)
+            }
         };
         res::Pattern { loc, kind }
     }

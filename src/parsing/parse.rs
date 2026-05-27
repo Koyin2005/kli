@@ -4,8 +4,8 @@ use crate::{
     ast::{
         BinaryOp, BlockBody, BorrowExpr, CaseArm, Expr, ExprKind, FieldInit, Function,
         FunctionType, Generics, IsResource, Lambda, LetBinding, Module, Mutable, Param, Path,
-        Pattern, PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type,
-        TypeKind,
+        Pattern, PatternField, PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt,
+        StmtKind, Type, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::Ident,
@@ -267,6 +267,24 @@ impl Parser {
                     Ok(Pattern {
                         loc,
                         kind: PatternKind::Deref(Box::new(pattern)),
+                    })
+                }
+                TokenKind::LeftBrace => {
+                    self.next_token();
+                    let mut fields = Vec::new();
+                    while self.check_is_not_token(&TokenKind::RightBrace) {
+                        let name = self.expect_ident("field name")?;
+                        let _ = self.expect(&TokenKind::Equal);
+                        let pattern = self.parse_pattern()?;
+                        fields.push(PatternField { name, pattern });
+                        if self.not_matches_token(&TokenKind::Coma) {
+                            break;
+                        }
+                    }
+                    let _ = self.expect(&TokenKind::RightBrace);
+                    Ok(Pattern {
+                        loc,
+                        kind: PatternKind::Record(fields),
                     })
                 }
                 _ => {

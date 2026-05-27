@@ -5,7 +5,16 @@ use crate::{
 
 pub fn pattern_to_pat<'a>(pattern: &'a Pattern) -> Pat<'a> {
     let ty = &pattern.ty;
+
     match &pattern.kind {
+        PatternKind::Record(fields) => Pat {
+            ty,
+            constructor: Constructor::Record,
+            fields: fields
+                .iter()
+                .map(|field| pattern_to_pat(&field.pattern).with_index(field.index.into_index()))
+                .collect(),
+        },
         PatternKind::None => Pat {
             constructor: Constructor::None,
             fields: Vec::new(),
@@ -13,7 +22,7 @@ pub fn pattern_to_pat<'a>(pattern: &'a Pattern) -> Pat<'a> {
         },
         PatternKind::Some(inner) => Pat {
             constructor: Constructor::Some,
-            fields: vec![pattern_to_pat(inner)],
+            fields: vec![pattern_to_pat(inner).with_index(0)],
             ty,
         },
         PatternKind::Bool(value) => Pat {
@@ -28,7 +37,7 @@ pub fn pattern_to_pat<'a>(pattern: &'a Pattern) -> Pat<'a> {
         },
         PatternKind::Deref(inner) => Pat {
             constructor: Constructor::Deref,
-            fields: vec![pattern_to_pat(inner)],
+            fields: vec![pattern_to_pat(inner).with_index(0)],
             ty,
         },
     }
