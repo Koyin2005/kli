@@ -582,10 +582,9 @@ impl Parser {
                         kind: ExprKind::String(string),
                     })
                 }
-                TokenKind::List => {
+                TokenKind::LeftBracket => {
                     self.next_token();
                     let mut values = Vec::new();
-                    let _ = self.expect(&TokenKind::LeftBracket);
                     while self.check_is_not_token(&TokenKind::RightBracket) {
                         values.push(self.parse_expr()?);
                         if self.not_matches_token(&TokenKind::Coma) {
