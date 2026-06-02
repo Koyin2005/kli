@@ -247,14 +247,6 @@ impl Parser {
                         kind: PatternKind::Bool(false),
                     })
                 }
-                TokenKind::Caret => {
-                    self.next_token();
-                    let pattern = self.parse_pattern()?;
-                    Ok(Pattern {
-                        loc,
-                        kind: PatternKind::Deref(Box::new(pattern)),
-                    })
-                }
                 TokenKind::LeftBrace => {
                     self.next_token();
                     let mut fields = Vec::new();

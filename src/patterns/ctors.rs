@@ -5,7 +5,6 @@ pub enum Constructor {
     None,
     Bool(bool),
     Wildcard,
-    Deref,
     Record,
     NonExhaustive,
 }
@@ -13,7 +12,7 @@ pub enum Constructor {
 pub fn constructors_of_ty(ty: &Type) -> Vec<Constructor> {
     match ty {
         Type::Bool => vec![Constructor::Bool(true), Constructor::Bool(false)],
-        Type::Imm(..) | Type::Mut(..) => vec![Constructor::Deref],
+        Type::Imm(.., ty) | Type::Mut(.., ty) => constructors_of_ty(ty),
         Type::Option(_) => vec![Constructor::Some, Constructor::None],
         Type::Char
         | Type::Box(_)
@@ -32,6 +31,9 @@ pub fn constructors_of_ty(ty: &Type) -> Vec<Constructor> {
 }
 
 pub fn fields_of(ty: &Type, constructor: Constructor) -> Vec<&Type> {
+    if let Type::Imm(_, ty) | Type::Mut(_, ty) = ty {
+        return fields_of(ty, constructor);
+    }
     match constructor {
         Constructor::Bool(_)
         | Constructor::None
@@ -40,12 +42,6 @@ pub fn fields_of(ty: &Type, constructor: Constructor) -> Vec<&Type> {
         Constructor::Some => {
             let Type::Option(ty) = ty else {
                 unreachable!("Should be an option")
-            };
-            vec![ty]
-        }
-        Constructor::Deref => {
-            let (Type::Imm(_, ty) | Type::Mut(_, ty)) = ty else {
-                unreachable!("Should be a reference")
             };
             vec![ty]
         }

@@ -14,9 +14,14 @@ impl TypeCheck {
         &mut self,
         pattern: Pattern,
         expected_type: Type,
-        region: Option<Region>,
+        binding_mode: Option<(Region, Mutable)>,
     ) -> typed_ast::Pattern {
         let expected_type = self.simplify_type(expected_type);
+        if let Ok((mutable, region, ty)) = expected_type.as_reference_type() {
+            let region = region.clone();
+            let ty = ty.clone();
+            return self.check_pattern(pattern, ty, Some((region, mutable)));
+        }
         match pattern.kind {
             PatternKind::Record(fields) => {
                 let expected_fields = match self.simplify_type(expected_type) {
@@ -50,7 +55,7 @@ impl TypeCheck {
                                         .map(|fields| fields[field].ty.clone())
                                 })
                                 .unwrap_or(Type::Unknown),
-                            region.clone(),
+                            binding_mode.clone(),
                         );
                         if expected_fields.is_some() && !seen_fields.insert(name.content.clone()) {
                             self.diag.borrow_mut().add_diagnostic(
@@ -115,41 +120,6 @@ impl TypeCheck {
                     kind: typed_ast::PatternKind::Bool(value),
                 }
             }
-            PatternKind::Deref(derefed_pattern) => {
-                let (derefed_pattern, mutable, region) = match expected_type.as_reference_type() {
-                    Ok((mutable, expected_region, ty)) => {
-                        let region = match region {
-                            Some(region) => self.unify_region(
-                                region,
-                                expected_region.clone(),
-                                pattern.loc.clone(),
-                            ),
-                            None => expected_region.clone(),
-                        };
-                        (
-                            self.check_pattern(*derefed_pattern, ty.clone(), Some(region.clone())),
-                            mutable,
-                            region,
-                        )
-                    }
-                    Err(ty) => {
-                        self.diag.borrow_mut().add_diagnostic(
-                            format!("Expected a reference type but got '{}'", ty),
-                            pattern.loc.clone(),
-                        );
-                        (
-                            self.check_pattern(*derefed_pattern, Type::Unknown, region),
-                            Mutable::Immutable,
-                            Region::Unknown,
-                        )
-                    }
-                };
-                typed_ast::Pattern {
-                    ty: Type::reference(derefed_pattern.ty.clone(), mutable, region),
-                    loc: pattern.loc,
-                    kind: typed_ast::PatternKind::Deref(Box::new(derefed_pattern)),
-                }
-            }
             PatternKind::None => {
                 let inner_ty = match expected_type {
                     Type::Option(ty) => *ty,
@@ -169,13 +139,13 @@ impl TypeCheck {
             }
             PatternKind::Some(inner) => {
                 let inner = match expected_type {
-                    Type::Option(ty) => self.check_pattern(*inner, *ty, region),
+                    Type::Option(ty) => self.check_pattern(*inner, *ty, binding_mode),
                     expected_type => {
                         self.diag.borrow_mut().add_diagnostic(
                             format!("Expected an option type but got '{}'", expected_type),
                             pattern.loc.clone(),
                         );
-                        self.check_pattern(*inner, Type::Unknown, region)
+                        self.check_pattern(*inner, Type::Unknown, binding_mode)
                     }
                 };
                 typed_ast::Pattern {
@@ -186,7 +156,11 @@ impl TypeCheck {
             }
             PatternKind::Binding(mutable, ident, var) => {
                 let name = ident.content.clone();
-                let var_ty = expected_type.clone();
+                let var_ty = if let Some((region, mutable)) = binding_mode {
+                    Type::reference(expected_type.clone(), mutable, region)
+                } else {
+                    expected_type.clone()
+                };
                 self.declare_var(var, var_ty.clone());
                 typed_ast::Pattern {
                     ty: expected_type,

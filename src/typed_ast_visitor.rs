@@ -20,7 +20,7 @@ where
 {
     match &pattern.kind {
         PatternKind::Binding(..) | PatternKind::Bool(_) | PatternKind::None => (),
-        PatternKind::Deref(pattern) | PatternKind::Some(pattern) => v.visit_pattern(pattern),
+        PatternKind::Some(pattern) => v.visit_pattern(pattern),
         PatternKind::Record(fields) => {
             for field in fields {
                 v.visit_pattern(&field.pattern);

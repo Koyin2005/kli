@@ -242,7 +242,7 @@ impl ResourceCheck {
                     self.check_pattern(&field.pattern);
                 }
             }
-            PatternKind::Some(sub_pattern) | PatternKind::Deref(sub_pattern) => {
+            PatternKind::Some(sub_pattern) => {
                 self.check_pattern(sub_pattern);
             }
             PatternKind::Binding(mutable, var, ty) => {

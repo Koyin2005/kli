@@ -35,10 +35,5 @@ pub fn pattern_to_pat<'a>(pattern: &'a Pattern) -> Pat<'a> {
             fields: Vec::new(),
             ty,
         },
-        PatternKind::Deref(inner) => Pat {
-            constructor: Constructor::Deref,
-            fields: vec![pattern_to_pat(inner).with_index(0)],
-            ty,
-        },
     }
 }

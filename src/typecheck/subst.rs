@@ -63,7 +63,6 @@ impl<'a> TypeSubst<'a> {
         match &mut pattern.kind {
             PatternKind::None | PatternKind::Bool(_) => (),
             PatternKind::Some(pattern) => self.subst_pattern(pattern),
-            PatternKind::Deref(pattern) => self.subst_pattern(pattern),
             PatternKind::Binding(.., ty) => self.subst_type(ty),
             PatternKind::Record(fields) => {
                 for field in fields {

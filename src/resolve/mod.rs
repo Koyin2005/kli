@@ -335,19 +335,12 @@ impl Resolve {
         let kind = match pattern.kind {
             ast::PatternKind::Bool(value) => res::PatternKind::Bool(value),
             ast::PatternKind::None => res::PatternKind::None,
-            ast::PatternKind::Deref(pattern) => {
-                res::PatternKind::Deref(Box::new(self.resolve_pattern(*pattern)))
-            }
             ast::PatternKind::Some(pattern) => {
                 res::PatternKind::Some(Box::new(self.resolve_pattern(*pattern)))
             }
             ast::PatternKind::Binding(mutable, name) => {
                 let var = self.declare_var(name.content.clone());
-                res::PatternKind::Binding(
-                    mutable,
-                    name,
-                    var
-                )
+                res::PatternKind::Binding(mutable, name, var)
             }
             ast::PatternKind::Record(fields) => {
                 let fields = fields

@@ -233,21 +233,6 @@ impl TypeCheck {
     pub(super) fn simplify_type(&self, ty: Type) -> Type {
         self.infer.simplify_type(ty)
     }
-    pub(super) fn simplify_region(&self, region: Region) -> Region {
-        self.infer.simplify_region(region)
-    }
-    pub(super) fn unify_region(&mut self, region1: Region, region2: Region, loc: SrcLoc) -> Region {
-        if let Some(region) = self.infer.unify_region(region1.clone(), region2.clone()) {
-            region
-        } else {
-            let region1 = self.simplify_region(region1);
-            let region2 = self.simplify_region(region2);
-            self.diag
-                .borrow_mut()
-                .add_diagnostic(format!("Expected '{region1}' but got '{region2}'"), loc);
-            Region::Unknown
-        }
-    }
     pub(super) fn unify(&mut self, ty1: Type, ty2: Type, loc: SrcLoc) -> Type {
         if let Some(ty) = self.infer.unify_ty(ty1.clone(), ty2.clone()) {
             ty
@@ -300,9 +285,6 @@ impl TypeCheck {
                 main.loc.clone(),
             );
         }
-    }
-    pub(super) fn lower_region(&self, region: res::Region) -> Region {
-        Lower::new(&self.generics, &self.diag).lower_region(&region)
     }
     pub(super) fn lower_type(&self, ty: res::Type) -> Type {
         Lower::new(&self.generics, &self.diag).lower_type(&ty)

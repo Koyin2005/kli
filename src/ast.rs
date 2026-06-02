@@ -73,7 +73,6 @@ pub enum PatternKind {
     Binding(Mutable, Ident),
     Some(Box<Pattern>),
     None,
-    Deref(Box<Pattern>),
     Record(Vec<PatternField>),
 }
 #[derive(Debug)]

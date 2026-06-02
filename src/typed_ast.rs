@@ -25,7 +25,6 @@ pub enum PatternKind {
     Bool(bool),
     Some(Box<Pattern>),
     None,
-    Deref(Box<Pattern>),
     Binding(Mutable, Var, Box<Type>),
     Record(Vec<PatternField>),
 }
