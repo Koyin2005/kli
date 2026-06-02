@@ -346,8 +346,7 @@ impl Resolve {
                 res::PatternKind::Binding(
                     mutable,
                     name,
-                    var,
-                    None,
+                    var
                 )
             }
             ast::PatternKind::Record(fields) => {

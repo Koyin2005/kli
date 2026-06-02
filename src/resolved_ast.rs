@@ -166,7 +166,7 @@ pub enum PatternKind {
     Bool(bool),
     Some(Box<Pattern>),
     None,
-    Binding(Mutable, Ident, VarId, Option<Region>),
+    Binding(Mutable, Ident, VarId),
     Deref(Box<Pattern>),
     Record(Vec<PatternField>),
 }

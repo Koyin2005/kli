@@ -184,26 +184,9 @@ impl TypeCheck {
                     kind: typed_ast::PatternKind::Some(Box::new(inner)),
                 }
             }
-            PatternKind::Binding(mutable, ident, var, borrow_region) => {
-                let borrow_region = borrow_region.map(|region| self.lower_region(region));
+            PatternKind::Binding(mutable, ident, var) => {
                 let name = ident.content.clone();
-                let var_ty = match (borrow_region, region) {
-                    (None, None) => expected_type.clone(),
-                    (None, Some(_)) => expected_type.clone(),
-                    (Some(region), None) => {
-                        self.diag.borrow_mut().add_diagnostic(
-                            "Cannot borrow without region".to_string(),
-                            pattern.loc.clone(),
-                        );
-                        Type::reference(expected_type.clone(), mutable, region)
-                    }
-                    (Some(borrow_region), Some(expected)) => {
-                        let region =
-                            self.unify_region(borrow_region, expected, pattern.loc.clone());
-                        Type::reference(expected_type.clone(), mutable, region)
-                    }
-                };
-
+                let var_ty = expected_type.clone();
                 self.declare_var(var, var_ty.clone());
                 typed_ast::Pattern {
                     ty: expected_type,
