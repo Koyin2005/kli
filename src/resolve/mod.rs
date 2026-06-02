@@ -341,13 +341,13 @@ impl Resolve {
             ast::PatternKind::Some(pattern) => {
                 res::PatternKind::Some(Box::new(self.resolve_pattern(*pattern)))
             }
-            ast::PatternKind::Binding(mutable, name, region) => {
+            ast::PatternKind::Binding(mutable, name) => {
                 let var = self.declare_var(name.content.clone());
                 res::PatternKind::Binding(
                     mutable,
                     name,
                     var,
-                    region.map(|region| self.resolve_region(region)),
+                    None,
                 )
             }
             ast::PatternKind::Record(fields) => {

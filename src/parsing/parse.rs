@@ -199,7 +199,7 @@ impl Parser {
         let name = self.expect_ident("variable name")?;
         Ok(Pattern {
             loc,
-            kind: PatternKind::Binding(mutable, name, None),
+            kind: PatternKind::Binding(mutable, name),
         })
     }
     fn parse_pattern(&mut self) -> Result<Pattern, ParseError> {

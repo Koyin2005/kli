@@ -70,7 +70,7 @@ pub struct PatternField {
 #[derive(Debug)]
 pub enum PatternKind {
     Bool(bool),
-    Binding(Mutable, Ident, Option<Region>),
+    Binding(Mutable, Ident),
     Some(Box<Pattern>),
     None,
     Deref(Box<Pattern>),
