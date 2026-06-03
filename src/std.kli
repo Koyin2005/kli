@@ -11,4 +11,3 @@ fun print_string(value : string) -> () =
         end;
         destroy_string(value)
     end
-

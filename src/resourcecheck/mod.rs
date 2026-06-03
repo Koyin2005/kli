@@ -75,8 +75,8 @@ impl ResourceCheck {
             loops: 0,
         }
     }
-    fn is_strict_resource(&self, ty: &Type) -> bool {
-        !matches!(ty, Type::Mut(..)) && self.is_resource(ty)
+    fn is_strict_resource(&self, _: &Type) -> bool {
+        false
     }
     fn is_resource(&self, ty: &Type) -> bool {
         match ty {
