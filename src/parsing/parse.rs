@@ -664,21 +664,19 @@ impl Parser {
         let mut lhs = self.parse_expr_precedence(Precedence::None)?;
         while self.matches_token(&TokenKind::Equal) {
             let loc = lhs.loc.clone();
-            lhs = match lhs.as_place() {
-                Ok(place) => Expr {
-                    loc,
-                    kind: ExprKind::Assign(
-                        place,
-                        Box::new(self.parse_expr_precedence(Precedence::None)?),
-                    ),
-                },
-                Err(non_place) => {
-                    lhs = non_place;
-                    self.diag
-                        .add_diagnostic("Invalid assignment target".to_string(), loc);
-                    break;
-                }
+            lhs = Expr {
+                loc,
+                kind: ExprKind::Assign(
+                    Box::new(lhs),
+                    Box::new(self.parse_expr_precedence(Precedence::None)?),
+                ),
             };
+            /*Err(non_place) => {
+                lhs = non_place;
+                self.diag
+                    .add_diagnostic("Invalid assignment target".to_string(), loc);
+                break;
+            }*/
         }
         Ok(lhs)
     }

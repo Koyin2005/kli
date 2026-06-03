@@ -330,6 +330,16 @@ impl Resolve {
                 .expect("There should be a pushed scope"),
         )
     }
+    fn path_error(&mut self, path: &ast::Path, loc: SrcLoc, error: NameResolutionError) {
+        match error {
+            NameResolutionError::NotInScope => {
+                self.path_not_in_scope_error(&path, loc);
+            }
+            NameResolutionError::InvalidPathStart => {
+                self.invalid_path_start_error(&path, loc);
+            }
+        }
+    }
     fn resolve_pattern(&mut self, pattern: ast::Pattern) -> res::Pattern {
         let loc = pattern.loc;
         let kind = match pattern.kind {
@@ -361,21 +371,23 @@ impl Resolve {
         let pattern = self.resolve_pattern(let_binding.pattern);
         res::LetBinding { pattern, ty, value }
     }
-    fn resolve_place(&mut self, place: ast::Place) -> Option<res::Place> {
-        match place {
-            ast::Place::Deref(expr, loc) => Some(res::Place {
+    fn resolve_place(&mut self, place: ast::Expr) -> Option<res::Place> {
+        let loc = place.loc;
+        match place.kind {
+            ast::ExprKind::Deref(expr) => Some(res::Place {
                 loc,
                 kind: res::PlaceKind::Deref(Box::new(self.resolve_expr(*expr))),
             }),
-            ast::Place::Ident(name) => Some(res::Place {
-                loc: name.loc.clone(),
-                kind: match self.resolve_name(&name.content) {
-                    None => {
-                        self.not_in_scope_error(&name.content, name.loc.clone());
+            ast::ExprKind::Path(path) => {
+                let kind = match self.resolve_path(&path) {
+                    Err(err) => {
+                        self.path_error(&path, loc, err);
                         return None;
                     }
-                    Some(Res::Var(var)) => res::PlaceKind::Var(res::Var(name.content, var)),
-                    Some(
+                    Ok(Res::Var(var)) => {
+                        res::PlaceKind::Var(res::Var(path.expect_head().content, var))
+                    }
+                    Ok(
                         Res::Builtin(_)
                         | Res::Function(..)
                         | Res::Param(_)
@@ -383,13 +395,19 @@ impl Resolve {
                         | Res::Module(_),
                     ) => {
                         self.diag.add_diagnostic(
-                            format!("Can't use '{}' as place", name.content),
-                            name.loc.clone(),
+                            format!("Can't use '{}' as place", path.display()),
+                            path.expect_head().loc.clone(),
                         );
                         return None;
                     }
-                },
-            }),
+                };
+                Some(res::Place { loc, kind })
+            }
+            _ => {
+                self.diag
+                    .add_diagnostic(format!("Invalid place"), loc.clone());
+                None
+            }
         }
     }
     fn resolve_stmt(&mut self, stmt: ast::Stmt) -> res::Stmt {
@@ -535,7 +553,7 @@ impl Resolve {
                 }))
             }),
             ast::ExprKind::Assign(place, value) => {
-                let place = self.resolve_place(place);
+                let place = self.resolve_place(*place);
                 let value = self.resolve_expr(*value);
                 let Some(place) = place else {
                     return res::Expr {

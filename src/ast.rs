@@ -27,24 +27,6 @@ pub struct Expr {
     pub loc: SrcLoc,
     pub kind: ExprKind,
 }
-impl Expr {
-    pub fn as_place(self) -> Result<Place, Expr> {
-        match self.kind {
-            ExprKind::Path(path) => match path.into_head() {
-                Ok(head) => Ok(Place::Ident(head)),
-                Err(path) => Err(Expr {
-                    loc: self.loc,
-                    kind: ExprKind::Path(path),
-                }),
-            },
-            ExprKind::Deref(expr) => {
-                let loc = expr.loc.clone();
-                Ok(Place::Deref(Box::new(*expr), loc))
-            }
-            _ => Err(self),
-        }
-    }
-}
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum BinaryOp {
     Add,
@@ -191,7 +173,7 @@ pub enum ExprKind {
     Borrow(Box<BorrowExpr>),
     Case(Box<Expr>, Vec<CaseArm>),
     For(Box<Pattern>, Box<Expr>, Box<Expr>),
-    Assign(Place, Box<Expr>),
+    Assign(Box<Expr>, Box<Expr>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Path(Path),
     Lambda(Box<Lambda>),
