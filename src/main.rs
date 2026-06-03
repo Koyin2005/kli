@@ -69,13 +69,12 @@ fn main() {
             }
         },
     };
-    let modules = if meta.is_file() {
+    let files = if meta.is_file() {
         if !Path::new(&path).exists() {
             eprintln!("File at '{}' not found", path);
             return;
         }
-
-        let (name, src) = match read_source_file(
+        match read_source_file(
             Path::new(&path),
             Path::new(&path)
                 .file_name()
@@ -83,7 +82,7 @@ fn main() {
                 .to_string_lossy()
                 .into_owned(),
         ) {
-            Ok((name, src)) => (name, src),
+            Ok((name, src)) => BTreeMap::from([(name, src)]),
             Err(ModuleError::InvalidModule) => {
                 eprintln!("Cannot compile non kli file at {}", path);
                 return;
@@ -92,39 +91,39 @@ fn main() {
                 eprintln!("Unkown error : {:?}", error);
                 return;
             }
-        };
-        let parser = Parser::new(name.clone(), &src);
-        let Ok(module) = parser.parse_module() else {
-            return;
-        };
-        BTreeMap::from([(name, module)])
+        }
     } else {
-        let files = match read_source_files(path) {
+        match read_source_files(path) {
             Ok(files) => files,
             Err(err) => {
                 eprintln!("Unknown error '{:?}'", err);
                 return;
             }
-        };
-        let mut had_error = false;
-        let modules = files
-            .into_iter()
-            .filter_map(|(name, source)| {
-                let Some(program) = parse_source_file(name, &source) else {
-                    had_error = true;
-                    return None;
-                };
-                if had_error {
-                    return None;
-                };
-                Some(program)
-            })
-            .collect::<BTreeMap<_, _>>();
-        if had_error {
-            return;
         }
-        modules
     };
+    let files = {
+        let mut files = files;
+        files.insert(Rc::from("std"), include_str!("std.kli").to_string());
+        files
+    };
+
+    let mut had_error = false;
+    let modules = files
+        .into_iter()
+        .filter_map(|(name, source)| {
+            let Some(program) = parse_source_file(name, &source) else {
+                had_error = true;
+                return None;
+            };
+            if had_error {
+                return None;
+            };
+            Some(program)
+        })
+        .collect::<BTreeMap<_, _>>();
+    if had_error {
+        return;
+    }
     let Ok(program) = Resolve::new().resolve(modules) else {
         return;
     };
