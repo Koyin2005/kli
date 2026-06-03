@@ -167,6 +167,7 @@ impl<'s> Lexer<'s> {
                 "end" => TokenKind::End,
                 "of" => TokenKind::Of,
                 "do" => TokenKind::Do,
+                "region" => TokenKind::Region,
                 _ => TokenKind::Ident(src),
             },
         })
