@@ -4,4 +4,6 @@ fun not(x : bool) -> bool =
     | false -> true 
     end
 
-fun print_string(value : string) -> () = ()
+fun print_string(value : string) -> () = do in r
+    print(borrow value in r)
+end
