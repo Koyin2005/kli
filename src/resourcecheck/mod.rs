@@ -173,6 +173,13 @@ impl ResourceCheck {
     }
     fn write_to_var(&mut self, var: VarId, loc: SrcLoc) {
         let info = &self.vars[&var];
+        if self.borrowed.get(&var).is_some() {
+            self.err.add_diagnostic(
+                format!("Cant assign to '{}' while borrowed", info.name),
+                loc,
+            );
+            return;
+        }
         let is_resource = self.is_strict_resource(&info.ty);
         let state = self.var_states.get_mut(&var).unwrap();
         if is_resource && *state != VarState::Moved {
@@ -579,7 +586,7 @@ impl ResourceCheck {
                     );
                     return;
                 }
-                // TODO : Allow borrowing from place with longer region 
+                // TODO : Allow borrowing from place with longer region
                 if !matches!(region, Region::Local(..)) {
                     self.err.add_diagnostic(
                         format!("Cannot borrow '{}' with region '{}'", var.0, region),
