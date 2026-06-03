@@ -161,15 +161,6 @@ impl Parser {
             _ => None,
         }
     }
-    fn parse_binding(&mut self) -> Result<(Mutable, Ident), ParseError> {
-        let mutable = if self.matches_token(&TokenKind::Mut) {
-            Mutable::Mutable
-        } else {
-            Mutable::Immutable
-        };
-        let name = self.expect_ident("variable name")?;
-        Ok((mutable, name))
-    }
     fn parse_region(&mut self) -> Result<Region, ParseError> {
         match self.match_ident() {
             Some(name) => Ok(Region::Named(name)),
@@ -315,11 +306,16 @@ impl Parser {
     }
     fn parse_block_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.expect(&TokenKind::Do)?;
+        let region = if self.matches_token(&TokenKind::In) {
+            Some(self.expect_ident("region name")?)
+        } else {
+            None
+        };
         let body = self.parse_block_body()?;
         self.expect(&TokenKind::End)?;
         Ok(Expr {
             loc,
-            kind: ExprKind::Block(body),
+            kind: ExprKind::Block(body, region),
         })
     }
     fn parse_case_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
@@ -459,20 +455,20 @@ impl Parser {
                 }
                 TokenKind::Borrow => {
                     self.next_token();
-                    let (mutable, name) = self.parse_binding()?;
-                    let _ = self.expect(&TokenKind::In);
-                    let region = self.expect_ident("region name")?;
-                    let body = {
-                        let loc = self.current_loc();
-                        self.parse_block_expr(loc)?
+                    let mutable = if self.matches_token(&TokenKind::Mut) {
+                        Mutable::Mutable
+                    } else {
+                        Mutable::Immutable
                     };
+                    let expr = self.parse_expr()?;
+                    let _ = self.expect(&TokenKind::In);
+                    let region = self.parse_region()?;
                     Ok(Expr {
                         loc,
                         kind: ExprKind::Borrow(Box::new(BorrowExpr {
                             mutable,
-                            var_name: name,
+                            expr,
                             region,
-                            body: Box::new(body),
                         })),
                     })
                 }

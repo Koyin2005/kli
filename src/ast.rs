@@ -7,6 +7,14 @@ pub enum Mutable {
     Mutable,
     Immutable,
 }
+impl Display for Mutable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.pad(match self {
+            Self::Immutable => "imm",
+            Self::Mutable => "mut",
+        })
+    }
+}
 #[derive(Debug)]
 pub enum StmtKind {
     Let(LetBinding),
@@ -155,9 +163,8 @@ pub struct RecordExpr {
 #[derive(Debug)]
 pub struct BorrowExpr {
     pub mutable: Mutable,
-    pub var_name: Ident,
-    pub region: Ident,
-    pub body: Box<Expr>,
+    pub expr: Expr,
+    pub region: Region,
 }
 #[derive(Debug)]
 pub enum ExprKind {
@@ -177,7 +184,7 @@ pub enum ExprKind {
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Path(Path),
     Lambda(Box<Lambda>),
-    Block(BlockBody),
+    Block(BlockBody, Option<Ident>),
     Deref(Box<Expr>),
     Bool(bool),
     Number(u64),

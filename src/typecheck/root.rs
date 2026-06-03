@@ -245,6 +245,18 @@ impl TypeCheck {
             Type::Unknown
         }
     }
+    pub(super) fn unify_region(&mut self, region1: Region, region2: Region, loc: SrcLoc) -> Region {
+        if let Some(region) = self.infer.unify_region(region1.clone(), region2.clone()) {
+            region
+        } else {
+            let region1 = self.infer.simplify_region(region1);
+            let region2 = self.infer.simplify_region(region2);
+            self.diag
+                .borrow_mut()
+                .add_diagnostic(format!("Expected '{region1}' but got '{region2}'"), loc);
+            Region::Unknown
+        }
+    }
 
     pub(super) fn type_annotations_needed(&self, loc: SrcLoc) {
         self.diag
@@ -285,6 +297,9 @@ impl TypeCheck {
                 main.loc.clone(),
             );
         }
+    }
+    pub(super) fn lower_region(&self, region: res::Region) -> Region {
+        Lower::new(&self.generics, &self.diag).lower_region(&region)
     }
     pub(super) fn lower_type(&self, ty: res::Type) -> Type {
         Lower::new(&self.generics, &self.diag).lower_type(&ty)

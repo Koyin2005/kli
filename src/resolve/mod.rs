@@ -333,10 +333,10 @@ impl Resolve {
     fn path_error(&mut self, path: &ast::Path, loc: SrcLoc, error: NameResolutionError) {
         match error {
             NameResolutionError::NotInScope => {
-                self.path_not_in_scope_error(&path, loc);
+                self.path_not_in_scope_error(path, loc);
             }
             NameResolutionError::InvalidPathStart => {
-                self.invalid_path_start_error(&path, loc);
+                self.invalid_path_start_error(path, loc);
             }
         }
     }
@@ -405,7 +405,7 @@ impl Resolve {
             }
             _ => {
                 self.diag
-                    .add_diagnostic(format!("Invalid place"), loc.clone());
+                    .add_diagnostic("Invalid place".to_string(), loc.clone());
                 None
             }
         }
@@ -457,15 +457,19 @@ impl Resolve {
     fn resolve_expr(&mut self, expr: ast::Expr) -> res::Expr {
         let loc = expr.loc;
         let kind = match expr.kind {
-            ast::ExprKind::Block(block) => self.in_scope(|this| {
-                res::ExprKind::Block(res::BlockBody {
-                    stmts: block
-                        .stmts
-                        .into_iter()
-                        .map(|stmt| this.resolve_stmt(stmt))
-                        .collect(),
-                    expr: Box::new(this.resolve_expr(*block.expr)),
-                })
+            ast::ExprKind::Block(block, region) => self.in_scope(|this| {
+                let region = region.map(|region| this.declare_region(region.content));
+                res::ExprKind::Block(
+                    res::BlockBody {
+                        stmts: block
+                            .stmts
+                            .into_iter()
+                            .map(|stmt| this.resolve_stmt(stmt))
+                            .collect(),
+                        expr: Box::new(this.resolve_expr(*block.expr)),
+                    },
+                    region,
+                )
             }),
 
             ast::ExprKind::Unit => res::ExprKind::Unit,
@@ -566,43 +570,22 @@ impl Resolve {
             ast::ExprKind::Borrow(borrow_expr) => {
                 let BorrowExpr {
                     mutable,
-                    var_name,
-                    region: region_name,
-                    body,
+                    expr,
+                    region,
                 } = *borrow_expr;
-                let (body, new_var, var, region) = self.in_scope(|this| {
-                    let region = this.declare_region(region_name.content.clone());
-                    let var = match this.resolve_name(&var_name.content) {
-                        None => {
-                            this.not_in_scope_error(&var_name.content, var_name.loc.clone());
-                            None
-                        }
-                        Some(Res::Var(var)) => Some(var),
-                        Some(_) => {
-                            this.cannot_use_as_error(
-                                &var_name.content,
-                                "variable",
-                                var_name.loc.clone(),
-                            );
-                            None
-                        }
+                let place = self.resolve_place(expr);
+                let region = self.resolve_region(region);
+                let Some(place) = place else {
+                    return res::Expr {
+                        loc: loc.clone(),
+                        kind: res::ExprKind::Err,
                     };
-                    let new_var = this.declare_var(var_name.content.clone());
-                    let body = this.resolve_expr(*body);
-                    (body, new_var, var, region)
-                });
-                match var {
-                    None => res::ExprKind::Err,
-                    Some(var) => res::ExprKind::Borrow(Box::new(res::BorrowExpr {
-                        mutable,
-                        var_name,
-                        old_var: var,
-                        new_var,
-                        region_name,
-                        region,
-                        body,
-                    })),
-                }
+                };
+                res::ExprKind::Borrow(Box::new(res::BorrowExpr {
+                    mutable,
+                    place,
+                    region,
+                }))
             }
             ast::ExprKind::Case(matched, arms) => {
                 let matched = self.resolve_expr(*matched);

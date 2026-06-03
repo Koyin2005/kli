@@ -58,7 +58,7 @@ pub enum TokenKind {
     True,
     False,
     Error,
-    Region
+    Region,
 }
 
 impl Display for TokenKind {
@@ -117,7 +117,7 @@ impl Display for TokenKind {
             Self::Option => "option",
             Self::Ident(name) => name,
             Self::Error => "{error}",
-            Self::Region => "region"
+            Self::Region => "region",
         };
         f.write_str(txt)
     }

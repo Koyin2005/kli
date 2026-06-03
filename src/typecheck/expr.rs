@@ -2,12 +2,13 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     resolved_ast::{
-        BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, Lambda, Pattern, Place, PlaceKind, Var,
+        BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, Lambda, LocalRegionId, Pattern, Place,
+        PlaceKind, Var,
     },
     src_loc::SrcLoc,
     typecheck::root::TypeCheck,
     typed_ast::{self, FieldId, RecordFieldInit},
-    types::{FunctionType, RecordField, Region, Type},
+    types::{FunctionType, RecordField, Type},
 };
 
 impl TypeCheck {
@@ -81,31 +82,47 @@ impl TypeCheck {
     ) -> typed_ast::Expr {
         let BorrowExpr {
             mutable,
-            var_name,
-            old_var,
-            new_var,
-            region_name,
+            place,
             region,
-            body,
         } = borrow;
-        let var_ty = self.var_type(old_var).clone();
-        let new_ty = var_ty
-            .clone()
-            .reference(mutable, Region::Local(region_name.content.clone(), region));
-        self.declare_var(new_var, new_ty.clone());
-        let body = self.check_expr(body, expected_ty);
+        let (ty_mutable, ty_region, expected) = if let Some(ref expected) = expected_ty
+            && let Ok((ty_mutable, ty_region, ty)) = expected.as_reference_type()
+        {
+            (Some(ty_mutable), Some(ty_region.clone()), Some(ty.clone()))
+        } else {
+            (None, None, None)
+        };
+        let place = self.check_place(place, expected);
+        let region = {
+            let region = self.lower_region(region);
+            match ty_region {
+                Some(expected) => self.unify_region(expected, region, loc.clone()),
+                None => region,
+            }
+        };
+        if let Some(ty_mutable) = ty_mutable
+            && ty_mutable != mutable
+        {
+            self.diag.borrow_mut().add_diagnostic(
+                format!("Expected a '{}' but got '{}'", ty_mutable, mutable),
+                loc.clone(),
+            );
+        }
+        if let Some(expected) = expected_ty
+            && expected.as_reference_type().is_err()
+        {
+            self.diag.borrow_mut().add_diagnostic(
+                format!("Expected a view but got '{}'", expected),
+                loc.clone(),
+            );
+        }
         typed_ast::Expr {
-            ty: body.ty.clone(),
+            ty: Type::reference(place.ty.clone(), mutable, region.clone()),
             loc,
             kind: typed_ast::ExprKind::Borrow {
                 mutable,
-                var_name,
-                old_var,
-                new_var,
-                region_name,
                 region,
-                new_ty,
-                body: Box::new(body),
+                place,
             },
         }
     }
@@ -226,6 +243,7 @@ impl TypeCheck {
         &mut self,
         loc: SrcLoc,
         body: BlockBody,
+        region: Option<LocalRegionId>,
         expected_ty: Option<Type>,
     ) -> typed_ast::Expr {
         let stmts = body
@@ -242,7 +260,7 @@ impl TypeCheck {
         typed_ast::Expr {
             ty,
             loc,
-            kind: typed_ast::ExprKind::Block(body),
+            kind: typed_ast::ExprKind::Block(body, region),
         }
     }
     fn check_record(
@@ -327,7 +345,9 @@ impl TypeCheck {
         let make_expr = |ty, kind, loc| typed_ast::Expr { ty, kind, loc };
         let mut expr = match kind {
             ExprKind::Record(fields) => self.check_record(loc, fields, expected_ty.clone()),
-            ExprKind::Block(block) => return self.check_block(loc, block, expected_ty),
+            ExprKind::Block(block, region) => {
+                return self.check_block(loc, block, region, expected_ty);
+            }
             ExprKind::Annotate(expr, ty) => self.check_expr(*expr, Some(self.lower_type(*ty))),
             ExprKind::Err => typed_ast::Expr {
                 loc,

@@ -90,7 +90,7 @@ impl<'a> TypeSubst<'a> {
     }
     pub fn subst_expr(&mut self, expr: &mut Expr) {
         match &mut expr.kind {
-            ExprKind::Block(block) => {
+            ExprKind::Block(block, _) => {
                 for stmt in &mut block.stmts {
                     self.subst_stmt(stmt);
                 }
@@ -140,9 +140,9 @@ impl<'a> TypeSubst<'a> {
                 self.subst_place(place);
                 self.subst_expr(expr);
             }
-            ExprKind::Borrow { new_ty, body, .. } => {
-                self.subst_type(new_ty);
-                self.subst_expr(body);
+            ExprKind::Borrow { place, region, .. } => {
+                self.subst_place(place);
+                self.subst_region(region);
             }
             ExprKind::Case(matchee, arms) => {
                 self.subst_expr(matchee);

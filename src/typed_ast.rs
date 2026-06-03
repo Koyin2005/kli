@@ -5,7 +5,7 @@ use crate::{
     ident::Ident,
     resolved_ast::{Builtin, FunctionId, LocalRegionId, Var, VarId},
     src_loc::SrcLoc,
-    types::{GenericArg, GenericKind, Type},
+    types::{GenericArg, GenericKind, Region, Type},
 };
 
 #[derive(Debug)]
@@ -91,7 +91,7 @@ pub struct RecordFieldInit {
 #[derive(Debug)]
 pub enum ExprKind {
     Record(Vec<RecordFieldInit>),
-    Block(BlockBody),
+    Block(BlockBody, Option<LocalRegionId>),
     String(Rc<str>),
     Bool(bool),
     Int(i64),
@@ -114,13 +114,8 @@ pub enum ExprKind {
     },
     Borrow {
         mutable: Mutable,
-        var_name: Ident,
-        old_var: VarId,
-        new_var: VarId,
-        region_name: Ident,
-        region: LocalRegionId,
-        new_ty: Type,
-        body: Box<Expr>,
+        place: Place,
+        region: Region,
     },
     Case(Box<Expr>, Vec<CaseArm>),
     Assign(Place, Box<Expr>),

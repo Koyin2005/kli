@@ -56,7 +56,7 @@ where
     V: Visitor + ?Sized,
 {
     match &expr.kind {
-        ExprKind::Block(body) => {
+        ExprKind::Block(body, _) => {
             for stmt in &body.stmts {
                 v.visit_stmt(stmt);
             }
@@ -96,7 +96,7 @@ where
             v.visit_place(place);
             v.visit_expr(value);
         }
-        ExprKind::Borrow { body, .. } => v.visit_expr(body),
+        ExprKind::Borrow { place, .. } => v.visit_place(place),
         ExprKind::For {
             pattern,
             iterator,

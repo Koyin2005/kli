@@ -54,6 +54,7 @@ pub struct ResourceCheck {
     err: DiagnosticReporter,
     is_current_function_resource: IsResource,
     expired_regions: HashSet<LocalRegionId>,
+    borrowed: HashMap<VarId, Mutable>,
     scopes: Vec<Vec<VarId>>,
     region_params: HashSet<usize>,
     function_level: usize,
@@ -73,6 +74,7 @@ impl ResourceCheck {
             function_level: 0,
             capture_set: None,
             loops: 0,
+            borrowed: HashMap::new(),
         }
     }
     fn is_strict_resource(&self, _: &Type) -> bool {
@@ -419,11 +421,20 @@ impl ResourceCheck {
     }
     fn check_expr(&mut self, expr: &Expr) {
         match &expr.kind {
-            ExprKind::Block(body) => {
+            ExprKind::Block(body, region) => {
                 for stmt in &body.stmts {
                     self.check_stmt(stmt);
                 }
                 self.check_expr(&body.expr);
+                if let Some(region) = region {
+                    self.expired_regions.insert(*region);
+                    if self.ty_is_expired(&body.expr.ty) {
+                        self.err.add_diagnostic(
+                            format!("Cannot let '{}' escape", body.expr.ty),
+                            expr.loc.clone(),
+                        );
+                    }
+                }
             }
             ExprKind::Bool(_)
             | ExprKind::Err
@@ -517,42 +528,44 @@ impl ResourceCheck {
                 });
             }
             ExprKind::Borrow {
-                var_name,
-                new_var,
-                new_ty,
-                region,
-                body,
-                old_var,
                 mutable,
-                ..
+                place,
+                region: _,
             } => {
-                let old_var_mutable = self.vars[old_var].mutable;
+                let old_var_mutable = self.place_mutable(place);
                 match (old_var_mutable, mutable) {
-                    (Mutable::Mutable, Mutable::Immutable)
-                    | (Mutable::Mutable, Mutable::Mutable)
-                    | (Mutable::Immutable, Mutable::Immutable) => (),
+                    (Mutable::Mutable, _) | (Mutable::Immutable, Mutable::Immutable) => (),
                     (Mutable::Immutable, Mutable::Mutable) => {
-                        self.err.add_diagnostic(
-                            format!("Cannot borrow '{}' as mut", var_name.content),
-                            var_name.loc.clone(),
-                        );
+                        self.err
+                            .add_diagnostic("Cannot borrow  as mut".to_string(), place.loc.clone());
                     }
                 }
-                self.init_var(
-                    Mutable::Immutable,
-                    *new_var,
-                    var_name.loc.clone(),
-                    var_name.content.clone(),
-                    new_ty.clone(),
-                    false,
-                );
-                self.check_expr(body);
-                self.expired_regions.insert(*region);
-                if self.ty_is_expired(&body.ty) {
-                    self.err.add_diagnostic(
-                        format!("Cannot let '{}' escape", body.ty),
-                        body.loc.clone(),
-                    );
+                let var = if let Some(var) = self.var_of(place) {
+                    var
+                } else {
+                    self.err
+                        .add_diagnostic("Cannot borrow this place".to_string(), place.loc.clone());
+                    return;
+                };
+                match self.borrowed.entry(var) {
+                    Entry::Vacant(entry) => {
+                        entry.insert_entry(*mutable);
+                    }
+                    Entry::Occupied(entry) => match (entry.get(), *mutable) {
+                        (Mutable::Immutable, Mutable::Immutable) => (),
+                        (_, Mutable::Mutable) => {
+                            self.err.add_diagnostic(
+                                "Cannot borrow as mut".to_string(),
+                                place.loc.clone(),
+                            );
+                        }
+                        (Mutable::Mutable, Mutable::Immutable) => {
+                            self.err.add_diagnostic(
+                                "Cannot borrow as imm".to_string(),
+                                place.loc.clone(),
+                            );
+                        }
+                    },
                 }
             }
             ExprKind::For {

@@ -4,10 +4,4 @@ fun not(x : bool) -> bool =
     | false -> true 
     end
 
-fun print_string(value : string) -> () = 
-    do
-        borrow value in r do
-            print(value)
-        end;
-        destroy_string(value)
-    end
+fun print_string(value : string) -> () = ()

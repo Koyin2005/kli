@@ -48,12 +48,8 @@ pub struct Var(pub Rc<str>, pub VarId);
 #[derive(Debug)]
 pub struct BorrowExpr {
     pub mutable: Mutable,
-    pub var_name: Ident,
-    pub old_var: VarId,
-    pub new_var: VarId,
-    pub region_name: Ident,
-    pub region: LocalRegionId,
-    pub body: Expr,
+    pub place: Place,
+    pub region: Region,
 }
 #[derive(Debug)]
 pub struct Lambda {
@@ -117,7 +113,7 @@ pub struct FieldInit {
 }
 #[derive(Debug)]
 pub enum ExprKind {
-    Block(BlockBody),
+    Block(BlockBody, Option<LocalRegionId>),
     Unit,
     Err,
     Annotate(Box<Expr>, Box<Type>),
