@@ -54,8 +54,9 @@ pub struct ResourceCheck {
     err: DiagnosticReporter,
     is_current_function_resource: IsResource,
     expired_regions: HashSet<LocalRegionId>,
-    borrowed: HashMap<VarId, Mutable>,
+    borrowed: HashMap<VarId, (Mutable, Region)>,
     scopes: Vec<Vec<VarId>>,
+
     region_params: HashSet<usize>,
     function_level: usize,
     capture_set: Option<HashMap<VarId, SrcLoc>>,
@@ -143,6 +144,7 @@ impl ResourceCheck {
                 let msg = format!("'{}' cannot go out of scope", var_info.name);
                 self.err.add_diagnostic(msg, loc);
             }
+            self.borrowed.remove(&var);
         }
         scope
     }
@@ -187,6 +189,13 @@ impl ResourceCheck {
         let state = self.var_states.get_mut(&var).unwrap();
         match state {
             VarState::Owned => {
+                if self.borrowed.contains_key(&var) {
+                    self.err.add_diagnostic(
+                        format!("Cannot move from '{}' while borrowed", info.name),
+                        loc,
+                    );
+                    return;
+                }
                 if is_resource {
                     *state = VarState::Moved;
                     let info = &self.vars[&var];
@@ -422,19 +431,27 @@ impl ResourceCheck {
     fn check_expr(&mut self, expr: &Expr) {
         match &expr.kind {
             ExprKind::Block(body, region) => {
-                for stmt in &body.stmts {
-                    self.check_stmt(stmt);
-                }
-                self.check_expr(&body.expr);
-                if let Some(region) = region {
-                    self.expired_regions.insert(*region);
-                    if self.ty_is_expired(&body.expr.ty) {
-                        self.err.add_diagnostic(
-                            format!("Cannot let '{}' escape", body.expr.ty),
-                            expr.loc.clone(),
-                        );
+                self.in_drop_scope(|this| {
+                    for stmt in &body.stmts {
+                        this.check_stmt(stmt);
                     }
-                }
+                    this.check_expr(&body.expr);
+                    if let Some(region) = region {
+                        this.expired_regions.insert(*region);
+                        if this.ty_is_expired(&body.expr.ty) {
+                            this.err.add_diagnostic(
+                                format!("Cannot let '{}' escape", body.expr.ty),
+                                expr.loc.clone(),
+                            );
+                        }
+                        this.borrowed.retain(|_, (_, region)| {
+                            let Region::Local(_, local) = region else {
+                                return true;
+                            };
+                            !this.expired_regions.contains(local)
+                        });
+                    }
+                });
             }
             ExprKind::Bool(_)
             | ExprKind::Err
@@ -530,7 +547,7 @@ impl ResourceCheck {
             ExprKind::Borrow {
                 mutable,
                 place,
-                region: _,
+                region,
             } => {
                 let old_var_mutable = self.place_mutable(place);
                 match (old_var_mutable, mutable) {
@@ -540,18 +557,40 @@ impl ResourceCheck {
                             .add_diagnostic("Cannot borrow  as mut".to_string(), place.loc.clone());
                     }
                 }
-                let var = if let Some(var) = self.var_of(place) {
-                    var
-                } else {
-                    self.err
-                        .add_diagnostic("Cannot borrow this place".to_string(), place.loc.clone());
-                    return;
-                };
-                match self.borrowed.entry(var) {
-                    Entry::Vacant(entry) => {
-                        entry.insert_entry(*mutable);
+
+                let var = match &place.kind {
+                    PlaceKind::Var(var) => var,
+                    PlaceKind::Deref(_) => {
+                        self.err.add_diagnostic(
+                            "Cannot borrow this place".to_string(),
+                            place.loc.clone(),
+                        );
+                        return;
                     }
-                    Entry::Occupied(entry) => match (entry.get(), *mutable) {
+                };
+                if self
+                    .var_states
+                    .get(&var.1)
+                    .is_some_and(|state| *state == VarState::Moved)
+                {
+                    self.err.add_diagnostic(
+                        format!("Cannot borrow '{}' while moved", var.0),
+                        place.loc.clone(),
+                    );
+                    return;
+                }
+                // TODO : Allow borrowing from place with longer region 
+                if !matches!(region, Region::Local(..)) {
+                    self.err.add_diagnostic(
+                        format!("Cannot borrow '{}' with region '{}'", var.0, region),
+                        place.loc.clone(),
+                    );
+                }
+                match self.borrowed.entry(var.1) {
+                    Entry::Vacant(entry) => {
+                        entry.insert_entry((*mutable, region.clone()));
+                    }
+                    Entry::Occupied(entry) => match (entry.get().0, *mutable) {
                         (Mutable::Immutable, Mutable::Immutable) => (),
                         (_, Mutable::Mutable) => {
                             self.err.add_diagnostic(
