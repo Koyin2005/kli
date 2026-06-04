@@ -6,6 +6,7 @@ pub enum Constructor {
     Bool(bool),
     Wildcard,
     Record,
+    Ref,
     NonExhaustive,
 }
 
@@ -42,6 +43,12 @@ pub fn fields_of(ty: &Type, constructor: Constructor) -> Vec<&Type> {
         Constructor::Some => {
             let Type::Option(ty) = ty else {
                 unreachable!("Should be an option")
+            };
+            vec![ty]
+        }
+        Constructor::Ref => {
+            let (Type::Imm(_, ty) | Type::Mut(_, ty)) = ty else {
+                unreachable!("Should be a view")
             };
             vec![ty]
         }

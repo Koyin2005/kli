@@ -161,8 +161,9 @@ pub struct PatternField {
 pub enum PatternKind {
     Bool(bool),
     Some(Box<Pattern>),
+    Ref(Box<Pattern>),
     None,
-    Binding(Mutable, Ident, VarId),
+    Binding(Option<Mutable>, Mutable, Ident, VarId),
     Record(Vec<PatternField>),
 }
 #[derive(Debug)]

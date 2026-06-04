@@ -184,13 +184,14 @@ impl Parser {
     }
     fn parse_pattern_ident(
         &mut self,
+        borrow: Option<Mutable>,
         loc: SrcLoc,
         mutable: Mutable,
     ) -> Result<Pattern, ParseError> {
         let name = self.expect_ident("variable name")?;
         Ok(Pattern {
             loc,
-            kind: PatternKind::Binding(mutable, name),
+            kind: PatternKind::Binding(borrow, mutable, name),
         })
     }
     fn parse_pattern(&mut self) -> Result<Pattern, ParseError> {
@@ -202,10 +203,27 @@ impl Parser {
                 Err(ParseError)
             }
             Some(Token { loc: _, kind }) => match kind {
-                TokenKind::Ident(_) => self.parse_pattern_ident(loc, Mutable::Immutable),
+                TokenKind::Ref => {
+                    self.next_token();
+                    let pattern = self.parse_pattern()?;
+                    Ok(Pattern {
+                        loc,
+                        kind: PatternKind::Ref(Box::new(pattern)),
+                    })
+                }
+                TokenKind::Borrow => {
+                    self.next_token();
+                    let mutable = if self.matches_token(&TokenKind::Mut) {
+                        Mutable::Mutable
+                    } else {
+                        Mutable::Immutable
+                    };
+                    self.parse_pattern_ident(Some(mutable), loc, Mutable::Immutable)
+                }
+                TokenKind::Ident(_) => self.parse_pattern_ident(None, loc, Mutable::Immutable),
                 TokenKind::Mut => {
                     self.next_token();
-                    self.parse_pattern_ident(loc, Mutable::Mutable)
+                    self.parse_pattern_ident(None, loc, Mutable::Mutable)
                 }
                 TokenKind::Some => {
                     self.next_token();

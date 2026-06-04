@@ -17,12 +17,25 @@ impl TypeCheck {
         binding_mode: Option<(Region, Mutable)>,
     ) -> typed_ast::Pattern {
         let expected_type = self.simplify_type(expected_type);
-        if let Ok((mutable, region, ty)) = expected_type.as_reference_type() {
-            let region = region.clone();
-            let ty = ty.clone();
-            return self.check_pattern(pattern, ty, Some((region, mutable)));
-        }
         match pattern.kind {
+            PatternKind::Ref(inner) => {
+                let (mutable, region, ty) =
+                    if let Ok((mutable, region, ty)) = expected_type.as_reference_type() {
+                        (mutable, region.clone(), ty.clone())
+                    } else {
+                        self.diag.borrow_mut().add_diagnostic(
+                            format!("Expected a reference type but got '{}'", expected_type),
+                            pattern.loc.clone(),
+                        );
+                        (Mutable::Mutable, Region::Unknown, Type::Unknown)
+                    };
+                let inner = self.check_pattern(*inner, ty.clone(), Some((region.clone(), mutable)));
+                typed_ast::Pattern {
+                    ty: Type::reference(inner.ty.clone(), mutable, region),
+                    loc: pattern.loc,
+                    kind: typed_ast::PatternKind::Ref(Box::new(inner)),
+                }
+            }
             PatternKind::Record(fields) => {
                 let expected_fields = match self.simplify_type(expected_type) {
                     Type::Record(fields) => Some(fields),
@@ -154,12 +167,27 @@ impl TypeCheck {
                     kind: typed_ast::PatternKind::Some(Box::new(inner)),
                 }
             }
-            PatternKind::Binding(mutable, ident, var) => {
+            PatternKind::Binding(borrow, mutable, ident, var) => {
                 let name = ident.content.clone();
-                let var_ty = if let Some((region, mutable)) = binding_mode {
-                    Type::reference(expected_type.clone(), mutable, region)
-                } else {
-                    expected_type.clone()
+                let var_ty = match (borrow, binding_mode) {
+                    (None, None) => expected_type.clone(),
+                    (None, Some(_)) => expected_type.clone(),
+                    (Some(_), None) => {
+                        self.diag.borrow_mut().add_diagnostic(
+                            format!("Cannot create borrow binding '{}'", ident.content.clone()),
+                            ident.loc.clone(),
+                        );
+                        expected_type.clone()
+                    }
+                    (Some(borrow), Some((region, mutable))) => {
+                        if !mutable.usable_as(borrow) {
+                            self.diag.borrow_mut().add_diagnostic(
+                                format!("Cannot create borrow binding '{}'", ident.content.clone()),
+                                ident.loc.clone(),
+                            );
+                        }
+                        Type::reference(expected_type.clone(), borrow, region)
+                    }
                 };
                 self.declare_var(var, var_ty.clone());
                 typed_ast::Pattern {
