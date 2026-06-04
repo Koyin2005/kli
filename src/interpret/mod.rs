@@ -1,5 +1,8 @@
 mod values;
-pub struct Interpret{}
+mod functions;
+pub struct Interpret{
+
+}
 impl Interpret{
 
 }
