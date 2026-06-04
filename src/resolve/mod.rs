@@ -348,9 +348,9 @@ impl Resolve {
             ast::PatternKind::Some(pattern) => {
                 res::PatternKind::Some(Box::new(self.resolve_pattern(*pattern)))
             }
-            ast::PatternKind::Binding(mutable, name) => {
+            ast::PatternKind::Binding(borrow, mutable, name) => {
                 let var = self.declare_var(name.content.clone());
-                res::PatternKind::Binding(mutable, name, var)
+                res::PatternKind::Binding(borrow, mutable, name, var)
             }
             ast::PatternKind::Record(fields) => {
                 let fields = fields
@@ -361,6 +361,9 @@ impl Resolve {
                     })
                     .collect();
                 res::PatternKind::Record(fields)
+            }
+            ast::PatternKind::Ref(pattern) => {
+                res::PatternKind::Ref(Box::new(self.resolve_pattern(*pattern)))
             }
         };
         res::Pattern { loc, kind }

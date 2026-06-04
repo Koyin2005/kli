@@ -173,7 +173,7 @@ impl ResourceCheck {
     }
     fn write_to_var(&mut self, var: VarId, loc: SrcLoc) {
         let info = &self.vars[&var];
-        if self.borrowed.get(&var).is_some() {
+        if self.borrowed.contains_key(&var) {
             self.err.add_diagnostic(
                 format!("Cant assign to '{}' while borrowed", info.name),
                 loc,
@@ -260,7 +260,7 @@ impl ResourceCheck {
                     self.check_pattern(&field.pattern);
                 }
             }
-            PatternKind::Some(sub_pattern) => {
+            PatternKind::Some(sub_pattern) | PatternKind::Ref(sub_pattern) => {
                 self.check_pattern(sub_pattern);
             }
             PatternKind::Binding(mutable, var, ty) => {

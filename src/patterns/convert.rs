@@ -7,6 +7,11 @@ pub fn pattern_to_pat<'a>(pattern: &'a Pattern) -> Pat<'a> {
     let ty = &pattern.ty;
 
     match &pattern.kind {
+        PatternKind::Ref(inner) => Pat {
+            ty,
+            constructor: Constructor::Ref,
+            fields: vec![pattern_to_pat(inner).with_index(0)],
+        },
         PatternKind::Record(fields) => Pat {
             ty,
             constructor: Constructor::Record,

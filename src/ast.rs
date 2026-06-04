@@ -7,6 +7,16 @@ pub enum Mutable {
     Mutable,
     Immutable,
 }
+impl Mutable {
+    pub fn usable_as(self, other: Self) -> bool {
+        match (self, other) {
+            (Self::Mutable, Self::Mutable)
+            | (Self::Immutable, Self::Immutable)
+            | (Self::Mutable, Self::Immutable) => true,
+            (Self::Immutable, Self::Mutable) => false,
+        }
+    }
+}
 impl Display for Mutable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.pad(match self {
@@ -60,8 +70,9 @@ pub struct PatternField {
 #[derive(Debug)]
 pub enum PatternKind {
     Bool(bool),
-    Binding(Mutable, Ident),
+    Binding(Option<Mutable>, Mutable, Ident),
     Some(Box<Pattern>),
+    Ref(Box<Pattern>),
     None,
     Record(Vec<PatternField>),
 }
