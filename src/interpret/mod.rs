@@ -476,14 +476,15 @@ impl<'f> Interpret<'f> {
                 match &**ty {
                     Type::String => {
                         let string = self.string_from(iterator_value.as_string().unwrap())?;
-                        for c in string.chars() {
-                            let local = self.allocate_local(&Type::Char);
-                            self.typed_write(local, &Type::Char, Value::Char(c))?;
-                            self.assign_to_pattern(pattern, local)?;
-                            self.interpret_expr(body)?;
-                            self.drop(&Type::Char, local)?;
-                        }
-                        Ok(())
+                        self.in_drop_scope(|this| {
+                            for c in string.chars() {
+                                let local = this.allocate_local(&Type::Char);
+                                this.typed_write(local, &Type::Char, Value::Char(c))?;
+                                this.assign_to_pattern(pattern, local)?;
+                                this.interpret_expr(body)?;
+                            }
+                            Ok(())
+                        })
                     }
                     Type::List(_) => {
                         todo!("Handle list")
