@@ -9,12 +9,12 @@ pub enum GenericKind {
     Region,
     Type,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum GenericArg {
     Region(Region),
     Type(Type),
 }
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct FunctionType {
     pub resource: IsResource,
     pub params: Vec<Type>,
@@ -54,12 +54,12 @@ impl Display for Region {
         }
     }
 }
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct RecordField {
     pub name: Rc<str>,
     pub ty: Type,
 }
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub enum Type {
     Infer(usize),
     Unknown,
@@ -78,6 +78,9 @@ pub enum Type {
     Record(Vec<RecordField>),
 }
 impl Type {
+    pub fn is_reference(&self) -> bool {
+        matches!(self, Self::Imm(..) | Self::Mut(..))
+    }
     pub fn reference(self, mutable: Mutable, region: Region) -> Self {
         match mutable {
             Mutable::Immutable => Self::Imm(region, Box::new(self)),

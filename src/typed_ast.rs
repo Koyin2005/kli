@@ -26,7 +26,7 @@ pub enum PatternKind {
     Some(Box<Pattern>),
     None,
     Ref(Box<Pattern>),
-    Binding(Mutable, Var, Box<Type>),
+    Binding(Option<Mutable>, Mutable, Var, Box<Type>),
     Record(Vec<PatternField>),
 }
 #[derive(Debug)]
@@ -73,7 +73,7 @@ pub struct Expr {
     pub loc: SrcLoc,
     pub kind: ExprKind,
 }
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct FieldId(usize);
 impl FieldId {
     pub fn new(index: usize) -> Self {

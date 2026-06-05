@@ -194,6 +194,7 @@ impl TypeCheck {
                     ty: expected_type,
                     loc: pattern.loc,
                     kind: typed_ast::PatternKind::Binding(
+                        borrow,
                         mutable,
                         Var(name.clone(), var),
                         Box::new(var_ty),

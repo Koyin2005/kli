@@ -68,7 +68,7 @@ pub enum PlaceKind {
     Deref(Box<Expr>),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Builtin {
     AllocBox,
     DeallocBox,

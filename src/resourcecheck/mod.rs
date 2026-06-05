@@ -263,7 +263,7 @@ impl ResourceCheck {
             PatternKind::Some(sub_pattern) | PatternKind::Ref(sub_pattern) => {
                 self.check_pattern(sub_pattern);
             }
-            PatternKind::Binding(mutable, var, ty) => {
+            PatternKind::Binding(_, mutable, var, ty) => {
                 self.init_var(
                     *mutable,
                     var.1,

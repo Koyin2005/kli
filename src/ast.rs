@@ -207,7 +207,7 @@ pub struct Generics {
     pub names: Vec<Ident>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 pub enum IsResource {
     Resource,
     Data,

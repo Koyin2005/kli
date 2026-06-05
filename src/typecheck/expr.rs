@@ -405,8 +405,10 @@ impl TypeCheck {
                         }
                     }
                     (Some(ty), Some(expected)) => {
-                        if let Type::Option(expected) = expected {
-                            self.unify(ty, *expected, loc.clone())
+                        if let Type::Option(ty) =
+                            self.unify(Type::Option(Box::new(ty)), expected.clone(), loc.clone())
+                        {
+                            *ty
                         } else {
                             Type::Unknown
                         }
