@@ -34,8 +34,8 @@ pub fn constructors_of_ty(ty: &Type) -> Vec<Constructor> {
 
 pub fn fields_of(ty: &Type, constructor: Constructor) -> Vec<&Type> {
     match constructor {
-        Constructor::Int(_)|
-        Constructor::Bool(_)
+        Constructor::Int(_)
+        | Constructor::Bool(_)
         | Constructor::None
         | Constructor::NonExhaustive
         | Constructor::Wildcard => Vec::new(),

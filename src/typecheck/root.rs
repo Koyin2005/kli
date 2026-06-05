@@ -14,6 +14,7 @@ pub struct TypeError;
 #[derive(Debug)]
 struct VarInfo {
     ty: Type,
+    function_scope: usize,
 }
 pub struct TypeCheck {
     function_generic_kinds: Vec<Vec<GenericKind>>,
@@ -21,6 +22,7 @@ pub struct TypeCheck {
     variables: Vec<VarInfo>,
     generics: Vec<GenericKind>,
     signatures: Vec<Scheme<FunctionType>>,
+    captures: Vec<Vec<VarId>>,
     pub(super) infer: TypeInfer,
 }
 
@@ -57,6 +59,7 @@ impl TypeCheck {
             function_generic_kinds: function_kinds,
             diag: RefCell::new(DiagnosticReporter::new()),
             variables: Vec::new(),
+            captures: Vec::new(),
         }
     }
     pub(super) fn iterator_element(&self, ty: Type) -> Result<Type, Type> {
@@ -196,6 +199,18 @@ impl TypeCheck {
             Builtin::DestroyString => Vec::new(),
         }
     }
+    pub(super) fn with_capture_scope<T>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> (Vec<VarId>, T) {
+        self.captures.push(Vec::new());
+        let value = f(self);
+        if let Some(captures) = self.captures.pop() {
+            (captures, value)
+        } else {
+            (Vec::new(), value)
+        }
+    }
     pub(super) fn fresh_region(&mut self, loc: SrcLoc) -> Region {
         Region::Infer(self.infer.fresh_region(loc))
     }
@@ -222,13 +237,28 @@ impl TypeCheck {
     pub(super) fn var_type(&self, var: VarId) -> &Type {
         &self.variables[usize::from(var)].ty
     }
+    pub(super) fn capture(&mut self, var: VarId) -> bool {
+        if self.variables[usize::from(var)].function_scope != self.captures.len(){
+            let Some(captures) = self.captures.last_mut() else {
+                return false;
+            };
+            captures.push(var);
+            true
+        }
+        else {
+            false
+        }
+    }
     pub(super) fn declare_var(&mut self, var_id: VarId, ty: Type) {
         assert_eq!(
             usize::from(var_id),
             self.variables.len(),
             "variable declarations not in order"
         );
-        self.variables.push(VarInfo { ty });
+        self.variables.push(VarInfo {
+            ty,
+            function_scope: self.captures.len(),
+        });
     }
     pub(super) fn simplify_type(&self, ty: Type) -> Type {
         self.infer.simplify_type(ty)

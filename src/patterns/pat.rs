@@ -43,7 +43,7 @@ impl Display for Pat<'_> {
                 }
             }
             Constructor::Int(value) => {
-                write!(f,"{}",value)
+                write!(f, "{}", value)
             }
             Constructor::Ref => {
                 f.write_str("ref ")?;

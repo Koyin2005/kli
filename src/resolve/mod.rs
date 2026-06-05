@@ -346,7 +346,8 @@ impl Resolve {
             ast::PatternKind::Int(value) => res::PatternKind::Int(match value.try_into() {
                 Ok(number) => number,
                 Err(_) => {
-                    self.diag.add_diagnostic("Invalid integer".to_string(), loc.clone());
+                    self.diag
+                        .add_diagnostic("Invalid integer".to_string(), loc.clone());
                     0
                 }
             }),
