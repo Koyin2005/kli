@@ -92,6 +92,7 @@ impl<'f> Interpret<'f> {
         builtin_functions.insert(Builtin::Replace, HashMap::new());
         builtin_functions.insert(Builtin::DestroyList, HashMap::new());
         builtin_functions.insert(Builtin::DestroyString, HashMap::new());
+        builtin_functions.insert(Builtin::Freeze, HashMap::new());
         Self {
             functions,
             entry,
@@ -137,8 +138,19 @@ impl<'f> Interpret<'f> {
                 }
             }
             Type::Function(..) => todo!("Drop functions"),
-            Type::Record(..) => {
-                todo!("Drop record")
+            Type::Record(fields) => {
+                let tys = fields
+                    .iter()
+                    .map(|field| field.ty.clone())
+                    .collect::<Vec<_>>();
+                let (_, offsets) = offsets_of(&tys);
+                for (ty, offset) in tys.into_iter().zip(offsets) {
+                    let pointer = self
+                        .memory
+                        .byte_offset_in_bounds(pointer_to_place, offset as isize)?;
+                    self.drop(&ty, pointer)?;
+                }
+                Ok(())
             }
             Type::Param(..) => todo!("Handle params"),
             Type::List(..) => todo!("Drop lists"),
@@ -209,7 +221,7 @@ impl<'f> Interpret<'f> {
                 if *moved && as_move {
                     return Err(InterpretError::UseAfterMove);
                 }
-                if as_move {
+                if as_move && is_resource(&place.ty) {
                     *moved = true;
                 }
                 Ok(*pointer)
@@ -405,8 +417,8 @@ impl<'f> Interpret<'f> {
                 print!("{{");
                 let mut first = true;
                 for (field, field_value) in fields.iter().zip(field_values) {
-                    if first {
-                        print!(",");
+                    if !first {
+                        print!(", ");
                     }
                     print!("{} = ", field.name);
                     self.print_value(field_value, &field.ty)?;
