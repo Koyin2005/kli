@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::BinaryOp,
+    ast::{BinaryOp, IsResource},
     interpret::{
         functions::FunctionInfo,
         memory::{Byte, MemLocation, Memory},
@@ -10,7 +10,7 @@ use crate::{
     },
     resolved_ast::{Builtin, FunctionId, VarId},
     typed_ast::{self, FieldId},
-    types::{GenericArg, Type},
+    types::{FunctionType, GenericArg, Type},
 };
 
 mod functions;
@@ -137,7 +137,15 @@ impl<'f> Interpret<'f> {
                     Ok(())
                 }
             }
-            Type::Function(..) => todo!("Drop functions"),
+            Type::Function(FunctionType { resource, .. }) => match resource {
+                IsResource::Data => Ok(()),
+                IsResource::Resource => {
+                    let (env, code) = self.typed_read(pointer_to_place, ty)?.into_pair().unwrap();
+                    let env = env.as_pointer().unwrap();
+                    let _ = code.as_pointer().unwrap();
+                    todo!("Dropping env pointing at {:?}", env)
+                }
+            },
             Type::Record(fields) => {
                 let tys = fields
                     .iter()
@@ -172,12 +180,6 @@ impl<'f> Interpret<'f> {
             }
         }
         value
-    }
-    fn dangling_pointer(ty: &Type) -> Pointer {
-        Pointer {
-            address: align_of(ty),
-            alloc: None,
-        }
     }
     fn allocate_local(&mut self, ty: &Type) -> Pointer {
         let pointer = self.memory.allocate(MemLocation::Stack, size_of(ty));
@@ -434,7 +436,12 @@ impl<'f> Interpret<'f> {
                 let value = self.typed_read(pointer, pointee)?;
                 self.print_value(&value, pointee)?;
             }
-            Type::Function(_) => todo!("Functions"),
+            Type::Function(FunctionType { resource, .. }) => match resource {
+                IsResource::Data => print!("{}", value.as_pointer().unwrap().address),
+                IsResource::Resource => {
+                    unreachable!("You can't print these")
+                }
+            },
             Type::Char => {
                 let char = value.as_char().unwrap();
                 print!("{}", char)
@@ -615,19 +622,22 @@ impl<'f> Interpret<'f> {
             typed_ast::ExprKind::Function(_, id, args) => {
                 let args = Self::generic_args_to_instance_args(args.to_vec());
                 assert!(args.is_empty(), "Generic functions not supported atm");
-                Ok(Value::pair(
-                    Value::Pointer(Self::dangling_pointer(&Type::Unit)),
-                    Value::Pointer(self.functions[id].pointer),
-                ))
+                Ok(Value::Pointer(self.functions[id].pointer))
             }
             typed_ast::ExprKind::Call(callee, args) => {
-                let callee = self.interpret_expr(callee)?;
+                let callee_value = self.interpret_expr(callee)?;
                 let args = args
                     .iter()
                     .map(|arg| self.interpret_expr(arg))
                     .collect::<Result<Vec<_>, _>>()?;
-                let (_, code) = callee.into_pair().unwrap();
-                let code = code.as_pointer().unwrap();
+                let Type::Function(FunctionType { resource, .. }) = callee.ty else {
+                    unreachable!("Can only call functions")
+                };
+                let IsResource::Data = resource else {
+                    let (_ptr, _code) = callee_value.into_pair().unwrap();
+                    todo!("Handle resource functinos")
+                };
+                let code = callee_value.as_pointer().unwrap();
                 if let Some((b, tys)) =
                     self.builtin_functions.iter().find_map(|(b, args_with_p)| {
                         if let Some((args, _)) = args_with_p.iter().find(|&(_, &p)| p == code) {
@@ -650,10 +660,7 @@ impl<'f> Interpret<'f> {
                     let function_ptr = *instances
                         .entry(args)
                         .or_insert_with(|| self.memory.allocate(MemLocation::Function, 0));
-                    Ok(Value::pair(
-                        Value::Pointer(Self::dangling_pointer(&Type::Unit)),
-                        Value::Pointer(function_ptr),
-                    ))
+                    Ok(Value::Pointer(function_ptr))
                 })
                 .unwrap_or_else(|| panic!("{:?} should be supported", builtin)),
             typed_ast::ExprKind::Borrow {

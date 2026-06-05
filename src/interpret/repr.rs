@@ -178,14 +178,20 @@ pub fn encode(ty: &Type, value: Value) -> Vec<Byte> {
         Type::Infer(_) | Type::Unknown => unreachable!("Cant encode"),
         Type::Param(..) => todo!("Handle generic param encode"),
         Type::List(..) => todo!("List encode"),
-        Type::Function(_) => {
-            let (env, code) = value.into_pair().unwrap();
-            let env = env.as_pointer().unwrap();
-            let code = code.as_pointer().unwrap();
-            let mut bytes = encode_ptr(env);
-            bytes.extend(encode_ptr(code));
-            bytes
-        }
+        Type::Function(FunctionType { resource, .. }) => match resource {
+            IsResource::Data => {
+                let pointer = value.as_pointer().unwrap();
+                encode_ptr(pointer)
+            }
+            IsResource::Resource => {
+                let (env, code) = value.into_pair().unwrap();
+                let env = env.as_pointer().unwrap();
+                let code = code.as_pointer().unwrap();
+                let mut bytes = encode_ptr(env);
+                bytes.extend(encode_ptr(code));
+                bytes
+            }
+        },
         Type::Option(inner) => {
             let value = value.into_option().unwrap();
             let mut bytes = vec![Byte::Uninit; size_of(ty)];
@@ -245,21 +251,27 @@ pub fn decode(ty: &Type, bytes: &[Byte]) -> Result<Value, InterpretError> {
             let values = decode_record(&fields, bytes)?;
             Ok(Value::Tuple(values))
         }
-        Type::Function(_) => {
-            let record = decode_record(
-                &[
-                    Type::Box(Box::new(Type::Unknown)),
-                    Type::Box(Box::new(Type::Unknown)),
-                ],
-                bytes,
-            )?;
-            let (env, code) = Value::Tuple(record)
-                .into_pair()
-                .ok_or(InterpretError::InvalidValue)?;
-            let env = env.as_pointer().ok_or(InterpretError::InvalidPointer)?;
-            let code = code.as_pointer().ok_or(InterpretError::InvalidPointer)?;
-            Ok(Value::pair(Value::Pointer(env), Value::Pointer(code)))
-        }
+        Type::Function(FunctionType { resource, .. }) => match resource {
+            IsResource::Data => {
+                let pointer = decode_ptr(bytes)?;
+                Ok(Value::Pointer(pointer))
+            }
+            IsResource::Resource => {
+                let record = decode_record(
+                    &[
+                        Type::Box(Box::new(Type::Unknown)),
+                        Type::Box(Box::new(Type::Unknown)),
+                    ],
+                    bytes,
+                )?;
+                let (env, code) = Value::Tuple(record)
+                    .into_pair()
+                    .ok_or(InterpretError::InvalidValue)?;
+                let env = env.as_pointer().ok_or(InterpretError::InvalidPointer)?;
+                let code = code.as_pointer().ok_or(InterpretError::InvalidPointer)?;
+                Ok(Value::pair(Value::Pointer(env), Value::Pointer(code)))
+            }
+        },
         Type::Char => {
             let bytes = &bytes[0..4];
             let bytes = bytes
