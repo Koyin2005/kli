@@ -1,6 +1,6 @@
 use crate::{
     typecheck::infer::TypeInfer,
-    typed_ast::{Expr, ExprKind, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
+    typed_ast::{Expr, ExprKind, Param, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
     types::{FunctionType, GenericArg, Region, Type},
 };
 
@@ -157,7 +157,7 @@ impl<'a> TypeSubst<'a> {
                 }
             }
             ExprKind::Lambda(lambda) => {
-                for (.., ty) in lambda.params.iter_mut() {
+                for Param { ty, .. } in lambda.params.iter_mut() {
                     self.subst_type(ty);
                 }
                 self.subst_type(&mut lambda.return_type);

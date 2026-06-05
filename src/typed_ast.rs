@@ -45,7 +45,7 @@ pub enum PlaceKind {
 pub struct Lambda {
     pub is_resource: IsResource,
     pub captures: Vec<VarId>,
-    pub params: Vec<(Ident, VarId, Type)>,
+    pub params: Vec<Param>,
     pub return_type: Type,
     pub body: Expr,
 }
@@ -133,6 +133,7 @@ pub struct GenericParam {
     pub name: Ident,
     pub kind: GenericKind,
 }
+#[derive(Debug)]
 pub struct Param {
     pub name: Ident,
     pub var: VarId,

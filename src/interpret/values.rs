@@ -36,6 +36,20 @@ impl Value {
             _ => None,
         }
     }
+    pub fn as_pair(&self) -> Option<(&Value, &Value)> {
+        match self {
+            Self::Tuple(values) => {
+                let mut values = values.into_iter();
+                let first = values.next()?;
+                let second = values.next()?;
+                if values.next().is_some() {
+                    return None;
+                }
+                Some((first, second))
+            }
+            _ => None,
+        }
+    }
     pub fn as_int(&self) -> Option<Int> {
         match self {
             Self::Int(value) => Some(*value),

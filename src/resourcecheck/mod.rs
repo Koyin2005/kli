@@ -8,7 +8,9 @@ use crate::{
     diagnostics::DiagnosticReporter,
     resolved_ast::{LocalRegionId, VarId},
     src_loc::SrcLoc,
-    typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
+    typed_ast::{
+        Expr, ExprKind, Function, Param, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind,
+    },
     types::{FunctionType, GenericKind, Region, Type},
 };
 
@@ -517,7 +519,7 @@ impl ResourceCheck {
                         lambda.is_resource,
                     );
                     this.function_level += 1;
-                    for (name, var, ty) in lambda.params.iter() {
+                    for Param { name, var, ty } in lambda.params.iter() {
                         this.init_var(
                             Mutable::Immutable,
                             *var,

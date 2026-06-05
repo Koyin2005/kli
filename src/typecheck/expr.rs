@@ -131,7 +131,7 @@ impl TypeCheck {
             Some(Type::Function(ref function)) => Some(function.clone()),
             _ => None,
         };
-        let (captures,(params,body)) = self.with_capture_scope(|this|{
+        let (captures, (params, body)) = self.with_capture_scope(|this| {
             let params = lambda
                 .params
                 .into_iter()
@@ -154,18 +154,21 @@ impl TypeCheck {
                     };
 
                     this.declare_var(var, ty.clone());
-                    (name, var, ty)
+                    typed_ast::Param { name, var, ty }
                 })
                 .collect::<Vec<_>>();
             let body = this.check_expr(
                 lambda.body,
                 expected_sig.as_ref().map(|sig| (*sig.return_type).clone()),
             );
-            (params,body)
+            (params, body)
         });
         let function = Type::Function(FunctionType {
             resource: lambda.resource,
-            params: params.iter().map(|(_, _, ty)| ty.clone()).collect(),
+            params: params
+                .iter()
+                .map(|typed_ast::Param { ty, .. }| ty.clone())
+                .collect(),
             return_type: Box::new(body.ty.clone()),
         });
         typed_ast::Expr {
@@ -366,7 +369,7 @@ impl TypeCheck {
             ExprKind::Var(var, id) => {
                 self.capture(id);
                 make_expr(
-                self.var_type(id).clone(),
+                    self.var_type(id).clone(),
                     typed_ast::ExprKind::Load(typed_ast::Place {
                         ty: self.var_type(id).clone(),
                         loc: loc.clone(),
@@ -374,7 +377,7 @@ impl TypeCheck {
                     }),
                     loc,
                 )
-            },
+            }
             ExprKind::Builtin(builtin) => {
                 let args = self.instantiate_builtin_args(builtin, loc.clone());
                 make_expr(

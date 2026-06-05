@@ -238,14 +238,14 @@ impl TypeCheck {
         &self.variables[usize::from(var)].ty
     }
     pub(super) fn capture(&mut self, var: VarId) -> bool {
-        if self.variables[usize::from(var)].function_scope != self.captures.len(){
-            let Some(captures) = self.captures.last_mut() else {
-                return false;
-            };
-            captures.push(var);
+        let function = self.variables[usize::from(var)].function_scope;
+        let current = self.captures.len();
+        if function < current {
+            for capture in self.captures.iter_mut().rev().take(current - function) {
+                capture.push(var);
+            }
             true
-        }
-        else {
+        } else {
             false
         }
     }

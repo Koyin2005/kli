@@ -54,10 +54,12 @@ struct Frame {
     vars: HashMap<VarId, (Type, bool, Pointer)>,
     locals: Vec<Pointer>,
     scope: Vec<Vec<VarId>>,
+    captured_vars: Option<(Pointer, HashMap<VarId, (Type, usize)>)>,
 }
 pub struct Interpret<'f> {
     functions: HashMap<FunctionId, FunctionInfo<'f>>,
     builtin_functions: HashMap<Builtin, HashMap<Vec<Type>, Pointer>>,
+    lambdas: HashMap<Pointer, (FunctionInfo<'f>, Option<(usize, Vec<(VarId, Type, usize)>)>)>,
     entry: FunctionId,
     call_stack: Vec<Frame>,
     memory: Memory,
@@ -77,7 +79,8 @@ impl<'f> Interpret<'f> {
                 (
                     FunctionId::new(i),
                     FunctionInfo {
-                        code: function,
+                        params: &function.params,
+                        body: &function.body,
                         pointer: mem.allocate(MemLocation::Function, 0),
                     },
                 )
@@ -99,9 +102,21 @@ impl<'f> Interpret<'f> {
             call_stack: vec![],
             builtin_functions,
             memory: mem,
+            lambdas: HashMap::new(),
         }
     }
-
+    fn drop_closure_env(
+        &mut self,
+        env: Pointer,
+        captures: Vec<(VarId, Type, usize)>,
+    ) -> Result<(), InterpretError> {
+        for (_, ref ty, offset) in captures {
+            let pointer = self.memory.byte_offset_in_bounds(env, offset as isize)?;
+            self.drop(ty, pointer)?;
+        }
+        self.memory.deallocate(MemLocation::Heap, env)?;
+        Ok(())
+    }
     fn drop(&mut self, ty: &Type, pointer_to_place: Pointer) -> Result<(), InterpretError> {
         match ty {
             Type::Bool | Type::Int | Type::Unit | Type::Imm(..) | Type::Mut(..) | Type::Char => {
@@ -142,8 +157,10 @@ impl<'f> Interpret<'f> {
                 IsResource::Resource => {
                     let (env, code) = self.typed_read(pointer_to_place, ty)?.into_pair().unwrap();
                     let env = env.as_pointer().unwrap();
-                    let _ = code.as_pointer().unwrap();
-                    todo!("Dropping env pointing at {:?}", env)
+                    let code_ptr = code.as_pointer().unwrap();
+                    let (_, captures) = &self.lambdas[&code_ptr];
+                    let &(_, ref captures) = captures.as_ref().unwrap();
+                    self.drop_closure_env(env, captures.clone())
                 }
             },
             Type::Record(fields) => {
@@ -206,28 +223,42 @@ impl<'f> Interpret<'f> {
         let bytes = self.memory.read(pointer, size_of(ty))?;
         decode(ty, &bytes)
     }
+    fn pointer_to_var(
+        &mut self,
+        as_move: bool,
+        var: VarId,
+    ) -> Result<(Pointer, Type), InterpretError> {
+        for frame in self.call_stack.iter_mut().rev() {
+            if let Some((env, ref captures)) = frame.captured_vars
+                && let Some(&(ref ty, offset)) = captures.get(&var)
+                && let ty = ty.clone()
+            {
+                return self
+                    .memory
+                    .byte_offset_in_bounds(env, offset as isize)
+                    .map(|p| (p, ty));
+            }
+        }
+        let frame = self.call_stack.last_mut().unwrap();
+        let (ty, moved, pointer) = frame
+            .vars
+            .get_mut(&var)
+            .unwrap_or_else(|| panic!("The var '{:?}' should be here ", var));
+        if *moved && as_move {
+            return Err(InterpretError::UseAfterMove);
+        }
+        if as_move && is_resource(ty) {
+            *moved = true;
+        }
+        Ok((*pointer, ty.clone()))
+    }
     fn pointer_to_place(
         &mut self,
         as_move: bool,
-        place: &typed_ast::Place,
+        place: &'f typed_ast::Place,
     ) -> Result<Pointer, InterpretError> {
         match &place.kind {
-            typed_ast::PlaceKind::Var(var) => {
-                let (_, moved, pointer) = self
-                    .call_stack
-                    .last_mut()
-                    .unwrap()
-                    .vars
-                    .get_mut(&var.1)
-                    .unwrap();
-                if *moved && as_move {
-                    return Err(InterpretError::UseAfterMove);
-                }
-                if as_move && is_resource(&place.ty) {
-                    *moved = true;
-                }
-                Ok(*pointer)
-            }
+            typed_ast::PlaceKind::Var(var) => Ok(self.pointer_to_var(as_move, var.1)?.0),
             typed_ast::PlaceKind::Deref(value) => match &value.kind {
                 typed_ast::ExprKind::Load(place) => {
                     let place_pointer = self.pointer_to_place(false, place)?;
@@ -374,7 +405,7 @@ impl<'f> Interpret<'f> {
             }
         }
     }
-    fn interpet_stmt(&mut self, stmt: &typed_ast::Stmt) -> Result<(), InterpretError> {
+    fn interpet_stmt(&mut self, stmt: &'f typed_ast::Stmt) -> Result<(), InterpretError> {
         match &stmt.kind {
             typed_ast::StmtKind::Expr(expr) => {
                 let value = self.interpret_expr(expr)?;
@@ -439,7 +470,10 @@ impl<'f> Interpret<'f> {
             Type::Function(FunctionType { resource, .. }) => match resource {
                 IsResource::Data => print!("{}", value.as_pointer().unwrap().address),
                 IsResource::Resource => {
-                    unreachable!("You can't print these")
+                    let (env, code) = value.as_pair().unwrap();
+                    let env = env.as_pointer().unwrap();
+                    let code = code.as_pointer().unwrap();
+                    print!("closure{{env = {:?},code = {:?}}}", env, code)
                 }
             },
             Type::Char => {
@@ -457,13 +491,13 @@ impl<'f> Interpret<'f> {
         }
         Ok(())
     }
-    fn function_from_pointer(&self, p: Pointer) -> Result<FunctionId, InterpretError> {
+    fn function_from_pointer(&self, p: Pointer) -> Option<FunctionId> {
         for (id, f) in self.functions.iter() {
             if f.pointer == p {
-                return Ok(*id);
+                return Some(*id);
             }
         }
-        Err(InterpretError::CalledNonFunction)
+        None
     }
     fn string_from(&self, string_value: StringValue) -> Result<String, InterpretError> {
         let StringValue {
@@ -488,7 +522,7 @@ impl<'f> Interpret<'f> {
         &mut self,
         pattern: &typed_ast::Pattern,
         iter_ty: &Type,
-        body: &typed_ast::Expr,
+        body: &'f typed_ast::Expr,
         iterator_value: Value,
     ) -> Result<(), InterpretError> {
         match &iter_ty {
@@ -517,7 +551,7 @@ impl<'f> Interpret<'f> {
             _ => unreachable!("Cant iterate these"),
         }
     }
-    fn interpret_expr(&mut self, expr: &typed_ast::Expr) -> Result<Value, InterpretError> {
+    fn interpret_expr(&mut self, expr: &'f typed_ast::Expr) -> Result<Value, InterpretError> {
         match &expr.kind {
             typed_ast::ExprKind::Err => panic!("Cannot interpret err value"),
             typed_ast::ExprKind::Panic => Err(InterpretError::Panic),
@@ -633,24 +667,7 @@ impl<'f> Interpret<'f> {
                 let Type::Function(FunctionType { resource, .. }) = callee.ty else {
                     unreachable!("Can only call functions")
                 };
-                let IsResource::Data = resource else {
-                    let (_ptr, _code) = callee_value.into_pair().unwrap();
-                    todo!("Handle resource functinos")
-                };
-                let code = callee_value.as_pointer().unwrap();
-                if let Some((b, tys)) =
-                    self.builtin_functions.iter().find_map(|(b, args_with_p)| {
-                        if let Some((args, _)) = args_with_p.iter().find(|&(_, &p)| p == code) {
-                            Some((*b, args.clone()))
-                        } else {
-                            None
-                        }
-                    })
-                {
-                    return self.handle_builtin_call(b, tys, args);
-                }
-                let f = self.function_from_pointer(code)?;
-                self.interpret_function(f, args)
+                self.call_value(resource, callee_value, args)
             }
             typed_ast::ExprKind::Builtin(builtin, args) => self
                 .builtin_functions
@@ -699,8 +716,108 @@ impl<'f> Interpret<'f> {
                 self.typed_write(pointer, &place.ty, value)?;
                 Ok(Value::unit())
             }
-            typed_ast::ExprKind::Lambda(..) => todo!("Lambda"),
+            typed_ast::ExprKind::Lambda(lambda) => {
+                let code_ptr = self.memory.allocate(MemLocation::Function, 0);
+                match lambda.is_resource {
+                    IsResource::Data => {
+                        self.lambdas.insert(
+                            code_ptr,
+                            (
+                                FunctionInfo {
+                                    params: &lambda.params,
+                                    body: &lambda.body,
+                                    pointer: code_ptr,
+                                },
+                                None,
+                            ),
+                        );
+                        Ok(Value::Pointer(code_ptr))
+                    }
+                    IsResource::Resource => {
+                        let captures = lambda
+                            .captures
+                            .iter()
+                            .map(|var| {
+                                let (pointer, ty) = self.pointer_to_var(true, *var).unwrap();
+                                (*var, ty, pointer)
+                            })
+                            .collect::<Vec<_>>();
+                        let tys = captures
+                            .iter()
+                            .map(|(_, ty, _)| ty.clone())
+                            .collect::<Vec<_>>();
+                        let (size, offsets) = offsets_of(&tys);
+                        let env = self.memory.allocate(MemLocation::Heap, size);
+                        for (capture, offset) in captures.iter().zip(offsets.iter().copied()) {
+                            let &(_, ref ty, pointer_to_var) = capture;
+                            let pointer =
+                                self.memory.byte_offset_in_bounds(env, offset as isize)?;
+                            self.typed_write(pointer, &ty, self.typed_read(pointer_to_var, &ty)?)?;
+                        }
+                        self.lambdas.insert(
+                            code_ptr,
+                            (
+                                FunctionInfo {
+                                    params: &lambda.params,
+                                    body: &lambda.body,
+                                    pointer: code_ptr,
+                                },
+                                Some((
+                                    size,
+                                    captures
+                                        .into_iter()
+                                        .zip(offsets)
+                                        .map(|((var, ty, _), offset)| (var, ty, offset))
+                                        .collect(),
+                                )),
+                            ),
+                        );
+                        Ok(Value::pair(Value::Pointer(env), Value::Pointer(code_ptr)))
+                    }
+                }
+            }
             typed_ast::ExprKind::List(..) => todo!("List"),
+        }
+    }
+    fn call_value(
+        &mut self,
+        resource: IsResource,
+        callee: Value,
+        args: Vec<Value>,
+    ) -> Result<Value, InterpretError> {
+        let IsResource::Data = resource else {
+            let (env, code) = callee.into_pair().unwrap();
+            let env = env.as_pointer().unwrap();
+            let code = code.as_pointer().unwrap();
+            let &(function, ref captures) = &self.lambdas[&code];
+            let (_, captures) = captures.as_ref().unwrap();
+            let captures = captures.clone();
+            let mut args = args;
+            args.insert(0, Value::Pointer(env));
+            let capture_map = captures
+                .iter()
+                .map(|(var, ty, offset)| (*var, (ty.clone(), *offset)))
+                .collect();
+            let value = self.interpret_function(function, args, Some(capture_map))?;
+            self.drop_closure_env(env, captures)?;
+            return Ok(value);
+        };
+        let code = callee.as_pointer().unwrap();
+        if let Some((b, tys)) = self.builtin_functions.iter().find_map(|(b, args_with_p)| {
+            if let Some((args, _)) = args_with_p.iter().find(|&(_, &p)| p == code) {
+                Some((*b, args.clone()))
+            } else {
+                None
+            }
+        }) {
+            return self.handle_builtin_call(b, tys, args);
+        }
+        if let Some(f) = self.function_from_pointer(code) {
+            self.interpret_function(self.functions[&f], args, None)
+        } else {
+            let (function, captures) = &self.lambdas[&code];
+            debug_assert!(captures.is_none());
+            self.interpret_function(*function, args, None)
         }
     }
     fn handle_builtin_call(
@@ -763,7 +880,15 @@ impl<'f> Interpret<'f> {
                 Ok(Value::Pointer(pointer))
             }
             Builtin::DestroyString => todo!("destroy string"),
-            Builtin::Replace => todo!("Replace"),
+            Builtin::Replace => {
+                let ty = &tys[0];
+                let [mut_ref, f] = args_as_array(args).unwrap();
+                let mut_ref = mut_ref.as_pointer().unwrap();
+                let old_value = self.typed_read(mut_ref, ty)?;
+                let result = self.call_value(IsResource::Resource, f, vec![old_value])?;
+                self.typed_write(mut_ref, ty, result)?;
+                Ok(Value::Pointer(mut_ref))
+            }
             Builtin::DestroyList => todo!("Destroy list"),
             Builtin::Swap => {
                 let [dest, src] = args_as_array(args).unwrap();
@@ -777,18 +902,21 @@ impl<'f> Interpret<'f> {
     }
     fn interpret_function(
         &mut self,
-        f: FunctionId,
-        args: Vec<Value>,
+        function: FunctionInfo<'f>,
+        mut args: Vec<Value>,
+        captures: Option<HashMap<VarId, (Type, usize)>>,
     ) -> Result<Value, InterpretError> {
         self.call_stack.push(Frame {
             vars: HashMap::new(),
             locals: Vec::new(),
             scope: Vec::new(),
+            captured_vars: captures.map(|captures| {
+                let env = args.remove(0).as_pointer().unwrap();
+                (env, captures)
+            }),
         });
         let result = self.in_drop_scope(|this| {
-            let function = this.functions[&f];
             let param_tys = function
-                .code
                 .params
                 .iter()
                 .map(|param| (param.var, param.ty.clone()))
@@ -797,13 +925,13 @@ impl<'f> Interpret<'f> {
                 let pointer = this.alloc_var(var, &param);
                 this.typed_write(pointer, &param, arg)?;
             }
-            this.interpret_expr(&function.code.body)
+            this.interpret_expr(&function.body)
         });
         self.call_stack.pop();
         result
     }
     pub fn interpret(mut self) -> Result<(), InterpretError> {
-        let value = self.interpret_function(self.entry, Vec::new())?;
+        let value = self.interpret_function(self.functions[&self.entry], Vec::new(), None)?;
         assert!(value.is_unit());
         for alloc in self.memory.leaked_allocations() {
             println!("Leaked {:?} at {}", alloc.bytes, alloc.base_address);
