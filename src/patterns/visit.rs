@@ -16,9 +16,9 @@ impl PatternCheck {
             diag: DiagnosticReporter::new(),
         }
     }
-    pub fn check(mut self, body: &Expr) {
+    pub fn check(mut self, body: &Expr) -> bool {
         self.visit_expr(body);
-        self.diag.report_all();
+        self.diag.report_all()
     }
 }
 impl Visitor for PatternCheck {

@@ -130,11 +130,15 @@ fn main() {
     let Ok(program) = TypeCheck::new(&program).check(program) else {
         return;
     };
+    let mut had_error = false;
     for function in &program.functions {
-        PatternCheck::new().check(&function.body);
+        had_error |= PatternCheck::new().check(&function.body);
     }
     for function in &program.functions {
-        ResourceCheck::new().check_function(function);
+        had_error |= ResourceCheck::new().check_function(function);
+    }
+    if had_error{
+        return;
     }
     if let Err(e) = Interpret::new(&program.functions).interpret() {
         println!("{:?}", e)

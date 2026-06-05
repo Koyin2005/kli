@@ -668,7 +668,7 @@ impl ResourceCheck {
             }
         }
     }
-    pub fn check_function(mut self, function: &Function) {
+    pub fn check_function(mut self, function: &Function) -> bool {
         self.region_params.extend(
             function
                 .generics
@@ -692,6 +692,6 @@ impl ResourceCheck {
             }
             this.check_expr(&function.body);
         });
-        self.err.report_all();
+        self.err.report_all()
     }
 }
