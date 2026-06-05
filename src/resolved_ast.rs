@@ -159,6 +159,7 @@ pub struct PatternField {
 }
 #[derive(Debug)]
 pub enum PatternKind {
+    Int(i64),
     Bool(bool),
     Some(Box<Pattern>),
     Ref(Box<Pattern>),
