@@ -610,7 +610,7 @@ impl<'f> Interpret<'f> {
                     .iter()
                     .map(|arg| self.interpret_expr(arg))
                     .collect::<Result<Vec<_>, _>>()?;
-                let (_, code) = callee.as_pair().unwrap();
+                let (_, code) = callee.into_pair().unwrap();
                 let code = code.as_pointer().unwrap();
                 if let Some((b, tys)) =
                     self.builtin_functions.iter().find_map(|(b, args_with_p)| {

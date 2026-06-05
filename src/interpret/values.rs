@@ -22,7 +22,7 @@ impl Value {
     pub fn pair(first: Self, second: Self) -> Self {
         Self::Tuple(vec![first, second])
     }
-    pub fn as_pair(self) -> Option<(Value, Value)> {
+    pub fn into_pair(self) -> Option<(Value, Value)> {
         match self {
             Self::Tuple(values) => {
                 let mut values = values.into_iter();
@@ -66,7 +66,7 @@ impl Value {
             _ => None,
         }
     }
-    pub fn as_variant(self) -> Option<(u128, Vec<Value>)> {
+    pub fn into_variant(self) -> Option<(u128, Vec<Value>)> {
         match self {
             Self::Variant(discriminant, values) => Some((discriminant, values)),
             _ => None,
@@ -105,8 +105,8 @@ impl Value {
             None
         }
     }
-    pub fn as_option(self) -> Option<Option<Value>> {
-        let (discr, fields) = self.as_variant()?;
+    pub fn into_option(self) -> Option<Option<Value>> {
+        let (discr, fields) = self.into_variant()?;
         if discr == Self::NONE_DISCRIMINANT {
             let [] = fields.as_array()?;
             Some(None)

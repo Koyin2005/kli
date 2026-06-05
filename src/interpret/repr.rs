@@ -179,7 +179,7 @@ pub fn encode(ty: &Type, value: Value) -> Vec<Byte> {
         Type::Param(..) => todo!("Handle generic param encode"),
         Type::List(..) => todo!("List encode"),
         Type::Function(_) => {
-            let (env, code) = value.as_pair().unwrap();
+            let (env, code) = value.into_pair().unwrap();
             let env = env.as_pointer().unwrap();
             let code = code.as_pointer().unwrap();
             let mut bytes = encode_ptr(env);
@@ -187,14 +187,13 @@ pub fn encode(ty: &Type, value: Value) -> Vec<Byte> {
             bytes
         }
         Type::Option(inner) => {
-            let value = value.as_option().unwrap();
+            let value = value.into_option().unwrap();
             let mut bytes = vec![Byte::Uninit; size_of(ty)];
             let offset = align_of(inner);
 
             bytes[..1].copy_from_slice(&encode(&Type::Bool, Value::Bool(value.is_some()))[..1]);
             if let Some(value) = value {
                 bytes[offset..].copy_from_slice(&encode(inner, value));
-            } else {
             }
             bytes
         }
@@ -255,7 +254,7 @@ pub fn decode(ty: &Type, bytes: &[Byte]) -> Result<Value, InterpretError> {
                 bytes,
             )?;
             let (env, code) = Value::Tuple(record)
-                .as_pair()
+                .into_pair()
                 .ok_or(InterpretError::InvalidValue)?;
             let env = env.as_pointer().ok_or(InterpretError::InvalidPointer)?;
             let code = code.as_pointer().ok_or(InterpretError::InvalidPointer)?;
