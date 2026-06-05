@@ -265,16 +265,19 @@ impl<'f> Interpret<'f> {
                     .unwrap();
                 self.matches_pattern(inner, pointer)
             }
+            &typed_ast::PatternKind::Int(matched_value) => {
+                let value = self
+                    .typed_read(pointer_to_place, &Type::Int)?
+                    .as_int()
+                    .unwrap();
+                Ok(value == matched_value)
+            }
             &typed_ast::PatternKind::Bool(matched_value) => {
                 let value = self
                     .typed_read(pointer_to_place, &Type::Bool)?
                     .as_bool()
                     .unwrap();
-                if value == matched_value {
-                    Ok(true)
-                } else {
-                    Ok(false)
-                }
+                Ok(value == matched_value)
             }
             typed_ast::PatternKind::Some(inner) => {
                 let is_some = self
@@ -337,7 +340,7 @@ impl<'f> Interpret<'f> {
                     .unwrap();
                 self.assign_to_pattern(inner, pointer)
             }
-            &typed_ast::PatternKind::Bool(_) => Ok(()),
+            &typed_ast::PatternKind::Bool(_) | typed_ast::PatternKind::Int(_) => Ok(()),
             typed_ast::PatternKind::Some(inner) => {
                 let is_some = self
                     .typed_read(pointer_to_place, &Type::Bool)?

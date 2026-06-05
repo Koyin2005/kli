@@ -205,7 +205,10 @@ impl Parser {
             Some(Token { loc: _, kind }) => match kind {
                 &TokenKind::Number(number) => {
                     self.next_token();
-                    Ok(Pattern { loc, kind: PatternKind::Int(number)})
+                    Ok(Pattern {
+                        loc,
+                        kind: PatternKind::Int(number),
+                    })
                 }
                 TokenKind::Ref => {
                     self.next_token();
