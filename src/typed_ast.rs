@@ -22,6 +22,7 @@ pub struct Pattern {
 }
 #[derive(Debug)]
 pub enum PatternKind {
+    Int(i64),
     Bool(bool),
     Some(Box<Pattern>),
     None,

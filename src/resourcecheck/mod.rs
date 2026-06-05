@@ -254,7 +254,7 @@ impl ResourceCheck {
     }
     fn check_pattern(&mut self, pattern: &Pattern) {
         match &pattern.kind {
-            PatternKind::None | PatternKind::Bool(_) => (),
+            PatternKind::None | PatternKind::Bool(_) | PatternKind::Int(_)=> (),
             PatternKind::Record(fields) => {
                 for field in fields {
                     self.check_pattern(&field.pattern);

@@ -73,6 +73,7 @@ pub enum PatternKind {
     Binding(Option<Mutable>, Mutable, Ident),
     Some(Box<Pattern>),
     Ref(Box<Pattern>),
+    Int(u64),
     None,
     Record(Vec<PatternField>),
 }

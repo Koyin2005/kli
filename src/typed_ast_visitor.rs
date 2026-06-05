@@ -19,7 +19,7 @@ where
     V: Visitor + ?Sized,
 {
     match &pattern.kind {
-        PatternKind::Binding(..) | PatternKind::Bool(_) | PatternKind::None => (),
+        PatternKind::Binding(..) | PatternKind::Bool(_) | PatternKind::None | PatternKind::Int(..) => (),
         PatternKind::Some(pattern) | PatternKind::Ref(pattern) => v.visit_pattern(pattern),
         PatternKind::Record(fields) => {
             for field in fields {

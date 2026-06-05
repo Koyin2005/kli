@@ -18,6 +18,10 @@ impl TypeCheck {
     ) -> typed_ast::Pattern {
         let expected_type = self.simplify_type(expected_type);
         match pattern.kind {
+            PatternKind::Int(value) => {
+                let _ = self.unify(expected_type, Type::Int, pattern.loc.clone());
+                typed_ast::Pattern { ty: Type::Int, loc: pattern.loc, kind: typed_ast::PatternKind::Int(value) }
+            }
             PatternKind::Ref(inner) => {
                 let (mutable, region, ty) =
                     if let Ok((mutable, region, ty)) = expected_type.as_reference_type() {

@@ -343,6 +343,13 @@ impl Resolve {
     fn resolve_pattern(&mut self, pattern: ast::Pattern) -> res::Pattern {
         let loc = pattern.loc;
         let kind = match pattern.kind {
+            ast::PatternKind::Int(value) => res::PatternKind::Int(match value.try_into() {
+                Ok(number) => number,
+                Err(_) => {
+                    self.diag.add_diagnostic("Invalid integer".to_string(), loc.clone());
+                    0
+                }
+            }),
             ast::PatternKind::Bool(value) => res::PatternKind::Bool(value),
             ast::PatternKind::None => res::PatternKind::None,
             ast::PatternKind::Some(pattern) => {
