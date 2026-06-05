@@ -131,35 +131,38 @@ impl TypeCheck {
             Some(Type::Function(ref function)) => Some(function.clone()),
             _ => None,
         };
-        let params = lambda
-            .params
-            .into_iter()
-            .enumerate()
-            .map(|(i, (name, var, ty))| {
-                let ty = match ty {
-                    Some(ty) => {
-                        let ty = self.lower_type(ty);
-                        if let Some(sig) = &expected_sig
-                            && let Some(expect) = sig.params.get(i)
-                        {
-                            self.unify(expect.clone(), ty.clone(), name.loc.clone());
+        let (captures,(params,body)) = self.with_capture_scope(|this|{
+            let params = lambda
+                .params
+                .into_iter()
+                .enumerate()
+                .map(|(i, (name, var, ty))| {
+                    let ty = match ty {
+                        Some(ty) => {
+                            let ty = this.lower_type(ty);
+                            if let Some(sig) = &expected_sig
+                                && let Some(expect) = sig.params.get(i)
+                            {
+                                this.unify(expect.clone(), ty.clone(), name.loc.clone());
+                            }
+                            ty
                         }
-                        ty
-                    }
-                    None => expected_sig
-                        .as_ref()
-                        .and_then(|sig| sig.params.get(i).cloned())
-                        .unwrap_or_else(|| self.fresh_ty(name.loc.clone())),
-                };
+                        None => expected_sig
+                            .as_ref()
+                            .and_then(|sig| sig.params.get(i).cloned())
+                            .unwrap_or_else(|| this.fresh_ty(name.loc.clone())),
+                    };
 
-                self.declare_var(var, ty.clone());
-                (name, var, ty)
-            })
-            .collect::<Vec<_>>();
-        let body = self.check_expr(
-            lambda.body,
-            expected_sig.as_ref().map(|sig| (*sig.return_type).clone()),
-        );
+                    this.declare_var(var, ty.clone());
+                    (name, var, ty)
+                })
+                .collect::<Vec<_>>();
+            let body = this.check_expr(
+                lambda.body,
+                expected_sig.as_ref().map(|sig| (*sig.return_type).clone()),
+            );
+            (params,body)
+        });
         let function = Type::Function(FunctionType {
             resource: lambda.resource,
             params: params.iter().map(|(_, _, ty)| ty.clone()).collect(),
@@ -169,6 +172,7 @@ impl TypeCheck {
             ty: function,
             loc,
             kind: typed_ast::ExprKind::Lambda(Box::new(typed_ast::Lambda {
+                captures,
                 is_resource: lambda.resource,
                 params,
                 return_type: body.ty.clone(),
@@ -359,15 +363,18 @@ impl TypeCheck {
                 ty: Type::Bool,
                 kind: typed_ast::ExprKind::Bool(value),
             },
-            ExprKind::Var(var, id) => make_expr(
+            ExprKind::Var(var, id) => {
+                self.capture(id);
+                make_expr(
                 self.var_type(id).clone(),
-                typed_ast::ExprKind::Load(typed_ast::Place {
-                    ty: self.var_type(id).clone(),
-                    loc: loc.clone(),
-                    kind: typed_ast::PlaceKind::Var(Var(var, id)),
-                }),
-                loc,
-            ),
+                    typed_ast::ExprKind::Load(typed_ast::Place {
+                        ty: self.var_type(id).clone(),
+                        loc: loc.clone(),
+                        kind: typed_ast::PlaceKind::Var(Var(var, id)),
+                    }),
+                    loc,
+                )
+            },
             ExprKind::Builtin(builtin) => {
                 let args = self.instantiate_builtin_args(builtin, loc.clone());
                 make_expr(
