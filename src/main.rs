@@ -1,8 +1,13 @@
 use std::{collections::BTreeMap, env, path::Path, rc::Rc};
 
 use kli::{
-    ast, interpret::Interpret, parsing::parse::Parser, patterns::visit::PatternCheck,
-    resolve::Resolve, resourcecheck::ResourceCheck, typecheck::root::TypeCheck,
+    ast,
+    interpret::{Endianess, Interpret},
+    parsing::parse::Parser,
+    patterns::visit::PatternCheck,
+    resolve::Resolve,
+    resourcecheck::ResourceCheck,
+    typecheck::root::TypeCheck,
 };
 enum ModuleError {
     Io(std::io::Error),
@@ -137,10 +142,10 @@ fn main() {
     for function in &program.functions {
         had_error |= ResourceCheck::new().check_function(function);
     }
-    if had_error{
+    if had_error {
         return;
     }
-    if let Err(e) = Interpret::new(&program.functions).interpret() {
+    if let Err(e) = Interpret::new(Endianess::Big, &program.functions).interpret() {
         println!("{:?}", e)
     }
 }

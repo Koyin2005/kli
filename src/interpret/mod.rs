@@ -1,22 +1,28 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
 
 use crate::{
     ast::{BinaryOp, IsResource},
     interpret::{
         functions::FunctionInfo,
+        ints::Int,
         memory::{Byte, MemLocation, Memory},
         repr::{align_of, decode, encode, is_resource, offsets_of, size_of},
-        values::{Int, Pointer, StringValue, Value},
+        values::{Pointer, StringValue, Value},
     },
     resolved_ast::{Builtin, FunctionId, VarId},
     typed_ast::{self, FieldId},
-    types::{FunctionType, GenericArg, Type},
+    types::{FunctionType, GenericArg, GenericKind, RecordField, Type},
 };
-
 mod functions;
+mod ints;
 mod memory;
 mod repr;
 mod values;
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub enum Endianess {
+    Little,
+    Big,
+}
 #[derive(Debug)]
 pub enum InterpretError {
     Panic,
@@ -48,24 +54,67 @@ pub enum InterpretError {
     UseAfterMove,
     ReachedUnreachable,
 }
-pub const INT_SIZE: usize = std::mem::size_of::<Int>();
+pub const INT_SIZE: usize = 8;
 pub const ADDR_SIZE: usize = 8;
-struct Frame {
+fn simplify_ty<'a>(g: &HashMap<usize, Type>, ty: Type) -> Type {
+    match ty {
+        Type::Bool | Type::Char | Type::Int | Type::Unit | Type::String => ty,
+        Type::Infer(_) | Type::Unknown => unreachable!(),
+        Type::List(element) => Type::List(Box::new(simplify_ty(g, *element))),
+        Type::Option(inner) => Type::Option(Box::new(simplify_ty(g, *inner))),
+        Type::Box(inner) => Type::Box(Box::new(simplify_ty(g, *inner))),
+        Type::Mut(region, ty) => Type::Mut(region, Box::new(simplify_ty(g, *ty))),
+        Type::Imm(region, ty) => Type::Imm(region, Box::new(simplify_ty(g, *ty))),
+        Type::Function(FunctionType {
+            resource,
+            params,
+            return_type,
+        }) => Type::Function(FunctionType {
+            resource,
+            params: params
+                .into_iter()
+                .map(|param| simplify_ty(g, param))
+                .collect(),
+            return_type: Box::new(simplify_ty(g, *return_type)),
+        }),
+        Type::Record(fields) => Type::Record(
+            fields
+                .into_iter()
+                .map(|field| RecordField {
+                    name: field.name,
+                    ty: simplify_ty(g, field.ty),
+                })
+                .collect(),
+        ),
+        Type::Param(_, i) => g.get(&i).cloned().expect("No generic arg"),
+    }
+}
+struct Frame<'f> {
+    f: FunctionInfo<'f>,
+    generic_args: Vec<Type>,
     vars: HashMap<VarId, (Type, bool, Pointer)>,
     locals: Vec<Pointer>,
     scope: Vec<Vec<VarId>>,
     captured_vars: Option<(Pointer, HashMap<VarId, (Type, usize)>)>,
 }
 pub struct Interpret<'f> {
-    functions: HashMap<FunctionId, FunctionInfo<'f>>,
+    functions: HashMap<FunctionId, (FunctionInfo<'f>, HashMap<Vec<Type>, Pointer>)>,
     builtin_functions: HashMap<Builtin, HashMap<Vec<Type>, Pointer>>,
-    lambdas: HashMap<Pointer, (FunctionInfo<'f>, Option<(usize, Vec<(VarId, Type, usize)>)>)>,
+    lambdas: HashMap<
+        Pointer,
+        (
+            FunctionInfo<'f>,
+            Option<(usize, Vec<(VarId, Type, usize)>)>,
+            Vec<Type>,
+        ),
+    >,
     entry: FunctionId,
-    call_stack: Vec<Frame>,
+    call_stack: Vec<Frame<'f>>,
     memory: Memory,
+    endianness: Endianess,
 }
 impl<'f> Interpret<'f> {
-    pub fn new(functions: &'f [typed_ast::Function]) -> Self {
+    pub fn new(e: Endianess, functions: &'f [typed_ast::Function]) -> Self {
         let entry = functions
             .iter()
             .position(|f| &f.name.content as &str == "main")
@@ -78,11 +127,18 @@ impl<'f> Interpret<'f> {
             .map(|(i, function)| {
                 (
                     FunctionId::new(i),
-                    FunctionInfo {
-                        params: &function.params,
-                        body: &function.body,
-                        pointer: mem.allocate(MemLocation::Function, 0),
-                    },
+                    (
+                        FunctionInfo {
+                            generics: &function.generics,
+                            params: &function.params,
+                            body: &function.body,
+                        },
+                        if function.generics.is_empty() {
+                            HashMap::from([(Vec::new(), mem.allocate(MemLocation::Function, 0))])
+                        } else {
+                            HashMap::new()
+                        },
+                    ),
                 )
             })
             .collect();
@@ -103,6 +159,7 @@ impl<'f> Interpret<'f> {
             builtin_functions,
             memory: mem,
             lambdas: HashMap::new(),
+            endianness: e,
         }
     }
     fn drop_closure_env(
@@ -133,7 +190,10 @@ impl<'f> Interpret<'f> {
                     pointer,
                     cap: _,
                     len: _,
-                } = self.typed_read(pointer_to_place, ty)?.as_string().unwrap();
+                } = self
+                    .typed_read(pointer_to_place, ty)?
+                    .into_string()
+                    .unwrap();
                 self.memory.deallocate(MemLocation::Heap, pointer)?;
                 Ok(())
             }
@@ -158,7 +218,7 @@ impl<'f> Interpret<'f> {
                     let (env, code) = self.typed_read(pointer_to_place, ty)?.into_pair().unwrap();
                     let env = env.as_pointer().unwrap();
                     let code_ptr = code.as_pointer().unwrap();
-                    let (_, captures) = &self.lambdas[&code_ptr];
+                    let (_, captures, _) = &self.lambdas[&code_ptr];
                     let &(_, ref captures) = captures.as_ref().unwrap();
                     self.drop_closure_env(env, captures.clone())
                 }
@@ -166,7 +226,7 @@ impl<'f> Interpret<'f> {
             Type::Record(fields) => {
                 let tys = fields
                     .iter()
-                    .map(|field| field.ty.clone())
+                    .map(|field| self.simplify_ty(field.ty.clone()))
                     .collect::<Vec<_>>();
                 let (_, offsets) = offsets_of(&tys);
                 for (ty, offset) in tys.into_iter().zip(offsets) {
@@ -177,7 +237,7 @@ impl<'f> Interpret<'f> {
                 }
                 Ok(())
             }
-            Type::Param(..) => todo!("Handle params"),
+            Type::Param(..) => unreachable!("Cant have params"),
             Type::List(..) => todo!("Drop lists"),
         }
     }
@@ -198,7 +258,28 @@ impl<'f> Interpret<'f> {
         }
         value
     }
+    fn current_frame<'a>(&'a self) -> &'a Frame<'f> {
+        self.call_stack.last().unwrap()
+    }
+    fn simplify_ty(&self, ty: Type) -> Type {
+        let frame = self.current_frame();
+        let params = frame.f.generics;
+        let generic_arg_map = params
+            .iter()
+            .enumerate()
+            .filter_map(|(i, param)| {
+                let GenericKind::Type = param.kind else {
+                    return None;
+                };
+                Some(i)
+            })
+            .enumerate()
+            .map(|(generic_index, ty_index)| (generic_index, frame.generic_args[ty_index].clone()))
+            .collect();
+        simplify_ty(&generic_arg_map, ty)
+    }
     fn allocate_local(&mut self, ty: &Type) -> Pointer {
+        let ty = &self.simplify_ty(ty.clone());
         let pointer = self.memory.allocate(MemLocation::Stack, size_of(ty));
         self.call_stack.last_mut().unwrap().locals.push(pointer);
         pointer
@@ -217,11 +298,14 @@ impl<'f> Interpret<'f> {
         ty: &Type,
         value: Value,
     ) -> Result<(), InterpretError> {
-        self.memory.write(pointer, encode(ty, value))
+        let ty = &self.simplify_ty(ty.clone());
+        self.memory
+            .write(pointer, encode(self.endianness, ty, value))
     }
     fn typed_read(&self, pointer: Pointer, ty: &Type) -> Result<Value, InterpretError> {
+        let ty = &self.simplify_ty(ty.clone());
         let bytes = self.memory.read(pointer, size_of(ty))?;
-        decode(ty, &bytes)
+        decode(self.endianness, ty, &bytes)
     }
     fn pointer_to_var(
         &mut self,
@@ -301,9 +385,9 @@ impl<'f> Interpret<'f> {
             &typed_ast::PatternKind::Int(matched_value) => {
                 let value = self
                     .typed_read(pointer_to_place, &Type::Int)?
-                    .as_int()
+                    .into_int()
                     .unwrap();
-                Ok(value == matched_value)
+                Ok(value == Int::new(matched_value))
             }
             &typed_ast::PatternKind::Bool(matched_value) => {
                 let value = self
@@ -336,7 +420,7 @@ impl<'f> Interpret<'f> {
             typed_ast::PatternKind::Record(fields) => {
                 let field_tys = fields
                     .iter()
-                    .map(|field| field.pattern.ty.clone())
+                    .map(|field| self.simplify_ty(field.pattern.ty.clone()))
                     .collect::<Vec<_>>();
                 let (_, offsets) = offsets_of(&field_tys);
                 for (offset, field) in offsets.into_iter().zip(fields) {
@@ -392,7 +476,7 @@ impl<'f> Interpret<'f> {
             typed_ast::PatternKind::Record(fields) => {
                 let field_tys = fields
                     .iter()
-                    .map(|field| field.pattern.ty.clone())
+                    .map(|field| self.simplify_ty(field.pattern.ty.clone()))
                     .collect::<Vec<_>>();
                 let (_, offsets) = offsets_of(&field_tys);
                 for (offset, field) in offsets.into_iter().zip(fields) {
@@ -424,21 +508,21 @@ impl<'f> Interpret<'f> {
         }
         Ok(())
     }
-    fn print_value(&self, value: &Value, ty: &Type) -> Result<(), InterpretError> {
+    fn print_value(&self, value: Value, ty: &Type) -> Result<(), InterpretError> {
         match ty {
             Type::Bool => {
                 let value = value.as_bool().expect("Should be a bool");
                 print!("{}", value)
             }
             Type::Int => {
-                let value = value.as_int().expect("Should be an int");
+                let value = value.into_int().expect("Should be an int");
                 print!("{}", value)
             }
             Type::Unit => {
                 print!("()")
             }
             Type::Option(ty) => {
-                let value = value.as_option_ref().expect("Should be an option");
+                let value = value.into_option().expect("Should be an option");
                 match value {
                     Some(value) => {
                         print!("Some(");
@@ -449,10 +533,10 @@ impl<'f> Interpret<'f> {
                 }
             }
             Type::Record(fields) => {
-                let field_values = value.as_tuple().expect("Should be a record");
+                let field_values = value.into_tuple().expect("Should be a record");
                 print!("{{");
                 let mut first = true;
-                for (field, field_value) in fields.iter().zip(field_values) {
+                for (field, field_value) in fields.into_iter().zip(field_values) {
                     if !first {
                         print!(", ");
                     }
@@ -465,7 +549,7 @@ impl<'f> Interpret<'f> {
             Type::Imm(.., pointee) | Type::Mut(.., pointee) | Type::Box(pointee) => {
                 let pointer = value.as_pointer().unwrap();
                 let value = self.typed_read(pointer, pointee)?;
-                self.print_value(&value, pointee)?;
+                self.print_value(value, pointee)?;
             }
             Type::Function(FunctionType { resource, .. }) => match resource {
                 IsResource::Data => print!("{}", value.as_pointer().unwrap().address),
@@ -481,20 +565,22 @@ impl<'f> Interpret<'f> {
                 print!("{}", char)
             }
             Type::String => {
-                let string = self.string_from(value.as_string().expect("Should be a string"))?;
+                let string = self.string_from(value.into_string().expect("Should be a string"))?;
                 print!("{}", string);
             }
             Type::List(_) => todo!("boxing"),
 
-            Type::Param(..) => todo!("Type Param"),
+            Type::Param(..) => unreachable!("No generic params"),
             Type::Unknown | Type::Infer(_) => unreachable!("Cannot have this type"),
         }
         Ok(())
     }
-    fn function_from_pointer(&self, p: Pointer) -> Option<FunctionId> {
+    fn function_from_pointer(&self, p: Pointer) -> Option<(FunctionId, Vec<Type>)> {
         for (id, f) in self.functions.iter() {
-            if f.pointer == p {
-                return Some(*id);
+            for (args, pointer) in f.1.iter() {
+                if *pointer == p {
+                    return Some((*id, args.clone()));
+                }
             }
         }
         None
@@ -505,8 +591,8 @@ impl<'f> Interpret<'f> {
             cap,
             len,
         } = string_value;
-        let all_bytes = self.memory.read(ptr, len as usize)?;
-        let mut bytes = Vec::with_capacity(cap as usize);
+        let all_bytes = self.memory.read(ptr, len.into_size())?;
+        let mut bytes = Vec::with_capacity(cap.into_size());
         for b in all_bytes {
             let value = match b {
                 Byte::Init(b, _) => b,
@@ -531,7 +617,7 @@ impl<'f> Interpret<'f> {
                 let iterator_value = self.typed_read(pointer, ty)?;
                 match &**ty {
                     Type::String => {
-                        let string = self.string_from(iterator_value.as_string().unwrap())?;
+                        let string = self.string_from(iterator_value.into_string().unwrap())?;
                         self.in_drop_scope(|this| {
                             for c in string.chars() {
                                 let local = this.allocate_local(&Type::Char);
@@ -555,14 +641,14 @@ impl<'f> Interpret<'f> {
         match &expr.kind {
             typed_ast::ExprKind::Err => panic!("Cannot interpret err value"),
             typed_ast::ExprKind::Panic => Err(InterpretError::Panic),
-            typed_ast::ExprKind::Int(value) => Ok(Value::Int(*value)),
+            typed_ast::ExprKind::Int(value) => Ok(Value::Int(Int::new(*value))),
             typed_ast::ExprKind::Binary(op, left, right) => {
-                let left = self.interpret_expr(left)?.as_int().unwrap();
-                let right = self.interpret_expr(right)?.as_int().unwrap();
-                let (res, overflow) = match op {
+                let left = self.interpret_expr(left)?.into_int().unwrap();
+                let right = self.interpret_expr(right)?.into_int().unwrap();
+                let (res,overflow) = match op {
                     BinaryOp::Add => left.overflowing_add(right),
                     BinaryOp::Divide => {
-                        if right == 0 {
+                        if right == Int::ZERO {
                             return Err(InterpretError::DivideByZero);
                         } else {
                             left.overflowing_div(right)
@@ -592,7 +678,7 @@ impl<'f> Interpret<'f> {
             typed_ast::ExprKind::Print(value) => {
                 if let Some(arg) = value {
                     let value = self.interpret_expr(arg)?;
-                    self.print_value(&value, &arg.ty)?;
+                    self.print_value(value, &arg.ty)?;
                 }
                 println!();
                 Ok(Value::unit())
@@ -649,14 +735,20 @@ impl<'f> Interpret<'f> {
                 )?;
                 Ok(Value::Tuple(vec![
                     Value::Pointer(pointer),
-                    Value::Int(Int::try_from(value.len()).unwrap()),
-                    Value::Int(Int::try_from(value.len()).unwrap()),
+                    Value::Int(Int::from_size(value.len())),
+                    Value::Int(Int::from_size(value.len())),
                 ]))
             }
             typed_ast::ExprKind::Function(_, id, args) => {
                 let args = Self::generic_args_to_instance_args(args.to_vec());
-                assert!(args.is_empty(), "Generic functions not supported atm");
-                Ok(Value::Pointer(self.functions[id].pointer))
+                Ok(Value::Pointer(
+                    match self.functions.get_mut(id).unwrap().1.entry(args) {
+                        Entry::Occupied(occupied) => *occupied.get(),
+                        Entry::Vacant(vacant) => *vacant
+                            .insert_entry(self.memory.allocate(MemLocation::Function, 0))
+                            .get(),
+                    },
+                ))
             }
             typed_ast::ExprKind::Call(callee, args) => {
                 let callee_value = self.interpret_expr(callee)?;
@@ -718,17 +810,19 @@ impl<'f> Interpret<'f> {
             }
             typed_ast::ExprKind::Lambda(lambda) => {
                 let code_ptr = self.memory.allocate(MemLocation::Function, 0);
+                let generic_args = self.current_frame().generic_args.clone();
                 match lambda.is_resource {
                     IsResource::Data => {
                         self.lambdas.insert(
                             code_ptr,
                             (
                                 FunctionInfo {
+                                    generics: self.call_stack.last().unwrap().f.generics,
                                     params: &lambda.params,
                                     body: &lambda.body,
-                                    pointer: code_ptr,
                                 },
                                 None,
+                                generic_args,
                             ),
                         );
                         Ok(Value::Pointer(code_ptr))
@@ -739,6 +833,7 @@ impl<'f> Interpret<'f> {
                             .iter()
                             .map(|var| {
                                 let (pointer, ty) = self.pointer_to_var(true, *var).unwrap();
+                                let ty = self.simplify_ty(ty);
                                 (*var, ty, pointer)
                             })
                             .collect::<Vec<_>>();
@@ -758,9 +853,9 @@ impl<'f> Interpret<'f> {
                             code_ptr,
                             (
                                 FunctionInfo {
+                                    generics: self.call_stack.last().unwrap().f.generics,
                                     params: &lambda.params,
                                     body: &lambda.body,
-                                    pointer: code_ptr,
                                 },
                                 Some((
                                     size,
@@ -770,6 +865,7 @@ impl<'f> Interpret<'f> {
                                         .map(|((var, ty, _), offset)| (var, ty, offset))
                                         .collect(),
                                 )),
+                                generic_args,
                             ),
                         );
                         Ok(Value::pair(Value::Pointer(env), Value::Pointer(code_ptr)))
@@ -789,7 +885,8 @@ impl<'f> Interpret<'f> {
             let (env, code) = callee.into_pair().unwrap();
             let env = env.as_pointer().unwrap();
             let code = code.as_pointer().unwrap();
-            let &(function, ref captures) = &self.lambdas[&code];
+            let &(function, ref captures, ref generic_args) = &self.lambdas[&code];
+            let generic_args = generic_args.clone();
             let (_, captures) = captures.as_ref().unwrap();
             let captures = captures.clone();
             let mut args = args;
@@ -798,7 +895,7 @@ impl<'f> Interpret<'f> {
                 .iter()
                 .map(|(var, ty, offset)| (*var, (ty.clone(), *offset)))
                 .collect();
-            let value = self.interpret_function(function, args, Some(capture_map))?;
+            let value = self.interpret_function(function, generic_args, args, Some(capture_map))?;
             self.drop_closure_env(env, captures)?;
             return Ok(value);
         };
@@ -812,12 +909,13 @@ impl<'f> Interpret<'f> {
         }) {
             return self.handle_builtin_call(b, tys, args);
         }
-        if let Some(f) = self.function_from_pointer(code) {
-            self.interpret_function(self.functions[&f], args, None)
+        if let Some((f, inst_args)) = self.function_from_pointer(code) {
+            self.interpret_function(self.functions[&f].0, inst_args, args, None)
         } else {
-            let (function, captures) = &self.lambdas[&code];
+            let (function, captures, generic_args) = &self.lambdas[&code];
+            let generic_args = generic_args.clone();
             debug_assert!(captures.is_none());
-            self.interpret_function(*function, args, None)
+            self.interpret_function(*function, generic_args, args, None)
         }
     }
     fn handle_builtin_call(
@@ -826,11 +924,15 @@ impl<'f> Interpret<'f> {
         tys: Vec<Type>,
         args: Vec<Value>,
     ) -> Result<Value, InterpretError> {
+        let tys = tys
+            .into_iter()
+            .map(|ty| self.simplify_ty(ty))
+            .collect::<Vec<_>>();
         fn args_as_array<const N: usize>(args: Vec<Value>) -> Option<[Value; N]> {
             if args.len() != N {
                 return None;
             }
-            let mut values = [const { Value::Int(0) }; N];
+            let mut values = [const { Value::Int(Int::ZERO) }; N];
 
             for (i, arg) in args.into_iter().enumerate() {
                 values[i] = arg;
@@ -903,13 +1005,16 @@ impl<'f> Interpret<'f> {
     fn interpret_function(
         &mut self,
         function: FunctionInfo<'f>,
+        generic_args: Vec<Type>,
         mut args: Vec<Value>,
         captures: Option<HashMap<VarId, (Type, usize)>>,
     ) -> Result<Value, InterpretError> {
         self.call_stack.push(Frame {
+            f: function,
             vars: HashMap::new(),
             locals: Vec::new(),
             scope: Vec::new(),
+            generic_args,
             captured_vars: captures.map(|captures| {
                 let env = args.remove(0).as_pointer().unwrap();
                 (env, captures)
@@ -931,7 +1036,8 @@ impl<'f> Interpret<'f> {
         result
     }
     pub fn interpret(mut self) -> Result<(), InterpretError> {
-        let value = self.interpret_function(self.functions[&self.entry], Vec::new(), None)?;
+        let value =
+            self.interpret_function(self.functions[&self.entry].0, Vec::new(), Vec::new(), None)?;
         assert!(value.is_unit());
         for alloc in self.memory.leaked_allocations() {
             println!("Leaked {:?} at {}", alloc.bytes, alloc.base_address);

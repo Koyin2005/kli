@@ -1,4 +1,5 @@
-pub type Int = i64;
+use crate::interpret::ints::Int;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Pointer {
     pub address: usize,
@@ -50,9 +51,9 @@ impl Value {
             _ => None,
         }
     }
-    pub fn as_int(&self) -> Option<Int> {
+    pub fn into_int(self) -> Option<Int> {
         match self {
-            Self::Int(value) => Some(*value),
+            Self::Int(value) => Some(value),
             _ => None,
         }
     }
@@ -74,6 +75,12 @@ impl Value {
             _ => None,
         }
     }
+    pub fn into_tuple(self) -> Option<Vec<Value>> {
+        match self {
+            Self::Tuple(values) => Some(values),
+            _ => None,
+        }
+    }
     pub fn as_tuple(&self) -> Option<&[Value]> {
         match self {
             Self::Tuple(values) => Some(values),
@@ -86,38 +93,20 @@ impl Value {
             _ => None,
         }
     }
-    pub fn as_variant_ref(&self) -> Option<(u128, &[Value])> {
-        match self {
-            Self::Variant(discriminant, values) => Some((*discriminant, values)),
-            _ => None,
-        }
-    }
     pub fn is_unit(&self) -> bool {
         matches!(self,Self::Tuple(values) if values.is_empty())
     }
-    pub fn as_string(&self) -> Option<StringValue> {
-        let fields = self.as_tuple()?;
-        let [ptr, cap, len] = fields.as_array()?;
+    pub fn into_string(self) -> Option<StringValue> {
+        let fields = self.into_tuple()?;
+        let [ptr, cap, len] = fields.try_into().ok()?;
         let ptr = ptr.as_pointer()?;
-        let cap = cap.as_int()?;
-        let len = len.as_int()?;
+        let cap = cap.into_int()?;
+        let len = len.into_int()?;
         Some(StringValue {
             pointer: ptr,
             cap,
             len,
         })
-    }
-    pub fn as_option_ref(&self) -> Option<Option<&Value>> {
-        let (discr, fields) = self.as_variant_ref()?;
-        if discr == Self::NONE_DISCRIMINANT {
-            let [] = fields.as_array()?;
-            Some(None)
-        } else if discr == Self::SOME_DISCRIMINANT {
-            let [field] = fields.as_array()?;
-            Some(Some(field))
-        } else {
-            None
-        }
     }
     pub fn into_option(self) -> Option<Option<Value>> {
         let (discr, fields) = self.into_variant()?;

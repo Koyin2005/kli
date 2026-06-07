@@ -11,6 +11,15 @@ impl Byte {
             _ => None,
         }
     }
+    pub fn data(self) -> Option<u8> {
+        match self {
+            Self::Init(value, _) => Some(value),
+            Self::Uninit => None,
+        }
+    }
+    pub fn from_u8(value: u8) -> Self {
+        Self::Init(value, None)
+    }
 }
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum MemLocation {
