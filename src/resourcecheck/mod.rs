@@ -648,14 +648,7 @@ impl ResourceCheck {
                     for (var, state) in new_state {
                         match combined_state.entry(var) {
                             Entry::Occupied(mut entry) => {
-                                let Some(new_state) = unify_state(state, *entry.get()) else {
-                                    let name = &self.vars[&var].name;
-                                    self.err.add_diagnostic(
-                                        format!("'{name}' should always be moved"),
-                                        arm.body.loc.clone(),
-                                    );
-                                    continue;
-                                };
+                                let new_state = unify_state(state, *entry.get()).unwrap_or(VarState::Moved);
                                 entry.insert(new_state);
                             }
                             Entry::Vacant(entry) => {

@@ -13,6 +13,7 @@ use crate::{
     typed_ast::{self, FieldId},
     types::{FunctionType, GenericArg, GenericKind, RecordField, Type},
 };
+
 mod functions;
 mod ints;
 mod memory;
@@ -203,10 +204,11 @@ impl<'f> Interpret<'f> {
                     .as_bool()
                     .unwrap();
                 if is_some {
+                    let inner_ty = self.simplify_ty((**inner_ty).clone());
                     let pointer_to_inner = self
                         .memory
-                        .byte_offset_in_bounds(pointer_to_place, align_of(inner_ty) as isize)?;
-                    self.drop(inner_ty, pointer_to_inner)
+                        .byte_offset_in_bounds(pointer_to_place, align_of(&inner_ty) as isize)?;
+                    self.drop(&inner_ty, pointer_to_inner)
                 } else {
                     Ok(())
                 }
@@ -383,7 +385,6 @@ impl<'f> Interpret<'f> {
             },
         }
     }
-
     fn alloc_var(&mut self, var: VarId, ty: &Type) -> Pointer {
         let pointer = self.allocate_local(ty);
         let frame = self.call_stack.last_mut().unwrap();
@@ -427,7 +428,7 @@ impl<'f> Interpret<'f> {
                 if is_some {
                     let pointer = self
                         .memory
-                        .byte_offset_in_bounds(pointer_to_place, align_of(&inner.ty) as isize)?;
+                        .byte_offset_in_bounds(pointer_to_place, align_of(&self.simplify_ty(inner.ty.clone())) as isize)?;
                     self.matches_pattern(inner, pointer)
                 } else {
                     Ok(false)
@@ -489,7 +490,7 @@ impl<'f> Interpret<'f> {
                 if is_some {
                     let pointer = self
                         .memory
-                        .byte_offset_in_bounds(pointer_to_place, align_of(&inner.ty) as isize)?;
+                        .byte_offset_in_bounds(pointer_to_place, align_of(&self.simplify_ty(inner.ty.clone())) as isize)?;
                     self.assign_to_pattern(inner, pointer)
                 } else {
                     Ok(())
