@@ -181,7 +181,10 @@ pub fn encode(e: Endianess, ty: &Type, value: Value) -> Vec<Byte> {
         }
         Type::Infer(_) | Type::Unknown => unreachable!("Cant encode"),
         Type::Param(..) => unreachable!("Generic params can not be encoded"),
-        Type::List(..) => todo!("List encode"),
+        Type::List(ty) => {
+            let values = value.into_tuple().expect("Should be 3-tuple");
+            encode_record(e, &[Type::Box(ty.clone()),Type::Int,Type::Int], values)
+        },
         Type::Function(FunctionType { resource, .. }) => match resource {
             IsResource::Data => {
                 let pointer = value.as_pointer().unwrap();
@@ -234,8 +237,8 @@ pub fn decode(e: Endianess, ty: &Type, bytes: &[Byte]) -> Result<Value, Interpre
                 .try_into()
                 .map_err(|_| InterpretError::InvalidValue)?;
             let ptr = ptr.as_pointer().ok_or(InterpretError::InvalidPointer)?;
-            let cap = cap.into_int().ok_or(InterpretError::InvalidPointer)?;
-            let len = len.into_int().ok_or(InterpretError::InvalidPointer)?;
+            let cap = cap.into_int().ok_or(InterpretError::InvalidValue)?;
+            let len = len.into_int().ok_or(InterpretError::InvalidValue)?;
             Ok(Value::from_string(StringValue {
                 pointer: ptr,
                 cap,
@@ -303,7 +306,10 @@ pub fn decode(e: Endianess, ty: &Type, bytes: &[Byte]) -> Result<Value, Interpre
             ))
         }
         Type::Param(..) => unreachable!("Cannot decode params"),
-        Type::List(_) => todo!("Decode list"),
+        Type::List(ty) => {
+            let three_tuple = decode_record(e, &[Type::Box(ty.clone()),Type::Int,Type::Int], bytes)?;
+            Ok(Value::Tuple(three_tuple))
+        },
         Type::Option(inner) => {
             let bytes = &bytes[0..size_of(ty)];
             const NONE_DISCRIMINANT_AS_U8: u8 = Value::NONE_DISCRIMINANT as u8;

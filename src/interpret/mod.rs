@@ -237,7 +237,20 @@ impl<'f> Interpret<'f> {
                 Ok(())
             }
             Type::Param(..) => unreachable!("Cant have params"),
-            Type::List(..) => todo!("Drop lists"),
+            Type::List(element_type) => {
+                let element_type = self.simplify_ty((**element_type).clone());
+                let size = size_of(&element_type);
+                let [ptr,cap,len] = self.typed_read(pointer_to_place, &ty)?.into_tuple().expect("Should be a tuple").try_into().expect("Should be 3-tuple");
+                let ptr = ptr.as_pointer().expect("Should be a ptr");
+                let _ = cap.into_int().expect("Should be an int");
+                let len = len.into_int().expect("Should be an int");
+                for i in 0..len.into_size(){
+                    self.drop(&element_type, self.memory.byte_offset_in_bounds(ptr, (i * size).try_into().unwrap())?)?;
+                }
+                self.memory.deallocate(MemLocation::Heap, ptr)?;
+                Ok(())
+
+            },
         }
     }
     fn in_drop_scope<T>(
@@ -871,7 +884,26 @@ impl<'f> Interpret<'f> {
                     }
                 }
             }
-            typed_ast::ExprKind::List(..) => todo!("List"),
+            typed_ast::ExprKind::List(elements) =>{
+                let Type::List(ty) = &expr.ty else {
+                    unreachable!("Should be a list")
+                };
+                let ty = self.simplify_ty((**ty).clone());
+                let element_values = elements.iter().map(|value|{
+                    self.interpret_expr(value)
+                }).collect::<Result<Vec<_>,_>>()?;
+                let size = size_of(&ty);
+                let pointer = self.memory.allocate(MemLocation::Heap, size * element_values.len());
+                for (i,value) in element_values.into_iter().enumerate(){
+                    self.typed_write(self.memory.byte_offset_in_bounds(pointer, (size * i).try_into().unwrap())?, &ty, value)?;
+                }
+                Ok(Value::Tuple(vec![
+                    Value::Pointer(pointer),
+                    Value::Int(Int::from_size(elements.len())),
+                    Value::Int(Int::from_size(elements.len()))
+                ]))
+
+            },
         }
     }
     fn call_value(
