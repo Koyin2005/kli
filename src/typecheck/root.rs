@@ -172,7 +172,7 @@ impl TypeCheck {
         loc: SrcLoc,
     ) -> Vec<GenericArg> {
         match builtin {
-            Builtin::AllocBox | Builtin::DeallocBox  => {
+            Builtin::AllocBox | Builtin::DeallocBox => {
                 vec![GenericArg::Type(self.fresh_ty(loc))]
             }
             Builtin::DerefBox

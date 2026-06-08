@@ -240,17 +240,25 @@ impl<'f> Interpret<'f> {
             Type::List(element_type) => {
                 let element_type = self.simplify_ty((**element_type).clone());
                 let size = size_of(&element_type);
-                let [ptr,cap,len] = self.typed_read(pointer_to_place, &ty)?.into_tuple().expect("Should be a tuple").try_into().expect("Should be 3-tuple");
+                let [ptr, cap, len] = self
+                    .typed_read(pointer_to_place, &ty)?
+                    .into_tuple()
+                    .expect("Should be a tuple")
+                    .try_into()
+                    .expect("Should be 3-tuple");
                 let ptr = ptr.as_pointer().expect("Should be a ptr");
                 let _ = cap.into_int().expect("Should be an int");
                 let len = len.into_int().expect("Should be an int");
-                for i in 0..len.into_size(){
-                    self.drop(&element_type, self.memory.byte_offset_in_bounds(ptr, (i * size).try_into().unwrap())?)?;
+                for i in 0..len.into_size() {
+                    self.drop(
+                        &element_type,
+                        self.memory
+                            .byte_offset_in_bounds(ptr, (i * size).try_into().unwrap())?,
+                    )?;
                 }
                 self.memory.deallocate(MemLocation::Heap, ptr)?;
                 Ok(())
-
-            },
+            }
         }
     }
     fn in_drop_scope<T>(
@@ -580,7 +588,30 @@ impl<'f> Interpret<'f> {
                 let string = self.string_from(value.into_string().expect("Should be a string"))?;
                 print!("{}", string);
             }
-            Type::List(_) => todo!("boxing"),
+            Type::List(element_ty) => {
+                let [ptr, cap, len] = value.into_tuple().unwrap().try_into().unwrap();
+                let ptr = ptr.as_pointer().unwrap();
+                let _ = cap.into_int().unwrap();
+                let len = len.into_int().unwrap();
+                let element_ty = self.simplify_ty((**element_ty).clone());
+                let size = size_of(&element_ty);
+                print!("[");
+                let len = len.into_size();
+                for i in 0..len {
+                    self.print_value(
+                        self.typed_read(
+                            self.memory
+                                .byte_offset_in_bounds(ptr, (i * size).try_into().unwrap())?,
+                            &element_ty,
+                        )?,
+                        &element_ty,
+                    )?;
+                    if i < len - 1 {
+                        print!(",")
+                    }
+                }
+                print!("]");
+            }
 
             Type::Param(..) => unreachable!("No generic params"),
             Type::Unknown | Type::Infer(_) => unreachable!("Cannot have this type"),
@@ -623,8 +654,9 @@ impl<'f> Interpret<'f> {
         body: &'f typed_ast::Expr,
         iterator_value: Value,
     ) -> Result<(), InterpretError> {
+        let mutable = matches!(iter_ty, Type::Mut(..));
         match &iter_ty {
-            Type::Imm(_, ty) | Type::Mut(_, ty) => {
+            Type::Imm(region, ty) | Type::Mut(region, ty) => {
                 let pointer = iterator_value.as_pointer().unwrap();
                 let iterator_value = self.typed_read(pointer, ty)?;
                 match &**ty {
@@ -640,8 +672,37 @@ impl<'f> Interpret<'f> {
                             Ok(())
                         })
                     }
-                    Type::List(_) => {
-                        todo!("Handle list")
+                    Type::List(ty) => {
+                        let element_ty = self.simplify_ty((**ty).clone());
+                        let iter_element_ty = if mutable {
+                            Type::Mut(region.clone(), Box::new(element_ty))
+                        } else {
+                            Type::Imm(region.clone(), Box::new(element_ty))
+                        };
+                        let [ptr, cap, len] =
+                            iterator_value.into_tuple().unwrap().try_into().unwrap();
+                        let ptr = ptr.as_pointer().unwrap();
+                        let _ = cap.into_int().unwrap();
+                        let size = size_of(&ty);
+                        let len = len.into_int().unwrap();
+                        for i in 0..len.into_size() {
+                            self.in_drop_scope(|this| {
+                                let local = this.allocate_local(&iter_element_ty);
+                                this.typed_write(
+                                    local,
+                                    &iter_element_ty,
+                                    Value::Pointer(this.memory.byte_offset_in_bounds(
+                                        ptr,
+                                        (i * size).try_into().unwrap(),
+                                    )?),
+                                )?;
+                                this.assign_to_pattern(pattern, local)?;
+                                this.interpret_expr(body)?;
+
+                                Ok(())
+                            })?;
+                        }
+                        Ok(())
                     }
                     ty => self.handle_iteration(pattern, ty, body, iterator_value),
                 }
@@ -884,26 +945,33 @@ impl<'f> Interpret<'f> {
                     }
                 }
             }
-            typed_ast::ExprKind::List(elements) =>{
+            typed_ast::ExprKind::List(elements) => {
                 let Type::List(ty) = &expr.ty else {
                     unreachable!("Should be a list")
                 };
                 let ty = self.simplify_ty((**ty).clone());
-                let element_values = elements.iter().map(|value|{
-                    self.interpret_expr(value)
-                }).collect::<Result<Vec<_>,_>>()?;
+                let element_values = elements
+                    .iter()
+                    .map(|value| self.interpret_expr(value))
+                    .collect::<Result<Vec<_>, _>>()?;
                 let size = size_of(&ty);
-                let pointer = self.memory.allocate(MemLocation::Heap, size * element_values.len());
-                for (i,value) in element_values.into_iter().enumerate(){
-                    self.typed_write(self.memory.byte_offset_in_bounds(pointer, (size * i).try_into().unwrap())?, &ty, value)?;
+                let pointer = self
+                    .memory
+                    .allocate(MemLocation::Heap, size * element_values.len());
+                for (i, value) in element_values.into_iter().enumerate() {
+                    self.typed_write(
+                        self.memory
+                            .byte_offset_in_bounds(pointer, (size * i).try_into().unwrap())?,
+                        &ty,
+                        value,
+                    )?;
                 }
                 Ok(Value::Tuple(vec![
                     Value::Pointer(pointer),
                     Value::Int(Int::from_size(elements.len())),
-                    Value::Int(Int::from_size(elements.len()))
+                    Value::Int(Int::from_size(elements.len())),
                 ]))
-
-            },
+            }
         }
     }
     fn call_value(
