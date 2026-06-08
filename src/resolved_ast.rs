@@ -72,7 +72,6 @@ pub enum PlaceKind {
 pub enum Builtin {
     AllocBox,
     DeallocBox,
-    DestroyList,
     DerefBox,
     DerefBoxMut,
     Freeze,

@@ -150,17 +150,6 @@ impl TypeCheck {
                     (Type::Mut(r_param, Box::new(t_param))),
                 )
             }
-            Builtin::DestroyList => (
-                vec![
-                    Type::List(Box::new(Type::Param(Rc::from("T"), 0))),
-                    Type::Function(FunctionType {
-                        resource: crate::ast::IsResource::Data,
-                        params: vec![Type::Param(Rc::from("T"), 0)],
-                        return_type: Box::new(Type::Unit),
-                    }),
-                ],
-                (Type::Unit),
-            ),
             Builtin::Freeze => (
                 vec![Type::Mut(
                     Region::Param(Rc::from("r"), 0),
@@ -183,7 +172,7 @@ impl TypeCheck {
         loc: SrcLoc,
     ) -> Vec<GenericArg> {
         match builtin {
-            Builtin::AllocBox | Builtin::DeallocBox | Builtin::DestroyList => {
+            Builtin::AllocBox | Builtin::DeallocBox  => {
                 vec![GenericArg::Type(self.fresh_ty(loc))]
             }
             Builtin::DerefBox

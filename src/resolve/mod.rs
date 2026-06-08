@@ -56,10 +56,6 @@ impl Resolve {
                 names::DEREF_BOX_MUT.into(),
                 Res::Builtin(Builtin::DerefBoxMut),
             ),
-            (
-                names::DESTROY_LIST.into(),
-                Res::Builtin(Builtin::DestroyList),
-            ),
             (names::FREEZE.into(), Res::Builtin(Builtin::Freeze)),
             (
                 names::DESTROY_STRING.into(),

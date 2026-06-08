@@ -149,7 +149,6 @@ impl<'f> Interpret<'f> {
         builtin_functions.insert(Builtin::DerefBoxMut, HashMap::new());
         builtin_functions.insert(Builtin::Swap, HashMap::new());
         builtin_functions.insert(Builtin::Replace, HashMap::new());
-        builtin_functions.insert(Builtin::DestroyList, HashMap::new());
         builtin_functions.insert(Builtin::DestroyString, HashMap::new());
         builtin_functions.insert(Builtin::Freeze, HashMap::new());
         Self {
@@ -991,7 +990,6 @@ impl<'f> Interpret<'f> {
                 self.typed_write(mut_ref, ty, result)?;
                 Ok(Value::Pointer(mut_ref))
             }
-            Builtin::DestroyList => todo!("Destroy list"),
             Builtin::Swap => {
                 let [dest, src] = args_as_array(args).unwrap();
                 let dest = dest.as_pointer().unwrap();
