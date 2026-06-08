@@ -95,7 +95,7 @@ struct Frame<'f> {
     vars: HashMap<VarId, (Type, bool, Pointer)>,
     locals: Vec<Pointer>,
     scope: Vec<Vec<VarId>>,
-    captured_vars: Option<(Pointer, HashMap<VarId, (Type, usize)>)>,
+    captured_vars: Option<(Pointer, HashMap<VarId, (Type,bool, usize)>)>,
 }
 pub struct Interpret<'f> {
     functions: HashMap<FunctionId, (FunctionInfo<'f>, HashMap<Vec<Type>, Pointer>)>,
@@ -333,10 +333,13 @@ impl<'f> Interpret<'f> {
         var: VarId,
     ) -> Result<(Pointer, Type), InterpretError> {
         for frame in self.call_stack.iter_mut().rev() {
-            if let Some((env, ref captures)) = frame.captured_vars
-                && let Some(&(ref ty, offset)) = captures.get(&var)
+            if let Some((env, ref mut captures)) = frame.captured_vars
+                && let Some(&mut (ref ty,ref mut moved, offset)) = captures.get_mut(&var)
                 && let ty = ty.clone()
             {
+                if as_move && is_resource(&ty){
+                    *moved = true;
+                }
                 return self
                     .memory
                     .byte_offset_in_bounds(env, offset as isize)
@@ -1115,7 +1118,9 @@ impl<'f> Interpret<'f> {
             generic_args,
             captured_vars: captures.map(|captures| {
                 let env = args.remove(0).as_pointer().unwrap();
-                (env, captures)
+                (env, captures.into_iter().map(|(var,(ty,field))|{
+                    (var,(ty,false,field))
+                }).collect())
             }),
         });
         let result = self.in_drop_scope(|this| {
