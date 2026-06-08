@@ -151,13 +151,21 @@ pub fn encode(e: Endianess, ty: &Type, value: Value) -> Vec<Byte> {
             let string = value.into_string().unwrap();
             let mut bytes = Vec::new();
             bytes.extend(encode_ptr(string.pointer));
-            bytes.extend(encode_int(e, string.cap,INT_SIZE).into_iter().map(Byte::from_u8));
-            bytes.extend(encode_int(e, string.len,INT_SIZE).into_iter().map(Byte::from_u8));
+            bytes.extend(
+                encode_int(e, string.cap, INT_SIZE)
+                    .into_iter()
+                    .map(Byte::from_u8),
+            );
+            bytes.extend(
+                encode_int(e, string.len, INT_SIZE)
+                    .into_iter()
+                    .map(Byte::from_u8),
+            );
             bytes
         }
         Type::Int => {
             let value = value.into_int().unwrap();
-            encode_int(e, value,INT_SIZE)
+            encode_int(e, value, INT_SIZE)
                 .into_iter()
                 .map(|b| Byte::Init(b, None))
                 .collect()

@@ -581,8 +581,9 @@ impl Parser {
                         kind: ExprKind::String(string),
                     })
                 }
-                TokenKind::LeftBracket => {
+                TokenKind::ArrayList => {
                     self.next_token();
+                    self.expect(&TokenKind::LeftBracket)?;
                     let mut values = Vec::new();
                     while self.check_is_not_token(&TokenKind::RightBracket) {
                         values.push(self.parse_expr()?);
@@ -590,7 +591,7 @@ impl Parser {
                             break;
                         }
                     }
-                    let _ = self.expect(&TokenKind::RightBracket);
+                    self.expect(&TokenKind::RightBracket)?;
                     Ok(Expr {
                         loc,
                         kind: ExprKind::List(values),
@@ -818,7 +819,7 @@ impl Parser {
                     kind: TypeKind::String,
                 })
             }
-            TokenKind::List => {
+            TokenKind::ArrayList => {
                 self.next_token();
                 let _ = self.expect(&TokenKind::LeftBracket);
                 let ty = self.parse_type()?;

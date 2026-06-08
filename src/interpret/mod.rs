@@ -645,7 +645,7 @@ impl<'f> Interpret<'f> {
             typed_ast::ExprKind::Binary(op, left, right) => {
                 let left = self.interpret_expr(left)?.into_int().unwrap();
                 let right = self.interpret_expr(right)?.into_int().unwrap();
-                let (res,overflow) = match op {
+                let (res, overflow) = match op {
                     BinaryOp::Add => left.overflowing_add(right),
                     BinaryOp::Divide => {
                         if right == Int::ZERO {

@@ -14,21 +14,21 @@ impl Int {
     pub const fn is_negative(&self) -> bool {
         self.0.is_negative()
     }
-    pub fn overflowing_add(self, other: Self) -> (Self,bool){
-        let (result,overflow) = self.0.overflowing_add(other.0);
-        (Self(result),overflow)
+    pub fn overflowing_add(self, other: Self) -> (Self, bool) {
+        let (result, overflow) = self.0.overflowing_add(other.0);
+        (Self(result), overflow)
     }
-    pub fn overflowing_sub(self, other: Self) -> (Self,bool){
-        let (result,overflow) = self.0.overflowing_sub(other.0);
-        (Self(result),overflow)
+    pub fn overflowing_sub(self, other: Self) -> (Self, bool) {
+        let (result, overflow) = self.0.overflowing_sub(other.0);
+        (Self(result), overflow)
     }
-    pub fn overflowing_mul(self, other: Self) -> (Self,bool){
-        let (result,overflow) = self.0.overflowing_mul(other.0);
-        (Self(result),overflow)
+    pub fn overflowing_mul(self, other: Self) -> (Self, bool) {
+        let (result, overflow) = self.0.overflowing_mul(other.0);
+        (Self(result), overflow)
     }
-    pub fn overflowing_div(self, other: Self) -> (Self,bool){
-        let (result,overflow) = self.0.overflowing_div(other.0);
-        (Self(result),overflow)
+    pub fn overflowing_div(self, other: Self) -> (Self, bool) {
+        let (result, overflow) = self.0.overflowing_div(other.0);
+        (Self(result), overflow)
     }
     pub fn as_u8(&self) -> Option<u8> {
         self.0.try_into().ok()

@@ -41,7 +41,6 @@ pub enum TokenKind {
     StringLiteral(String),
     Ref,
     Box,
-    List,
     Static,
     Let,
     Mut,
@@ -59,6 +58,7 @@ pub enum TokenKind {
     False,
     Error,
     Region,
+    ArrayList,
 }
 
 impl Display for TokenKind {
@@ -109,7 +109,6 @@ impl Display for TokenKind {
             Self::Ref => "ref",
             Self::Number(number) => return write!(f, "{number}"),
             Self::Box => "box",
-            Self::List => "list",
             Self::Mut => "mut",
             Self::Let => "let",
             Self::Case => "case",
@@ -118,6 +117,7 @@ impl Display for TokenKind {
             Self::Ident(name) => name,
             Self::Error => "{error}",
             Self::Region => "region",
+            Self::ArrayList => "arraylist",
         };
         f.write_str(txt)
     }

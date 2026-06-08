@@ -153,7 +153,6 @@ impl<'s> Lexer<'s> {
                 "int" => TokenKind::Int,
                 "string" => TokenKind::String,
                 "bool" => TokenKind::Bool,
-                "list" => TokenKind::List,
                 "let" => TokenKind::Let,
                 "case" => TokenKind::Case,
                 "print" => TokenKind::Print,
@@ -168,6 +167,7 @@ impl<'s> Lexer<'s> {
                 "of" => TokenKind::Of,
                 "do" => TokenKind::Do,
                 "region" => TokenKind::Region,
+                "arraylist" => TokenKind::ArrayList,
                 _ => TokenKind::Ident(src),
             },
         })
