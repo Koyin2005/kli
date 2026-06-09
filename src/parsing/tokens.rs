@@ -59,11 +59,13 @@ pub enum TokenKind {
     Error,
     Region,
     ArrayList,
+    At
 }
 
 impl Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let txt = match self {
+            Self::At => "@",
             Self::Semi => ";",
             Self::LeftBrace => "{",
             Self::RightBrace => "}",

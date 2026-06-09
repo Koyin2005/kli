@@ -261,8 +261,19 @@ pub struct Lambda {
     pub body: Box<Expr>,
 }
 #[derive(Debug)]
+pub enum AnnotationField {
+    String(SrcLoc,String)
+}
+#[derive(Debug)]
+pub struct Annotation{
+    pub loc : SrcLoc,
+    pub name : Ident,
+    pub fields : Vec<AnnotationField>
+}
+#[derive(Debug)]
 pub struct Function {
     pub loc: SrcLoc,
+    pub annotations : Vec<Annotation>,
     pub name: Ident,
     pub generics: Option<Generics>,
     pub params: Vec<Param>,

@@ -178,6 +178,7 @@ impl<'s> Lexer<'s> {
         let &c = self.chars.peek()?;
         self.start_line = line;
         match c {
+            '@' => Some(self.next_token_from_char(TokenKind::At)),
             '.' => Some(self.next_token_from_char(TokenKind::Dot)),
             '=' => Some(self.next_token_from_char_or_chars(
                 '>',

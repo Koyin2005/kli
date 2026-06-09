@@ -2,10 +2,7 @@ use std::{iter::Peekable, rc::Rc, vec::IntoIter};
 
 use crate::{
     ast::{
-        BinaryOp, BlockBody, BorrowExpr, CaseArm, Expr, ExprKind, FieldInit, Function,
-        FunctionType, Generics, IsResource, Lambda, LetBinding, Module, Mutable, Param, Path,
-        Pattern, PatternField, PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt,
-        StmtKind, Type, TypeKind,
+        Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, Expr, ExprKind, FieldInit, Function, FunctionType, Generics, IsResource, Lambda, LetBinding, Module, Mutable, Param, Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeKind
     },
     diagnostics::DiagnosticReporter,
     ident::Ident,
@@ -121,6 +118,17 @@ impl Parser {
             };
             self.diag.add_diagnostic(msg, loc);
             Err(ParseError)
+        }
+    }
+    fn match_string_literal(&mut self) -> Option<(SrcLoc,String)> {
+        if self.peek_token().is_some_and(|token| matches!(token,Token { loc:_, kind:TokenKind::StringLiteral(_) })){
+            let Token { loc, kind:TokenKind::StringLiteral(value) } = self.next_token().expect("Should be a string literal") else {
+                unreachable!("Should be a string literal")
+            };
+            Some((loc,value))
+        }
+        else {
+            None
         }
     }
     fn expect(&mut self, kind: &TokenKind) -> Result<(), ParseError> {
@@ -899,7 +907,30 @@ impl Parser {
         let ty = self.parse_type()?;
         Ok(Param { name, ty })
     }
+    fn parse_annotations(&mut self) -> Result<Vec<Annotation>,ParseError>{
+        let mut annotations = Vec::new();
+        while let Some(token) = self.match_token(&TokenKind::At) {
+            let loc = token.loc;
+            let name = self.expect_ident("annotation name")?;
+            let mut fields = Vec::new();
+            if self.matches_token(&TokenKind::LeftParen){
+                while self.not_matches_token(&TokenKind::RightParen) {
+                    let (loc,string) = self.match_string_literal().ok_or_else(||{
+                        self.diag.add_diagnostic(format!("Expected a string"), loc.clone());
+                        ParseError
+                    })?;
+                    fields.push(AnnotationField::String(loc, string));
+                    if self.not_matches_token(&TokenKind::Coma){
+                        break;
+                    }
+                }
+            }
+            annotations.push(Annotation { loc, name, fields });
+        }
+        Ok(annotations)
+    }
     fn parse_function(&mut self) -> Result<Function, ParseError> {
+        let annotations = self.parse_annotations()?;
         let loc = self.current_loc();
         let _ = self.expect(&TokenKind::Fun);
         let name = self.expect_ident("function name")?;
@@ -920,6 +951,7 @@ impl Parser {
         let body = self.parse_expr()?;
         Ok(Function {
             loc,
+            annotations,
             name,
             generics,
             params,
