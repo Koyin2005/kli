@@ -7,3 +7,6 @@ fun not(x : bool) -> bool =
 fun print_string(value : string) -> () = do in r
     print(borrow value in r)
 end
+
+@builtin("wrapping_add")
+fun wrapping_add(x : int, y : int) -> int;
