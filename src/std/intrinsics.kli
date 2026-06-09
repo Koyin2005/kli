@@ -1,0 +1,2 @@
+@builtin("wrapping_add")
+fun wrapping_add(x : int, y : int) -> int;
