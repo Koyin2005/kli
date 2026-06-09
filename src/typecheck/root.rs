@@ -291,7 +291,7 @@ impl TypeCheck {
             let loc = program
                 .functions
                 .last()
-                .map(|function| function.body.loc.clone())
+                .and_then(|function| function.body.as_ref().map(|body| body.loc.clone()))
                 .unwrap_or(SrcLoc::dummy());
             return self
                 .diag
@@ -353,19 +353,24 @@ impl TypeCheck {
                 }
             })
             .collect::<Vec<_>>();
-        let body = self.check_expr(f.body, Some(*return_type));
-        let unsolved = self.infer.unsolved_locs();
-        let body = if !unsolved.is_empty() {
-            for line in unsolved {
-                self.diag
-                    .borrow_mut()
-                    .add_diagnostic("type annotations needed".to_string(), line);
-            }
-            body
+        let body = if let Some(body) = f.body {
+            let body = self.check_expr(body, Some((*return_type).clone()));
+            let unsolved = self.infer.unsolved_locs();
+            let body = if !unsolved.is_empty() {
+                for line in unsolved {
+                    self.diag
+                        .borrow_mut()
+                        .add_diagnostic("type annotations needed".to_string(), line);
+                }
+                body
+            } else {
+                let mut body = body;
+                TypeSubst::new(&mut self.infer).subst_expr(&mut body);
+                body
+            };
+            Some(body)
         } else {
-            let mut body = body;
-            TypeSubst::new(&mut self.infer).subst_expr(&mut body);
-            body
+            None
         };
         self.variables.clear();
         self.infer.clear();
@@ -378,7 +383,7 @@ impl TypeCheck {
             name: f.name,
             generics,
             params,
-            return_type: body.ty.clone(),
+            return_type: *return_type,
             body,
         }
     }

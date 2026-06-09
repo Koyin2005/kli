@@ -649,7 +649,7 @@ impl Resolve {
                     this.resolve_signature(function.params, function.return_type),
                 )
             };
-            let body = this.resolve_expr(function.body);
+            let body = function.body.map(|body| this.resolve_expr(body));
             res::Function {
                 loc: function.loc,
                 name: function.name,

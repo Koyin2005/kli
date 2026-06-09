@@ -200,7 +200,7 @@ pub struct Function {
     pub generics: Option<Generics>,
     pub params: Vec<Param>,
     pub return_type: Type,
-    pub body: Expr,
+    pub body: Option<Expr>,
 }
 #[derive(Debug)]
 pub struct RecordFieldType {

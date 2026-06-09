@@ -59,7 +59,7 @@ pub enum TokenKind {
     Error,
     Region,
     ArrayList,
-    At
+    At,
 }
 
 impl Display for TokenKind {

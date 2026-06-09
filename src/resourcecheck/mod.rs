@@ -648,7 +648,8 @@ impl ResourceCheck {
                     for (var, state) in new_state {
                         match combined_state.entry(var) {
                             Entry::Occupied(mut entry) => {
-                                let new_state = unify_state(state, *entry.get()).unwrap_or(VarState::Moved);
+                                let new_state =
+                                    unify_state(state, *entry.get()).unwrap_or(VarState::Moved);
                                 entry.insert(new_state);
                             }
                             Entry::Vacant(entry) => {
@@ -683,7 +684,9 @@ impl ResourceCheck {
                     true,
                 );
             }
-            this.check_expr(&function.body);
+            if let Some(ref body) = function.body {
+                this.check_expr(body);
+            }
         });
         self.err.report_all()
     }

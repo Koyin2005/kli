@@ -137,7 +137,9 @@ fn main() {
     };
     let mut had_error = false;
     for function in &program.functions {
-        had_error |= PatternCheck::new().check(&function.body);
+        if let Some(ref body) = function.body{
+            had_error |= PatternCheck::new().check(body);
+        }
     }
     for function in &program.functions {
         had_error |= ResourceCheck::new().check_function(function);

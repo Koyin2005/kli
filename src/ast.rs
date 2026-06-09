@@ -262,23 +262,23 @@ pub struct Lambda {
 }
 #[derive(Debug)]
 pub enum AnnotationField {
-    String(SrcLoc,String)
+    String(SrcLoc, String),
 }
 #[derive(Debug)]
-pub struct Annotation{
-    pub loc : SrcLoc,
-    pub name : Ident,
-    pub fields : Vec<AnnotationField>
+pub struct Annotation {
+    pub loc: SrcLoc,
+    pub name: Ident,
+    pub fields: Vec<AnnotationField>,
 }
 #[derive(Debug)]
 pub struct Function {
     pub loc: SrcLoc,
-    pub annotations : Vec<Annotation>,
+    pub annotations: Vec<Annotation>,
     pub name: Ident,
     pub generics: Option<Generics>,
     pub params: Vec<Param>,
     pub return_type: Type,
-    pub body: Expr,
+    pub body: Option<Expr>,
 }
 #[derive(Debug, Clone)]
 pub enum Region {

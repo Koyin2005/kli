@@ -96,7 +96,7 @@ struct Frame<'f> {
     vars: HashMap<VarId, (Type, bool, Pointer)>,
     locals: Vec<Pointer>,
     scope: Vec<Vec<VarId>>,
-    captured_vars: Option<(Pointer, HashMap<VarId, (Type,bool, usize)>)>,
+    captured_vars: Option<(Pointer, HashMap<VarId, (Type, bool, usize)>)>,
 }
 pub struct Interpret<'f> {
     functions: HashMap<FunctionId, (FunctionInfo<'f>, HashMap<Vec<Type>, Pointer>)>,
@@ -132,7 +132,9 @@ impl<'f> Interpret<'f> {
                         FunctionInfo {
                             generics: &function.generics,
                             params: &function.params,
-                            body: &function.body,
+                            body: function
+                                .body
+                                .as_ref(),
                         },
                         if function.generics.is_empty() {
                             HashMap::from([(Vec::new(), mem.allocate(MemLocation::Function, 0))])
@@ -336,10 +338,10 @@ impl<'f> Interpret<'f> {
     ) -> Result<(Pointer, Type), InterpretError> {
         for frame in self.call_stack.iter_mut().rev() {
             if let Some((env, ref mut captures)) = frame.captured_vars
-                && let Some(&mut (ref ty,ref mut moved, offset)) = captures.get_mut(&var)
+                && let Some(&mut (ref ty, ref mut moved, offset)) = captures.get_mut(&var)
                 && let ty = ty.clone()
             {
-                if as_move && is_resource(&ty){
+                if as_move && is_resource(&ty) {
                     *moved = true;
                 }
                 return self
@@ -426,9 +428,10 @@ impl<'f> Interpret<'f> {
                     .as_bool()
                     .unwrap();
                 if is_some {
-                    let pointer = self
-                        .memory
-                        .byte_offset_in_bounds(pointer_to_place, align_of(&self.simplify_ty(inner.ty.clone())) as isize)?;
+                    let pointer = self.memory.byte_offset_in_bounds(
+                        pointer_to_place,
+                        align_of(&self.simplify_ty(inner.ty.clone())) as isize,
+                    )?;
                     self.matches_pattern(inner, pointer)
                 } else {
                     Ok(false)
@@ -488,9 +491,10 @@ impl<'f> Interpret<'f> {
                     .as_bool()
                     .unwrap();
                 if is_some {
-                    let pointer = self
-                        .memory
-                        .byte_offset_in_bounds(pointer_to_place, align_of(&self.simplify_ty(inner.ty.clone())) as isize)?;
+                    let pointer = self.memory.byte_offset_in_bounds(
+                        pointer_to_place,
+                        align_of(&self.simplify_ty(inner.ty.clone())) as isize,
+                    )?;
                     self.assign_to_pattern(inner, pointer)
                 } else {
                     Ok(())
@@ -896,7 +900,7 @@ impl<'f> Interpret<'f> {
                                 FunctionInfo {
                                     generics: self.call_stack.last().unwrap().f.generics,
                                     params: &lambda.params,
-                                    body: &lambda.body,
+                                    body: Some(&lambda.body),
                                 },
                                 None,
                                 generic_args,
@@ -932,7 +936,7 @@ impl<'f> Interpret<'f> {
                                 FunctionInfo {
                                     generics: self.call_stack.last().unwrap().f.generics,
                                     params: &lambda.params,
-                                    body: &lambda.body,
+                                    body: Some(&lambda.body),
                                 },
                                 Some((
                                     size,
@@ -1111,6 +1115,9 @@ impl<'f> Interpret<'f> {
         mut args: Vec<Value>,
         captures: Option<HashMap<VarId, (Type, usize)>>,
     ) -> Result<Value, InterpretError> {
+        let Some(body) = function.body else {
+            unreachable!("Cannot call functions without body")
+        };
         self.call_stack.push(Frame {
             f: function,
             vars: HashMap::new(),
@@ -1119,9 +1126,13 @@ impl<'f> Interpret<'f> {
             generic_args,
             captured_vars: captures.map(|captures| {
                 let env = args.remove(0).as_pointer().unwrap();
-                (env, captures.into_iter().map(|(var,(ty,field))|{
-                    (var,(ty,false,field))
-                }).collect())
+                (
+                    env,
+                    captures
+                        .into_iter()
+                        .map(|(var, (ty, field))| (var, (ty, false, field)))
+                        .collect(),
+                )
             }),
         });
         let result = self.in_drop_scope(|this| {
@@ -1134,7 +1145,7 @@ impl<'f> Interpret<'f> {
                 let pointer = this.alloc_var(var, &param);
                 this.typed_write(pointer, &param, arg)?;
             }
-            this.interpret_expr(&function.body)
+            this.interpret_expr(body)
         });
         self.call_stack.pop();
         result

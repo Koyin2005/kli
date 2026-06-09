@@ -2,7 +2,10 @@ use std::{iter::Peekable, rc::Rc, vec::IntoIter};
 
 use crate::{
     ast::{
-        Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, Expr, ExprKind, FieldInit, Function, FunctionType, Generics, IsResource, Lambda, LetBinding, Module, Mutable, Param, Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeKind
+        Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, Expr, ExprKind,
+        FieldInit, Function, FunctionType, Generics, IsResource, Lambda, LetBinding, Module,
+        Mutable, Param, Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField,
+        RecordType, Region, Stmt, StmtKind, Type, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::Ident,
@@ -120,14 +123,25 @@ impl Parser {
             Err(ParseError)
         }
     }
-    fn match_string_literal(&mut self) -> Option<(SrcLoc,String)> {
-        if self.peek_token().is_some_and(|token| matches!(token,Token { loc:_, kind:TokenKind::StringLiteral(_) })){
-            let Token { loc, kind:TokenKind::StringLiteral(value) } = self.next_token().expect("Should be a string literal") else {
+    fn match_string_literal(&mut self) -> Option<(SrcLoc, String)> {
+        if self.peek_token().is_some_and(|token| {
+            matches!(
+                token,
+                Token {
+                    loc: _,
+                    kind: TokenKind::StringLiteral(_)
+                }
+            )
+        }) {
+            let Token {
+                loc,
+                kind: TokenKind::StringLiteral(value),
+            } = self.next_token().expect("Should be a string literal")
+            else {
                 unreachable!("Should be a string literal")
             };
-            Some((loc,value))
-        }
-        else {
+            Some((loc, value))
+        } else {
             None
         }
     }
@@ -907,23 +921,25 @@ impl Parser {
         let ty = self.parse_type()?;
         Ok(Param { name, ty })
     }
-    fn parse_annotations(&mut self) -> Result<Vec<Annotation>,ParseError>{
+    fn parse_annotations(&mut self) -> Result<Vec<Annotation>, ParseError> {
         let mut annotations = Vec::new();
         while let Some(token) = self.match_token(&TokenKind::At) {
             let loc = token.loc;
             let name = self.expect_ident("annotation name")?;
             let mut fields = Vec::new();
-            if self.matches_token(&TokenKind::LeftParen){
+            if self.matches_token(&TokenKind::LeftParen) {
                 while self.not_matches_token(&TokenKind::RightParen) {
-                    let (loc,string) = self.match_string_literal().ok_or_else(||{
-                        self.diag.add_diagnostic(format!("Expected a string"), loc.clone());
+                    let (loc, string) = self.match_string_literal().ok_or_else(|| {
+                        self.diag
+                            .add_diagnostic(format!("Expected a string"), loc.clone());
                         ParseError
                     })?;
                     fields.push(AnnotationField::String(loc, string));
-                    if self.not_matches_token(&TokenKind::Coma){
+                    if self.not_matches_token(&TokenKind::Coma) {
                         break;
                     }
                 }
+                self.expect(&TokenKind::RightParen)?;
             }
             annotations.push(Annotation { loc, name, fields });
         }
@@ -947,8 +963,13 @@ impl Parser {
         let _ = self.expect(&TokenKind::RightParen);
         let _ = self.expect(&TokenKind::Arrow);
         let ty = self.parse_type()?;
-        let _ = self.expect(&TokenKind::Equal);
-        let body = self.parse_expr()?;
+        let body = if self.matches_token(&TokenKind::Semi) {
+            None
+        } else {
+            let _ = self.expect(&TokenKind::Equal);
+            let body = self.parse_expr()?;
+            Some(body)
+        };
         Ok(Function {
             loc,
             annotations,

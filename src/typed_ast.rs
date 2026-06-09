@@ -144,7 +144,7 @@ pub struct Function {
     pub generics: Vec<GenericParam>,
     pub params: Vec<Param>,
     pub return_type: Type,
-    pub body: Expr,
+    pub body: Option<Expr>,
 }
 
 pub struct Program {

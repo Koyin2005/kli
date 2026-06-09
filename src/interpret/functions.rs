@@ -3,5 +3,5 @@ use crate::typed_ast::{Expr, GenericParam, Param};
 pub struct FunctionInfo<'f> {
     pub generics: &'f [GenericParam],
     pub params: &'f [Param],
-    pub body: &'f Expr,
+    pub body: Option<&'f Expr>,
 }
