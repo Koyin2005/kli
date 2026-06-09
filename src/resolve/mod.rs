@@ -52,17 +52,11 @@ impl Resolve {
             (names::ALLOC_BOX.to_string(), Builtin::AllocBox),
             (names::DEALLOC_BOX.into(), Builtin::DeallocBox),
             (names::DEREF_BOX.into(), Builtin::DerefBox),
-            (
-                names::DEREF_BOX_MUT.into(),
-                (Builtin::DerefBoxMut),
-            ),
+            (names::DEREF_BOX_MUT.into(), (Builtin::DerefBoxMut)),
             (names::FREEZE.into(), Builtin::Freeze),
-            (
-                names::DESTROY_STRING.into(),
-                Builtin::DestroyString,
-            ),
+            (names::DESTROY_STRING.into(), Builtin::DestroyString),
             (names::REPLACE.into(), Builtin::Replace),
-            (names::SWAP.into(), Builtin::Swap)
+            (names::SWAP.into(), Builtin::Swap),
         ]);
         let env = Scope::from([
             (names::ALLOC_BOX.into(), Res::Builtin(Builtin::AllocBox)),

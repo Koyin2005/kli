@@ -289,4 +289,5 @@ pub enum Region {
 #[derive(Debug)]
 pub struct Module {
     pub functions: Vec<Function>,
+    pub child_modules: Vec<Module>,
 }

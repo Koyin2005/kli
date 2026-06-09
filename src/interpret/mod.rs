@@ -132,9 +132,7 @@ impl<'f> Interpret<'f> {
                         FunctionInfo {
                             generics: &function.generics,
                             params: &function.params,
-                            body: function
-                                .body
-                                .as_ref(),
+                            body: function.body.as_ref(),
                         },
                         if function.generics.is_empty() {
                             HashMap::from([(Vec::new(), mem.allocate(MemLocation::Function, 0))])

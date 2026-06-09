@@ -2,3 +2,7 @@
 fun print_string(value : string) -> () = do in r
     print(borrow value in r)
 end
+
+fun print_int(value : int) -> () = do in r
+    print(value)
+end

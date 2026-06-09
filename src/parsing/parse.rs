@@ -994,6 +994,9 @@ impl Parser {
         if self.diag.report_all() {
             return Err(ParseError);
         }
-        Ok(Module { functions })
+        Ok(Module {
+            functions,
+            child_modules: Vec::new(),
+        })
     }
 }
