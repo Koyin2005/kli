@@ -6,3 +6,6 @@ end
 fun print_int(value : int) -> () = do in r
     print(value)
 end
+
+@builtin("read_line")
+fun read_line() -> string;

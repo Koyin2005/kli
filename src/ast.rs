@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 use crate::{ident::Ident, src_loc::SrcLoc};
 
@@ -285,9 +285,13 @@ pub enum Region {
     Static(SrcLoc),
     Named(Ident),
 }
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
+pub struct ModuleId(pub u32);
 
 #[derive(Debug)]
 pub struct Module {
+    pub id: ModuleId,
+    pub name: Rc<str>,
     pub functions: Vec<Function>,
     pub child_modules: Vec<Module>,
 }

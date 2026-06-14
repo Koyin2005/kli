@@ -4,8 +4,8 @@ use crate::{
     ast::{
         Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, Expr, ExprKind,
         FieldInit, Function, FunctionType, Generics, IsResource, Lambda, LetBinding, Module,
-        Mutable, Param, Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField,
-        RecordType, Region, Stmt, StmtKind, Type, TypeKind,
+        ModuleId, Mutable, Param, Path, Pattern, PatternField, PatternKind, RecordExpr,
+        RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::Ident,
@@ -980,7 +980,7 @@ impl Parser {
             body,
         })
     }
-    pub fn parse_module(mut self) -> Result<Module, ParseError> {
+    pub fn parse_module(mut self, name: Rc<str>, id: ModuleId) -> Result<Module, ParseError> {
         let mut functions = Vec::new();
         while self.peek_token().is_some() {
             let Ok(function) = self.parse_function() else {
@@ -995,6 +995,8 @@ impl Parser {
             return Err(ParseError);
         }
         Ok(Module {
+            id,
+            name,
             functions,
             child_modules: Vec::new(),
         })

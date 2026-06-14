@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
-use crate::ast::{BorrowExpr, Path, StmtKind};
+use crate::ast::{BorrowExpr, Module, ModuleId, Path, StmtKind};
 use crate::diagnostics::DiagnosticReporter;
 use crate::ident::Ident;
 use crate::resolved_ast::{Builtin, FunctionId, GenericKind, LocalRegionId, VarId};
@@ -14,7 +14,6 @@ enum NameResolutionError {
     NotInScope,
     InvalidPathStart,
 }
-#[derive(Default)]
 struct ModuleInfo {
     env: Scope,
 }
@@ -27,10 +26,10 @@ pub(super) enum Res {
     Builtin(Builtin),
     Function(FunctionId),
     Var(VarId),
-    Module(usize),
+    Module(ModuleId),
 }
 pub struct Resolve {
-    modules: Vec<ModuleInfo>,
+    modules: HashMap<ModuleId, ModuleInfo>,
     env: Scope,
     prev_envs: Vec<Scope>,
     functions: Vec<Option<res::Function>>,
@@ -75,7 +74,7 @@ impl Resolve {
             (names::SWAP.into(), Res::Builtin(Builtin::Swap)),
         ]);
         Self {
-            modules: Vec::new(),
+            modules: HashMap::new(),
             prev_envs: Vec::new(),
             env,
             vars: 0,
@@ -292,11 +291,14 @@ impl Resolve {
         self.env.insert(var, Res::Var(var_id));
         var_id
     }
-    fn declare_module(&mut self, name: Rc<str>) -> usize {
-        let new_module = self.modules.len();
-        self.modules.push(Default::default());
-        self.env.insert(name, Res::Module(new_module));
-        new_module
+    fn declare_module(&mut self, id: ModuleId, name: Rc<str>) {
+        self.modules.insert(
+            id,
+            ModuleInfo {
+                env: Default::default(),
+            },
+        );
+        self.env.insert(name, Res::Module(id));
     }
     fn declare_param(&mut self, name: Rc<str>) -> usize {
         let generic = self.generics;
@@ -313,10 +315,10 @@ impl Resolve {
             .expect("There should be a pushed scope");
         value
     }
-    fn in_module_scope<T>(&mut self, module: usize, f: impl FnOnce(&mut Self) -> T) -> T {
+    fn in_module_scope<T>(&mut self, module: ModuleId, f: impl FnOnce(&mut Self) -> T) -> T {
         self.prev_envs.push({
             let old_env = std::mem::take(&mut self.env);
-            self.env.clone_from(&self.modules[module].env);
+            self.env.clone_from(&self.modules[&module].env);
             old_env
         });
         let value = f(self);
@@ -455,7 +457,7 @@ impl Resolve {
         for segment in path.segments_iter().into_iter().skip(1) {
             curr = match curr {
                 Res::Module(module) => {
-                    let env = &self.modules[module].env;
+                    let env = &self.modules[&module].env;
                     if let Some(&res) = env.get(&segment.content) {
                         res
                     } else {
@@ -548,14 +550,13 @@ impl Resolve {
                     Res::Function(function) => {
                         res::ExprKind::Function(path.into_last().content, function)
                     }
-                    Res::Param(_) | Res::LocalRegion(_) => {
+                    Res::Param(_) | Res::LocalRegion(_) | Res::Module(_) => {
                         self.diag.add_diagnostic(
                             format!("Can't use '{}' as a value", path.display()),
                             loc.clone(),
                         );
                         res::ExprKind::Err
                     }
-                    Res::Module(_) => todo!("Handle module"),
                 },
             },
             ast::ExprKind::Lambda(lambda) => self.in_scope(|this| {
@@ -673,31 +674,40 @@ impl Resolve {
         self.vars = 0;
         function
     }
-    fn declare(&mut self, modules: &BTreeMap<Rc<str>, ast::Module>) {
-        for (i, (name, module)) in modules.iter().enumerate() {
-            self.declare_module(name.clone());
-            let scope = self.take_new_scope(|this| {
-                for function in &module.functions {
-                    this.declare_function(function.name.clone());
-                }
-            });
-            self.modules[i].env.extend(scope);
+    fn declare_module_items(&mut self, module: &ast::Module) {
+        self.declare_module(module.id, module.name.clone());
+        let scope = self.take_new_scope(|this| {
+            for function in &module.functions {
+                this.declare_function(function.name.clone());
+            }
+            for module in &module.child_modules {
+                this.declare_module_items(module);
+            }
+        });
+        self.modules.get_mut(&module.id).unwrap().env.extend(scope);
+    }
+    fn declare(&mut self, modules: &[ast::Module]) {
+        for module in modules.iter() {
+            self.declare_module_items(module);
         }
     }
-    pub fn resolve(
-        mut self,
-        modules: BTreeMap<Rc<str>, ast::Module>,
-    ) -> Result<res::Program, ResolveErrored> {
+    fn resolve_module(&mut self, functions: &mut Vec<res::Function>, module: ast::Module) {
+        self.in_module_scope(module.id, |this| {
+            for function in module.functions {
+                functions.push(this.resolve_function(function));
+            }
+            for child in module.child_modules {
+                this.resolve_module(functions, child);
+            }
+        });
+    }
+    pub fn resolve(mut self, modules: Vec<ast::Module>) -> Result<res::Program, ResolveErrored> {
         //First pass : Declare everything
         self.declare(&modules);
         //Second pass : Resolve
         let mut functions = Vec::new();
-        for (i, module) in modules.into_values().enumerate() {
-            self.in_module_scope(i, |this| {
-                for function in module.functions {
-                    functions.push(this.resolve_function(function));
-                }
-            });
+        for module in modules.into_iter() {
+            self.resolve_module(&mut functions, module);
         }
         let program = res::Program { functions };
         if !self.diag.report_all() {
