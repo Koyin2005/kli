@@ -1,7 +1,9 @@
 pub mod ast;
 pub mod diagnostics;
 mod ident;
+mod index_vec;
 pub mod interpret;
+pub mod mir;
 mod names;
 pub mod parsing;
 pub mod patterns;

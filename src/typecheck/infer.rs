@@ -1,4 +1,5 @@
 use crate::{
+    index_vec::IndexVec,
     src_loc::SrcLoc,
     types::{FunctionType, RecordField, Region, Type},
 };
@@ -72,6 +73,7 @@ impl TypeInfer {
             | Type::Unknown
             | Type::String
             | Type::Char
+            | Type::ClosureEnv
             | Type::Param(..) => ty,
             Type::Box(ty) => Type::Box(Box::new(self.simplify_type(*ty))),
             Type::Option(ty) => Type::Option(Box::new(self.simplify_type(*ty))),
@@ -183,7 +185,7 @@ impl TypeInfer {
                             None
                         }
                     })
-                    .collect::<Option<Vec<_>>>()
+                    .collect::<Option<IndexVec<_, _>>>()
                     .map(Type::Record)
             }
             (Type::Imm(region1, ty1), Type::Imm(region2, ty2)) => self

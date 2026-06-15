@@ -2,22 +2,11 @@ use std::rc::Rc;
 
 use crate::{
     ast::{BinaryOp, IsResource, Mutable},
+    define_id,
     ident::Ident,
     src_loc::SrcLoc,
 };
-
-#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Copy)]
-pub struct FunctionId(usize);
-impl FunctionId {
-    pub fn new(index: usize) -> Self {
-        Self(index)
-    }
-}
-impl From<FunctionId> for usize {
-    fn from(value: FunctionId) -> Self {
-        value.0
-    }
-}
+define_id!(FunctionId);
 
 #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Copy)]
 pub struct VarId(usize);

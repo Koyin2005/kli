@@ -57,10 +57,16 @@ pub enum InterpretError {
 }
 pub const INT_SIZE: usize = 8;
 pub const ADDR_SIZE: usize = 8;
-fn simplify_ty<'a>(g: &HashMap<usize, Type>, ty: Type) -> Type {
+fn simplify_ty(g: &HashMap<usize, Type>, ty: Type) -> Type {
     match ty {
-        Type::Bool | Type::Char | Type::Int | Type::Unit | Type::String => ty,
-        Type::Infer(_) | Type::Unknown => unreachable!(),
+        Type::Bool
+        | Type::Char
+        | Type::Int
+        | Type::Unit
+        | Type::String
+        | Type::ClosureEnv
+        | Type::Unknown => ty,
+        Type::Infer(_) => unreachable!(),
         Type::List(element) => Type::List(Box::new(simplify_ty(g, *element))),
         Type::Option(inner) => Type::Option(Box::new(simplify_ty(g, *inner))),
         Type::Box(inner) => Type::Box(Box::new(simplify_ty(g, *inner))),
@@ -90,25 +96,31 @@ fn simplify_ty<'a>(g: &HashMap<usize, Type>, ty: Type) -> Type {
         Type::Param(_, i) => g.get(&i).cloned().expect("No generic arg"),
     }
 }
+struct Env {
+    pointer: Pointer,
+    fields: HashMap<VarId, (Type, bool, usize)>,
+}
 struct Frame<'f> {
     f: FunctionInfo<'f>,
     generic_args: Vec<Type>,
     vars: HashMap<VarId, (Type, bool, Pointer)>,
     locals: Vec<Pointer>,
     scope: Vec<Vec<VarId>>,
-    captured_vars: Option<(Pointer, HashMap<VarId, (Type, bool, usize)>)>,
+    captured_vars: Option<Env>,
+}
+pub struct CaptureInfo {
+    pub size: usize,
+    pub info: Vec<(VarId, Type, usize)>,
+}
+pub struct LambdaInfo<'f> {
+    pub info: FunctionInfo<'f>,
+    pub captures: Option<CaptureInfo>,
+    pub generic_args: Vec<Type>,
 }
 pub struct Interpret<'f> {
     functions: HashMap<FunctionId, (FunctionInfo<'f>, HashMap<Vec<Type>, Pointer>)>,
     builtin_functions: HashMap<Builtin, HashMap<Vec<Type>, Pointer>>,
-    lambdas: HashMap<
-        Pointer,
-        (
-            FunctionInfo<'f>,
-            Option<(usize, Vec<(VarId, Type, usize)>)>,
-            Vec<Type>,
-        ),
-    >,
+    lambdas: HashMap<Pointer, LambdaInfo<'f>>,
     entry: FunctionId,
     call_stack: Vec<Frame<'f>>,
     memory: Memory,
@@ -176,6 +188,7 @@ impl<'f> Interpret<'f> {
     }
     fn drop(&mut self, ty: &Type, pointer_to_place: Pointer) -> Result<(), InterpretError> {
         match ty {
+            Type::ClosureEnv => unreachable!("Cannot drop closure env"),
             Type::Bool | Type::Int | Type::Unit | Type::Imm(..) | Type::Mut(..) | Type::Char => {
                 Ok(())
             }
@@ -219,8 +232,15 @@ impl<'f> Interpret<'f> {
                     let (env, code) = self.typed_read(pointer_to_place, ty)?.into_pair().unwrap();
                     let env = env.as_pointer().unwrap();
                     let code_ptr = code.as_pointer().unwrap();
-                    let (_, captures, _) = &self.lambdas[&code_ptr];
-                    let &(_, ref captures) = captures.as_ref().unwrap();
+                    let LambdaInfo {
+                        info: _,
+                        captures,
+                        generic_args: _,
+                    } = &self.lambdas[&code_ptr];
+                    let CaptureInfo {
+                        size: _,
+                        info: captures,
+                    } = captures.as_ref().unwrap();
                     self.drop_closure_env(env, captures.clone())
                 }
             },
@@ -243,7 +263,7 @@ impl<'f> Interpret<'f> {
                 let element_type = self.simplify_ty((**element_type).clone());
                 let size = size_of(&element_type);
                 let [ptr, cap, len] = self
-                    .typed_read(pointer_to_place, &ty)?
+                    .typed_read(pointer_to_place, ty)?
                     .into_tuple()
                     .expect("Should be a tuple")
                     .try_into()
@@ -335,7 +355,10 @@ impl<'f> Interpret<'f> {
         var: VarId,
     ) -> Result<(Pointer, Type), InterpretError> {
         for frame in self.call_stack.iter_mut().rev() {
-            if let Some((env, ref mut captures)) = frame.captured_vars
+            if let Some(Env {
+                pointer: env,
+                fields: ref mut captures,
+            }) = frame.captured_vars
                 && let Some(&mut (ref ty, ref mut moved, offset)) = captures.get_mut(&var)
                 && let ty = ty.clone()
             {
@@ -536,6 +559,10 @@ impl<'f> Interpret<'f> {
     }
     fn print_value(&self, value: Value, ty: &Type) -> Result<(), InterpretError> {
         match ty {
+            Type::ClosureEnv => {
+                let value = value.as_pointer().unwrap();
+                println!("{}", value.address);
+            }
             Type::Bool => {
                 let value = value.as_bool().expect("Should be a bool");
                 print!("{}", value)
@@ -689,7 +716,7 @@ impl<'f> Interpret<'f> {
                             iterator_value.into_tuple().unwrap().try_into().unwrap();
                         let ptr = ptr.as_pointer().unwrap();
                         let _ = cap.into_int().unwrap();
-                        let size = size_of(&ty);
+                        let size = size_of(ty);
                         let len = len.into_int().unwrap();
                         for i in 0..len.into_size() {
                             self.in_drop_scope(|this| {
@@ -894,15 +921,15 @@ impl<'f> Interpret<'f> {
                     IsResource::Data => {
                         self.lambdas.insert(
                             code_ptr,
-                            (
-                                FunctionInfo {
+                            LambdaInfo {
+                                info: FunctionInfo {
                                     generics: self.call_stack.last().unwrap().f.generics,
                                     params: &lambda.params,
                                     body: Some(&lambda.body),
                                 },
-                                None,
+                                captures: None,
                                 generic_args,
-                            ),
+                            },
                         );
                         Ok(Value::Pointer(code_ptr))
                     }
@@ -926,26 +953,26 @@ impl<'f> Interpret<'f> {
                             let &(_, ref ty, pointer_to_var) = capture;
                             let pointer =
                                 self.memory.byte_offset_in_bounds(env, offset as isize)?;
-                            self.typed_write(pointer, &ty, self.typed_read(pointer_to_var, &ty)?)?;
+                            self.typed_write(pointer, ty, self.typed_read(pointer_to_var, ty)?)?;
                         }
                         self.lambdas.insert(
                             code_ptr,
-                            (
-                                FunctionInfo {
+                            LambdaInfo {
+                                info: FunctionInfo {
                                     generics: self.call_stack.last().unwrap().f.generics,
                                     params: &lambda.params,
                                     body: Some(&lambda.body),
                                 },
-                                Some((
+                                captures: Some(CaptureInfo {
                                     size,
-                                    captures
+                                    info: captures
                                         .into_iter()
                                         .zip(offsets)
                                         .map(|((var, ty, _), offset)| (var, ty, offset))
                                         .collect(),
-                                )),
+                                }),
                                 generic_args,
-                            ),
+                            },
                         );
                         Ok(Value::pair(Value::Pointer(env), Value::Pointer(code_ptr)))
                     }
@@ -990,9 +1017,16 @@ impl<'f> Interpret<'f> {
             let (env, code) = callee.into_pair().unwrap();
             let env = env.as_pointer().unwrap();
             let code = code.as_pointer().unwrap();
-            let &(function, ref captures, ref generic_args) = &self.lambdas[&code];
+            let &LambdaInfo {
+                info: function,
+                ref captures,
+                ref generic_args,
+            } = &self.lambdas[&code];
             let generic_args = generic_args.clone();
-            let (_, captures) = captures.as_ref().unwrap();
+            let CaptureInfo {
+                size: _,
+                info: captures,
+            } = captures.as_ref().unwrap();
             let captures = captures.clone();
             let mut args = args;
             args.insert(0, Value::Pointer(env));
@@ -1017,7 +1051,11 @@ impl<'f> Interpret<'f> {
         if let Some((f, inst_args)) = self.function_from_pointer(code) {
             self.interpret_function(self.functions[&f].0, inst_args, args, None)
         } else {
-            let (function, captures, generic_args) = &self.lambdas[&code];
+            let LambdaInfo {
+                info: function,
+                captures,
+                generic_args,
+            } = &self.lambdas[&code];
             let generic_args = generic_args.clone();
             debug_assert!(captures.is_none());
             self.interpret_function(*function, generic_args, args, None)
@@ -1124,13 +1162,13 @@ impl<'f> Interpret<'f> {
             generic_args,
             captured_vars: captures.map(|captures| {
                 let env = args.remove(0).as_pointer().unwrap();
-                (
-                    env,
-                    captures
+                Env {
+                    pointer: env,
+                    fields: captures
                         .into_iter()
                         .map(|(var, (ty, field))| (var, (ty, false, field)))
                         .collect(),
-                )
+                }
             }),
         });
         let result = self.in_drop_scope(|this| {

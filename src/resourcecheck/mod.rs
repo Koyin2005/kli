@@ -104,7 +104,8 @@ impl ResourceCheck {
             | Type::String
             | Type::Box(_)
             | Type::Param(..)
-            | Type::List(_) => true,
+            | Type::List(_)
+            | Type::ClosureEnv => true,
             Type::Record(fields) => fields.iter().any(|field| self.is_resource(&field.ty)),
             Type::Infer(_) => unreachable!("All infers should be removed"),
         }
@@ -118,7 +119,8 @@ impl ResourceCheck {
             | Type::Unknown
             | Type::Param(..)
             | Type::Function(..)
-            | Type::Char => false,
+            | Type::Char
+            | Type::ClosureEnv => false,
             Type::List(ty) | Type::Box(ty) | Type::Option(ty) => self.ty_is_expired(ty),
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
                 if let Region::Local(_, local) = region
@@ -285,7 +287,8 @@ impl ResourceCheck {
             | Type::String
             | Type::Unit
             | Type::Param(..)
-            | Type::Unknown => HashSet::new(),
+            | Type::Unknown
+            | Type::ClosureEnv => HashSet::new(),
             Type::Infer(_) => unreachable!("Cannot infer here"),
             Type::Box(ty) | Type::List(ty) | Type::Option(ty) => self.regions_in(ty),
             Type::Function(function) => {
@@ -335,6 +338,7 @@ impl ResourceCheck {
                 .iter()
                 .all(|field| self.outlives_generic_regions(&field.ty)),
             Type::Infer(_) => unreachable!("Cannot infer here"),
+            Type::ClosureEnv => unreachable!("Cannot have env here"),
         }
     }
     fn var_of(&self, place: &Place) -> Option<VarId> {

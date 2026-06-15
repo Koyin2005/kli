@@ -22,7 +22,7 @@ pub fn pattern_to_pat<'a>(pattern: &'a Pattern) -> Pat<'a> {
             constructor: Constructor::Record,
             fields: fields
                 .iter()
-                .map(|field| pattern_to_pat(&field.pattern).with_index(field.index.into_index()))
+                .map(|field| pattern_to_pat(&field.pattern).with_index(field.index.into_usize()))
                 .collect(),
         },
         PatternKind::None => Pat {

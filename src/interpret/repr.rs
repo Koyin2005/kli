@@ -27,7 +27,7 @@ pub fn align_of(ty: &Type) -> usize {
     match ty {
         Type::Bool => 1,
         Type::Char => 4,
-        Type::Imm(..) | Type::Box(..) | Type::Mut(..) => ADDR_SIZE,
+        Type::Imm(..) | Type::Box(..) | Type::Mut(..) | Type::ClosureEnv => ADDR_SIZE,
         Type::Record(fields) => fields
             .iter()
             .map(|field| align_of(&field.ty))
@@ -51,7 +51,7 @@ pub fn size_of(ty: &Type) -> usize {
         Type::Unit => 0,
         Type::Int => 8,
         Type::Char => 4,
-        Type::Box(_) | Type::Imm(..) | Type::Mut(..) => ADDR_SIZE,
+        Type::Box(_) | Type::Imm(..) | Type::Mut(..) | Type::ClosureEnv => ADDR_SIZE,
         Type::Param(..) => unreachable!("Type params"),
         Type::Record(fields) => {
             let mut max_align = 1;
@@ -170,7 +170,9 @@ pub fn encode(e: Endianess, ty: &Type, value: Value) -> Vec<Byte> {
                 .map(|b| Byte::Init(b, None))
                 .collect()
         }
-        Type::Box(_) | Type::Imm(..) | Type::Mut(..) => encode_ptr(value.as_pointer().unwrap()),
+        Type::Box(_) | Type::Imm(..) | Type::Mut(..) | Type::ClosureEnv => {
+            encode_ptr(value.as_pointer().unwrap())
+        }
         Type::Record(fields) => {
             let fields = fields
                 .iter()
@@ -245,7 +247,7 @@ pub fn decode(e: Endianess, ty: &Type, bytes: &[Byte]) -> Result<Value, Interpre
                 len,
             }))
         }
-        Type::Box(_) | Type::Imm(..) | Type::Mut(..) => {
+        Type::Box(_) | Type::Imm(..) | Type::Mut(..) | Type::ClosureEnv => {
             let ptr = decode_ptr(bytes)?;
             Ok(Value::Pointer(ptr))
         }
@@ -354,7 +356,8 @@ pub fn is_resource(ty: &Type) -> bool {
         | Type::String
         | Type::Box(_)
         | Type::Param(..)
-        | Type::List(_) => true,
+        | Type::List(_)
+        | Type::ClosureEnv => true,
         Type::Record(fields) => fields.iter().any(|field| is_resource(&field.ty)),
         Type::Infer(_) => unreachable!("All infers should be removed"),
     }

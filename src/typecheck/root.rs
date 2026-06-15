@@ -3,11 +3,12 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     diagnostics::DiagnosticReporter,
     ident::Ident,
+    index_vec::IndexVec,
     resolved_ast::{self as res, Builtin, FunctionId, Program, VarId},
     scheme::Scheme,
     src_loc::SrcLoc,
     typecheck::{infer::TypeInfer, lower::Lower, subst::TypeSubst},
-    typed_ast::{self, Function, GenericParam, LetBinding},
+    typed_ast::{self, Function, GenericParam, LambdaId, LetBinding},
     types::{FunctionType, GenericArg, GenericKind, Region, Type},
 };
 pub struct TypeError;
@@ -17,12 +18,13 @@ struct VarInfo {
     function_scope: usize,
 }
 pub struct TypeCheck {
-    function_generic_kinds: Vec<Vec<GenericKind>>,
+    function_generic_kinds: IndexVec<FunctionId, Vec<GenericKind>>,
     pub(super) diag: RefCell<DiagnosticReporter>,
     variables: Vec<VarInfo>,
     generics: Vec<GenericKind>,
     signatures: Vec<Scheme<FunctionType>>,
     captures: Vec<Vec<VarId>>,
+    next_lambda_id: LambdaId,
     pub(super) infer: TypeInfer,
 }
 
@@ -30,7 +32,7 @@ impl TypeCheck {
     pub fn new(program: &Program) -> Self {
         let mut signatures = Vec::new();
         let diag = RefCell::new(DiagnosticReporter::new());
-        let mut function_kinds = Vec::new();
+        let mut function_kinds = IndexVec::new();
         for function in program.functions.iter() {
             let kinds = match function.generics {
                 None => Vec::new(),
@@ -60,6 +62,7 @@ impl TypeCheck {
             diag: RefCell::new(DiagnosticReporter::new()),
             variables: Vec::new(),
             captures: Vec::new(),
+            next_lambda_id: LambdaId::zero(),
         }
     }
     pub(super) fn iterator_element(&self, ty: Type) -> Result<Type, Type> {
@@ -88,7 +91,8 @@ impl TypeCheck {
             | Type::Option(_)
             | Type::Function(_)
             | Type::Box(_)
-            | Type::Record(_) => Err(ty),
+            | Type::Record(_)
+            | Type::ClosureEnv => Err(ty),
         }
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
@@ -164,7 +168,7 @@ impl TypeCheck {
         Scheme::new(FunctionType::new_data(params, return_type))
     }
     pub(super) fn signature_of_function(&self, function: FunctionId) -> Scheme<FunctionType> {
-        self.signatures[usize::from(function)].clone()
+        self.signatures[function.into_usize()].clone()
     }
     pub(super) fn instantiate_builtin_args(
         &mut self,
@@ -211,7 +215,7 @@ impl TypeCheck {
         function: FunctionId,
         loc: SrcLoc,
     ) -> Vec<GenericArg> {
-        self.function_generic_kinds[usize::from(function)]
+        self.function_generic_kinds[function]
             .iter()
             .map(|kind| match *kind {
                 GenericKind::Region => {
@@ -330,8 +334,7 @@ impl TypeCheck {
         LetBinding { pattern, value }
     }
     pub(super) fn check_function(&mut self, id: FunctionId, f: res::Function) -> Function {
-        self.generics
-            .clone_from(&self.function_generic_kinds[usize::from(id)]);
+        self.generics.clone_from(&self.function_generic_kinds[id]);
         let FunctionType {
             resource: _,
             params,
@@ -387,9 +390,14 @@ impl TypeCheck {
             body,
         }
     }
+    pub fn next_lambda_id(&mut self) -> LambdaId {
+        let next_id = self.next_lambda_id;
+        self.next_lambda_id = self.next_lambda_id.next();
+        next_id
+    }
     pub fn check(mut self, program: res::Program) -> Result<typed_ast::Program, TypeError> {
         self.validate_main(&program);
-        let mut functions = Vec::new();
+        let mut functions = IndexVec::new();
         for (function_index, function) in program.functions.into_iter().enumerate() {
             functions.push(self.check_function(FunctionId::new(function_index), function));
         }

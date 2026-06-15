@@ -1,7 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::{BorrowExpr, Module, ModuleId, Path, StmtKind};
+use crate::ast::{BorrowExpr, ModuleId, Path, StmtKind};
 use crate::diagnostics::DiagnosticReporter;
 use crate::ident::Ident;
 use crate::resolved_ast::{Builtin, FunctionId, GenericKind, LocalRegionId, VarId};
@@ -57,22 +57,11 @@ impl Resolve {
             (names::REPLACE.into(), Builtin::Replace),
             (names::SWAP.into(), Builtin::Swap),
         ]);
-        let env = Scope::from([
-            (names::ALLOC_BOX.into(), Res::Builtin(Builtin::AllocBox)),
-            (names::DEALLOC_BOX.into(), Res::Builtin(Builtin::DeallocBox)),
-            (names::DEREF_BOX.into(), Res::Builtin(Builtin::DerefBox)),
-            (
-                names::DEREF_BOX_MUT.into(),
-                Res::Builtin(Builtin::DerefBoxMut),
-            ),
-            (names::FREEZE.into(), Res::Builtin(Builtin::Freeze)),
-            (
-                names::DESTROY_STRING.into(),
-                Res::Builtin(Builtin::DestroyString),
-            ),
-            (names::REPLACE.into(), Res::Builtin(Builtin::Replace)),
-            (names::SWAP.into(), Res::Builtin(Builtin::Swap)),
-        ]);
+        let env = Scope::from_iter(
+            builtins
+                .into_iter()
+                .map(|(name, builtin)| (name.into(), Res::Builtin(builtin))),
+        );
         Self {
             modules: HashMap::new(),
             prev_envs: Vec::new(),

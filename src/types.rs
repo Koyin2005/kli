@@ -2,14 +2,16 @@ use std::{fmt::Display, rc::Rc};
 
 use crate::{
     ast::{IsResource, Mutable},
+    index_vec::IndexVec,
     resolved_ast::LocalRegionId,
+    typed_ast::FieldId,
 };
 #[derive(Clone, Copy, Debug)]
 pub enum GenericKind {
     Region,
     Type,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GenericArg {
     Region(Region),
     Type(Type),
@@ -75,9 +77,22 @@ pub enum Type {
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
     Function(FunctionType),
-    Record(Vec<RecordField>),
+    Record(IndexVec<FieldId, RecordField>),
+    ClosureEnv,
 }
 impl Type {
+    pub fn record(field_tys: Vec<Self>) -> Self {
+        Self::Record(
+            field_tys
+                .into_iter()
+                .enumerate()
+                .map(|(i, field)| RecordField {
+                    name: Rc::from(i.to_string()),
+                    ty: field,
+                })
+                .collect(),
+        )
+    }
     pub fn is_reference(&self) -> bool {
         matches!(self, Self::Imm(..) | Self::Mut(..))
     }
@@ -99,6 +114,7 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::ClosureEnv => f.write_str("env"),
             Self::Record(fields) => {
                 f.pad("{")?;
                 let mut first = true;
@@ -114,7 +130,7 @@ impl Display for Type {
             Self::Char => f.pad("char"),
             Self::Bool => f.pad("bool"),
             Self::Int => f.pad("int"),
-            Self::Unit => f.pad("unit"),
+            Self::Unit => f.pad("()"),
             Self::Unknown => f.pad("{unknown}"),
             Self::String => f.pad("string"),
             Self::Infer(_) => f.pad("_"),

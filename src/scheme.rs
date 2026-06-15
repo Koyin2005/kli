@@ -40,7 +40,8 @@ impl Bind for Type {
             | Self::Unknown
             | Self::String
             | Self::Infer(_)
-            | Self::Char => self,
+            | Self::Char
+            | Self::ClosureEnv => self,
             Self::Imm(region, ty) => Self::Imm(region.bind(args), Box::new((*ty).bind(args))),
             Self::Mut(region, ty) => Self::Mut(region.bind(args), Box::new((*ty).bind(args))),
             Self::Function(function) => Self::Function(function.bind(args)),

@@ -40,7 +40,7 @@ impl Value {
     pub fn as_pair(&self) -> Option<(&Value, &Value)> {
         match self {
             Self::Tuple(values) => {
-                let mut values = values.into_iter();
+                let mut values = values.iter();
                 let first = values.next()?;
                 let second = values.next()?;
                 if values.next().is_some() {

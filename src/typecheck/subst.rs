@@ -19,7 +19,8 @@ impl<'a> TypeSubst<'a> {
             | Type::Unit
             | Type::Unknown
             | Type::Char
-            | Type::Param(..) => (),
+            | Type::Param(..)
+            | Type::ClosureEnv => (),
             Type::Box(ty) | Type::Option(ty) | Type::List(ty) => self.subst_type(ty),
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
                 self.subst_region(region);

@@ -66,7 +66,7 @@ impl TypeCheck {
                     .into_iter()
                     .enumerate()
                     .filter_map(|(i, PatternField { name, pattern })| {
-                        let field_id = field_names.get(&name.content).copied();
+                        let field_id = field_names.get(&name.content).copied().map(FieldId::new);
                         let pattern = self.check_pattern(
                             pattern,
                             field_id
@@ -95,12 +95,12 @@ impl TypeCheck {
                             );
                             return None;
                         } else {
-                            i
+                            FieldId::new(i)
                         };
                         Some(typed_ast::PatternField {
                             name,
                             pattern,
-                            index: FieldId::new(field_id),
+                            index: field_id,
                         })
                     })
                     .collect::<Vec<_>>();

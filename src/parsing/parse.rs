@@ -931,7 +931,7 @@ impl Parser {
                 while self.not_matches_token(&TokenKind::RightParen) {
                     let (loc, string) = self.match_string_literal().ok_or_else(|| {
                         self.diag
-                            .add_diagnostic(format!("Expected a string"), loc.clone());
+                            .add_diagnostic("Expected a string".to_string(), loc.clone());
                         ParseError
                     })?;
                     fields.push(AnnotationField::String(loc, string));

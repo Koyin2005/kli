@@ -2,7 +2,9 @@ use std::rc::Rc;
 
 use crate::{
     ast::{BinaryOp, IsResource, Mutable},
+    define_id,
     ident::Ident,
+    index_vec::IndexVec,
     resolved_ast::{Builtin, FunctionId, LocalRegionId, Var, VarId},
     src_loc::SrcLoc,
     types::{GenericArg, GenericKind, Region, Type},
@@ -41,8 +43,10 @@ pub enum PlaceKind {
     Var(Var),
     Deref(Box<Expr>),
 }
+define_id!(LambdaId);
 #[derive(Debug)]
 pub struct Lambda {
+    pub id: LambdaId,
     pub is_resource: IsResource,
     pub captures: Vec<VarId>,
     pub params: Vec<Param>,
@@ -75,16 +79,8 @@ pub struct Expr {
     pub loc: SrcLoc,
     pub kind: ExprKind,
 }
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct FieldId(usize);
-impl FieldId {
-    pub fn new(index: usize) -> Self {
-        Self(index)
-    }
-    pub fn into_index(self) -> usize {
-        self.0
-    }
-}
+define_id!(FieldId);
+
 #[derive(Debug)]
 pub struct RecordFieldInit {
     pub index: FieldId,
@@ -148,5 +144,5 @@ pub struct Function {
 }
 
 pub struct Program {
-    pub functions: Vec<Function>,
+    pub functions: IndexVec<FunctionId, Function>,
 }

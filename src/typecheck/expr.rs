@@ -127,6 +127,7 @@ impl TypeCheck {
         }
     }
     fn check_lambda(&mut self, loc: SrcLoc, lambda: Lambda, hint: Option<Type>) -> typed_ast::Expr {
+        let id = self.next_lambda_id();
         let expected_sig = match hint.clone().map(|ty| self.simplify_type(ty)) {
             Some(Type::Function(ref function)) => Some(function.clone()),
             _ => None,
@@ -175,6 +176,7 @@ impl TypeCheck {
             ty: function,
             loc,
             kind: typed_ast::ExprKind::Lambda(Box::new(typed_ast::Lambda {
+                id,
                 captures,
                 is_resource: lambda.resource,
                 params,
@@ -290,7 +292,7 @@ impl TypeCheck {
             .collect::<HashMap<_, _>>();
 
         for (i, FieldInit { name, value }) in field_inits.into_iter().enumerate() {
-            let field_id = field_names.get(&name.content).copied();
+            let field_id = field_names.get(&name.content).copied().map(FieldId::new);
             let value = self.check_expr(
                 value,
                 expected_fields
@@ -314,10 +316,10 @@ impl TypeCheck {
                 );
                 continue;
             } else {
-                i
+                FieldId::new(i)
             };
             fields.push(RecordFieldInit {
-                index: FieldId::new(field_id),
+                index: field_id,
                 name,
                 value,
             });

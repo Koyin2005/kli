@@ -1,8 +1,14 @@
-use std::{collections::BTreeMap, env, path::Path, rc::Rc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    env,
+    path::Path,
+    rc::Rc,
+};
 
 use kli::{
     ast::{self, Module, ModuleId},
     interpret::{Endianess, Interpret},
+    mir,
     parsing::parse::Parser,
     patterns::visit::PatternCheck,
     resolve::Resolve,
@@ -89,16 +95,18 @@ fn find_src_files_at(path: &Path) -> Result<Vec<FileEntry>, FileError> {
     }
     Ok(file_entries)
 }
-fn find_all_src_files_in_dir(
-    name: String,
-    path: &Path,
-) -> Result<(Rc<str>, BTreeMap<Rc<str>, FileEntry>), FileError> {
+
+struct FileTree {
+    files: BTreeMap<Rc<str>, FileEntry>,
+}
+
+fn find_all_src_files_in_dir(path: &Path) -> Result<FileTree, FileError> {
     let files = find_src_files_at(path)?;
     let files = files
         .into_iter()
         .map(|file| (file.name.clone(), file))
         .collect::<BTreeMap<_, _>>();
-    Ok((name.into(), files))
+    Ok(FileTree { files })
 }
 fn find_all_src_files(path: &Path) -> Result<Files, FileError> {
     let metadata = path.metadata().map_err(FileError::Io)?;
@@ -108,8 +116,8 @@ fn find_all_src_files(path: &Path) -> Result<Files, FileError> {
         .to_str()
         .ok_or(FileError::InvalidName)?
         .to_string();
-    let (_, files) = if metadata.is_dir() {
-        find_all_src_files_in_dir(name, path)?
+    let FileTree { files } = if metadata.is_dir() {
+        find_all_src_files_in_dir(path)?
     } else if metadata.is_file() {
         let (name, src) = match read_source_file(path, name) {
             Ok((name, src)) => (name, src),
@@ -118,16 +126,15 @@ fn find_all_src_files(path: &Path) -> Result<Files, FileError> {
                 ModuleError::Io(e) => return Err(FileError::Io(e)),
             },
         };
-        (
-            name.clone(),
-            BTreeMap::from([(
+        FileTree {
+            files: BTreeMap::from([(
                 name.clone(),
                 FileEntry {
                     name,
                     kind: FileEntryKind::Single { src },
                 },
             )]),
-        )
+        }
     } else {
         return Err(FileError::NotAFile);
     };
@@ -140,17 +147,14 @@ fn parse_modules(module_counter: &mut u32, entry: FileEntry) -> Option<Module> {
     Some(match entry.kind {
         FileEntryKind::Folder(modules) => {
             let modules = modules
-                .into_iter()
-                .map(|(_, file)| parse_modules(module_counter, file))
+                .into_values()
+                .map(|file| parse_modules(module_counter, file))
                 .collect::<Vec<Option<Module>>>();
             Module {
                 id,
                 name,
                 functions: Vec::new(),
-                child_modules: modules
-                    .into_iter()
-                    .map(std::convert::identity)
-                    .collect::<Option<Vec<_>>>()?,
+                child_modules: modules.into_iter().collect::<Option<Vec<_>>>()?,
             }
         }
         FileEntryKind::Single { src } => parse_source_file(id, name, &src)?,
@@ -160,10 +164,10 @@ fn parse_all_modules(file_tree: Files) -> Option<Vec<Module>> {
     let module_counter = &mut 0;
     let modules = file_tree
         .files
-        .into_iter()
-        .map(|(_, file)| parse_modules(module_counter, file))
+        .into_values()
+        .map(|file| parse_modules(module_counter, file))
         .collect::<Vec<Option<Module>>>();
-    modules.into_iter().map(std::convert::identity).collect()
+    modules.into_iter().collect()
 }
 fn find_std_lib() -> FileEntry {
     let bool_file = include_str!("std/bools.kli");
@@ -190,20 +194,29 @@ fn find_std_lib() -> FileEntry {
         ])),
     }
 }
+
 fn main() {
     let mut args = env::args().skip(1).collect::<Vec<_>>();
-    let path = if args.len() == 1
-        && let Some(name) = args.pop()
-    {
-        name
+    let path = if !args.is_empty() {
+        args.remove(0)
     } else {
         eprintln!("Invalid format");
         eprintln!("Expected 'program_path'");
         return;
     };
+    let include_std = if args.is_empty() {
+        true
+    } else if (&args)[0] == "--no_std" {
+        false
+    } else {
+        true
+    };
+
     let file_tree = match find_all_src_files(Path::new(&path)) {
         Ok(mut file_tree) => {
-            file_tree.files.insert(Rc::from("std"), find_std_lib());
+            if include_std {
+                file_tree.files.insert(Rc::from("std"), find_std_lib());
+            }
             file_tree
         }
         Err(e) => match e {
@@ -238,7 +251,16 @@ fn main() {
     if had_error {
         return;
     }
-    if let Err(e) = Interpret::new(Endianess::Big, &program.functions).interpret() {
-        println!("{:?}", e)
+    let mut context = mir::Context::default();
+    for function in program.functions.iter() {
+        context.function_names.push(function.name.clone());
+    }
+    for (id, function) in program.functions.iter_enumerated() {
+        mir::build::Builder::build_function(&mut context, id, function);
+    }
+    for body in context.bodies.values() {
+        mir::dump::MirDump::new(std::io::stdout(), &context)
+            .write_body(body)
+            .unwrap();
     }
 }
