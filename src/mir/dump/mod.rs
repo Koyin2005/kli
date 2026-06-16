@@ -31,6 +31,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 LocalKind::Var(var) => write!(self.output, " var {}", var.0),
                 LocalKind::DropFlag(_) => todo!("Handle drop flag"),
                 LocalKind::Temp => write!(self.output, " temp {}", local.0),
+                LocalKind::Env => write!(self.output, " env"),
             }?;
             writeln!(self.output, " : {}", info.ty)?;
         }
@@ -90,6 +91,19 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(capacity)?;
                 write!(self.output, ")")?;
             }
+            Rvalue::AllocateEnv(captures) => {
+                write!(self.output, "allocEnv(")?;
+                let mut first = true;
+                for (var, operand) in captures {
+                    if !first {
+                        write!(self.output, ",")?;
+                    }
+                    write!(self.output, "{} = ", var.0)?;
+                    self.write_operand(operand)?;
+                    first = false;
+                }
+                write!(self.output, ")")?;
+            }
             Rvalue::Aggregate(kind, fields) => match kind {
                 AggregateKind::Record { field_names } => {
                     let mut first = true;
@@ -98,6 +112,21 @@ impl<'ctxt> MirDump<'ctxt> {
                         if !first {
                             write!(self.output, ",")?;
                         }
+                        write!(self.output, "{} = ", name)?;
+                        self.write_operand(operand)?;
+                        first = false;
+                    }
+                    write!(self.output, "}}")?;
+                }
+                AggregateKind::Closure => {
+                    let mut first = true;
+                    write!(self.output, "Closure {{")?;
+                    let name = |i: usize| if i == 0 { "env" } else { "code" };
+                    for (i, operand) in fields.iter_enumerated() {
+                        if !first {
+                            write!(self.output, ",")?;
+                        }
+                        let name = name(i.into_usize());
                         write!(self.output, "{} = ", name)?;
                         self.write_operand(operand)?;
                         first = false;
@@ -135,12 +164,22 @@ impl<'ctxt> MirDump<'ctxt> {
                 ConstantValue::Int(value) => write!(self.output, "{}", value),
                 ConstantValue::Bool(value) => write!(self.output, "{}", value),
                 ConstantValue::ZeroSized => write!(self.output, "{}", constant.ty),
-                ConstantValue::Function(id, ref _args) => {
-                    write!(self.output, "{}", self.ctxt.function_names[id].content)
+                ConstantValue::Function(id, ref args) => {
+                    write!(self.output, "{}", self.ctxt.function_names[id].content)?;
+                    if !args.is_empty() {
+                        todo!("handle non empty args")
+                    }
+                    Ok(())
+                }
+                ConstantValue::Lambda(id, ref args) => {
+                    write!(self.output, "lambda {}", id.into_usize())?;
+                    if !args.is_empty() {
+                        todo!("handle non empty args")
+                    }
+                    Ok(())
                 }
             },
-        }?;
-        Ok(())
+        }
     }
     fn write_block(&mut self, id: BasicBlockId, block: &BasicBlock) -> std::io::Result<()> {
         writeln!(self.output, " bb{}", id.into_usize())?;

@@ -1,9 +1,4 @@
-use std::{
-    collections::BTreeMap,
-    env,
-    path::Path,
-    rc::Rc,
-};
+use std::{collections::BTreeMap, env, path::Path, rc::Rc};
 
 use kli::{
     ast::{self, Module, ModuleId},
@@ -205,8 +200,9 @@ fn main() {
     };
     let include_std = if args.is_empty() {
         true
-    } else {(&args)[0] != "--no_std"
-};
+    } else {
+        (&args)[0] != "--no_std"
+    };
 
     let file_tree = match find_all_src_files(Path::new(&path)) {
         Ok(mut file_tree) => {
@@ -252,7 +248,7 @@ fn main() {
         context.function_names.push(function.name.clone());
     }
     for (id, function) in program.functions.iter_enumerated() {
-        mir::build::Builder::build_function(&mut context, id, function);
+        mir::build::Builder::build_from_function(&mut context, id, function);
     }
     for body in context.body_sources.iter() {
         let body = &context.bodies[body];

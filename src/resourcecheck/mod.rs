@@ -228,7 +228,7 @@ impl ResourceCheck {
     }
     fn place_mutable(&self, place: &Place) -> Mutable {
         match &place.kind {
-            PlaceKind::Var(var) => self.vars[&var.1].mutable,
+            PlaceKind::Var(var) | PlaceKind::Upvar(var) => self.vars[&var.1].mutable,
             PlaceKind::Deref(_) => {
                 let mut place = place;
                 while let PlaceKind::Deref(value) = &place.kind {
@@ -343,7 +343,7 @@ impl ResourceCheck {
     }
     fn var_of(&self, place: &Place) -> Option<VarId> {
         match place.kind {
-            PlaceKind::Var(ref var) => Some(var.1),
+            PlaceKind::Var(ref var) | PlaceKind::Upvar(ref var) => Some(var.1),
             PlaceKind::Deref(ref value) => {
                 if let ExprKind::Load(ref place) = value.kind {
                     self.var_of(place)
@@ -385,7 +385,7 @@ impl ResourceCheck {
     }
     fn check_place_use(&mut self, place: &Place, place_use: PlaceUse) {
         match &place.kind {
-            PlaceKind::Var(var) => {
+            PlaceKind::Var(var) | PlaceKind::Upvar(var) => {
                 let var = var.1;
                 self.capture_if_upvar(var, place.loc.clone());
                 match place_use {
@@ -572,6 +572,7 @@ impl ResourceCheck {
                 }
 
                 let var = match &place.kind {
+                    PlaceKind::Upvar(var) => var,
                     PlaceKind::Var(var) => var,
                     PlaceKind::Deref(_) => {
                         self.err.add_diagnostic(

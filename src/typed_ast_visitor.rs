@@ -36,7 +36,7 @@ where
     V: Visitor + ?Sized,
 {
     match &place.kind {
-        PlaceKind::Var(_) => (),
+        PlaceKind::Var(_) | PlaceKind::Upvar(_) => (),
         PlaceKind::Deref(value) => v.visit_expr(value),
     }
 }

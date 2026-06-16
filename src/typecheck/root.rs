@@ -14,6 +14,7 @@ use crate::{
 pub struct TypeError;
 #[derive(Debug)]
 struct VarInfo {
+    name: Rc<str>,
     ty: Type,
     function_scope: usize,
 }
@@ -234,6 +235,9 @@ impl TypeCheck {
     pub(super) fn var_type(&self, var: VarId) -> &Type {
         &self.variables[usize::from(var)].ty
     }
+    pub(super) fn var_name(&self, var: VarId) -> Rc<str> {
+        self.variables[usize::from(var)].name.clone()
+    }
     pub(super) fn capture(&mut self, var: VarId) -> bool {
         let function = self.variables[usize::from(var)].function_scope;
         let current = self.captures.len();
@@ -246,13 +250,14 @@ impl TypeCheck {
             false
         }
     }
-    pub(super) fn declare_var(&mut self, var_id: VarId, ty: Type) {
+    pub(super) fn declare_var(&mut self, var_id: VarId, ty: Type, name: Rc<str>) {
         assert_eq!(
             usize::from(var_id),
             self.variables.len(),
             "variable declarations not in order"
         );
         self.variables.push(VarInfo {
+            name,
             ty,
             function_scope: self.captures.len(),
         });
@@ -349,7 +354,7 @@ impl TypeCheck {
             .into_iter()
             .zip(params)
             .map(|(param, ty)| {
-                self.declare_var(param.var.1, ty.clone());
+                self.declare_var(param.var.1, ty.clone(), param.var.0.clone());
                 typed_ast::Param {
                     name: Ident {
                         content: param.var.0,

@@ -389,7 +389,9 @@ impl<'f> Interpret<'f> {
         place: &'f typed_ast::Place,
     ) -> Result<Pointer, InterpretError> {
         match &place.kind {
-            typed_ast::PlaceKind::Var(var) => Ok(self.pointer_to_var(as_move, var.1)?.0),
+            typed_ast::PlaceKind::Upvar(var) | typed_ast::PlaceKind::Var(var) => {
+                Ok(self.pointer_to_var(as_move, var.1)?.0)
+            }
             typed_ast::PlaceKind::Deref(value) => match &value.kind {
                 typed_ast::ExprKind::Load(place) => {
                     let place_pointer = self.pointer_to_place(false, place)?;
@@ -938,9 +940,9 @@ impl<'f> Interpret<'f> {
                             .captures
                             .iter()
                             .map(|var| {
-                                let (pointer, ty) = self.pointer_to_var(true, *var).unwrap();
+                                let (pointer, ty) = self.pointer_to_var(true, var.0.1).unwrap();
                                 let ty = self.simplify_ty(ty);
-                                (*var, ty, pointer)
+                                (var.0.1, ty, pointer)
                             })
                             .collect::<Vec<_>>();
                         let tys = captures

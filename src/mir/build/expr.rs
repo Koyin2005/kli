@@ -4,10 +4,10 @@ use crate::{
     ast::{BinaryOp, IsResource},
     index_vec::IndexVec,
     mir::{
-        self, AggregateKind, Constant, ConstantValue, Local, Operand, OverflowOp,
-        Place, Rvalue, Stmt, SwitchTarget, SwitchTargets, build::Builder,
+        self, AggregateKind, Constant, ConstantValue, Local, Operand, OverflowOp, Place, Rvalue,
+        build::Builder,
     },
-    typed_ast::{self, Expr, ExprKind, FieldId, IteratorType, Pattern},
+    typed_ast::{self, Expr, ExprKind, FieldId, Pattern},
     types::{FunctionType, Type},
 };
 
@@ -24,6 +24,9 @@ impl Builder<'_> {
                     value: ConstantValue::Function(id, generic_args.clone()),
                 })
             }
+            ExprKind::Lambda(ref lambda) if lambda.is_resource == IsResource::Data => {
+                Some(self.lambda_code(lambda))
+            }
             _ => None,
         }
     }
@@ -34,192 +37,56 @@ impl Builder<'_> {
             None
         }
     }
-    fn as_operand(&mut self, expr: &Expr) -> Option<Operand> {
+    pub(super) fn as_operand(&mut self, expr: &Expr) -> Option<Operand> {
         if let Some(constant) = self.as_constant(expr) {
             Some(Operand::Constant(constant))
-        } else{
+        } else {
             self.as_place(expr).map(Operand::Load)
-        } 
+        }
     }
-    fn place(&mut self, expr: &Expr) -> Place {
+    pub(super) fn place(&mut self, expr: &Expr) -> Place {
         if let Some(place) = self.as_place(expr) {
             place
         } else {
             Place::local(self.expr_into_temp(expr))
         }
     }
-    fn operand_as_place(&mut self, ty: Type, operand: Operand) -> Place{
-        match operand{
+    fn operand_as_place(&mut self, ty: Type, operand: Operand) -> Place {
+        match operand {
             Operand::Load(place) => place,
-            Operand::Constant(_) => Place::local(self.assign_to_temp(ty, Rvalue::Use(operand)))
+            Operand::Constant(_) => Place::local(self.assign_to_temp(ty, Rvalue::Use(operand))),
         }
     }
-    fn operand(&mut self, expr: &Expr) -> Operand {
+    pub(super) fn operand(&mut self, expr: &Expr) -> Operand {
         if let Some(operand) = self.as_operand(expr) {
             operand
         } else {
             Operand::Load(Place::local(self.expr_into_temp(expr)))
         }
     }
-    fn assign(&mut self, place: Place, value: Rvalue) {
-        self.push_stmt(Stmt::Assign(place, value));
-    }
-    fn assign_to_temp(&mut self, ty: Type, value: Rvalue) -> Local {
-        let temp = self.new_temp(ty);
-        self.push_stmt(Stmt::Assign(Place::local(temp), value));
-        temp
-    }
-    fn lower_place(&mut self, place: &typed_ast::Place) -> Place {
+    pub(super) fn lower_place(&mut self, place: &typed_ast::Place) -> Place {
         match &place.kind {
             typed_ast::PlaceKind::Var(var) => {
                 let local = self.body.local_for_var(var.1).unwrap();
                 Place::local(local)
             }
+            typed_ast::PlaceKind::Upvar(var) => {
+                let index = self
+                    .body
+                    .captures
+                    .iter()
+                    .position(|(curr, _)| curr.1 == var.1)
+                    .unwrap();
+                Place::local(Local::zero()).with_field(FieldId::new(index))
+            }
+
             typed_ast::PlaceKind::Deref(value) => self.place(value).with_deref(),
         }
     }
-    fn expr_into_temp(&mut self, expr: &Expr) -> Local {
+    pub(super) fn expr_into_temp(&mut self, expr: &Expr) -> Local {
         let temp = self.new_temp(expr.ty.clone());
         self.expr_into_dest(Place::local(temp), expr);
         temp
-    }
-    fn for_loop(
-        &mut self,
-        pattern: &Pattern,
-        iterator: &Expr,
-        iterator_type: &IteratorType,
-        body: &Expr,
-    ) {
-        match iterator_type {
-            IteratorType::ArrayListRef(..) => {
-                /*
-                   for i in &l{
-                       stuff
-                   }
-
-                   bb_header
-                    iter = &l
-                    i = 0
-                    goto bb_cond
-                   bb_cond
-                    in_bounds = i < iter^.len
-                    switch in_bounds 0 -> bb_end, otherwise -> bb_body
-                   bb_body
-                    ....
-                    i = i + 1;
-                    goto bb_cond
-                   bb_end
-                */
-                let place = self.place(iterator);
-                let current_index = self
-                    .assign_to_temp(Type::Int, Rvalue::Use(Operand::Constant(Constant::int(0))));
-                self.goto_to_new_block();
-
-                //Condition
-                let len = place.clone().with_deref().with_len();
-                let in_bounds = self.assign_to_temp(
-                    Type::Bool,
-                    Rvalue::Binary(
-                        mir::BinaryOp::Lesser,
-                        Box::new((
-                            Operand::Load(Place::local(current_index)),
-                            Operand::Load(len),
-                        )),
-                    ),
-                );
-                let cond_block = self.current_block;
-
-                //Body
-                let loop_body_start_block = self.new_block();
-                self.switch_to_block(loop_body_start_block);
-                let current_element = place.with_deref().with_index(current_index);
-                self.assign_place_to_pattern(pattern, current_element);
-                self.expr_stmt(body);
-                self.assign(
-                    Place::local(current_index),
-                    Rvalue::Binary(
-                        mir::BinaryOp::Unchecked(OverflowOp::Add),
-                        Box::new((
-                            Operand::Load(Place::local(current_index)),
-                            Operand::Constant(Constant::int(1)),
-                        )),
-                    ),
-                );
-                self.finish_block_with_goto(cond_block);
-                self.switch_to_new_block();
-                let end_block = self.current_block;
-                self.switch_to_block(cond_block);
-                self.finish_block_with_switch(
-                    Operand::Load(Place::local(in_bounds)),
-                    SwitchTargets {
-                        targets: vec![SwitchTarget {
-                            value: 0,
-                            target: end_block,
-                        }],
-                        otherwise: loop_body_start_block,
-                    },
-                );
-                self.switch_to_block(end_block);
-            }
-            IteratorType::StringIter(..) => {
-                todo!("Char iterator")
-            }
-        }
-    }
-    fn panic(&mut self) {
-        let block = self.new_block();
-        self.finish_block(mir::Terminator::Panic);
-        self.switch_to_block(block);
-    }
-    fn expr_stmt(&mut self, expr: &Expr) {
-        match &expr.kind {
-            ExprKind::Err => (),
-            ExprKind::Assign(place, expr) => {
-                let place = self.lower_place(place);
-                let value = self.build_rvalue(expr);
-                self.assign(place, value);
-            }
-            ExprKind::Panic => {
-                self.panic();
-            }
-            ExprKind::Block(block_body, ..) => {
-                for stmt in block_body.stmts.iter() {
-                    self.stmt(stmt);
-                }
-                self.expr_stmt(&block_body.expr);
-            }
-            ExprKind::Print(expr) => {
-                let stmt = Stmt::Print(expr.as_ref().map(|expr| self.operand(expr)));
-                self.push_stmt(stmt);
-            }
-            ExprKind::For {
-                pattern,
-                iterator,
-                body,
-                iterator_type,
-            } => {
-                self.for_loop(pattern, iterator, iterator_type, body);
-            }
-            //Evaluate
-            ExprKind::Record(..)
-            | ExprKind::String(_)
-            | ExprKind::Unit
-            | ExprKind::Bool(_)
-            | ExprKind::Int(_)
-            | ExprKind::Borrow { .. }
-            | ExprKind::Load(_)
-            | ExprKind::Case(..)
-            | ExprKind::Call(..)
-            | ExprKind::Binary(..)
-            | ExprKind::Function(..)
-            | ExprKind::None
-            | ExprKind::Some(..)
-            | ExprKind::List(..)
-            | ExprKind::Builtin(..)
-            | ExprKind::Lambda(..) => {
-                self.expr_into_temp(expr);
-            }
-        }
     }
     fn assign_to_pattern(&mut self, pattern: &Pattern, value: &Expr) {
         match &pattern.kind {
@@ -233,7 +100,7 @@ impl Builder<'_> {
             }
         }
     }
-    fn assign_place_to_pattern(&mut self, pattern: &Pattern, place: Place) {
+    pub(super) fn assign_place_to_pattern(&mut self, pattern: &Pattern, place: Place) {
         match &pattern.kind {
             typed_ast::PatternKind::Binding(borrowed, _, var, ty) => {
                 let var_place = Place::local(self.new_var(var.clone(), (**ty).clone()));
@@ -249,7 +116,6 @@ impl Builder<'_> {
             typed_ast::PatternKind::Bool(_)
             | typed_ast::PatternKind::Int(_)
             | typed_ast::PatternKind::None => (),
-            
             _ => todo!("HANDL ASSIGN TO {:?}", pattern),
         }
     }
@@ -292,8 +158,8 @@ impl Builder<'_> {
             | ExprKind::None
             | ExprKind::String(_)
             | ExprKind::Lambda(_)
-            | ExprKind::Case(..) 
-            | ExprKind::Builtin(..)=> {
+            | ExprKind::Case(..)
+            | ExprKind::Builtin(..) => {
                 let rvalue = self.build_rvalue(expr);
                 self.assign(dest, rvalue);
             }
@@ -367,11 +233,10 @@ impl Builder<'_> {
                     let callee_value = self.operand(callee);
                     let arg_values = args.iter().map(|arg| self.operand(arg)).collect::<Vec<_>>();
                     match resource {
-                        IsResource::Data => {
-                            Rvalue::Call(callee_value, arg_values)
-                        }
+                        IsResource::Data => Rvalue::Call(callee_value, arg_values),
                         IsResource::Resource => {
-                            let closure_place = self.operand_as_place(callee.ty.clone(), callee_value);
+                            let closure_place =
+                                self.operand_as_place(callee.ty.clone(), callee_value);
                             let env = closure_place.clone().with_field(FieldId::new(0));
                             let code = closure_place.clone().with_field(FieldId::new(1));
                             let mut arg_values = arg_values;
@@ -468,7 +333,39 @@ impl Builder<'_> {
                 region: _,
             } => Rvalue::Ref(*mutable, self.lower_place(place)),
             ExprKind::Case(..) => todo!("case"),
-            ExprKind::Lambda(..) => todo!("lambda"),
+            ExprKind::Lambda(lambda) => {
+                let is_resource = lambda.is_resource == IsResource::Resource;
+                let function = Operand::Constant(self.lambda_code(lambda));
+                if is_resource {
+                    let env = self.assign_to_temp(
+                        Type::ClosureEnv,
+                        Rvalue::AllocateEnv(
+                            lambda
+                                .captures
+                                .iter()
+                                .map(|(var, _)| {
+                                    (
+                                        var.clone(),
+                                        Operand::Load(Place::local(
+                                            self.body
+                                                .local_for_var(var.1)
+                                                .expect("Should have a local for var"),
+                                        )),
+                                    )
+                                })
+                                .collect(),
+                        ),
+                    );
+                    Rvalue::Aggregate(
+                        AggregateKind::Closure,
+                        [Operand::Load(Place::local(env)), function]
+                            .into_iter()
+                            .collect(),
+                    )
+                } else {
+                    Rvalue::Use(function)
+                }
+            }
         }
     }
 }

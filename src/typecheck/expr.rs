@@ -14,7 +14,14 @@ use crate::{
 impl TypeCheck {
     fn check_place(&mut self, place: Place, expected_ty: Option<Type>) -> typed_ast::Place {
         let (ty, kind) = match place.kind {
-            PlaceKind::Var(var) => (self.var_type(var.1).clone(), typed_ast::PlaceKind::Var(var)),
+            PlaceKind::Var(var) => (
+                self.var_type(var.1).clone(),
+                if self.capture(var.1) {
+                    typed_ast::PlaceKind::Upvar(var)
+                } else {
+                    typed_ast::PlaceKind::Var(var)
+                },
+            ),
             PlaceKind::Deref(value) => {
                 let value = self.check_expr(*value, None);
                 (
@@ -162,7 +169,7 @@ impl TypeCheck {
                             .unwrap_or_else(|| this.fresh_ty(name.loc.clone())),
                     };
 
-                    this.declare_var(var, ty.clone());
+                    this.declare_var(var, ty.clone(), name.content.clone());
                     typed_ast::Param { name, var, ty }
                 })
                 .collect::<Vec<_>>();
@@ -180,6 +187,15 @@ impl TypeCheck {
                 .collect(),
             return_type: Box::new(body.ty.clone()),
         });
+        let captures = captures
+            .into_iter()
+            .map(|capture| {
+                (
+                    Var(self.var_name(capture), capture),
+                    self.var_type(capture).clone(),
+                )
+            })
+            .collect();
         typed_ast::Expr {
             ty: function,
             loc,
@@ -377,13 +393,17 @@ impl TypeCheck {
                 kind: typed_ast::ExprKind::Bool(value),
             },
             ExprKind::Var(var, id) => {
-                self.capture(id);
+                let captured = self.capture(id);
                 make_expr(
                     self.var_type(id).clone(),
                     typed_ast::ExprKind::Load(typed_ast::Place {
                         ty: self.var_type(id).clone(),
                         loc: loc.clone(),
-                        kind: typed_ast::PlaceKind::Var(Var(var, id)),
+                        kind: if !captured {
+                            typed_ast::PlaceKind::Var(Var(var, id))
+                        } else {
+                            typed_ast::PlaceKind::Upvar(Var(var, id))
+                        },
                     }),
                     loc,
                 )

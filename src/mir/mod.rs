@@ -1,4 +1,4 @@
-use std::{ collections::HashMap, fmt::Display, rc::Rc};
+use std::{collections::HashMap, fmt::Display, rc::Rc};
 
 use crate::{
     ast::Mutable,
@@ -124,6 +124,7 @@ pub enum ConstantValue {
     Int(i64),
     Bool(bool),
     Function(FunctionId, Vec<GenericArg>),
+    Lambda(LambdaId, Vec<GenericArg>),
     ZeroSized,
 }
 impl ConstantValue {
@@ -139,6 +140,7 @@ pub enum AggregateKind {
     Record {
         field_names: IndexVec<FieldId, Rc<str>>,
     },
+    Closure,
 }
 #[derive(Debug, Clone, Copy)]
 pub enum OverflowOp {
@@ -162,6 +164,7 @@ pub enum Rvalue {
     Binary(BinaryOp, Box<(Operand, Operand)>),
     Ref(Mutable, Place),
     AllocateArray(Type, Operand),
+    AllocateEnv(Vec<(Var, Operand)>),
 }
 pub struct SwitchTarget {
     pub value: i128,
@@ -213,6 +216,7 @@ pub enum BodySource {
 }
 pub enum LocalKind {
     Temp,
+    Env,
     DropFlag(Place),
     Var(Var),
     Param(Var),
@@ -224,6 +228,7 @@ pub struct LocalInfo {
 pub struct Body {
     pub src: BodySource,
     pub return_type: Type,
+    pub captures: Vec<(Var, Type)>,
     pub locals: Locals,
     pub blocks: IndexVec<BasicBlockId, BasicBlock>,
 }

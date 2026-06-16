@@ -40,6 +40,7 @@ pub struct Place {
 }
 #[derive(Debug)]
 pub enum PlaceKind {
+    Upvar(Var),
     Var(Var),
     Deref(Box<Expr>),
 }
@@ -48,7 +49,7 @@ define_id!(LambdaId);
 pub struct Lambda {
     pub id: LambdaId,
     pub is_resource: IsResource,
-    pub captures: Vec<VarId>,
+    pub captures: Vec<(Var, Type)>,
     pub params: Vec<Param>,
     pub return_type: Type,
     pub body: Expr,
@@ -135,7 +136,7 @@ pub struct GenericParam {
     pub name: Ident,
     pub kind: GenericKind,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Param {
     pub name: Ident,
     pub var: VarId,

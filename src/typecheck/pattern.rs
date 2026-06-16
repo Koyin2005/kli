@@ -197,14 +197,14 @@ impl TypeCheck {
                         Type::reference(expected_type.clone(), borrow, region)
                     }
                 };
-                self.declare_var(var, var_ty.clone());
+                self.declare_var(var, var_ty.clone(), name.clone());
                 typed_ast::Pattern {
                     ty: expected_type,
                     loc: pattern.loc,
                     kind: typed_ast::PatternKind::Binding(
                         borrow,
                         mutable,
-                        Var(name.clone(), var),
+                        Var(name, var),
                         Box::new(var_ty),
                     ),
                 }
