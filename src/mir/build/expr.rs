@@ -1,12 +1,14 @@
+use std::collections::HashMap;
+
 use crate::{
-    ast::BinaryOp,
+    ast::{BinaryOp, IsResource},
     index_vec::IndexVec,
     mir::{
-        self, AggregateKind, BasicBlock, Constant, ConstantValue, Local, Operand, OverflowOp,
-        Place, Rvalue, Stmt, build::Builder,
+        self, AggregateKind, Constant, ConstantValue, Local, Operand, OverflowOp,
+        Place, Rvalue, Stmt, SwitchTarget, SwitchTargets, build::Builder,
     },
-    typed_ast::{self, Expr, ExprKind, FieldId, Pattern},
-    types::Type,
+    typed_ast::{self, Expr, ExprKind, FieldId, IteratorType, Pattern},
+    types::{FunctionType, Type},
 };
 
 impl Builder<'_> {
@@ -15,6 +17,13 @@ impl Builder<'_> {
             ExprKind::Bool(value) => Some(Constant::bool(value)),
             ExprKind::Int(value) => Some(Constant::int(value)),
             ExprKind::Unit => Some(Constant::unit()),
+            ExprKind::Function(_, id, ref generic_args) => {
+                let ty = expr.ty.clone();
+                Some(Constant {
+                    ty,
+                    value: ConstantValue::Function(id, generic_args.clone()),
+                })
+            }
             _ => None,
         }
     }
@@ -32,6 +41,19 @@ impl Builder<'_> {
             Some(Operand::Load(place))
         } else {
             None
+        }
+    }
+    fn place(&mut self, expr: &Expr) -> Place {
+        if let Some(place) = self.as_place(expr) {
+            place
+        } else {
+            Place::local(self.expr_into_temp(expr))
+        }
+    }
+    fn operand_as_place(&mut self, ty: Type, operand: Operand) -> Place{
+        match operand{
+            Operand::Load(place) => place,
+            Operand::Constant(_) => Place::local(self.assign_to_temp(ty, Rvalue::Use(operand)))
         }
     }
     fn operand(&mut self, expr: &Expr) -> Operand {
@@ -55,13 +77,101 @@ impl Builder<'_> {
                 let local = self.body.local_for_var(var.1).unwrap();
                 Place::local(local)
             }
-            typed_ast::PlaceKind::Deref(_) => todo!("Derefs"),
+            typed_ast::PlaceKind::Deref(value) => self.place(value).with_deref(),
         }
     }
     fn expr_into_temp(&mut self, expr: &Expr) -> Local {
         let temp = self.new_temp(expr.ty.clone());
         self.expr_into_dest(Place::local(temp), expr);
         temp
+    }
+    fn for_loop(
+        &mut self,
+        pattern: &Pattern,
+        iterator: &Expr,
+        iterator_type: &IteratorType,
+        body: &Expr,
+    ) {
+        match iterator_type {
+            IteratorType::ArrayListRef(..) => {
+                /*
+                   for i in &l{
+                       stuff
+                   }
+
+                   bb_header
+                    iter = &l
+                    i = 0
+                    goto bb_cond
+                   bb_cond
+                    in_bounds = i < iter^.len
+                    switch in_bounds 0 -> bb_end, otherwise -> bb_body
+                   bb_body
+                    ....
+                    i = i + 1;
+                    goto bb_cond
+                   bb_end
+                */
+                let place = self.place(iterator);
+                let current_index = self
+                    .assign_to_temp(Type::Int, Rvalue::Use(Operand::Constant(Constant::int(0))));
+                self.goto_to_new_block();
+
+                //Condition
+                let len = place.clone().with_deref().with_len();
+                let in_bounds = self.assign_to_temp(
+                    Type::Bool,
+                    Rvalue::Binary(
+                        mir::BinaryOp::Lesser,
+                        Box::new((
+                            Operand::Load(Place::local(current_index)),
+                            Operand::Load(len),
+                        )),
+                    ),
+                );
+                let cond_block = self.current_block;
+
+                //Body
+                let loop_body_start_block = self.new_block();
+                self.switch_to_block(loop_body_start_block);
+                let current_element = place.with_deref().with_index(current_index);
+                self.assign_place_to_pattern(pattern, current_element);
+                self.expr_stmt(body);
+                self.assign(
+                    Place::local(current_index),
+                    Rvalue::Binary(
+                        mir::BinaryOp::Unchecked(OverflowOp::Add),
+                        Box::new((
+                            Operand::Load(Place::local(current_index)),
+                            Operand::Constant(Constant::int(1)),
+                        )),
+                    ),
+                );
+                self.finish_block_with_goto(cond_block);
+                self.switch_to_new_block();
+                let end_block = self.current_block;
+                self.switch_to_block(cond_block);
+                self.finish_block_with_switch(
+                    Operand::Load(Place::local(in_bounds)),
+                    SwitchTargets {
+                        targets: vec![SwitchTarget {
+                            value: 0,
+                            target: end_block,
+                        }],
+                        otherwise: loop_body_start_block,
+                    },
+                );
+                self.switch_to_block(end_block);
+            }
+            IteratorType::StringIter(region, mutable) => {
+                todo!("Char iterator")
+            }
+        }
+    }
+    fn panic(&mut self) {
+        let block = self.new_block();
+        self.finish_block(mir::Terminator::Panic);
+        self.switch_to_block(block);
     }
     fn expr_stmt(&mut self, expr: &Expr) {
         match &expr.kind {
@@ -71,16 +181,27 @@ impl Builder<'_> {
                 let value = self.build_rvalue(expr);
                 self.assign(place, value);
             }
-            ExprKind::Block(block_body, local_region_id) => todo!(),
-            ExprKind::None => todo!(),
-            ExprKind::Panic => todo!(),
-            ExprKind::Some(expr) => todo!(),
-            ExprKind::Builtin(builtin, generic_args) => todo!(),
-            ExprKind::Function(_, function_id, generic_args) => todo!(),
-            ExprKind::Print(expr) => todo!(),
-            ExprKind::List(exprs) => todo!(),
-            ExprKind::For { .. } => todo!(),
-            ExprKind::Lambda(..) => todo!(),
+            ExprKind::Panic => {
+                self.panic();
+            }
+            ExprKind::Block(block_body, ..) => {
+                for stmt in block_body.stmts.iter() {
+                    self.stmt(stmt);
+                }
+                self.expr_stmt(&block_body.expr);
+            }
+            ExprKind::Print(expr) => {
+                let stmt = Stmt::Print(expr.as_ref().map(|expr| self.operand(&**expr)));
+                self.push_stmt(stmt);
+            }
+            ExprKind::For {
+                pattern,
+                iterator,
+                body,
+                iterator_type,
+            } => {
+                self.for_loop(pattern, iterator, iterator_type, body);
+            }
             //Evaluate
             ExprKind::Record(..)
             | ExprKind::String(_)
@@ -91,7 +212,13 @@ impl Builder<'_> {
             | ExprKind::Load(_)
             | ExprKind::Case(..)
             | ExprKind::Call(..)
-            | ExprKind::Binary(..) => {
+            | ExprKind::Binary(..)
+            | ExprKind::Function(..)
+            | ExprKind::None
+            | ExprKind::Some(..)
+            | ExprKind::List(..)
+            | ExprKind::Builtin(..)
+            | ExprKind::Lambda(..) => {
                 self.expr_into_temp(expr);
             }
         }
@@ -108,7 +235,26 @@ impl Builder<'_> {
             }
         }
     }
-    fn assign_place_to_pattern(&mut self, pattern: &Pattern, place: Place) {}
+    fn assign_place_to_pattern(&mut self, pattern: &Pattern, place: Place) {
+        match &pattern.kind {
+            typed_ast::PatternKind::Binding(borrowed, _, var, ty) => {
+                let var_place = Place::local(self.new_var(var.clone(), (**ty).clone()));
+                if let Some(borrowed) = borrowed {
+                    self.assign(var_place, Rvalue::Ref(*borrowed, place));
+                    return;
+                }
+                self.assign(var_place, Rvalue::Use(Operand::Load(place)));
+            }
+            typed_ast::PatternKind::Ref(pattern) => {
+                self.assign_place_to_pattern(pattern, place.with_deref());
+            }
+            typed_ast::PatternKind::Bool(_)
+            | typed_ast::PatternKind::Int(_)
+            | typed_ast::PatternKind::None => (),
+            
+            _ => todo!("HANDL ASSIGN TO {:?}", pattern),
+        }
+    }
     pub fn stmt(&mut self, stmt: &typed_ast::Stmt) {
         match &stmt.kind {
             typed_ast::StmtKind::Expr(expr) => {
@@ -128,35 +274,28 @@ impl Builder<'_> {
                 }
                 self.expr_into_dest(dest, &block_body.expr);
             }
-            ExprKind::String(_) => todo!(),
-            ExprKind::None => todo!(),
-            ExprKind::Panic => todo!(),
-            ExprKind::Some(expr) => todo!(),
-            ExprKind::Builtin(builtin, generic_args) => todo!(),
-            ExprKind::Function(_, function_id, generic_args) => todo!(),
-            ExprKind::Print(expr) => todo!(),
-            ExprKind::For {
-                pattern,
-                iterator,
-                body,
-            } => todo!(),
-            ExprKind::Borrow {
-                mutable,
-                place,
-                region,
-            } => todo!(),
-            ExprKind::Case(expr, case_arms) => todo!("Case"),
-            ExprKind::Assign(place, expr) => todo!(),
-            ExprKind::Lambda(lambda) => todo!(),
-            //Rvalue exprs
+            ExprKind::Panic => {
+                self.panic();
+            }
             ExprKind::Record(_)
+            | ExprKind::Function(..)
             | ExprKind::Bool(_)
             | ExprKind::Int(_)
             | ExprKind::Unit
             | ExprKind::Load(_)
             | ExprKind::Call(..)
             | ExprKind::Binary(..)
-            | ExprKind::List(..) => {
+            | ExprKind::List(..)
+            | ExprKind::Print(_)
+            | ExprKind::For { .. }
+            | ExprKind::Assign(..)
+            | ExprKind::Borrow { .. }
+            | ExprKind::Some(_)
+            | ExprKind::None
+            | ExprKind::String(_)
+            | ExprKind::Lambda(_)
+            | ExprKind::Case(..) 
+            | ExprKind::Builtin(..)=> {
                 let rvalue = self.build_rvalue(expr);
                 self.assign(dest, rvalue);
             }
@@ -168,26 +307,83 @@ impl Builder<'_> {
     pub fn build_rvalue(&mut self, expr: &Expr) -> Rvalue {
         match &expr.kind {
             ExprKind::Err => unreachable!("Cannot have err here"),
-            ExprKind::Unit | ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::Load(_) => {
-                let operand = self.as_operand(expr).unwrap();
+            ExprKind::Unit
+            | ExprKind::Int(_)
+            | ExprKind::Bool(_)
+            | ExprKind::Load(_)
+            | ExprKind::Function(..) => {
+                let operand = self
+                    .as_operand(expr)
+                    .unwrap_or_else(|| unreachable!("Should be an operand '{:?}' ", expr));
                 Rvalue::Use(operand)
             }
-            ExprKind::Record(_) => {
-                todo!("Record")
+            ExprKind::Record(fields) => {
+                let mut field_map = fields
+                    .iter()
+                    .map(|field| {
+                        (
+                            field.index,
+                            (field.name.clone(), self.operand(&field.value)),
+                        )
+                    })
+                    .collect::<HashMap<_, _>>();
+                let mut field_names = IndexVec::new();
+                let fields = (0..fields.len())
+                    .map(|field| {
+                        let (name, operand) = field_map.remove(&FieldId::new(field)).unwrap();
+                        field_names.push(name.content);
+                        operand
+                    })
+                    .collect::<IndexVec<FieldId, _>>();
+                Rvalue::Aggregate(AggregateKind::Record { field_names }, fields)
             }
-            ExprKind::Block(block_body, local_region_id) => todo!(),
             ExprKind::String(_) => todo!(),
             ExprKind::None => todo!(),
-            ExprKind::Panic => todo!(),
             ExprKind::Some(expr) => todo!(),
             ExprKind::Builtin(builtin, generic_args) => todo!(),
-            ExprKind::Function(_, function_id, generic_args) => todo!(),
-            ExprKind::Print(expr) => todo!(),
             ExprKind::List(exprs) => {
-                // allocate space for n values
-                todo!("List")
+                let ty = if let Type::List(ty) = &expr.ty {
+                    (**ty).clone()
+                } else {
+                    unreachable!("Should be an array")
+                };
+                let len_constant =
+                    Operand::Constant(Constant::int(exprs.len().try_into().unwrap()));
+                let new_array = self.assign_to_temp(
+                    expr.ty.clone(),
+                    Rvalue::AllocateArray(ty, len_constant.clone()),
+                );
+                for (i, expr) in exprs.iter().enumerate() {
+                    let index: u32 = i.try_into().unwrap();
+                    self.expr_into_dest(Place::local(new_array).with_constant_index(index), expr);
+                }
+                self.assign(
+                    Place::local(new_array).with_len(),
+                    Rvalue::Use(len_constant),
+                );
+                Rvalue::Use(Operand::Load(Place::local(new_array)))
+            }
+            ExprKind::Call(callee, args) => match &callee.ty {
+                Type::Function(function_ty) => {
+                    let FunctionType { resource, .. } = function_ty;
+                    let callee_value = self.operand(callee);
+                    let arg_values = args.iter().map(|arg| self.operand(arg)).collect::<Vec<_>>();
+                    match resource {
+                        IsResource::Data => {
+                            Rvalue::Call(callee_value, arg_values)
+                        }
+                        IsResource::Resource => {
+                            let closure_place = self.operand_as_place(callee.ty.clone(), callee_value);
+                            let env = closure_place.clone().with_field(FieldId::new(0));
+                            let code = closure_place.clone().with_field(FieldId::new(1));
+                            let mut arg_values = arg_values;
+                            arg_values.insert(0, Operand::Load(env));
+                            Rvalue::Call(Operand::Load(code), arg_values)
+                        }
+                    }
+                }
+                _ => unreachable!("Can't call non function at {:?}", expr.loc),
             },
-            ExprKind::Call(expr, exprs) => todo!(),
             ExprKind::Binary(binary_op, left, right) => {
                 let left_operand = self.operand(left);
                 let right_operand = self.operand(right);
@@ -260,21 +456,21 @@ impl Builder<'_> {
                     Operand::Load(Place::local(checked_result).with_field(FieldId::new(1)));
                 Rvalue::Use(result)
             }
-            ExprKind::For {
-                pattern,
-                iterator,
-                body,
-            } => todo!(),
+            ExprKind::Block(..) | ExprKind::Panic => {
+                let temp = self.expr_into_temp(expr);
+                Rvalue::Use(Operand::Load(Place::local(temp)))
+            }
+            ExprKind::For { .. } | ExprKind::Print(_) | ExprKind::Assign(..) => {
+                self.expr_stmt(expr);
+                Rvalue::Use(Operand::Constant(Constant::unit()))
+            }
             ExprKind::Borrow {
                 mutable,
                 place,
-                region,
-            } => todo!(),
-            ExprKind::Case(expr, case_arms) => todo!(),
-            ExprKind::Assign(place, expr) => {
-                todo!()
-            }
-            ExprKind::Lambda(lambda) => todo!(),
+                region: _,
+            } => Rvalue::Ref(*mutable, self.lower_place(place)),
+            ExprKind::Case(expr, case_arms) => todo!("case"),
+            ExprKind::Lambda(lambda) => todo!("lambda"),
         }
     }
 }

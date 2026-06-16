@@ -52,24 +52,32 @@ impl TypeCheck {
     ) -> typed_ast::Expr {
         let iterator = self.check_expr(iterator, None);
         let element = self.iterator_element(iterator.ty.clone());
-        let element = match element {
-            Ok(element) => element,
+        let (iterator_type, element) = match element {
+            Ok((iterator_type, ty)) => (Some(iterator_type), ty),
             Err(_) => {
                 self.diag.borrow_mut().add_diagnostic(
                     format!("Cannot use '{}' as an iterator", iterator.ty),
                     iterator.loc.clone(),
                 );
-                Type::Unknown
+                (None, Type::Unknown)
             }
         };
         let pattern = self.check_pattern(pattern, element, None);
         let body = self.check_expr(body, Some(Type::Unit));
+        let Some(iterator_type) = iterator_type else {
+            return typed_ast::Expr {
+                ty: Type::Unit,
+                loc,
+                kind: typed_ast::ExprKind::Err,
+            };
+        };
         typed_ast::Expr {
             ty: Type::Unit,
             loc,
             kind: typed_ast::ExprKind::For {
                 pattern,
                 iterator: Box::new(iterator),
+                iterator_type,
                 body: Box::new(body),
             },
         }

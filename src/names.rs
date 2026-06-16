@@ -3,6 +3,5 @@ pub const DEALLOC_BOX: &str = "dealloc_box";
 pub const DEREF_BOX: &str = "deref_box";
 pub const DEREF_BOX_MUT: &str = "deref_box_mut";
 pub const FREEZE: &str = "freeze";
-pub const DESTROY_STRING: &str = "destroy_string";
 pub const REPLACE: &str = "replace";
 pub const SWAP: &str = "swap";

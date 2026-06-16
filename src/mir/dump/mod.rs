@@ -1,6 +1,6 @@
 use crate::mir::{
-    AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstantValue, Context, LocalKind,
-    Operand, Place, PlaceBase, PlaceProjection, Rvalue, Stmt, Terminator,
+    AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstantValue, Context,
+    LocalKind, Operand, Place, PlaceProjection, Rvalue, Stmt, Terminator,
 };
 
 pub struct MirDump<'ctxt> {
@@ -45,6 +45,26 @@ impl<'ctxt> MirDump<'ctxt> {
                         output.push_str(&format!(".{}", field.into_usize()));
                         output
                     }
+                    PlaceProjection::ConstantIndex(index) => {
+                        output.push_str(".[");
+                        output.push_str(&format!("{}", index));
+                        output.push_str("]");
+                        output
+                    }
+                    PlaceProjection::Len => {
+                        output.push_str(".len");
+                        output
+                    }
+                    PlaceProjection::Deref => {
+                        output.push_str("^");
+                        output
+                    }
+                    PlaceProjection::Index(index) => {
+                        output.push_str(".[");
+                        output.push_str(&format!("_{}", index.0));
+                        output.push_str("]");
+                        output
+                    }
                 };
             }
             write!(self.output, "{}", output)?;
@@ -65,9 +85,43 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(right)?;
                 write!(self.output, ")")?;
             }
-            Rvalue::Aggregate(..) => todo!("Aggregate"),
-            Rvalue::Call(..) => todo!("Call"),
-            Rvalue::Ref(..) => todo!("Ref"),
+            Rvalue::AllocateArray(ty, capacity) => {
+                write!(self.output, "allocArray[{}](", ty)?;
+                self.write_operand(capacity)?;
+                write!(self.output, ")")?;
+            }
+            Rvalue::Aggregate(kind, fields) => match kind {
+                AggregateKind::Record { field_names } => {
+                    let mut first = true;
+                    write!(self.output, "{{")?;
+                    for (name, operand) in field_names.iter().zip(fields) {
+                        if !first {
+                            write!(self.output, ",")?;
+                        }
+                        write!(self.output, "{} = ", name)?;
+                        self.write_operand(operand)?;
+                        first = false;
+                    }
+                    write!(self.output, "}}")?;
+                }
+            },
+            Rvalue::Call(operand, args) => {
+                self.write_operand(operand)?;
+                write!(self.output, "(")?;
+                let mut first = true;
+                for arg in args {
+                    if !first {
+                        write!(self.output, ",")?;
+                    }
+                    self.write_operand(arg)?;
+                    first = false;
+                }
+                write!(self.output, ")")?;
+            }
+            Rvalue::Ref(mutable, place) => {
+                write!(self.output, "ref {} ", mutable)?;
+                self.write_place(place)?;
+            }
         }
         Ok(())
     }
@@ -81,6 +135,9 @@ impl<'ctxt> MirDump<'ctxt> {
                 ConstantValue::Int(value) => write!(self.output, "{}", value),
                 ConstantValue::Bool(value) => write!(self.output, "{}", value),
                 ConstantValue::ZeroSized => write!(self.output, "{}", constant.ty),
+                ConstantValue::Function(id, ref args) => {
+                    write!(self.output, "{}", self.ctxt.function_names[id].content)
+                }
             },
         }?;
         Ok(())
@@ -90,6 +147,13 @@ impl<'ctxt> MirDump<'ctxt> {
         for stmt in &block.stmts {
             write!(self.output, "  ")?;
             match stmt {
+                Stmt::Print(value) => {
+                    write!(self.output, "print(")?;
+                    if let Some(value) = value {
+                        self.write_operand(value)?;
+                    }
+                    writeln!(self.output, ")")?;
+                }
                 Stmt::Noop => writeln!(self.output, "noop")?,
                 Stmt::Assign(place, value) => {
                     self.write_place(place)?;
@@ -122,7 +186,17 @@ impl<'ctxt> MirDump<'ctxt> {
             Terminator::Return => {
                 write!(self.output, "return")?;
             }
-            Terminator::Switch(..) => todo!("Switch"),
+            Terminator::Switch(operand, targets) => {
+                write!(self.output, "switch ")?;
+                self.write_operand(operand)?;
+                write!(self.output, " ")?;
+                for target in &targets.targets {
+                    write!(self.output, "{} -> bb{}, ", target.value, target.target.0)?;
+                }
+                write!(self.output, "otherwise -> bb{}", targets.otherwise.0)?;
+            }
+            Terminator::Goto(block) => write!(self.output, "goto bb{}", block.0)?,
+            Terminator::Panic => write!(self.output, "panic")?,
         }
         writeln!(self.output)
     }

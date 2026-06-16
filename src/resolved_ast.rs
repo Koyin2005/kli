@@ -64,7 +64,6 @@ pub enum Builtin {
     DerefBox,
     DerefBoxMut,
     Freeze,
-    DestroyString,
     Replace,
     Swap,
 }

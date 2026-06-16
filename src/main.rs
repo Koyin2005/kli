@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     env,
     path::Path,
     rc::Rc,
@@ -7,7 +7,6 @@ use std::{
 
 use kli::{
     ast::{self, Module, ModuleId},
-    interpret::{Endianess, Interpret},
     mir,
     parsing::parse::Parser,
     patterns::visit::PatternCheck,
@@ -258,7 +257,8 @@ fn main() {
     for (id, function) in program.functions.iter_enumerated() {
         mir::build::Builder::build_function(&mut context, id, function);
     }
-    for body in context.bodies.values() {
+    for body in context.body_sources.iter() {
+        let body = &context.bodies[body];
         mir::dump::MirDump::new(std::io::stdout(), &context)
             .write_body(body)
             .unwrap();

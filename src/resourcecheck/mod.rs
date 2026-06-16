@@ -623,6 +623,7 @@ impl ResourceCheck {
             ExprKind::For {
                 pattern,
                 iterator,
+                iterator_type: _,
                 body,
             } => {
                 self.check_expr(iterator);

@@ -24,6 +24,10 @@ impl Builder<'_> {
             builder.finish_block(Terminator::Unreachable);
         }
         let body = builder.finish();
-        context.bodies.insert(body.src, body);
+        context.body_sources.push(body.src);
+        assert!(
+            context.bodies.insert(body.src, body).is_none(),
+            "Can only have one source for each body"
+        );
     }
 }

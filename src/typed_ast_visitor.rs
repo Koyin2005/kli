@@ -103,6 +103,7 @@ where
         ExprKind::For {
             pattern,
             iterator,
+            iterator_type: _,
             body,
         } => {
             v.visit_expr(iterator);

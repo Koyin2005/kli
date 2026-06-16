@@ -8,7 +8,7 @@ use crate::{
     scheme::Scheme,
     src_loc::SrcLoc,
     typecheck::{infer::TypeInfer, lower::Lower, subst::TypeSubst},
-    typed_ast::{self, Function, GenericParam, LambdaId, LetBinding},
+    typed_ast::{self, Function, GenericParam, IteratorType, LambdaId, LetBinding},
     types::{FunctionType, GenericArg, GenericKind, Region, Type},
 };
 pub struct TypeError;
@@ -65,23 +65,29 @@ impl TypeCheck {
             next_lambda_id: LambdaId::zero(),
         }
     }
-    pub(super) fn iterator_element(&self, ty: Type) -> Result<Type, Type> {
+    pub(super) fn iterator_element(&self, ty: Type) -> Result<(IteratorType, Type), Type> {
         match ty {
             Type::Imm(_, _) | Type::Mut(_, _) => {
-                let (mutable, region, ty) = ty.as_reference_type().expect("Should be a reference");
-                let ty = self.simplify_type(ty.clone());
-                match ty {
-                    Type::List(element) => Ok(Type::reference(*element, mutable, region.clone())),
-                    Type::String => Ok(Type::Char),
-                    ty => self.iterator_element(ty),
+                let (mutable, region, pointee) =
+                    ty.as_reference_type().expect("Should be a reference");
+                match self.simplify_type(pointee.clone()) {
+                    Type::List(element) => Ok((
+                        IteratorType::ArrayListRef(region.clone(), mutable, (*element).clone()),
+                        Type::reference(*element, mutable, region.clone()),
+                    )),
+                    Type::String => Ok((
+                        IteratorType::StringIter(region.clone(), mutable),
+                        Type::Char,
+                    )),
+                    _ => Err(ty),
                 }
             }
             Type::Infer(var) => match self.simplify_type(Type::Infer(var)) {
                 Type::Infer(_) => Err(ty),
                 ty => self.iterator_element(ty),
             },
-            Type::Unknown => Ok(Type::Unknown),
             Type::Bool
+            | Type::Unknown
             | Type::Int
             | Type::Char
             | Type::Param(..)
@@ -123,7 +129,6 @@ impl TypeCheck {
                 ],
                 Type::Param(Rc::from("T"), 1),
             ),
-            Builtin::DestroyString => (vec![Type::String], Type::Unit),
             Builtin::AllocBox => (
                 vec![Type::Param(Rc::from("T"), 0)],
                 (Type::Box(Box::new(Type::Param(Rc::from("T"), 0)))),
@@ -189,7 +194,6 @@ impl TypeCheck {
                     GenericArg::Type(self.fresh_ty(loc)),
                 ]
             }
-            Builtin::DestroyString => Vec::new(),
         }
     }
     pub(super) fn with_capture_scope<T>(

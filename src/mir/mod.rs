@@ -1,13 +1,13 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
+use std::{ collections::HashMap, fmt::Display, rc::Rc};
 
 use crate::{
     ast::Mutable,
     define_id,
     ident::Ident,
     index_vec::IndexVec,
-    resolved_ast::{Builtin, FunctionId, Var, VarId},
+    resolved_ast::{FunctionId, Var, VarId},
     typed_ast::{FieldId, LambdaId},
-    types::{GenericArg, Region, Type},
+    types::{GenericArg, Type},
 };
 pub mod build;
 pub mod dump;
@@ -15,6 +15,10 @@ define_id!(Local);
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum PlaceProjection {
     Field(FieldId),
+    ConstantIndex(u32),
+    Index(Local),
+    Len,
+    Deref,
 }
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum PlaceBase {
@@ -49,6 +53,34 @@ impl Place {
     }
     pub fn with_field(mut self, field: FieldId) -> Self {
         self.projections.push(PlaceProjection::Field(field));
+        Self {
+            base: self.base,
+            projections: self.projections,
+        }
+    }
+    pub fn with_index(mut self, index: Local) -> Self {
+        self.projections.push(PlaceProjection::Index(index));
+        Self {
+            base: self.base,
+            projections: self.projections,
+        }
+    }
+    pub fn with_constant_index(mut self, index: u32) -> Self {
+        self.projections.push(PlaceProjection::ConstantIndex(index));
+        Self {
+            base: self.base,
+            projections: self.projections,
+        }
+    }
+    pub fn with_len(mut self) -> Self {
+        self.projections.push(PlaceProjection::Len);
+        Self {
+            base: self.base,
+            projections: self.projections,
+        }
+    }
+    pub fn with_deref(mut self) -> Self {
+        self.projections.push(PlaceProjection::Deref);
         Self {
             base: self.base,
             projections: self.projections,
@@ -91,6 +123,7 @@ impl Constant {
 pub enum ConstantValue {
     Int(i64),
     Bool(bool),
+    Function(FunctionId, Vec<GenericArg>),
     ZeroSized,
 }
 impl ConstantValue {
@@ -120,13 +153,15 @@ pub enum BinaryOp {
     Divide,
     Equals,
     BitwiseAnd,
+    Lesser,
 }
 pub enum Rvalue {
     Aggregate(AggregateKind, IndexVec<FieldId, Operand>),
     Use(Operand),
     Call(Operand, Vec<Operand>),
     Binary(BinaryOp, Box<(Operand, Operand)>),
-    Ref(Region, Mutable, Place),
+    Ref(Mutable, Place),
+    AllocateArray(Type, Operand),
 }
 pub struct SwitchTarget {
     pub value: i128,
@@ -145,11 +180,14 @@ pub enum Terminator {
     Switch(Operand, SwitchTargets),
     Unreachable,
     Return,
+    Goto(BasicBlockId),
+    Panic,
 }
 pub enum Stmt {
     Noop,
     Assign(Place, Rvalue),
     Assert(Operand, AssertKind),
+    Print(Option<Operand>),
 }
 define_id!(BasicBlockId);
 define_id!(StmtId);
@@ -206,5 +244,6 @@ impl Body {
 pub struct Context {
     pub function_names: IndexVec<FunctionId, Ident>,
     pub bodies: HashMap<BodySource, Body>,
+    pub body_sources: Vec<BodySource>,
 }
 pub type Locals = IndexVec<Local, LocalInfo>;

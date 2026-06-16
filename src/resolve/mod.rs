@@ -53,7 +53,6 @@ impl Resolve {
             (names::DEREF_BOX.into(), Builtin::DerefBox),
             (names::DEREF_BOX_MUT.into(), (Builtin::DerefBoxMut)),
             (names::FREEZE.into(), Builtin::Freeze),
-            (names::DESTROY_STRING.into(), Builtin::DestroyString),
             (names::REPLACE.into(), Builtin::Replace),
             (names::SWAP.into(), Builtin::Swap),
         ]);

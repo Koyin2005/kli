@@ -2,7 +2,7 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         AssertKind, BasicBlock, BasicBlockId, Body, BodySource, Context, Local, LocalInfo,
-        LocalKind, Locals, Operand, Place, Stmt, Terminator,
+        LocalKind, Locals, Operand, Place, Stmt, SwitchTargets, Terminator,
     },
     resolved_ast::Var,
     types::Type,
@@ -63,8 +63,23 @@ impl<'ctxt> Builder<'ctxt> {
     pub fn switch_to_block(&mut self, block: BasicBlockId) {
         self.current_block = block;
     }
+    pub fn switch_to_new_block(&mut self) -> BasicBlockId {
+        let block = self.new_block();
+        std::mem::replace(&mut self.current_block, block)
+    }
+    pub fn goto_to_new_block(&mut self) -> BasicBlockId {
+        let block = self.new_block();
+        self.finish_block(Terminator::Goto(block));
+        std::mem::replace(&mut self.current_block, block)
+    }
     pub fn finish_block(&mut self, terminator: Terminator) {
         self.body.blocks[self.current_block].terminator = Some(terminator);
+    }
+    pub fn finish_block_with_switch(&mut self, operand: Operand, targets: SwitchTargets) {
+        self.finish_block(Terminator::Switch(operand, targets));
+    }
+    pub fn finish_block_with_goto(&mut self, block: BasicBlockId) {
+        self.finish_block(Terminator::Goto(block));
     }
     pub fn push_stmt(&mut self, stmt: Stmt) {
         self.body.blocks[self.current_block].stmts.push(stmt);

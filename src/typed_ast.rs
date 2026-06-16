@@ -88,6 +88,11 @@ pub struct RecordFieldInit {
     pub value: Expr,
 }
 #[derive(Debug)]
+pub enum IteratorType {
+    ArrayListRef(Region, Mutable, Type),
+    StringIter(Region, Mutable),
+}
+#[derive(Debug)]
 pub enum ExprKind {
     Record(Vec<RecordFieldInit>),
     Block(BlockBody, Option<LocalRegionId>),
@@ -109,6 +114,7 @@ pub enum ExprKind {
     For {
         pattern: Pattern,
         iterator: Box<Expr>,
+        iterator_type: IteratorType,
         body: Box<Expr>,
     },
     Borrow {
