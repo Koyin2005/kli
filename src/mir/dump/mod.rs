@@ -29,7 +29,6 @@ impl<'ctxt> MirDump<'ctxt> {
             match &info.kind {
                 LocalKind::Param(var) => write!(self.output, " param {}", var.0),
                 LocalKind::Var(var) => write!(self.output, " var {}", var.0),
-                LocalKind::DropFlag(_) => todo!("Handle drop flag"),
                 LocalKind::Temp => write!(self.output, " temp {}", local.0),
                 LocalKind::Env => write!(self.output, " env"),
             }?;

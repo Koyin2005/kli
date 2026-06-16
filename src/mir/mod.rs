@@ -217,7 +217,6 @@ pub enum BodySource {
 pub enum LocalKind {
     Temp,
     Env,
-    DropFlag(Place),
     Var(Var),
     Param(Var),
 }
