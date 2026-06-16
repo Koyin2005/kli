@@ -16,15 +16,33 @@ pub enum GenericArg {
     Region(Region),
     Type(Type),
 }
-impl TypeMappable for GenericArg{
+impl TypeMappable for GenericArg {
     fn apply_map<M: TypeMap>(self, m: &mut M) -> Result<Self, M::Error>
     where
-        Self: Sized
+        Self: Sized,
     {
-        match self{
+        match self {
             Self::Region(region) => Ok(GenericArg::Region(region.apply_map(m)?)),
             Self::Type(ty) => Ok(GenericArg::Type(ty.apply_map(m)?)),
         }
+    }
+}
+pub struct DisplayGenericArgs<'a>(pub &'a [GenericArg]);
+impl Display for DisplayGenericArgs<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[")?;
+        let mut first = true;
+        for arg in self.0 {
+            if !first {
+                write!(f, ",")?;
+            }
+            match arg {
+                GenericArg::Region(region) => write!(f, "{}", region),
+                GenericArg::Type(ty) => write!(f, "{}", ty),
+            }?;
+            first = false;
+        }
+        write!(f, "]")
     }
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]

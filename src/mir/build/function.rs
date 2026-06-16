@@ -28,7 +28,7 @@ impl Builder<'_> {
             Vec::new(),
         );
     }
-    pub fn build<'a>(
+    pub fn build(
         context: &mut Context,
         source: BodySource,
         return_type: &Type,
@@ -63,8 +63,7 @@ impl Builder<'_> {
         if self
             .context
             .bodies
-            .get(&BodySource::Lambda(lambda.id))
-            .is_some()
+            .contains_key(&BodySource::Lambda(lambda.id))
         {
             return Constant {
                 ty,

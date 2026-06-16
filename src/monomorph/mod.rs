@@ -1,7 +1,10 @@
 use std::collections::{HashSet, VecDeque};
 
 use crate::{
-    mir::{BodySource, Constant, ConstantValue, Context, Operand, Rvalue, Stmt, Terminator}, resolved_ast::{FunctionId, LambdaId}, scheme::Scheme, types::GenericArg
+    mir::{BodySource, Constant, ConstantValue, Context, Operand, Rvalue, Stmt, Terminator},
+    resolved_ast::{FunctionId, LambdaId},
+    scheme::Scheme,
+    types::GenericArg,
 };
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -53,11 +56,13 @@ impl<'ctxt> InstanceCollector<'ctxt> {
             value: ConstantValue::Function(function, args),
         }) = operand
         {
-            let args = args.clone().into_iter().map(|arg|{
-                Scheme::new(arg).bind(&current_args)
-            }).collect();
+            let args = args
+                .clone()
+                .into_iter()
+                .map(|arg| Scheme::new(arg).bind(&current_args))
+                .collect();
             Some(Instance {
-                args: args,
+                args,
                 kind: InstanceKind::Function(*function),
             })
         } else if let Operand::Constant(Constant {

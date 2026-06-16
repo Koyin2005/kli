@@ -258,7 +258,8 @@ fn main() {
     }
 
     for instance in InstanceCollector::new(&context)
-            .collect(Instance::non_generic(InstanceKind::Function(program.main))){
-                println!("{:?}",instance);
-            }
+        .collect(Instance::non_generic(InstanceKind::Function(program.main)))
+    {
+        println!("{:?}", instance);
+    }
 }
