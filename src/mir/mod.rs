@@ -152,6 +152,7 @@ pub enum OverflowOp {
 pub enum BinaryOp {
     Overflow(OverflowOp),
     Unchecked(OverflowOp),
+    Wrapping(OverflowOp),
     Divide,
     Equals,
     BitwiseAnd,
