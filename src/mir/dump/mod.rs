@@ -48,7 +48,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     PlaceProjection::ConstantIndex(index) => {
                         output.push_str(".[");
                         output.push_str(&format!("{}", index));
-                        output.push_str("]");
+                        output.push(']');
                         output
                     }
                     PlaceProjection::Len => {
@@ -56,13 +56,13 @@ impl<'ctxt> MirDump<'ctxt> {
                         output
                     }
                     PlaceProjection::Deref => {
-                        output.push_str("^");
+                        output.push('^');
                         output
                     }
                     PlaceProjection::Index(index) => {
                         output.push_str(".[");
                         output.push_str(&format!("_{}", index.0));
-                        output.push_str("]");
+                        output.push(']');
                         output
                     }
                 };
@@ -135,7 +135,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 ConstantValue::Int(value) => write!(self.output, "{}", value),
                 ConstantValue::Bool(value) => write!(self.output, "{}", value),
                 ConstantValue::ZeroSized => write!(self.output, "{}", constant.ty),
-                ConstantValue::Function(id, ref args) => {
+                ConstantValue::Function(id, ref _args) => {
                     write!(self.output, "{}", self.ctxt.function_names[id].content)
                 }
             },

@@ -37,11 +37,9 @@ impl Builder<'_> {
     fn as_operand(&mut self, expr: &Expr) -> Option<Operand> {
         if let Some(constant) = self.as_constant(expr) {
             Some(Operand::Constant(constant))
-        } else if let Some(place) = self.as_place(expr) {
-            Some(Operand::Load(place))
-        } else {
-            None
-        }
+        } else{
+            self.as_place(expr).map(Operand::Load)
+        } 
     }
     fn place(&mut self, expr: &Expr) -> Place {
         if let Some(place) = self.as_place(expr) {
@@ -163,7 +161,7 @@ impl Builder<'_> {
                 );
                 self.switch_to_block(end_block);
             }
-            IteratorType::StringIter(region, mutable) => {
+            IteratorType::StringIter(..) => {
                 todo!("Char iterator")
             }
         }
@@ -191,7 +189,7 @@ impl Builder<'_> {
                 self.expr_stmt(&block_body.expr);
             }
             ExprKind::Print(expr) => {
-                let stmt = Stmt::Print(expr.as_ref().map(|expr| self.operand(&**expr)));
+                let stmt = Stmt::Print(expr.as_ref().map(|expr| self.operand(expr)));
                 self.push_stmt(stmt);
             }
             ExprKind::For {
@@ -337,10 +335,10 @@ impl Builder<'_> {
                     .collect::<IndexVec<FieldId, _>>();
                 Rvalue::Aggregate(AggregateKind::Record { field_names }, fields)
             }
-            ExprKind::String(_) => todo!(),
-            ExprKind::None => todo!(),
-            ExprKind::Some(expr) => todo!(),
-            ExprKind::Builtin(builtin, generic_args) => todo!(),
+            ExprKind::String(_) => todo!("Strings"),
+            ExprKind::None => todo!("None"),
+            ExprKind::Some(..) => todo!("Some"),
+            ExprKind::Builtin(..) => todo!("Builtins"),
             ExprKind::List(exprs) => {
                 let ty = if let Type::List(ty) = &expr.ty {
                     (**ty).clone()
@@ -469,8 +467,8 @@ impl Builder<'_> {
                 place,
                 region: _,
             } => Rvalue::Ref(*mutable, self.lower_place(place)),
-            ExprKind::Case(expr, case_arms) => todo!("case"),
-            ExprKind::Lambda(lambda) => todo!("lambda"),
+            ExprKind::Case(..) => todo!("case"),
+            ExprKind::Lambda(..) => todo!("lambda"),
         }
     }
 }

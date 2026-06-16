@@ -205,11 +205,8 @@ fn main() {
     };
     let include_std = if args.is_empty() {
         true
-    } else if (&args)[0] == "--no_std" {
-        false
-    } else {
-        true
-    };
+    } else {(&args)[0] != "--no_std"
+};
 
     let file_tree = match find_all_src_files(Path::new(&path)) {
         Ok(mut file_tree) => {
