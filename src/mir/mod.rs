@@ -5,8 +5,8 @@ use crate::{
     define_id,
     ident::Ident,
     index_vec::IndexVec,
-    resolved_ast::{FunctionId, Var, VarId},
-    typed_ast::{FieldId, LambdaId},
+    resolved_ast::{FunctionId, LambdaId, Var, VarId},
+    typed_ast::FieldId,
     types::{GenericArg, Type},
 };
 pub mod build;
@@ -245,10 +245,20 @@ impl Body {
             .map(Local::new)
     }
 }
+pub type Locals = IndexVec<Local, LocalInfo>;
+
 #[derive(Default)]
 pub struct Context {
     pub function_names: IndexVec<FunctionId, Ident>,
-    pub bodies: HashMap<BodySource, Body>,
-    pub body_sources: Vec<BodySource>,
+    pub(super) bodies: HashMap<BodySource, Body>,
+    pub(super) body_sources: Vec<BodySource>,
 }
-pub type Locals = IndexVec<Local, LocalInfo>;
+impl Context {
+    pub fn body_iter(&self) -> impl Iterator<Item = &Body> {
+        self.body_sources.iter().map(|src| &self.bodies[src])
+    }
+    #[track_caller]
+    pub fn expect_body(&self, src: BodySource) -> &Body {
+        self.bodies.get(&src).expect("expected a body")
+    }
+}

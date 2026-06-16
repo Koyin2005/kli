@@ -8,7 +8,7 @@ use crate::{
     scheme::Scheme,
     src_loc::SrcLoc,
     typecheck::{infer::TypeInfer, lower::Lower, subst::TypeSubst},
-    typed_ast::{self, Function, GenericParam, IteratorType, LambdaId, LetBinding},
+    typed_ast::{self, Function, GenericParam, IteratorType, LetBinding},
     types::{FunctionType, GenericArg, GenericKind, Region, Type},
 };
 pub struct TypeError;
@@ -25,7 +25,6 @@ pub struct TypeCheck {
     generics: Vec<GenericKind>,
     signatures: Vec<Scheme<FunctionType>>,
     captures: Vec<Vec<VarId>>,
-    next_lambda_id: LambdaId,
     pub(super) infer: TypeInfer,
 }
 
@@ -63,7 +62,6 @@ impl TypeCheck {
             diag: RefCell::new(DiagnosticReporter::new()),
             variables: Vec::new(),
             captures: Vec::new(),
-            next_lambda_id: LambdaId::zero(),
         }
     }
     pub(super) fn iterator_element(&self, ty: Type) -> Result<(IteratorType, Type), Type> {
@@ -295,22 +293,25 @@ impl TypeCheck {
             .borrow_mut()
             .add_diagnostic("type annotations needed".to_string(), loc);
     }
-    fn validate_main(&mut self, program: &res::Program) {
+    fn validate_main(&mut self, program: &res::Program) -> Result<FunctionId, TypeError> {
         let Some(main) = program
             .functions
             .iter()
             .position(|f| f.name.content.as_ref() == "main")
+            .map(FunctionId::new)
         else {
             let loc = program
                 .functions
+                .as_slice()
                 .last()
                 .and_then(|function| function.body.as_ref().map(|body| body.loc.clone()))
                 .unwrap_or(SrcLoc::dummy());
-            return self
-                .diag
+            self.diag
                 .borrow_mut()
                 .add_diagnostic("Missing main".to_string(), loc);
+            return Err(TypeError);
         };
+        let main_id = main;
         let main = &program.functions[main];
         if main.generics.as_ref().is_some_and(|g| g.names.is_empty()) {
             self.diag
@@ -328,7 +329,9 @@ impl TypeCheck {
                 "'main' should have '()' as return type".to_string(),
                 main.loc.clone(),
             );
+            return Err(TypeError);
         }
+        Ok(main_id)
     }
     pub(super) fn lower_region(&self, region: res::Region) -> Region {
         Lower::new(&self.generics, &self.diag).lower_region(&region)
@@ -399,19 +402,15 @@ impl TypeCheck {
             body,
         }
     }
-    pub fn next_lambda_id(&mut self) -> LambdaId {
-        let next_id = self.next_lambda_id;
-        self.next_lambda_id = self.next_lambda_id.next();
-        next_id
-    }
     pub fn check(mut self, program: res::Program) -> Result<typed_ast::Program, TypeError> {
-        self.validate_main(&program);
+        let main_id = self.validate_main(&program);
         let mut functions = IndexVec::new();
         for (function_index, function) in program.functions.into_iter().enumerate() {
             functions.push(self.check_function(FunctionId::new(function_index), function));
         }
         if !self.diag.into_inner().report_all() {
-            Ok(typed_ast::Program { functions })
+            let main = main_id?;
+            Ok(typed_ast::Program { functions, main })
         } else {
             Err(TypeError)
         }

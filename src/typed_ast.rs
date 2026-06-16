@@ -5,7 +5,7 @@ use crate::{
     define_id,
     ident::Ident,
     index_vec::IndexVec,
-    resolved_ast::{Builtin, FunctionId, LocalRegionId, Var, VarId},
+    resolved_ast::{Builtin, FunctionId, LambdaId, LocalRegionId, Var, VarId},
     src_loc::SrcLoc,
     types::{GenericArg, GenericKind, Region, Type},
 };
@@ -44,7 +44,6 @@ pub enum PlaceKind {
     Var(Var),
     Deref(Box<Expr>),
 }
-define_id!(LambdaId);
 #[derive(Debug)]
 pub struct Lambda {
     pub id: LambdaId,
@@ -152,4 +151,5 @@ pub struct Function {
 
 pub struct Program {
     pub functions: IndexVec<FunctionId, Function>,
+    pub main: FunctionId,
 }

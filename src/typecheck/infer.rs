@@ -1,7 +1,7 @@
 use crate::{
     index_vec::IndexVec,
     src_loc::SrcLoc,
-    types::{FunctionType, RecordField, Region, Type},
+    types::{FunctionType, RecordField, Region, Type, TypeMap},
 };
 #[derive(Debug)]
 pub struct TypeVarInfo {
@@ -50,72 +50,12 @@ impl TypeInfer {
             .collect()
     }
     pub fn simplify_region(&self, region: Region) -> Region {
-        match region {
-            Region::Infer(var) => {
-                if let RegionVarInfo {
-                    region: Some(region),
-                    loc: _,
-                } = &self.region_vars[var]
-                {
-                    self.simplify_region(region.clone())
-                } else {
-                    region
-                }
-            }
-            Region::Local(..) | Region::Static | Region::Param(..) | Region::Unknown => region,
-        }
+        let Ok(region) = Simplify(self).map_region(region);
+        region
     }
     pub fn simplify_type(&self, ty: Type) -> Type {
-        match ty {
-            Type::Bool
-            | Type::Int
-            | Type::Unit
-            | Type::Unknown
-            | Type::String
-            | Type::Char
-            | Type::ClosureEnv
-            | Type::Param(..) => ty,
-            Type::Box(ty) => Type::Box(Box::new(self.simplify_type(*ty))),
-            Type::Option(ty) => Type::Option(Box::new(self.simplify_type(*ty))),
-            Type::List(ty) => Type::List(Box::new(self.simplify_type(*ty))),
-            Type::Function(function) => Type::Function(FunctionType {
-                resource: function.resource,
-                params: function
-                    .params
-                    .into_iter()
-                    .map(|ty| self.simplify_type(ty))
-                    .collect(),
-                return_type: Box::new(self.simplify_type(*function.return_type)),
-            }),
-            Type::Record(fields) => Type::Record(
-                fields
-                    .into_iter()
-                    .map(|field| RecordField {
-                        name: field.name,
-                        ty: self.simplify_type(field.ty),
-                    })
-                    .collect(),
-            ),
-            Type::Infer(var) => {
-                if let TypeVarInfo {
-                    ty: Some(ty),
-                    loc: _,
-                } = &self.type_vars[var]
-                {
-                    self.simplify_type(ty.clone())
-                } else {
-                    ty
-                }
-            }
-            Type::Imm(region, ty) => Type::Imm(
-                self.simplify_region(region),
-                Box::new(self.simplify_type(*ty)),
-            ),
-            Type::Mut(region, ty) => Type::Mut(
-                self.simplify_region(region),
-                Box::new(self.simplify_type(*ty)),
-            ),
-        }
+        let Ok(ty) = Simplify(self).map_type(ty);
+        ty
     }
     pub fn unify_region(&mut self, region1: Region, region2: Region) -> Option<Region> {
         match (region1, region2) {
@@ -235,6 +175,39 @@ impl TypeInfer {
                 }
             },
             _ => None,
+        }
+    }
+}
+
+struct Simplify<'a>(&'a TypeInfer);
+impl TypeMap for Simplify<'_> {
+    type Error = std::convert::Infallible;
+    fn map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
+        let Region::Infer(var) = region else {
+            return self.super_map_region(region);
+        };
+        if let RegionVarInfo {
+            region: Some(region),
+            loc: _,
+        } = &self.0.region_vars[var]
+        {
+            self.map_region(region.clone())
+        } else {
+            Ok(region)
+        }
+    }
+    fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
+        let Type::Infer(var) = ty else {
+            return self.super_map_type(ty);
+        };
+        if let TypeVarInfo {
+            ty: Some(ty),
+            loc: _,
+        } = &self.0.type_vars[var]
+        {
+            self.map_type(ty.clone())
+        } else {
+            Ok(ty)
         }
     }
 }

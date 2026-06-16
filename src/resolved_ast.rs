@@ -4,10 +4,11 @@ use crate::{
     ast::{BinaryOp, IsResource, Mutable},
     define_id,
     ident::Ident,
+    index_vec::IndexVec,
     src_loc::SrcLoc,
 };
 define_id!(FunctionId);
-
+define_id!(LambdaId);
 #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Copy)]
 pub struct VarId(usize);
 impl VarId {
@@ -42,6 +43,7 @@ pub struct BorrowExpr {
 }
 #[derive(Debug)]
 pub struct Lambda {
+    pub id: LambdaId,
     pub params: Vec<(Ident, VarId, Option<Type>)>,
     pub resource: IsResource,
     pub body: Expr,
@@ -219,5 +221,5 @@ pub struct Type {
 }
 #[derive(Debug)]
 pub struct Program {
-    pub functions: Vec<Function>,
+    pub functions: IndexVec<FunctionId, Function>,
 }

@@ -1,6 +1,9 @@
-use crate::mir::{
-    AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstantValue, Context,
-    LocalKind, Operand, Place, PlaceProjection, Rvalue, Stmt, Terminator,
+use crate::{
+    mir::{
+        AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstantValue,
+        Context, LocalKind, Operand, Place, PlaceProjection, Rvalue, Stmt, Terminator,
+    },
+    types::{self, GenericArg},
 };
 
 pub struct MirDump<'ctxt> {
@@ -166,14 +169,38 @@ impl<'ctxt> MirDump<'ctxt> {
                 ConstantValue::Function(id, ref args) => {
                     write!(self.output, "{}", self.ctxt.function_names[id].content)?;
                     if !args.is_empty() {
-                        todo!("handle non empty args")
+                        write!(self.output, "[")?;
+                        let mut first = true;
+                        for arg in args {
+                            if !first {
+                                write!(self.output, ",")?;
+                            }
+                            match arg {
+                                GenericArg::Region(region) => write!(self.output, "{}", region),
+                                GenericArg::Type(ty) => write!(self.output, "{}", ty),
+                            }?;
+                            first = false;
+                        }
+                        write!(self.output, "]")?
                     }
                     Ok(())
                 }
                 ConstantValue::Lambda(id, ref args) => {
                     write!(self.output, "lambda {}", id.into_usize())?;
                     if !args.is_empty() {
-                        todo!("handle non empty args")
+                        write!(self.output, "[")?;
+                        let mut first = true;
+                        for arg in args {
+                            if !first {
+                                write!(self.output, ",")?;
+                            }
+                            match arg {
+                                GenericArg::Region(region) => write!(self.output, "{}", region),
+                                GenericArg::Type(ty) => write!(self.output, "{}", ty),
+                            }?;
+                            first = false;
+                        }
+                        write!(self.output, "]")?
                     }
                     Ok(())
                 }

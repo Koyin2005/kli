@@ -99,6 +99,9 @@ impl<I: Id, V> IndexVec<I, V> {
     pub fn into_vec(self) -> Vec<V> {
         self.0
     }
+    pub fn as_slice(&self) -> &[V] {
+        &self.0
+    }
 }
 
 impl<I: Id, V> Index<I> for IndexVec<I, V> {

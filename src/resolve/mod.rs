@@ -4,7 +4,8 @@ use std::rc::Rc;
 use crate::ast::{BorrowExpr, ModuleId, Path, StmtKind};
 use crate::diagnostics::DiagnosticReporter;
 use crate::ident::Ident;
-use crate::resolved_ast::{Builtin, FunctionId, GenericKind, LocalRegionId, VarId};
+use crate::index_vec::IndexVec;
+use crate::resolved_ast::{Builtin, FunctionId, GenericKind, LambdaId, LocalRegionId, VarId};
 use crate::src_loc::SrcLoc;
 use crate::{ast, names, resolved_ast as res};
 
@@ -38,6 +39,7 @@ pub struct Resolve {
     generics: usize,
     prev_kinds: Vec<HashMap<Rc<str>, GenericKind>>,
     generic_kinds: HashMap<Rc<str>, GenericKind>,
+    lambdas: usize,
     diag: DiagnosticReporter,
 }
 impl Default for Resolve {
@@ -72,6 +74,7 @@ impl Resolve {
             diag: DiagnosticReporter::new(),
             generic_kinds: HashMap::new(),
             prev_kinds: Vec::new(),
+            lambdas: 0,
         }
     }
     fn resolve_name(&self, name: &str) -> Option<Res> {
@@ -272,6 +275,11 @@ impl Resolve {
         self.regions += 1;
         self.env.insert(region, Res::LocalRegion(region_id));
         region_id
+    }
+    fn next_lambda_id(&mut self) -> LambdaId {
+        let id = LambdaId::new(self.lambdas);
+        self.lambdas += 1;
+        id
     }
     fn declare_var(&mut self, var: Rc<str>) -> VarId {
         let var_id = VarId::new(self.vars);
@@ -549,6 +557,7 @@ impl Resolve {
             },
             ast::ExprKind::Lambda(lambda) => self.in_scope(|this| {
                 res::ExprKind::Lambda(Box::new(res::Lambda {
+                    id: this.next_lambda_id(),
                     params: lambda
                         .params
                         .into_iter()
@@ -679,7 +688,11 @@ impl Resolve {
             self.declare_module_items(module);
         }
     }
-    fn resolve_module(&mut self, functions: &mut Vec<res::Function>, module: ast::Module) {
+    fn resolve_module(
+        &mut self,
+        functions: &mut IndexVec<FunctionId, res::Function>,
+        module: ast::Module,
+    ) {
         self.in_module_scope(module.id, |this| {
             for function in module.functions {
                 functions.push(this.resolve_function(function));
@@ -693,7 +706,7 @@ impl Resolve {
         //First pass : Declare everything
         self.declare(&modules);
         //Second pass : Resolve
-        let mut functions = Vec::new();
+        let mut functions = IndexVec::new();
         for module in modules.into_iter() {
             self.resolve_module(&mut functions, module);
         }

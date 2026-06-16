@@ -3,6 +3,7 @@ use std::{collections::BTreeMap, env, path::Path, rc::Rc};
 use kli::{
     ast::{self, Module, ModuleId},
     mir,
+    monomorph::{Instance, InstanceCollector, InstanceKind},
     parsing::parse::Parser,
     patterns::visit::PatternCheck,
     resolve::Resolve,
@@ -250,10 +251,14 @@ fn main() {
     for (id, function) in program.functions.iter_enumerated() {
         mir::build::Builder::build_from_function(&mut context, id, function);
     }
-    for body in context.body_sources.iter() {
-        let body = &context.bodies[body];
+    for body in context.body_iter() {
         mir::dump::MirDump::new(std::io::stdout(), &context)
             .write_body(body)
             .unwrap();
     }
+
+    for instance in InstanceCollector::new(&context)
+            .collect(Instance::non_generic(InstanceKind::Function(program.main))){
+                println!("{:?}",instance);
+            }
 }

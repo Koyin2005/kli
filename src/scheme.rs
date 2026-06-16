@@ -1,78 +1,39 @@
-use crate::types::{FunctionType, GenericArg, RecordField, Region, Type};
+use crate::types::{GenericArg, Region, Type, TypeMap, TypeMappable};
 #[derive(Clone, Eq, PartialEq)]
 pub struct Scheme<T> {
     value: T,
 }
-impl<T: Bind> Scheme<T> {
+impl<T: TypeMappable> Scheme<T> {
     pub fn new(value: T) -> Self {
         Self { value }
     }
     pub fn bind(self, args: &[GenericArg]) -> T {
-        self.value.bind(args)
+        struct Binder<'a>(&'a [GenericArg]);
+        impl TypeMap for Binder<'_> {
+            type Error = std::convert::Infallible;
+            fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
+                let Type::Param(_, index) = ty else {
+                    return self.super_map_type(ty);
+                };
+                let Some(GenericArg::Type(ty)) = self.0.get(index).cloned() else {
+                    return Ok(Type::Unknown);
+                };
+                Ok(ty)
+            }
+            fn map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
+                let Region::Param(_, index) = region else {
+                    return self.super_map_region(region);
+                };
+                let Some(GenericArg::Region(region)) = self.0.get(index).cloned() else {
+                    return Ok(Region::Unknown);
+                };
+                Ok(region)
+            }
+        }
+        let Ok(value) = self.value.apply_map(&mut Binder(args));
+        value
     }
     pub fn skip(self) -> T {
         self.value
-    }
-}
-pub trait Bind {
-    fn bind(self, args: &[GenericArg]) -> Self;
-}
-impl Bind for Region {
-    fn bind(self, args: &[GenericArg]) -> Self {
-        match self {
-            Self::Static | Self::Unknown | Self::Infer(_) | Self::Local(..) => self,
-            Self::Param(_, index) => {
-                if let Some(GenericArg::Region(region)) = args.get(index) {
-                    region.clone()
-                } else {
-                    Region::Unknown
-                }
-            }
-        }
-    }
-}
-impl Bind for Type {
-    fn bind(self, args: &[GenericArg]) -> Self {
-        match self {
-            Self::Bool
-            | Self::Int
-            | Self::Unit
-            | Self::Unknown
-            | Self::String
-            | Self::Infer(_)
-            | Self::Char
-            | Self::ClosureEnv => self,
-            Self::Imm(region, ty) => Self::Imm(region.bind(args), Box::new((*ty).bind(args))),
-            Self::Mut(region, ty) => Self::Mut(region.bind(args), Box::new((*ty).bind(args))),
-            Self::Function(function) => Self::Function(function.bind(args)),
-            Self::Box(ty) => Self::Box(Box::new((*ty).bind(args))),
-            Self::List(ty) => Self::List(Box::new((*ty).bind(args))),
-            Self::Option(ty) => Self::Option(Box::new((*ty).bind(args))),
-            Self::Param(_, index) => {
-                if let Some(GenericArg::Type(ty)) = args.get(index) {
-                    ty.clone()
-                } else {
-                    Self::Unknown
-                }
-            }
-            Self::Record(fields) => Self::Record(
-                fields
-                    .into_iter()
-                    .map(|field| RecordField {
-                        name: field.name,
-                        ty: field.ty.bind(args),
-                    })
-                    .collect(),
-            ),
-        }
-    }
-}
-impl Bind for FunctionType {
-    fn bind(self, args: &[GenericArg]) -> Self {
-        Self {
-            resource: self.resource,
-            params: self.params.into_iter().map(|ty| ty.bind(args)).collect(),
-            return_type: Box::new(self.return_type.bind(args)),
-        }
     }
 }

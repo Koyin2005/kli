@@ -16,6 +16,17 @@ pub enum GenericArg {
     Region(Region),
     Type(Type),
 }
+impl TypeMappable for GenericArg{
+    fn apply_map<M: TypeMap>(self, m: &mut M) -> Result<Self, M::Error>
+    where
+        Self: Sized
+    {
+        match self{
+            Self::Region(region) => Ok(GenericArg::Region(region.apply_map(m)?)),
+            Self::Type(ty) => Ok(GenericArg::Type(ty.apply_map(m)?)),
+        }
+    }
+}
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct FunctionType {
     pub resource: IsResource,
@@ -110,6 +121,17 @@ impl Type {
         };
         Ok((mutable, region, ty))
     }
+    pub fn erase_regions(self) -> Self {
+        struct EraseRegions;
+        impl TypeMap for EraseRegions {
+            type Error = std::convert::Infallible;
+            fn map_region(&mut self, _: Region) -> Result<Region, Self::Error> {
+                Ok(Region::Static)
+            }
+        }
+        let Ok(ty) = EraseRegions.map_type(self);
+        ty
+    }
 }
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -183,5 +205,106 @@ impl Display for Type {
                 write!(f, "{return_type}")
             }
         }
+    }
+}
+
+pub trait TypeMap {
+    type Error;
+    fn super_map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
+        match ty {
+            Type::Bool
+            | Type::Char
+            | Type::Int
+            | Type::Unit
+            | Type::Unknown
+            | Type::ClosureEnv
+            | Type::String
+            | Type::Infer(_)
+            | Type::Param(..) => Ok(ty),
+            Type::Box(ty) => Ok(Type::Box(Box::new(self.map_type(*ty)?))),
+            Type::List(ty) => Ok(Type::List(Box::new(self.map_type(*ty)?))),
+            Type::Option(ty) => Ok(Type::Option(Box::new(self.map_type(*ty)?))),
+            Type::Imm(region, ty) => Ok(Type::Imm(
+                self.map_region(region)?,
+                Box::new(self.map_type(*ty)?),
+            )),
+            Type::Mut(region, ty) => Ok(Type::Mut(
+                self.map_region(region)?,
+                Box::new(self.map_type(*ty)?),
+            )),
+            Type::Function(function_type) => {
+                Ok(Type::Function(self.map_function_type(function_type)?))
+            }
+            Type::Record(fields) => Ok(Type::Record(
+                fields
+                    .into_iter()
+                    .map(|field| self.map_field(field))
+                    .collect::<Result<_, _>>()?,
+            )),
+        }
+    }
+    fn super_map_function_type(
+        &mut self,
+        mut function_type: FunctionType,
+    ) -> Result<FunctionType, Self::Error> {
+        function_type.params = function_type
+            .params
+            .into_iter()
+            .map(|param| self.map_type(param))
+            .collect::<Result<_, _>>()?;
+        *function_type.return_type = self.map_type(*function_type.return_type)?;
+        Ok(function_type)
+    }
+    fn super_map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
+        Ok(region)
+    }
+    fn super_map_field(&mut self, field: RecordField) -> Result<RecordField, Self::Error> {
+        let mut field = field;
+        let ty = self.map_type(field.ty)?;
+        field.ty = ty;
+        Ok(field)
+    }
+    fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
+        self.super_map_type(ty)
+    }
+    fn map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
+        self.super_map_region(region)
+    }
+    fn map_field(&mut self, field: RecordField) -> Result<RecordField, Self::Error> {
+        self.super_map_field(field)
+    }
+    fn map_function_type(
+        &mut self,
+        function_type: FunctionType,
+    ) -> Result<FunctionType, Self::Error> {
+        self.super_map_function_type(function_type)
+    }
+}
+
+pub trait TypeMappable {
+    fn apply_map<M: TypeMap>(self, m: &mut M) -> Result<Self, M::Error>
+    where
+        Self: Sized;
+}
+
+impl TypeMappable for Type {
+    fn apply_map<M: TypeMap>(self, m: &mut M) -> Result<Self, M::Error> {
+        m.map_type(self)
+    }
+}
+impl TypeMappable for Region {
+    fn apply_map<M: TypeMap>(self, m: &mut M) -> Result<Self, M::Error> {
+        m.map_region(self)
+    }
+}
+
+impl TypeMappable for FunctionType {
+    fn apply_map<M: TypeMap>(self, m: &mut M) -> Result<Self, M::Error> {
+        m.map_function_type(self)
+    }
+}
+impl TypeMappable for RecordField {
+    fn apply_map<M: TypeMap>(self, m: &mut M) -> Result<Self, M::Error> {
+        m.map_field(self)
     }
 }

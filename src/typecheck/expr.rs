@@ -142,7 +142,7 @@ impl TypeCheck {
         }
     }
     fn check_lambda(&mut self, loc: SrcLoc, lambda: Lambda, hint: Option<Type>) -> typed_ast::Expr {
-        let id = self.next_lambda_id();
+        let id = lambda.id;
         let expected_sig = match hint.clone().map(|ty| self.simplify_type(ty)) {
             Some(Type::Function(ref function)) => Some(function.clone()),
             _ => None,
