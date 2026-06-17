@@ -66,9 +66,12 @@ impl Place {
             projections: self.projections,
         }
     }
-    pub fn with_downcast_some(mut self) -> Self{
+    pub fn with_downcast_some(mut self) -> Self {
         self.projections.push(PlaceProjection::DowncastSome);
-        Self { base: self.base, projections: self.projections }
+        Self {
+            base: self.base,
+            projections: self.projections,
+        }
     }
     pub fn with_constant_index(mut self, index: u32) -> Self {
         self.projections.push(PlaceProjection::ConstantIndex(index));

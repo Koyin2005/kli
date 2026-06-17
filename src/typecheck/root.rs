@@ -97,7 +97,7 @@ impl TypeCheck {
             | Type::Function(_)
             | Type::Box(_)
             | Type::Record(_)
-            | Type::ClosureEnv => Err(ty),
+            | Type::UniquePointer => Err(ty),
         }
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {

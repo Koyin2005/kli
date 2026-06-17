@@ -22,7 +22,7 @@ impl<'a> TypeSubst<'a> {
             | Type::Unknown
             | Type::Char
             | Type::Param(..)
-            | Type::ClosureEnv => (),
+            | Type::UniquePointer => (),
             Type::Box(ty) | Type::Option(ty) | Type::List(ty) => self.subst_type(ty),
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
                 self.subst_region(region);

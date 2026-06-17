@@ -24,12 +24,12 @@ pub fn constructors_of_ty(ty: &Type) -> Vec<Constructor> {
         | Type::Param(..)
         | Type::Int
         | Type::List(_)
-        | Type::Function(..) => vec![Constructor::NonExhaustive],
+        | Type::Function(..)
+        | Type::UniquePointer => vec![Constructor::NonExhaustive],
         Type::Record(_) => {
             vec![Constructor::Record]
         }
         Type::Infer(_) => unreachable!("Cannot have infer here"),
-        Type::ClosureEnv => unreachable!("Cannot match on closure env"),
     }
 }
 

@@ -120,8 +120,11 @@ impl Builder<'_> {
                 self.assign_place_to_pattern(pattern, place.with_downcast_some());
             }
             typed_ast::PatternKind::Record(fields) => {
-                for field in fields{
-                    self.assign_place_to_pattern(&field.pattern, place.clone().with_field(field.index));
+                for field in fields {
+                    self.assign_place_to_pattern(
+                        &field.pattern,
+                        place.clone().with_field(field.index),
+                    );
                 }
             }
         }
@@ -365,7 +368,7 @@ impl Builder<'_> {
                 let function = Operand::Constant(self.lambda_code(lambda));
                 if is_resource {
                     let env = self.assign_to_temp(
-                        Type::ClosureEnv,
+                        Type::UniquePointer,
                         Rvalue::AllocateEnv(
                             lambda
                                 .captures

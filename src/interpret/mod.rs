@@ -64,7 +64,7 @@ fn simplify_ty(g: &HashMap<usize, Type>, ty: Type) -> Type {
         | Type::Int
         | Type::Unit
         | Type::String
-        | Type::ClosureEnv
+        | Type::UniquePointer
         | Type::Unknown => ty,
         Type::Infer(_) => unreachable!(),
         Type::List(element) => Type::List(Box::new(simplify_ty(g, *element))),
@@ -187,7 +187,10 @@ impl<'f> Interpret<'f> {
     }
     fn drop(&mut self, ty: &Type, pointer_to_place: Pointer) -> Result<(), InterpretError> {
         match ty {
-            Type::ClosureEnv => unreachable!("Cannot drop closure env"),
+            Type::UniquePointer => self.memory.deallocate(
+                MemLocation::Heap,
+                self.typed_read(pointer_to_place, ty)?.as_pointer().unwrap(),
+            ),
             Type::Bool | Type::Int | Type::Unit | Type::Imm(..) | Type::Mut(..) | Type::Char => {
                 Ok(())
             }
@@ -560,7 +563,7 @@ impl<'f> Interpret<'f> {
     }
     fn print_value(&self, value: Value, ty: &Type) -> Result<(), InterpretError> {
         match ty {
-            Type::ClosureEnv => {
+            Type::UniquePointer => {
                 let value = value.as_pointer().unwrap();
                 println!("{}", value.address);
             }
