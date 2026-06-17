@@ -71,13 +71,16 @@ impl Builder<'_> {
                 Place::local(local)
             }
             typed_ast::PlaceKind::Upvar(var) => {
-                let index = self
-                    .body
+                let capture_info = self.body.capture_info.as_ref().unwrap();
+
+                let index = capture_info
                     .captures
                     .iter()
                     .position(|(curr, _)| curr.1 == var.1)
                     .unwrap();
-                Place::local(Local::zero()).with_field(FieldId::new(index))
+                Place::local(Local::zero())
+                    .with_deref_as(capture_info.env_type())
+                    .with_field(FieldId::new(index))
             }
 
             typed_ast::PlaceKind::Deref(value) => self.place(value).with_deref(),
@@ -243,19 +246,39 @@ impl Builder<'_> {
                 };
                 let len_constant =
                     Operand::Constant(Constant::int(exprs.len().try_into().unwrap()));
-                let new_array = self.assign_to_temp(
-                    expr.ty.clone(),
-                    Rvalue::AllocateArray(ty, len_constant.clone()),
+                let ptr_to_buf = self.assign_to_temp(
+                    Type::RawPointer,
+                    Rvalue::Allocate {
+                        size: Operand::Constant(Constant::sizeof(ty.clone())),
+                        count: len_constant.clone(),
+                    },
                 );
+
                 for (i, expr) in exprs.iter().enumerate() {
-                    let index: u32 = i.try_into().unwrap();
-                    self.expr_into_dest(Place::local(new_array).with_constant_index(index), expr);
+                    let offset_pointer = self.assign_to_temp(
+                        Type::RawPointer,
+                        Rvalue::Binary(
+                            mir::BinaryOp::Offset,
+                            Box::new((
+                                Operand::Load(Place::local(ptr_to_buf)),
+                                Operand::Constant(Constant::int(i.try_into().unwrap())),
+                            )),
+                        ),
+                    );
+                    self.expr_into_dest(
+                        Place::local(offset_pointer).with_deref_as(ty.clone()),
+                        expr,
+                    );
                 }
-                self.assign(
-                    Place::local(new_array).with_len(),
-                    Rvalue::Use(len_constant),
-                );
-                Rvalue::Use(Operand::Load(Place::local(new_array)))
+                Rvalue::Aggregate(
+                    AggregateKind::ArrayList(ty),
+                    [
+                        Operand::Load(Place::local(ptr_to_buf)),
+                        len_constant.clone(),
+                        len_constant.clone(),
+                    ]
+                    .into(),
+                )
             }
             ExprKind::Call(callee, args) => match &callee.ty {
                 Type::Function(function_ty) => {
@@ -367,21 +390,36 @@ impl Builder<'_> {
                 let is_resource = lambda.is_resource == IsResource::Resource;
                 let function = Operand::Constant(self.lambda_code(lambda));
                 if is_resource {
+                    let env_ty =
+                        Type::record(lambda.captures.iter().map(|(_, ty)| ty.clone()).collect());
+
+                    let size_of = Operand::Constant(Constant::sizeof(env_ty.clone()));
                     let env = self.assign_to_temp(
                         Type::RawPointer,
-                        Rvalue::AllocateEnv(
+                        Rvalue::Allocate {
+                            size: size_of,
+                            count: Operand::Constant(Constant::int(1)),
+                        },
+                    );
+                    self.assign(
+                        Place::local(env).with_deref_as(env_ty),
+                        Rvalue::Aggregate(
+                            AggregateKind::Record {
+                                field_names: lambda
+                                    .captures
+                                    .iter()
+                                    .map(|capture| capture.0.0.clone())
+                                    .collect(),
+                            },
                             lambda
                                 .captures
                                 .iter()
-                                .map(|(var, _)| {
-                                    (
-                                        var.clone(),
-                                        Operand::Load(Place::local(
-                                            self.body
-                                                .local_for_var(var.1)
-                                                .expect("Should have a local for var"),
-                                        )),
-                                    )
+                                .map(|capture| {
+                                    Operand::Load(Place::local(
+                                        self.body
+                                            .local_for_var(capture.0.1)
+                                            .expect("Should have a local for var"),
+                                    ))
                                 })
                                 .collect(),
                         ),

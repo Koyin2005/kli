@@ -15,6 +15,7 @@ define_id!(Local);
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum PlaceProjection {
     DowncastSome,
+    DerefAs(Type),
     Field(FieldId),
     ConstantIndex(u32),
     Index(Local),
@@ -87,6 +88,13 @@ impl Place {
             projections: self.projections,
         }
     }
+    pub fn with_deref_as(mut self, ty: Type) -> Self {
+        self.projections.push(PlaceProjection::DerefAs(ty));
+        Self {
+            base: self.base,
+            projections: self.projections,
+        }
+    }
     pub fn with_deref(mut self) -> Self {
         self.projections.push(PlaceProjection::Deref);
         Self {
@@ -126,8 +134,11 @@ impl Constant {
             value: ConstantValue::ZeroSized,
         }
     }
-    pub const fn sizeof(ty: Type) -> Self{
-        Self { ty:Type::Int, value: ConstantValue::Sizeof(ty) }
+    pub const fn sizeof(ty: Type) -> Self {
+        Self {
+            ty: Type::Int,
+            value: ConstantValue::Sizeof(ty),
+        }
     }
 }
 #[derive(Clone)]
@@ -157,6 +168,7 @@ pub enum AggregateKind {
         inner: Type,
         is_some: bool,
     },
+    ArrayList(Type),
 }
 #[derive(Debug, Clone, Copy)]
 pub enum OverflowOp {
@@ -169,6 +181,7 @@ pub enum BinaryOp {
     Overflow(OverflowOp),
     Unchecked(OverflowOp),
     Wrapping(OverflowOp),
+    Offset,
     Divide,
     Equals,
     BitwiseAnd,
@@ -180,8 +193,7 @@ pub enum Rvalue {
     Call(Operand, Vec<Operand>),
     Binary(BinaryOp, Box<(Operand, Operand)>),
     Ref(Mutable, Place),
-    AllocateArray(Type, Operand),
-    AllocateEnv(Vec<(Var, Operand)>),
+    Allocate { size: Operand, count: Operand },
 }
 pub struct SwitchTarget {
     pub value: i128,
@@ -241,10 +253,18 @@ pub struct LocalInfo {
     pub ty: Type,
     pub kind: LocalKind,
 }
+pub struct Captures {
+    pub captures: Vec<(Var, Type)>,
+}
+impl Captures {
+    pub fn env_type(&self) -> Type {
+        Type::record(self.captures.iter().map(|(_, ty)| ty.clone()).collect())
+    }
+}
 pub struct Body {
     pub src: BodySource,
     pub return_type: Type,
-    pub captures: Vec<(Var, Type)>,
+    pub capture_info: Option<Captures>,
     pub locals: Locals,
     pub blocks: IndexVec<BasicBlockId, BasicBlock>,
 }

@@ -21,12 +21,12 @@ impl<'ctxt> Builder<'ctxt> {
         context: &'ctxt mut Context,
         source: BodySource,
         return_type: Type,
-        captures: Vec<(Var, Type)>,
+        captures: Option<super::Captures>,
     ) -> Self {
         Self {
             context,
             body: Body {
-                captures,
+                capture_info: captures,
                 src: source,
                 locals: Locals::default(),
                 blocks: IndexVec::from_iter([BasicBlock::default()]),

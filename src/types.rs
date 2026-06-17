@@ -107,7 +107,7 @@ pub enum Type {
     Mut(Region, Box<Type>),
     Function(FunctionType),
     Record(IndexVec<FieldId, RecordField>),
-    RawPointer
+    RawPointer,
 }
 impl Type {
     pub fn record(field_tys: Vec<Self>) -> Self {

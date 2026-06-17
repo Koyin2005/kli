@@ -48,6 +48,9 @@ impl<'ctxt> MirDump<'ctxt> {
                     PlaceProjection::DowncastSome => {
                         format!("({} as Some)", output)
                     }
+                    PlaceProjection::DerefAs(ty) => {
+                        format!("({}:{})^", output, ty)
+                    }
                     PlaceProjection::Field(field) => {
                         output.push_str(&format!(".{}", field.into_usize()));
                         output
@@ -92,25 +95,33 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(right)?;
                 write!(self.output, ")")?;
             }
-            Rvalue::AllocateArray(ty, capacity) => {
-                write!(self.output, "allocArray[{}](", ty)?;
-                self.write_operand(capacity)?;
-                write!(self.output, ")")?;
-            }
-            Rvalue::AllocateEnv(captures) => {
-                write!(self.output, "allocEnv(")?;
-                let mut first = true;
-                for (var, operand) in captures {
-                    if !first {
-                        write!(self.output, ",")?;
-                    }
-                    write!(self.output, "{} = ", var.0)?;
-                    self.write_operand(operand)?;
-                    first = false;
-                }
+            Rvalue::Allocate { size, count } => {
+                write!(self.output, "allocate(")?;
+                self.write_operand(size)?;
+                write!(self.output, ",")?;
+                self.write_operand(count)?;
                 write!(self.output, ")")?;
             }
             Rvalue::Aggregate(kind, fields) => match kind {
+                AggregateKind::ArrayList(ty) => {
+                    let mut first = true;
+                    write!(self.output, "arraylist[{}]{{", ty)?;
+                    let name = |i| match i {
+                        0 => "ptr",
+                        1 => "cap",
+                        2 => "len",
+                        _ => unreachable!("Should only have 3 fields"),
+                    };
+                    for (i, operand) in fields.iter().enumerate() {
+                        if !first {
+                            write!(self.output, ",")?;
+                        }
+                        write!(self.output, "{} = ", name(i))?;
+                        self.write_operand(operand)?;
+                        first = false;
+                    }
+                    write!(self.output, "}}")?;
+                }
                 AggregateKind::Option { inner, is_some } => {
                     if *is_some {
                         let field = &fields[FieldId::zero()];
@@ -194,7 +205,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     }
                     Ok(())
                 }
-                ConstantValue::Sizeof(ref ty) => write!(self.output,"sizeof({})",ty)
+                ConstantValue::Sizeof(ref ty) => write!(self.output, "sizeof({})", ty),
             },
         }
     }

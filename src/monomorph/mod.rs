@@ -103,12 +103,11 @@ impl<'ctxt> InstanceCollector<'ctxt> {
                             );
                         }
                         Stmt::Assign(_, rvalue) => match rvalue {
-                            Rvalue::Use(operand) | Rvalue::AllocateArray(_, operand) => self
-                                .add_new_instances_from_operand(
-                                    &mut unvisited,
-                                    operand,
-                                    args.clone(),
-                                ),
+                            Rvalue::Use(operand) => self.add_new_instances_from_operand(
+                                &mut unvisited,
+                                operand,
+                                args.clone(),
+                            ),
                             Rvalue::Aggregate(_, fields) => {
                                 for field in fields {
                                     self.add_new_instances_from_operand(
@@ -117,6 +116,18 @@ impl<'ctxt> InstanceCollector<'ctxt> {
                                         args.clone(),
                                     )
                                 }
+                            }
+                            Rvalue::Allocate { size, count } => {
+                                self.add_new_instances_from_operand(
+                                    &mut unvisited,
+                                    size,
+                                    args.clone(),
+                                );
+                                self.add_new_instances_from_operand(
+                                    &mut unvisited,
+                                    count,
+                                    args.clone(),
+                                );
                             }
                             Rvalue::Call(operand, operands) => {
                                 self.add_new_instances_from_operand(
@@ -146,15 +157,6 @@ impl<'ctxt> InstanceCollector<'ctxt> {
                                 );
                             }
                             Rvalue::Ref(_, _) => (),
-                            Rvalue::AllocateEnv(operands) => {
-                                for (_, operand) in operands {
-                                    self.add_new_instances_from_operand(
-                                        &mut unvisited,
-                                        operand,
-                                        args.clone(),
-                                    );
-                                }
-                            }
                         },
                     }
                 }

@@ -1,7 +1,8 @@
 use crate::{
     ast::IsResource,
     mir::{
-        BodySource, Constant, ConstantValue, Context, LocalKind, Place, Terminator, build::Builder,
+        BodySource, Captures, Constant, ConstantValue, Context, LocalKind, Place, Terminator,
+        build::Builder,
     },
     resolved_ast::{FunctionId, Var},
     typed_ast::{self, Lambda},
@@ -36,7 +37,16 @@ impl Builder<'_> {
         body: Option<&typed_ast::Expr>,
         captures: Vec<(Var, Type)>,
     ) {
-        let mut builder = Builder::new(context, source, return_type.clone(), captures);
+        let mut builder = Builder::new(
+            context,
+            source,
+            return_type.clone(),
+            if captures.is_empty() {
+                None
+            } else {
+                Some(Captures { captures })
+            },
+        );
         for (kind, ty) in params {
             builder.new_local(ty.clone(), kind);
         }

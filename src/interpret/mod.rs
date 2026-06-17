@@ -187,9 +187,13 @@ impl<'f> Interpret<'f> {
     }
     fn drop(&mut self, ty: &Type, pointer_to_place: Pointer) -> Result<(), InterpretError> {
         match ty {
-            Type::Bool | Type::Int | Type::Unit | Type::Imm(..) | Type::Mut(..) | Type::Char | Type::RawPointer => {
-                Ok(())
-            }
+            Type::Bool
+            | Type::Int
+            | Type::Unit
+            | Type::Imm(..)
+            | Type::Mut(..)
+            | Type::Char
+            | Type::RawPointer => Ok(()),
             Type::Box(inner_ty) => {
                 let inner = self.typed_read(pointer_to_place, ty)?;
                 let inner = inner.as_pointer().unwrap();
