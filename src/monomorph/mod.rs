@@ -117,12 +117,7 @@ impl<'ctxt> InstanceCollector<'ctxt> {
                                     )
                                 }
                             }
-                            Rvalue::Allocate { size, count } => {
-                                self.add_new_instances_from_operand(
-                                    &mut unvisited,
-                                    size,
-                                    args.clone(),
-                                );
+                            Rvalue::Allocate { ty: _, count } => {
                                 self.add_new_instances_from_operand(
                                     &mut unvisited,
                                     count,
@@ -153,6 +148,13 @@ impl<'ctxt> InstanceCollector<'ctxt> {
                                 self.add_new_instances_from_operand(
                                     &mut unvisited,
                                     right,
+                                    args.clone(),
+                                );
+                            }
+                            Rvalue::PointerCast(operand) => {
+                                self.add_new_instances_from_operand(
+                                    &mut unvisited,
+                                    operand,
                                     args.clone(),
                                 );
                             }

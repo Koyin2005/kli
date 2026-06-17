@@ -25,7 +25,8 @@ pub fn constructors_of_ty(ty: &Type) -> Vec<Constructor> {
         | Type::Int
         | Type::List(_)
         | Type::Function(..)
-        | Type::RawPointer => vec![Constructor::NonExhaustive],
+        | Type::RawPointer(..)
+        | Type::Byte => vec![Constructor::NonExhaustive],
         Type::Record(_) => {
             vec![Constructor::Record]
         }

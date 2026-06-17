@@ -72,14 +72,14 @@ impl Builder<'_> {
             }
             typed_ast::PlaceKind::Upvar(var) => {
                 let capture_info = self.body.capture_info.as_ref().unwrap();
-
+                let env_ptr = capture_info.env_ptr.unwrap();
                 let index = capture_info
                     .captures
                     .iter()
                     .position(|(curr, _)| curr.1 == var.1)
                     .unwrap();
-                Place::local(Local::zero())
-                    .with_deref_as(capture_info.env_type())
+                Place::local(env_ptr)
+                    .with_deref()
                     .with_field(FieldId::new(index))
             }
 
@@ -247,16 +247,16 @@ impl Builder<'_> {
                 let len_constant =
                     Operand::Constant(Constant::int(exprs.len().try_into().unwrap()));
                 let ptr_to_buf = self.assign_to_temp(
-                    Type::RawPointer,
+                    Type::pointer(ty.clone()),
                     Rvalue::Allocate {
-                        size: Operand::Constant(Constant::sizeof(ty.clone())),
+                        ty: ty.clone(),
                         count: len_constant.clone(),
                     },
                 );
 
                 for (i, expr) in exprs.iter().enumerate() {
                     let offset_pointer = self.assign_to_temp(
-                        Type::RawPointer,
+                        Type::pointer(ty.clone()),
                         Rvalue::Binary(
                             mir::BinaryOp::Offset,
                             Box::new((
@@ -265,10 +265,7 @@ impl Builder<'_> {
                             )),
                         ),
                     );
-                    self.expr_into_dest(
-                        Place::local(offset_pointer).with_deref_as(ty.clone()),
-                        expr,
-                    );
+                    self.expr_into_dest(Place::local(offset_pointer).with_deref(), expr);
                 }
                 Rvalue::Aggregate(
                     AggregateKind::ArrayList(ty),
@@ -393,16 +390,15 @@ impl Builder<'_> {
                     let env_ty =
                         Type::record(lambda.captures.iter().map(|(_, ty)| ty.clone()).collect());
 
-                    let size_of = Operand::Constant(Constant::sizeof(env_ty.clone()));
                     let env = self.assign_to_temp(
-                        Type::RawPointer,
+                        Type::pointer(env_ty.clone()),
                         Rvalue::Allocate {
-                            size: size_of,
+                            ty: env_ty,
                             count: Operand::Constant(Constant::int(1)),
                         },
                     );
                     self.assign(
-                        Place::local(env).with_deref_as(env_ty),
+                        Place::local(env).with_deref(),
                         Rvalue::Aggregate(
                             AggregateKind::Record {
                                 field_names: lambda
@@ -424,9 +420,14 @@ impl Builder<'_> {
                                 .collect(),
                         ),
                     );
+
+                    let erased_env = self.assign_to_temp(
+                        Type::pointer(Type::Byte),
+                        Rvalue::PointerCast(Operand::Load(Place::local(env))),
+                    );
                     Rvalue::Aggregate(
                         AggregateKind::Closure,
-                        [Operand::Load(Place::local(env)), function]
+                        [Operand::Load(Place::local(erased_env)), function]
                             .into_iter()
                             .collect(),
                     )

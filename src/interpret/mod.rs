@@ -11,7 +11,7 @@ use crate::{
     },
     resolved_ast::{Builtin, FunctionId, VarId},
     typed_ast::{self, FieldId},
-    types::{FunctionType, GenericArg, GenericKind, RecordField, Type},
+    types::{FunctionType, GenericArg, GenericKind, Type, TypeMap, TypeMappable},
 };
 
 mod functions;
@@ -58,43 +58,18 @@ pub enum InterpretError {
 pub const INT_SIZE: usize = 8;
 pub const ADDR_SIZE: usize = 8;
 fn simplify_ty(g: &HashMap<usize, Type>, ty: Type) -> Type {
-    match ty {
-        Type::Bool
-        | Type::Char
-        | Type::Int
-        | Type::Unit
-        | Type::String
-        | Type::RawPointer
-        | Type::Unknown => ty,
-        Type::Infer(_) => unreachable!(),
-        Type::List(element) => Type::List(Box::new(simplify_ty(g, *element))),
-        Type::Option(inner) => Type::Option(Box::new(simplify_ty(g, *inner))),
-        Type::Box(inner) => Type::Box(Box::new(simplify_ty(g, *inner))),
-        Type::Mut(region, ty) => Type::Mut(region, Box::new(simplify_ty(g, *ty))),
-        Type::Imm(region, ty) => Type::Imm(region, Box::new(simplify_ty(g, *ty))),
-        Type::Function(FunctionType {
-            resource,
-            params,
-            return_type,
-        }) => Type::Function(FunctionType {
-            resource,
-            params: params
-                .into_iter()
-                .map(|param| simplify_ty(g, param))
-                .collect(),
-            return_type: Box::new(simplify_ty(g, *return_type)),
-        }),
-        Type::Record(fields) => Type::Record(
-            fields
-                .into_iter()
-                .map(|field| RecordField {
-                    name: field.name,
-                    ty: simplify_ty(g, field.ty),
-                })
-                .collect(),
-        ),
-        Type::Param(_, i) => g.get(&i).cloned().expect("No generic arg"),
+    struct Simplify<'a>(&'a HashMap<usize, Type>);
+    impl<'a> TypeMap for Simplify<'a> {
+        type Error = std::convert::Infallible;
+        fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
+            let Type::Param(_, index) = ty else {
+                return self.super_map_type(ty);
+            };
+            Ok(self.0.get(&index).cloned().expect("No generic arg"))
+        }
     }
+    let Ok(ty) = ty.apply_map(&mut Simplify(g));
+    ty
 }
 struct Env {
     pointer: Pointer,
@@ -193,7 +168,8 @@ impl<'f> Interpret<'f> {
             | Type::Imm(..)
             | Type::Mut(..)
             | Type::Char
-            | Type::RawPointer => Ok(()),
+            | Type::Byte
+            | Type::RawPointer(..) => Ok(()),
             Type::Box(inner_ty) => {
                 let inner = self.typed_read(pointer_to_place, ty)?;
                 let inner = inner.as_pointer().unwrap();
@@ -563,7 +539,7 @@ impl<'f> Interpret<'f> {
     }
     fn print_value(&self, value: Value, ty: &Type) -> Result<(), InterpretError> {
         match ty {
-            Type::RawPointer => {
+            Type::RawPointer(..) => {
                 let value = value.as_pointer().unwrap();
                 println!("{}", value.address);
             }
@@ -571,7 +547,7 @@ impl<'f> Interpret<'f> {
                 let value = value.as_bool().expect("Should be a bool");
                 print!("{}", value)
             }
-            Type::Int => {
+            Type::Int | Type::Byte => {
                 let value = value.into_int().expect("Should be an int");
                 print!("{}", value)
             }

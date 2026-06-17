@@ -89,9 +89,10 @@ impl ResourceCheck {
             | Type::Unit
             | Type::Unknown
             | Type::Int
+            | Type::Byte
             | Type::Imm(..)
             | Type::Char
-            | Type::RawPointer
+            | Type::RawPointer(_)
             | Type::Function(FunctionType {
                 resource: IsResource::Data,
                 ..
@@ -113,15 +114,17 @@ impl ResourceCheck {
     fn ty_is_expired(&self, ty: &Type) -> bool {
         match ty {
             Type::Bool
+            | Type::Byte
             | Type::Int
             | Type::String
             | Type::Unit
             | Type::Unknown
             | Type::Param(..)
             | Type::Function(..)
-            | Type::Char
-            | Type::RawPointer => false,
-            Type::List(ty) | Type::Box(ty) | Type::Option(ty) => self.ty_is_expired(ty),
+            | Type::Char => false,
+            Type::RawPointer(ty) | Type::List(ty) | Type::Box(ty) | Type::Option(ty) => {
+                self.ty_is_expired(ty)
+            }
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
                 if let Region::Local(_, local) = region
                     && self.expired_regions.contains(local)
@@ -287,8 +290,9 @@ impl ResourceCheck {
             | Type::String
             | Type::Unit
             | Type::Param(..)
-            | Type::Unknown
-            | Type::RawPointer => HashSet::new(),
+            | Type::Byte
+            | Type::Unknown => HashSet::new(),
+            Type::RawPointer(ty) => self.regions_in(ty),
             Type::Infer(_) => unreachable!("Cannot infer here"),
             Type::Box(ty) | Type::List(ty) | Type::Option(ty) => self.regions_in(ty),
             Type::Function(function) => {
@@ -320,8 +324,10 @@ impl ResourceCheck {
             | Type::Unit
             | Type::Param(..)
             | Type::Unknown
-            | Type::RawPointer => true,
-            Type::Box(ty) | Type::List(ty) | Type::Option(ty) => self.outlives_generic_regions(ty),
+            | Type::Byte => true,
+            Type::Box(ty) | Type::List(ty) | Type::RawPointer(ty) | Type::Option(ty) => {
+                self.outlives_generic_regions(ty)
+            }
             Type::Function(function) => {
                 function
                     .params

@@ -15,7 +15,6 @@ define_id!(Local);
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum PlaceProjection {
     DowncastSome,
-    DerefAs(Type),
     Field(FieldId),
     ConstantIndex(u32),
     Index(Local),
@@ -80,13 +79,6 @@ impl Place {
             projections: self.projections,
         }
     }
-    pub fn with_deref_as(mut self, ty: Type) -> Self {
-        self.projections.push(PlaceProjection::DerefAs(ty));
-        Self {
-            base: self.base,
-            projections: self.projections,
-        }
-    }
     pub fn with_deref(mut self) -> Self {
         self.projections.push(PlaceProjection::Deref);
         Self {
@@ -126,12 +118,6 @@ impl Constant {
             value: ConstantValue::ZeroSized,
         }
     }
-    pub const fn sizeof(ty: Type) -> Self {
-        Self {
-            ty: Type::Int,
-            value: ConstantValue::Sizeof(ty),
-        }
-    }
 }
 #[derive(Clone)]
 pub enum ConstantValue {
@@ -139,7 +125,6 @@ pub enum ConstantValue {
     Bool(bool),
     Function(FunctionId, Vec<GenericArg>),
     Lambda(LambdaId, Vec<GenericArg>),
-    Sizeof(Type),
     ZeroSized,
 }
 impl ConstantValue {
@@ -185,7 +170,8 @@ pub enum Rvalue {
     Call(Operand, Vec<Operand>),
     Binary(BinaryOp, Box<(Operand, Operand)>),
     Ref(Mutable, Place),
-    Allocate { size: Operand, count: Operand },
+    Allocate { ty: Type, count: Operand },
+    PointerCast(Operand),
 }
 pub struct SwitchTarget {
     pub value: i128,
@@ -223,11 +209,11 @@ pub struct BasicBlock {
 impl BasicBlock {
     #[track_caller]
     pub fn expect_terminator(&self) -> &Terminator {
-        self.terminator.as_ref().unwrap()
+        self.terminator.as_ref().expect("Block should have a terminator")
     }
     #[track_caller]
     pub fn expect_terminator_mut(&mut self) -> &mut Terminator {
-        self.terminator.as_mut().unwrap()
+        self.terminator.as_mut().expect("Block should have a terminator")
     }
 }
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
@@ -246,6 +232,8 @@ pub struct LocalInfo {
     pub kind: LocalKind,
 }
 pub struct Captures {
+    ///The local for the restored pointer with the proper type
+    pub env_ptr: Option<Local>,
     pub captures: Vec<(Var, Type)>,
 }
 impl Captures {

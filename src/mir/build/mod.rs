@@ -96,7 +96,4 @@ impl<'ctxt> Builder<'ctxt> {
     pub(super) fn assign(&mut self, place: Place, value: Rvalue) {
         self.push_stmt(Stmt::Assign(place, value));
     }
-    pub fn finish(self) -> Body {
-        self.body
-    }
 }

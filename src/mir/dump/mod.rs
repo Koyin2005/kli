@@ -48,9 +48,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     PlaceProjection::DowncastSome => {
                         format!("({} as Some)", output)
                     }
-                    PlaceProjection::DerefAs(ty) => {
-                        format!("({}:{})^", output, ty)
-                    }
                     PlaceProjection::Field(field) => {
                         output.push_str(&format!(".{}", field.into_usize()));
                         output
@@ -91,10 +88,8 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(right)?;
                 write!(self.output, ")")?;
             }
-            Rvalue::Allocate { size, count } => {
-                write!(self.output, "allocate(")?;
-                self.write_operand(size)?;
-                write!(self.output, ",")?;
+            Rvalue::Allocate { ty, count } => {
+                write!(self.output, "allocate[{ty}](")?;
                 self.write_operand(count)?;
                 write!(self.output, ")")?;
             }
@@ -174,6 +169,11 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, "ref {} ", mutable)?;
                 self.write_place(place)?;
             }
+            Rvalue::PointerCast(pointer) => {
+                write!(self.output, "ptr_cast(")?;
+                self.write_operand(pointer)?;
+                write!(self.output, ")")?;
+            }
         }
         Ok(())
     }
@@ -201,7 +201,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     }
                     Ok(())
                 }
-                ConstantValue::Sizeof(ref ty) => write!(self.output, "sizeof({})", ty),
             },
         }
     }

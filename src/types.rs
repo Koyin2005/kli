@@ -17,10 +17,7 @@ pub enum GenericArg {
     Type(Type),
 }
 impl TypeMappable for GenericArg {
-    fn apply_map<M: TypeMap>(self, m: &mut M) -> Result<Self, M::Error>
-    where
-        Self: Sized,
-    {
+    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         match self {
             Self::Region(region) => Ok(GenericArg::Region(region.apply_map(m)?)),
             Self::Type(ty) => Ok(GenericArg::Type(ty.apply_map(m)?)),
@@ -99,6 +96,7 @@ pub enum Type {
     Bool,
     String,
     Char,
+    Byte,
     Param(Rc<str>, usize),
     Box(Box<Type>),
     List(Box<Type>),
@@ -107,9 +105,12 @@ pub enum Type {
     Mut(Region, Box<Type>),
     Function(FunctionType),
     Record(IndexVec<FieldId, RecordField>),
-    RawPointer,
+    RawPointer(Box<Type>),
 }
 impl Type {
+    pub fn pointer(ty: Self) -> Self {
+        Self::RawPointer(Box::new(ty))
+    }
     pub fn record(field_tys: Vec<Self>) -> Self {
         Self::Record(
             field_tys
@@ -154,7 +155,10 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::RawPointer => f.write_str("ptr"),
+            Self::Byte => f.pad("byte"),
+            Self::RawPointer(ty) => {
+                write!(f, "ptr[{}]", ty)
+            }
             Self::Record(fields) => {
                 f.pad("{")?;
                 let mut first = true;
@@ -235,10 +239,11 @@ pub trait TypeMap {
             | Type::Int
             | Type::Unit
             | Type::Unknown
-            | Type::RawPointer
             | Type::String
+            | Type::Byte
             | Type::Infer(_)
             | Type::Param(..) => Ok(ty),
+            Type::RawPointer(ty) => Ok(Type::RawPointer(Box::new(self.map_type(*ty)?))),
             Type::Box(ty) => Ok(Type::Box(Box::new(self.map_type(*ty)?))),
             Type::List(ty) => Ok(Type::List(Box::new(self.map_type(*ty)?))),
             Type::Option(ty) => Ok(Type::Option(Box::new(self.map_type(*ty)?))),
@@ -300,30 +305,35 @@ pub trait TypeMap {
 }
 
 pub trait TypeMappable {
-    fn apply_map<M: TypeMap>(self, m: &mut M) -> Result<Self, M::Error>
+    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error>
     where
         Self: Sized;
 }
 
 impl TypeMappable for Type {
-    fn apply_map<M: TypeMap>(self, m: &mut M) -> Result<Self, M::Error> {
+    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         m.map_type(self)
     }
 }
 impl TypeMappable for Region {
-    fn apply_map<M: TypeMap>(self, m: &mut M) -> Result<Self, M::Error> {
+    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         m.map_region(self)
     }
 }
 
 impl TypeMappable for FunctionType {
-    fn apply_map<M: TypeMap>(self, m: &mut M) -> Result<Self, M::Error> {
+    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         m.map_function_type(self)
     }
 }
 impl TypeMappable for RecordField {
-    fn apply_map<M: TypeMap>(self, m: &mut M) -> Result<Self, M::Error> {
+    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         m.map_field(self)
+    }
+}
+impl<T: TypeMappable> TypeMappable for Box<T> {
+    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
+        Ok(Box::new((*self).apply_map(m)?))
     }
 }
 

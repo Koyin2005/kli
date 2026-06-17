@@ -141,6 +141,11 @@ pub struct Param {
     pub var: VarId,
     pub ty: Type,
 }
+impl Param {
+    pub fn var(&self) -> Var {
+        Var(self.name.content.clone(), self.var)
+    }
+}
 pub struct Function {
     pub name: Ident,
     pub generics: Vec<GenericParam>,
