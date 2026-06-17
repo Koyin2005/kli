@@ -76,7 +76,7 @@ impl Builder<'_> {
             BodySource::Lambda(lambda.id),
             &lambda.return_type,
             std::iter::once(if is_resource {
-                Some((LocalKind::Env, Type::UniquePointer))
+                Some((LocalKind::Env, Type::OwningPointer))
             } else {
                 None
             })

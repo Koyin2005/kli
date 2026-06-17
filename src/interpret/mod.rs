@@ -64,7 +64,7 @@ fn simplify_ty(g: &HashMap<usize, Type>, ty: Type) -> Type {
         | Type::Int
         | Type::Unit
         | Type::String
-        | Type::UniquePointer
+        | Type::OwningPointer
         | Type::Unknown => ty,
         Type::Infer(_) => unreachable!(),
         Type::List(element) => Type::List(Box::new(simplify_ty(g, *element))),
@@ -187,7 +187,7 @@ impl<'f> Interpret<'f> {
     }
     fn drop(&mut self, ty: &Type, pointer_to_place: Pointer) -> Result<(), InterpretError> {
         match ty {
-            Type::UniquePointer => self.memory.deallocate(
+            Type::OwningPointer => self.memory.deallocate(
                 MemLocation::Heap,
                 self.typed_read(pointer_to_place, ty)?.as_pointer().unwrap(),
             ),
@@ -563,7 +563,7 @@ impl<'f> Interpret<'f> {
     }
     fn print_value(&self, value: Value, ty: &Type) -> Result<(), InterpretError> {
         match ty {
-            Type::UniquePointer => {
+            Type::OwningPointer => {
                 let value = value.as_pointer().unwrap();
                 println!("{}", value.address);
             }
