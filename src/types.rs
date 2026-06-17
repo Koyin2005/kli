@@ -326,3 +326,7 @@ impl TypeMappable for RecordField {
         m.map_field(self)
     }
 }
+
+pub const LIST_PTR_FIELD: FieldId = FieldId::new(0);
+pub const LIST_CAPICITY_FIELD: FieldId = FieldId::new(1);
+pub const LIST_LEN_FIELD: FieldId = FieldId::new(2);

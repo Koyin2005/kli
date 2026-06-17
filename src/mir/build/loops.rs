@@ -4,7 +4,7 @@ use crate::{
         build::Builder,
     },
     typed_ast::{Expr, IteratorType, Pattern},
-    types::Type,
+    types::{self, Type},
 };
 
 impl Builder<'_> {
@@ -41,7 +41,7 @@ impl Builder<'_> {
                 self.goto_to_new_block();
 
                 //Condition
-                let len = place.clone().with_deref().with_len();
+                let len = place.clone().with_deref().with_field(types::LIST_LEN_FIELD);
                 let in_bounds = self.assign_to_temp(
                     Type::Bool,
                     Rvalue::Binary(

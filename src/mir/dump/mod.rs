@@ -4,7 +4,7 @@ use crate::{
         Context, LocalKind, Operand, Place, PlaceProjection, Rvalue, Stmt, Terminator,
     },
     typed_ast::FieldId,
-    types::DisplayGenericArgs,
+    types::{self, DisplayGenericArgs},
 };
 
 pub struct MirDump<'ctxt> {
@@ -61,10 +61,6 @@ impl<'ctxt> MirDump<'ctxt> {
                         output.push(']');
                         output
                     }
-                    PlaceProjection::Len => {
-                        output.push_str(".len");
-                        output
-                    }
                     PlaceProjection::Deref => {
                         output.push('^');
                         output
@@ -106,10 +102,10 @@ impl<'ctxt> MirDump<'ctxt> {
                 AggregateKind::ArrayList(ty) => {
                     let mut first = true;
                     write!(self.output, "arraylist[{}]{{", ty)?;
-                    let name = |i| match i {
-                        0 => "ptr",
-                        1 => "cap",
-                        2 => "len",
+                    let name = |i| match FieldId::new(i) {
+                        types::LIST_PTR_FIELD => "ptr",
+                        types::LIST_CAPICITY_FIELD => "cap",
+                        types::LIST_LEN_FIELD => "len",
                         _ => unreachable!("Should only have 3 fields"),
                     };
                     for (i, operand) in fields.iter().enumerate() {

@@ -18,16 +18,20 @@ macro_rules! define_id {
         #[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
         pub struct $name(u32);
         impl $name {
-            pub fn new(id: usize) -> Self {
-                $name(id.try_into().expect("too many ids"))
+            pub const fn new(id: usize) -> Self {
+                if id < u32::MAX as usize {
+                    $name(id as u32)
+                } else {
+                    panic!("too many ids")
+                }
             }
             pub fn zero() -> Self {
                 Self(0)
             }
-            pub fn into_usize(self) -> usize {
+            pub const fn into_usize(self) -> usize {
                 self.0 as usize
             }
-            pub fn next(self) -> Self {
+            pub const fn next(self) -> Self {
                 Self::new((self.0 + 1) as usize)
             }
         }

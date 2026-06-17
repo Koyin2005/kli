@@ -19,7 +19,6 @@ pub enum PlaceProjection {
     Field(FieldId),
     ConstantIndex(u32),
     Index(Local),
-    Len,
     Deref,
 }
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -76,13 +75,6 @@ impl Place {
     }
     pub fn with_constant_index(mut self, index: u32) -> Self {
         self.projections.push(PlaceProjection::ConstantIndex(index));
-        Self {
-            base: self.base,
-            projections: self.projections,
-        }
-    }
-    pub fn with_len(mut self) -> Self {
-        self.projections.push(PlaceProjection::Len);
         Self {
             base: self.base,
             projections: self.projections,
