@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, env, path::Path, rc::Rc};
 
 use kli::{
     ast::{self, Module, ModuleId},
-    mir,
+    mir, mir_eval,
     monomorph::collect::{Instance, InstanceCollector, InstanceKind},
     parsing::parse::Parser,
     patterns::visit::PatternCheck,
@@ -257,9 +257,11 @@ fn main() {
             .unwrap();
     }
 
-    for instance in InstanceCollector::new(&context)
-        .collect(Instance::non_generic(InstanceKind::Function(program.main)))
-    {
+    let instances = InstanceCollector::new(&context)
+        .collect(Instance::non_generic(InstanceKind::Function(program.main)));
+    for instance in &instances {
         println!("{:?}", instance);
     }
+
+    mir_eval::Interpret::new(&context).run(instances[0].clone());
 }
