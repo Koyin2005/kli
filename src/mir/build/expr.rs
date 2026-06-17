@@ -119,7 +119,11 @@ impl Builder<'_> {
             typed_ast::PatternKind::Some(pattern) => {
                 self.assign_place_to_pattern(pattern, place.with_downcast_some());
             }
-            typed_ast::PatternKind::Record(_) => todo!("Record")
+            typed_ast::PatternKind::Record(fields) => {
+                for field in fields{
+                    self.assign_place_to_pattern(&field.pattern, place.clone().with_field(field.index));
+                }
+            }
         }
     }
     pub fn stmt(&mut self, stmt: &typed_ast::Stmt) {
