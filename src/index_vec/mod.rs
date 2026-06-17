@@ -141,3 +141,9 @@ impl<I: Id, V> FromIterator<V> for IndexVec<I, V> {
         Self(Vec::from_iter(iter), PhantomData)
     }
 }
+
+impl<const N: usize, I: Id, T> From<[T; N]> for IndexVec<I, T> {
+    fn from(value: [T; N]) -> Self {
+        Self::from_iter(value.into_iter())
+    }
+}

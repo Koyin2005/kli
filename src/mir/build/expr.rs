@@ -116,7 +116,10 @@ impl Builder<'_> {
             typed_ast::PatternKind::Bool(_)
             | typed_ast::PatternKind::Int(_)
             | typed_ast::PatternKind::None => (),
-            _ => todo!("HANDL ASSIGN TO {:?}", pattern),
+            typed_ast::PatternKind::Some(pattern) => {
+                self.assign_place_to_pattern(pattern, place.with_downcast_some());
+            }
+            typed_ast::PatternKind::Record(_) => todo!("Record")
         }
     }
     pub fn stmt(&mut self, stmt: &typed_ast::Stmt) {
@@ -202,8 +205,28 @@ impl Builder<'_> {
                 Rvalue::Aggregate(AggregateKind::Record { field_names }, fields)
             }
             ExprKind::String(_) => todo!("Strings"),
-            ExprKind::None => todo!("None"),
-            ExprKind::Some(..) => todo!("Some"),
+            ExprKind::None => {
+                let Type::Option(ty) = expr.ty.clone() else {
+                    unreachable!("Should be an option")
+                };
+                Rvalue::Aggregate(
+                    AggregateKind::Option {
+                        inner: *ty,
+                        is_some: false,
+                    },
+                    IndexVec::new(),
+                )
+            }
+            ExprKind::Some(value) => {
+                let operand = self.operand(value);
+                Rvalue::Aggregate(
+                    AggregateKind::Option {
+                        inner: value.ty.clone(),
+                        is_some: true,
+                    },
+                    [operand].into(),
+                )
+            }
             ExprKind::Builtin(..) => todo!("Builtins"),
             ExprKind::List(exprs) => {
                 let ty = if let Type::List(ty) = &expr.ty {

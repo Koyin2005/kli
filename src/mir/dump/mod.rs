@@ -3,6 +3,7 @@ use crate::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstantValue,
         Context, LocalKind, Operand, Place, PlaceProjection, Rvalue, Stmt, Terminator,
     },
+    typed_ast::FieldId,
     types::DisplayGenericArgs,
 };
 
@@ -44,6 +45,9 @@ impl<'ctxt> MirDump<'ctxt> {
             let mut output = format!("{}", place.base);
             for projection in place.projections.iter() {
                 output = match projection {
+                    PlaceProjection::DowncastSome => {
+                        format!("({} as Some)", output)
+                    }
                     PlaceProjection::Field(field) => {
                         output.push_str(&format!(".{}", field.into_usize()));
                         output
@@ -107,6 +111,16 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, ")")?;
             }
             Rvalue::Aggregate(kind, fields) => match kind {
+                AggregateKind::Option { inner, is_some } => {
+                    if *is_some {
+                        let field = &fields[FieldId::zero()];
+                        write!(self.output, "Some[{}]{{", inner)?;
+                        self.write_operand(field)?;
+                        write!(self.output, "}}")?;
+                    } else {
+                        write!(self.output, "None[{}]{{}}", inner)?;
+                    }
+                }
                 AggregateKind::Record { field_names } => {
                     let mut first = true;
                     write!(self.output, "{{")?;

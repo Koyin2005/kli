@@ -14,6 +14,7 @@ pub mod dump;
 define_id!(Local);
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum PlaceProjection {
+    DowncastSome,
     Field(FieldId),
     ConstantIndex(u32),
     Index(Local),
@@ -64,6 +65,10 @@ impl Place {
             base: self.base,
             projections: self.projections,
         }
+    }
+    pub fn with_downcast_some(mut self) -> Self{
+        self.projections.push(PlaceProjection::DowncastSome);
+        Self { base: self.base, projections: self.projections }
     }
     pub fn with_constant_index(mut self, index: u32) -> Self {
         self.projections.push(PlaceProjection::ConstantIndex(index));
@@ -141,6 +146,10 @@ pub enum AggregateKind {
         field_names: IndexVec<FieldId, Rc<str>>,
     },
     Closure,
+    Option {
+        inner: Type,
+        is_some: bool,
+    },
 }
 #[derive(Debug, Clone, Copy)]
 pub enum OverflowOp {
