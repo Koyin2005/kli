@@ -1,5 +1,0 @@
-fun not(x : bool) -> bool = 
-    case x of 
-    | true -> false 
-    | false -> true 
-    end
