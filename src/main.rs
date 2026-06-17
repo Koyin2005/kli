@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, env, path::Path, rc::Rc};
 use kli::{
     ast::{self, Module, ModuleId},
     mir,
-    monomorph::{Instance, InstanceCollector, InstanceKind},
+    monomorph::collect::{Instance, InstanceCollector, InstanceKind},
     parsing::parse::Parser,
     patterns::visit::PatternCheck,
     resolve::Resolve,
