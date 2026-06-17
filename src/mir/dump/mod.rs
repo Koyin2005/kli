@@ -194,6 +194,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     }
                     Ok(())
                 }
+                ConstantValue::Sizeof(ref ty) => write!(self.output,"sizeof({})",ty)
             },
         }
     }

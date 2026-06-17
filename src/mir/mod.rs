@@ -126,6 +126,9 @@ impl Constant {
             value: ConstantValue::ZeroSized,
         }
     }
+    pub const fn sizeof(ty: Type) -> Self{
+        Self { ty:Type::Int, value: ConstantValue::Sizeof(ty) }
+    }
 }
 #[derive(Clone)]
 pub enum ConstantValue {
@@ -133,6 +136,7 @@ pub enum ConstantValue {
     Bool(bool),
     Function(FunctionId, Vec<GenericArg>),
     Lambda(LambdaId, Vec<GenericArg>),
+    Sizeof(Type),
     ZeroSized,
 }
 impl ConstantValue {
