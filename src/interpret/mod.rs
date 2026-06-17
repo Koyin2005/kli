@@ -170,6 +170,15 @@ impl<'f> Interpret<'f> {
             | Type::Char
             | Type::Byte
             | Type::RawPointer(..) => Ok(()),
+            Type::Array(ty, count) => {
+                for i in 0..(*count).try_into().unwrap() {
+                    let pointer = self
+                        .memory
+                        .byte_offset_in_bounds(pointer_to_place, (i * size_of(ty)) as isize)?;
+                    self.drop(ty, pointer)?;
+                }
+                Ok(())
+            }
             Type::Box(inner_ty) => {
                 let inner = self.typed_read(pointer_to_place, ty)?;
                 let inner = inner.as_pointer().unwrap();
@@ -539,6 +548,24 @@ impl<'f> Interpret<'f> {
     }
     fn print_value(&self, value: Value, ty: &Type) -> Result<(), InterpretError> {
         match ty {
+            Type::Array(ty, count) => {
+                let field_values = value.into_tuple().expect("Should be a record");
+                print!("[");
+                let mut first = true;
+                for (i, value) in field_values
+                    .into_iter()
+                    .enumerate()
+                    .take((*count).try_into().unwrap())
+                {
+                    if !first {
+                        print!(", ");
+                    }
+                    print!("[{}] = ", i);
+                    self.print_value(value, ty)?;
+                    first = false;
+                }
+                print!("]");
+            }
             Type::RawPointer(..) => {
                 let value = value.as_pointer().unwrap();
                 println!("{}", value.address);

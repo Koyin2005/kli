@@ -40,6 +40,7 @@ pub fn align_of(ty: &Type) -> usize {
         Type::Option(ty) => align_of(ty).max(1),
         Type::Function(_) => ADDR_SIZE,
         Type::List(_) => ADDR_SIZE,
+        Type::Array(ty, _) => align_of(ty),
         Type::Param(..) => unreachable!("params"),
     }
 }
@@ -48,6 +49,11 @@ pub fn size_of(ty: &Type) -> usize {
     match ty {
         Type::Bool | Type::Byte => 1,
         Type::String | Type::List(_) => ADDR_SIZE * 3,
+        &Type::Array(ref ty, count) => {
+            let ty = ty.as_ref();
+            let count: usize = count.try_into().unwrap();
+            size_of(ty) * count
+        }
         Type::Unit => 0,
         Type::Int => 8,
         Type::Char => 4,
@@ -138,6 +144,16 @@ pub fn decode_record(
 #[track_caller]
 pub fn encode(e: Endianess, ty: &Type, value: Value) -> Vec<Byte> {
     match ty {
+        Type::Array(ty, count) => {
+            let Value::Tuple(values) = value else {
+                unreachable!("Should be a tuple")
+            };
+            encode_record(
+                e,
+                &vec![(**ty).clone(); (*count).try_into().unwrap()],
+                values,
+            )
+        }
         Type::Byte => vec![Byte::Init(value.into_int().unwrap().as_u8().unwrap(), None)],
         Type::Bool => vec![Byte::Init(
             if value.as_bool().unwrap() { 1 } else { 0 },
@@ -217,6 +233,15 @@ pub fn encode(e: Endianess, ty: &Type, value: Value) -> Vec<Byte> {
 }
 pub fn decode(e: Endianess, ty: &Type, bytes: &[Byte]) -> Result<Value, InterpretError> {
     match ty {
+        Type::Array(ty, count) => {
+            let values = decode_record(
+                e,
+                &std::iter::repeat_n((**ty).clone(), (*count).try_into().unwrap())
+                    .collect::<Box<[_]>>(),
+                bytes,
+            )?;
+            Ok(Value::Tuple(values))
+        }
         Type::Byte => {
             if let Some(&byte) = bytes.first() {
                 let Some(value) = byte.data() else {
@@ -360,7 +385,7 @@ pub fn is_resource(ty: &Type) -> bool {
             resource: IsResource::Data,
             ..
         }) => false,
-        Type::Option(ty) => is_resource(ty),
+        Type::Option(ty) | Type::Array(ty, _) => is_resource(ty),
         Type::Mut(..)
         | Type::Function(FunctionType {
             resource: IsResource::Resource,

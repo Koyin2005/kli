@@ -158,7 +158,7 @@ impl<'ctxt> InstanceCollector<'ctxt> {
                                     args.clone(),
                                 );
                             }
-                            Rvalue::Ref(_, _) => (),
+                            Rvalue::Ref(_, _) | Rvalue::Len(..) => (),
                         },
                     }
                 }

@@ -97,7 +97,7 @@ impl ResourceCheck {
                 resource: IsResource::Data,
                 ..
             }) => false,
-            Type::Option(ty) => self.is_resource(ty),
+            Type::Option(ty) | Type::Array(ty, _) => self.is_resource(ty),
             Type::Mut(..)
             | Type::Function(FunctionType {
                 resource: IsResource::Resource,
@@ -122,9 +122,11 @@ impl ResourceCheck {
             | Type::Param(..)
             | Type::Function(..)
             | Type::Char => false,
-            Type::RawPointer(ty) | Type::List(ty) | Type::Box(ty) | Type::Option(ty) => {
-                self.ty_is_expired(ty)
-            }
+            Type::RawPointer(ty)
+            | Type::Array(ty, _)
+            | Type::List(ty)
+            | Type::Box(ty)
+            | Type::Option(ty) => self.ty_is_expired(ty),
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
                 if let Region::Local(_, local) = region
                     && self.expired_regions.contains(local)
@@ -292,7 +294,7 @@ impl ResourceCheck {
             | Type::Param(..)
             | Type::Byte
             | Type::Unknown => HashSet::new(),
-            Type::RawPointer(ty) => self.regions_in(ty),
+            Type::RawPointer(ty) | Type::Array(ty, _) => self.regions_in(ty),
             Type::Infer(_) => unreachable!("Cannot infer here"),
             Type::Box(ty) | Type::List(ty) | Type::Option(ty) => self.regions_in(ty),
             Type::Function(function) => {
@@ -325,9 +327,11 @@ impl ResourceCheck {
             | Type::Param(..)
             | Type::Unknown
             | Type::Byte => true,
-            Type::Box(ty) | Type::List(ty) | Type::RawPointer(ty) | Type::Option(ty) => {
-                self.outlives_generic_regions(ty)
-            }
+            Type::Box(ty)
+            | Type::Array(ty, _)
+            | Type::List(ty)
+            | Type::RawPointer(ty)
+            | Type::Option(ty) => self.outlives_generic_regions(ty),
             Type::Function(function) => {
                 function
                     .params

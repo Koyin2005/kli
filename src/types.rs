@@ -106,6 +106,7 @@ pub enum Type {
     Function(FunctionType),
     Record(IndexVec<FieldId, RecordField>),
     RawPointer(Box<Type>),
+    Array(Box<Type>, u64),
 }
 impl Type {
     pub fn pointer(ty: Self) -> Self {
@@ -155,6 +156,9 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Array(ty, count) => {
+                write!(f, "fixed_array[{},{}]", ty, count)
+            }
             Self::Byte => f.pad("byte"),
             Self::RawPointer(ty) => {
                 write!(f, "ptr[{}]", ty)
@@ -243,6 +247,7 @@ pub trait TypeMap {
             | Type::Byte
             | Type::Infer(_)
             | Type::Param(..) => Ok(ty),
+            Type::Array(ty, count) => Ok(Type::Array(Box::new(self.map_type(*ty)?), count)),
             Type::RawPointer(ty) => Ok(Type::RawPointer(Box::new(self.map_type(*ty)?))),
             Type::Box(ty) => Ok(Type::Box(Box::new(self.map_type(*ty)?))),
             Type::List(ty) => Ok(Type::List(Box::new(self.map_type(*ty)?))),

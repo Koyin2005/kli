@@ -93,84 +93,59 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(count)?;
                 write!(self.output, ")")?;
             }
-            Rvalue::Aggregate(kind, fields) => match kind {
-                AggregateKind::ArrayList(ty) => {
-                    let mut first = true;
-                    write!(self.output, "arraylist[{}]{{", ty)?;
-                    let name = |i| match FieldId::new(i) {
-                        types::LIST_PTR_FIELD => "ptr",
-                        types::LIST_CAPICITY_FIELD => "cap",
-                        types::LIST_LEN_FIELD => "len",
-                        _ => unreachable!("Should only have 3 fields"),
-                    };
-                    for (i, operand) in fields.iter().enumerate() {
-                        if !first {
-                            write!(self.output, ",")?;
-                        }
-                        write!(self.output, "{} = ", name(i))?;
-                        self.write_operand(operand)?;
-                        first = false;
+            Rvalue::Len(place) => {
+                write!(self.output, "len(")?;
+                self.write_place(place)?;
+                write!(self.output, ")")?;
+            }
+            Rvalue::Aggregate(kind, fields) => {
+                let name = match kind {
+                    AggregateKind::Array(..) | AggregateKind::Record { .. } => "".to_string(),
+                    AggregateKind::Closure => "Closure".to_string(),
+                    AggregateKind::ArrayList(ty) => format!("array_list[{}]", ty),
+                    AggregateKind::String => "string".to_string(),
+                    AggregateKind::Option { inner, is_some } => {
+                        format!("{}[{}]", if *is_some { "Some" } else { "None" }, inner)
                     }
-                    write!(self.output, "}}")?;
-                }
-                AggregateKind::String => {
-                    let mut first = true;
-                    write!(self.output, "string{{")?;
-                    let name = |i| match FieldId::new(i) {
-                        types::LIST_PTR_FIELD => "ptr",
-                        types::LIST_CAPICITY_FIELD => "cap",
-                        types::LIST_LEN_FIELD => "len",
-                        _ => unreachable!("Should only have 3 fields"),
-                    };
-                    for (i, operand) in fields.iter().enumerate() {
-                        if !first {
-                            write!(self.output, ",")?;
+                };
+                let (open_bracket, close_bracket) = match kind {
+                    AggregateKind::Array(_, _) => ('[', ']'),
+                    AggregateKind::Option { .. } => ('(', ')'),
+                    _ => ('{', '}'),
+                };
+                let field_name = |i: FieldId| match kind {
+                    AggregateKind::ArrayList(_) | AggregateKind::String => Some(
+                        match i {
+                            types::LIST_PTR_FIELD => "ptr",
+                            types::LIST_CAPICITY_FIELD => "cap",
+                            types::LIST_LEN_FIELD => "len",
+                            _ => unreachable!("Should only have 3 fields"),
                         }
-                        write!(self.output, "{} = ", name(i))?;
-                        self.write_operand(operand)?;
-                        first = false;
+                        .to_string(),
+                    ),
+                    AggregateKind::Array(..) => None,
+                    AggregateKind::Option { .. } => Some(i.into_usize().to_string()),
+                    AggregateKind::Record { field_names } => Some(field_names[i].to_string()),
+                    AggregateKind::Closure => Some(match i {
+                        i if i == FieldId::zero() => "env".to_string(),
+                        i if i == FieldId::new(1) => "code".to_string(),
+                        _ => unreachable!("Should only have 2 fields"),
+                    }),
+                };
+                write!(self.output, "{name}{open_bracket}")?;
+                let mut first = true;
+                for (i, operand) in fields.iter_enumerated() {
+                    if !first {
+                        write!(self.output, ",")?;
                     }
-                    write!(self.output, "}}")?;
-                }
-                AggregateKind::Option { inner, is_some } => {
-                    if *is_some {
-                        let field = &fields[FieldId::zero()];
-                        write!(self.output, "Some[{}]{{", inner)?;
-                        self.write_operand(field)?;
-                        write!(self.output, "}}")?;
-                    } else {
-                        write!(self.output, "None[{}]{{}}", inner)?;
-                    }
-                }
-                AggregateKind::Record { field_names } => {
-                    let mut first = true;
-                    write!(self.output, "{{")?;
-                    for (name, operand) in field_names.iter().zip(fields) {
-                        if !first {
-                            write!(self.output, ",")?;
-                        }
+                    if let Some(name) = field_name(i) {
                         write!(self.output, "{} = ", name)?;
-                        self.write_operand(operand)?;
-                        first = false;
                     }
-                    write!(self.output, "}}")?;
+                    self.write_operand(operand)?;
+                    first = false;
                 }
-                AggregateKind::Closure => {
-                    let mut first = true;
-                    write!(self.output, "Closure {{")?;
-                    let name = |i: usize| if i == 0 { "env" } else { "code" };
-                    for (i, operand) in fields.iter_enumerated() {
-                        if !first {
-                            write!(self.output, ",")?;
-                        }
-                        let name = name(i.into_usize());
-                        write!(self.output, "{} = ", name)?;
-                        self.write_operand(operand)?;
-                        first = false;
-                    }
-                    write!(self.output, "}}")?;
-                }
-            },
+                write!(self.output, "{}", close_bracket)?;
+            }
             Rvalue::Call(operand, args) => {
                 self.write_operand(operand)?;
                 write!(self.output, "(")?;

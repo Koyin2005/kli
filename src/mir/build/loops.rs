@@ -4,7 +4,7 @@ use crate::{
         build::Builder,
     },
     typed_ast::{Expr, IteratorType, Pattern},
-    types::{self, Type},
+    types::Type,
 };
 
 impl Builder<'_> {
@@ -27,7 +27,7 @@ impl Builder<'_> {
                     i = 0
                     goto bb_cond
                    bb_cond
-                    in_bounds = i < iter^.len
+                    in_bounds = i < len(iter^)
                     switch in_bounds 0 -> bb_end, otherwise -> bb_body
                    bb_body
                     ....
@@ -41,15 +41,12 @@ impl Builder<'_> {
                 self.goto_to_new_block();
 
                 //Condition
-                let len = place.clone().with_deref().with_field(types::LIST_LEN_FIELD);
+                let len = self.len_operand(place.clone().with_deref());
                 let in_bounds = self.assign_to_temp(
                     Type::Bool,
                     Rvalue::Binary(
                         BinaryOp::Lesser,
-                        Box::new((
-                            Operand::Load(Place::local(current_index)),
-                            Operand::Load(len),
-                        )),
+                        Box::new((Operand::Load(Place::local(current_index)), len.clone())),
                     ),
                 );
                 let cond_block = self.current_block;

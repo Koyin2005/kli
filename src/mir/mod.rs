@@ -152,6 +152,7 @@ pub enum AggregateKind {
         is_some: bool,
     },
     ArrayList(Type),
+    Array(Type, u64),
     String,
 }
 #[derive(Debug, Clone, Copy)]
@@ -179,6 +180,7 @@ pub enum Rvalue {
     Ref(Mutable, Place),
     Allocate { ty: Type, count: Operand },
     PointerCast(Operand),
+    Len(Place),
 }
 pub struct SwitchTarget {
     pub value: i128,

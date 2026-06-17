@@ -51,6 +51,11 @@ impl Builder<'_> {
             Place::local(self.expr_into_temp(expr))
         }
     }
+    pub(super) fn len_operand(&mut self, place: Place) -> Operand {
+        Operand::Load(Place::local(
+            self.assign_to_temp(Type::Int, Rvalue::Len(place)),
+        ))
+    }
     fn operand_as_place(&mut self, ty: Type, operand: Operand) -> Place {
         match operand {
             Operand::Load(place) => place,
@@ -215,37 +220,33 @@ impl Builder<'_> {
                 Rvalue::Aggregate(AggregateKind::Record { field_names }, fields)
             }
             ExprKind::String(value) => {
+                let len = value.len().try_into().unwrap();
+                let array_ty = Type::Array(Box::new(Type::Byte), len);
                 let bytes = self.assign_to_temp(
-                    Type::pointer(Type::Byte),
+                    Type::pointer(array_ty.clone()),
                     Rvalue::Allocate {
-                        ty: Type::Byte,
-                        count: Operand::Constant(Constant::int(
-                            value.bytes().len().try_into().unwrap(),
-                        )),
+                        ty: array_ty.clone(),
+                        count: Operand::Constant(Constant::int(1)),
                     },
                 );
-
-                for (i, b) in value.bytes().enumerate() {
-                    let offseted = self.assign_to_temp(
-                        Type::pointer(Type::Byte),
-                        Rvalue::Binary(
-                            mir::BinaryOp::Offset,
-                            Box::new((
-                                Operand::Load(Place::local(bytes)),
-                                Operand::Constant(Constant::int(i.try_into().unwrap())),
-                            )),
-                        ),
-                    );
-
-                    self.assign(
-                        Place::local(offseted).with_deref(),
-                        Rvalue::Use(Operand::Constant(Constant::byte(b))),
-                    );
-                }
+                self.assign(
+                    Place::local(bytes).with_deref(),
+                    Rvalue::Aggregate(
+                        AggregateKind::Array(Type::Byte, len),
+                        value
+                            .bytes()
+                            .map(|b| Operand::Constant(Constant::byte(b)))
+                            .collect(),
+                    ),
+                );
+                let ptr = self.assign_to_temp(
+                    Type::pointer(Type::Byte),
+                    Rvalue::PointerCast(Operand::Load(Place::local(bytes))),
+                );
                 Rvalue::Aggregate(
                     AggregateKind::String,
                     [
-                        Operand::Load(Place::local(bytes)),
+                        Operand::Load(Place::local(ptr)),
                         Operand::Constant(Constant::int(value.bytes().len().try_into().unwrap())),
                         Operand::Constant(Constant::int(value.bytes().len().try_into().unwrap())),
                     ]
@@ -281,33 +282,35 @@ impl Builder<'_> {
                 } else {
                     unreachable!("Should be an array")
                 };
+                let array_ty = Type::Array(Box::new(ty.clone()), exprs.len().try_into().unwrap());
+
                 let len_constant =
                     Operand::Constant(Constant::int(exprs.len().try_into().unwrap()));
+
                 let ptr_to_buf = self.assign_to_temp(
-                    Type::pointer(ty.clone()),
+                    Type::pointer(array_ty.clone()),
                     Rvalue::Allocate {
-                        ty: ty.clone(),
-                        count: len_constant.clone(),
+                        ty: array_ty.clone(),
+                        count: Operand::Constant(Constant::int(1)),
                     },
                 );
+                let operands = exprs.iter().map(|expr| self.operand(expr)).collect();
+                self.assign(
+                    Place::local(ptr_to_buf).with_deref(),
+                    Rvalue::Aggregate(
+                        AggregateKind::Array(ty.clone(), exprs.len().try_into().unwrap()),
+                        operands,
+                    ),
+                );
+                let ptr = self.assign_to_temp(
+                    Type::pointer(ty.clone()),
+                    Rvalue::PointerCast(Operand::Load(Place::local(ptr_to_buf))),
+                );
 
-                for (i, expr) in exprs.iter().enumerate() {
-                    let offset_pointer = self.assign_to_temp(
-                        Type::pointer(ty.clone()),
-                        Rvalue::Binary(
-                            mir::BinaryOp::Offset,
-                            Box::new((
-                                Operand::Load(Place::local(ptr_to_buf)),
-                                Operand::Constant(Constant::int(i.try_into().unwrap())),
-                            )),
-                        ),
-                    );
-                    self.expr_into_dest(Place::local(offset_pointer).with_deref(), expr);
-                }
                 Rvalue::Aggregate(
                     AggregateKind::ArrayList(ty),
                     [
-                        Operand::Load(Place::local(ptr_to_buf)),
+                        Operand::Load(Place::local(ptr)),
                         len_constant.clone(),
                         len_constant.clone(),
                     ]
