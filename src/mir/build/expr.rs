@@ -214,7 +214,44 @@ impl Builder<'_> {
                     .collect::<IndexVec<FieldId, _>>();
                 Rvalue::Aggregate(AggregateKind::Record { field_names }, fields)
             }
-            ExprKind::String(_) => todo!("Strings"),
+            ExprKind::String(value) => {
+                let bytes = self.assign_to_temp(
+                    Type::pointer(Type::Byte),
+                    Rvalue::Allocate {
+                        ty: Type::Byte,
+                        count: Operand::Constant(Constant::int(
+                            value.bytes().len().try_into().unwrap(),
+                        )),
+                    },
+                );
+
+                for (i, b) in value.bytes().enumerate() {
+                    let offseted = self.assign_to_temp(
+                        Type::pointer(Type::Byte),
+                        Rvalue::Binary(
+                            mir::BinaryOp::Offset,
+                            Box::new((
+                                Operand::Load(Place::local(bytes)),
+                                Operand::Constant(Constant::int(i.try_into().unwrap())),
+                            )),
+                        ),
+                    );
+
+                    self.assign(
+                        Place::local(offseted).with_deref(),
+                        Rvalue::Use(Operand::Constant(Constant::byte(b))),
+                    );
+                }
+                Rvalue::Aggregate(
+                    AggregateKind::String,
+                    [
+                        Operand::Load(Place::local(bytes)),
+                        Operand::Constant(Constant::int(value.bytes().len().try_into().unwrap())),
+                        Operand::Constant(Constant::int(value.bytes().len().try_into().unwrap())),
+                    ]
+                    .into(),
+                )
+            }
             ExprKind::None => {
                 let Type::Option(ty) = expr.ty.clone() else {
                     unreachable!("Should be an option")

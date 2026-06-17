@@ -113,6 +113,25 @@ impl<'ctxt> MirDump<'ctxt> {
                     }
                     write!(self.output, "}}")?;
                 }
+                AggregateKind::String => {
+                    let mut first = true;
+                    write!(self.output, "string{{")?;
+                    let name = |i| match FieldId::new(i) {
+                        types::LIST_PTR_FIELD => "ptr",
+                        types::LIST_CAPICITY_FIELD => "cap",
+                        types::LIST_LEN_FIELD => "len",
+                        _ => unreachable!("Should only have 3 fields"),
+                    };
+                    for (i, operand) in fields.iter().enumerate() {
+                        if !first {
+                            write!(self.output, ",")?;
+                        }
+                        write!(self.output, "{} = ", name(i))?;
+                        self.write_operand(operand)?;
+                        first = false;
+                    }
+                    write!(self.output, "}}")?;
+                }
                 AggregateKind::Option { inner, is_some } => {
                     if *is_some {
                         let field = &fields[FieldId::zero()];

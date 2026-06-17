@@ -100,6 +100,12 @@ impl Constant {
             value: ConstantValue::Bool(value),
         }
     }
+    pub const fn byte(value: u8) -> Self {
+        Self {
+            ty: Type::Byte,
+            value: ConstantValue::Int(value as i64),
+        }
+    }
     pub const fn int(value: i64) -> Self {
         Self {
             ty: Type::Int,
@@ -146,6 +152,7 @@ pub enum AggregateKind {
         is_some: bool,
     },
     ArrayList(Type),
+    String,
 }
 #[derive(Debug, Clone, Copy)]
 pub enum OverflowOp {
@@ -209,11 +216,15 @@ pub struct BasicBlock {
 impl BasicBlock {
     #[track_caller]
     pub fn expect_terminator(&self) -> &Terminator {
-        self.terminator.as_ref().expect("Block should have a terminator")
+        self.terminator
+            .as_ref()
+            .expect("Block should have a terminator")
     }
     #[track_caller]
     pub fn expect_terminator_mut(&mut self) -> &mut Terminator {
-        self.terminator.as_mut().expect("Block should have a terminator")
+        self.terminator
+            .as_mut()
+            .expect("Block should have a terminator")
     }
 }
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
