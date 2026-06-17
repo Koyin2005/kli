@@ -97,7 +97,7 @@ impl TypeCheck {
             | Type::Function(_)
             | Type::Box(_)
             | Type::Record(_)
-            | Type::OwningPointer => Err(ty),
+            | Type::RawPointer => Err(ty),
         }
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {

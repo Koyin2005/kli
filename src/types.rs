@@ -107,7 +107,7 @@ pub enum Type {
     Mut(Region, Box<Type>),
     Function(FunctionType),
     Record(IndexVec<FieldId, RecordField>),
-    OwningPointer,
+    RawPointer
 }
 impl Type {
     pub fn record(field_tys: Vec<Self>) -> Self {
@@ -154,7 +154,7 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::OwningPointer => f.write_str("ptr"),
+            Self::RawPointer => f.write_str("ptr"),
             Self::Record(fields) => {
                 f.pad("{")?;
                 let mut first = true;
@@ -235,7 +235,7 @@ pub trait TypeMap {
             | Type::Int
             | Type::Unit
             | Type::Unknown
-            | Type::OwningPointer
+            | Type::RawPointer
             | Type::String
             | Type::Infer(_)
             | Type::Param(..) => Ok(ty),

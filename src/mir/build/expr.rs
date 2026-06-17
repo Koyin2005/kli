@@ -368,7 +368,7 @@ impl Builder<'_> {
                 let function = Operand::Constant(self.lambda_code(lambda));
                 if is_resource {
                     let env = self.assign_to_temp(
-                        Type::OwningPointer,
+                        Type::RawPointer,
                         Rvalue::AllocateEnv(
                             lambda
                                 .captures
