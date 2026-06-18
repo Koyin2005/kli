@@ -4,7 +4,6 @@ mod ident;
 mod index_vec;
 pub mod interpret;
 pub mod mir;
-pub mod mir_eval;
 pub mod monomorph;
 mod names;
 pub mod parsing;

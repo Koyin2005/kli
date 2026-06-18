@@ -12,7 +12,7 @@ use crate::{
 pub mod build;
 pub mod dump;
 define_id!(Local);
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum PlaceProjection {
     DowncastSome,
     Field(FieldId),
@@ -20,7 +20,7 @@ pub enum PlaceProjection {
     Index(Local),
     Deref,
 }
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum PlaceBase {
     Local(Local),
     ReturnPlace,
@@ -33,7 +33,7 @@ impl Display for PlaceBase {
         }
     }
 }
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Place {
     pub base: PlaceBase,
     pub projections: Vec<PlaceProjection>,
@@ -87,7 +87,7 @@ impl Place {
         }
     }
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Constant {
     pub ty: Type,
 
@@ -125,7 +125,7 @@ impl Constant {
         }
     }
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ConstantValue {
     Int(i64),
     Bool(bool),
@@ -137,11 +137,12 @@ impl ConstantValue {
     pub const MAX_INT: i64 = i64::MAX;
     pub const MIN_INT: i64 = i64::MIN;
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Operand {
     Load(Place),
     Constant(Constant),
 }
+#[derive(Clone, Debug)]
 pub enum AggregateKind {
     Record {
         field_names: IndexVec<FieldId, Rc<str>>,
@@ -161,7 +162,7 @@ pub enum OverflowOp {
     Subtract,
     Multiply,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinaryOp {
     Overflow(OverflowOp),
     Unchecked(OverflowOp),
@@ -172,6 +173,7 @@ pub enum BinaryOp {
     BitwiseAnd,
     Lesser,
 }
+#[derive(Clone, Debug)]
 pub enum Rvalue {
     Aggregate(AggregateKind, IndexVec<FieldId, Operand>),
     Use(Operand),
@@ -182,19 +184,23 @@ pub enum Rvalue {
     PointerCast(Operand),
     Len(Place),
 }
+#[derive(Clone)]
 pub struct SwitchTarget {
     pub value: i128,
     pub target: BasicBlockId,
 }
+#[derive(Clone)]
 pub struct SwitchTargets {
     pub targets: Vec<SwitchTarget>,
     pub otherwise: BasicBlockId,
 }
+#[derive(Clone)]
 pub enum AssertKind {
     Overflow(OverflowOp),
     DivideOverflow,
     DivideByZero,
 }
+#[derive(Clone)]
 pub enum Terminator {
     Switch(Operand, SwitchTargets),
     Unreachable,
@@ -202,6 +208,7 @@ pub enum Terminator {
     Goto(BasicBlockId),
     Panic,
 }
+#[derive(Clone)]
 pub enum Stmt {
     Noop,
     Assign(Place, Rvalue),
@@ -210,7 +217,7 @@ pub enum Stmt {
 }
 define_id!(BasicBlockId);
 define_id!(StmtId);
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct BasicBlock {
     pub stmts: IndexVec<StmtId, Stmt>,
     pub terminator: Option<Terminator>,
@@ -234,16 +241,20 @@ pub enum BodySource {
     Function(FunctionId),
     Lambda(LambdaId),
 }
+#[derive(Clone)]
 pub enum LocalKind {
     Temp,
     Env,
     Var(Var),
     Param(Var),
 }
+#[derive(Clone)]
 pub struct LocalInfo {
     pub ty: Type,
     pub kind: LocalKind,
 }
+
+#[derive(Clone)]
 pub struct Captures {
     ///The local for the restored pointer with the proper type
     pub env_ptr: Option<Local>,
@@ -254,6 +265,7 @@ impl Captures {
         Type::record(self.captures.iter().map(|(_, ty)| ty.clone()).collect())
     }
 }
+#[derive(Clone)]
 pub struct Body {
     pub src: BodySource,
     pub return_type: Type,
@@ -272,6 +284,39 @@ impl Body {
                 var.1 == var_id
             })
             .map(Local::new)
+    }
+    pub fn type_of_base(&self, base: &PlaceBase) -> Type {
+        match base {
+            PlaceBase::Local(local) => self.locals[*local].ty.clone(),
+            PlaceBase::ReturnPlace => self.return_type.clone(),
+        }
+    }
+    pub fn apply_projection_to_type(&self, ty: Type, projection: &PlaceProjection) -> Type {
+        match projection {
+            PlaceProjection::Deref => ty.as_pointer().expect("should be a pointer type").clone(),
+            &PlaceProjection::Field(field) => {
+                ty.field_type(field).expect("should be a record type")
+            }
+            PlaceProjection::Index(_) | PlaceProjection::ConstantIndex(_) => {
+                todo!("Handle index projections")
+            }
+            PlaceProjection::DowncastSome => {
+                ty.as_option().expect("should be an option type").clone()
+            }
+        }
+    }
+    pub fn type_of_place(&self, place: &Place) -> Type {
+        let mut ty = self.type_of_base(&place.base);
+        for projection in place.projections.iter() {
+            ty = self.apply_projection_to_type(ty, projection);
+        }
+        ty
+    }
+    pub fn type_of_operand(&self, operand: &Operand) -> Type {
+        match operand {
+            Operand::Constant(constant) => constant.ty.clone(),
+            Operand::Load(place) => self.type_of_place(place),
+        }
     }
 }
 pub type Locals = IndexVec<Local, LocalInfo>;

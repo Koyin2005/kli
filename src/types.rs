@@ -109,6 +109,59 @@ pub enum Type {
     Array(Box<Type>, u64),
 }
 impl Type {
+    pub fn field_type(&self, field_id: FieldId) -> Option<Type> {
+        match self {
+            Self::Record(fields) => fields
+                .iter_enumerated()
+                .find(|(id, _)| *id == field_id)
+                .map(|(_, field)| field.ty.clone()),
+            Self::Function(FunctionType {
+                resource: IsResource::Resource,
+                params,
+                return_type,
+            }) => match field_id {
+                id if id == FieldId::zero() => Some(Type::pointer(Type::Byte)),
+                id if id == FieldId::new(1) => Some(Type::function_type(
+                    IsResource::Data,
+                    params.clone(),
+                    (**return_type).clone(),
+                )),
+                _ => None,
+            },
+            Self::List(ty) => match field_id {
+                id if id == FieldId::zero() => Some(Type::pointer((**ty).clone())),
+                id if id == FieldId::new(1) => Some(Type::Int),
+                id if id == FieldId::new(2) => Some(Type::Int),
+                _ => None,
+            },
+            Self::String => match field_id {
+                id if id == FieldId::zero() => Some(Type::pointer(Type::Byte)),
+                id if id == FieldId::new(1) => Some(Type::Int),
+                id if id == FieldId::new(2) => Some(Type::Int),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+    pub fn function_type(resource: IsResource, params: Vec<Self>, return_type: Self) -> Self {
+        Self::Function(FunctionType {
+            resource,
+            params,
+            return_type: Box::new(return_type),
+        })
+    }
+    pub fn as_option(&self) -> Option<&Type> {
+        let Type::Option(ty) = self else {
+            return None;
+        };
+        Some(ty)
+    }
+    pub fn as_pointer(&self) -> Option<&Type> {
+        let Type::RawPointer(ty) = self else {
+            return None;
+        };
+        Some(ty)
+    }
     pub fn pointer(ty: Self) -> Self {
         Self::RawPointer(Box::new(ty))
     }
