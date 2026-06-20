@@ -5,3 +5,5 @@ pub const DEREF_BOX_MUT: &str = "deref_box_mut";
 pub const FREEZE: &str = "freeze";
 pub const REPLACE: &str = "replace";
 pub const SWAP: &str = "swap";
+pub const ALLOCATE: &str = "allocate";
+pub const DEALLOCATE: &str = "deallocate";

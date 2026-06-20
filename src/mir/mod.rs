@@ -5,7 +5,7 @@ use crate::{
     define_id,
     ident::Ident,
     index_vec::IndexVec,
-    resolved_ast::{FunctionId, LambdaId, Var, VarId},
+    resolved_ast::{Builtin, FunctionId, LambdaId, Var, VarId},
     typed_ast::FieldId,
     types::{GenericArg, Type},
 };
@@ -129,6 +129,7 @@ impl Constant {
 pub enum ConstantValue {
     Int(i64),
     Bool(bool),
+    Builtin(Builtin, Vec<GenericArg>),
     Function(FunctionId, Vec<GenericArg>),
     Lambda(LambdaId, Vec<GenericArg>),
     ZeroSized,

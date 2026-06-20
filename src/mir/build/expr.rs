@@ -27,6 +27,10 @@ impl Builder<'_> {
             ExprKind::Lambda(ref lambda) if lambda.is_resource == IsResource::Data => {
                 Some(self.lambda_code(lambda))
             }
+            ExprKind::Builtin(builtin, ref args) => Some(Constant {
+                ty: expr.ty.clone(),
+                value: ConstantValue::Builtin(builtin, args.clone()),
+            }),
             _ => None,
         }
     }
@@ -193,7 +197,8 @@ impl Builder<'_> {
             | ExprKind::Int(_)
             | ExprKind::Bool(_)
             | ExprKind::Load(_)
-            | ExprKind::Function(..) => {
+            | ExprKind::Function(..)
+            | ExprKind::Builtin(..) => {
                 let operand = self
                     .as_operand(expr)
                     .unwrap_or_else(|| unreachable!("Should be an operand '{:?}' ", expr));
@@ -275,7 +280,6 @@ impl Builder<'_> {
                     [operand].into(),
                 )
             }
-            ExprKind::Builtin(..) => todo!("Builtins"),
             ExprKind::List(exprs) => {
                 let ty = if let Type::List(ty) = &expr.ty {
                     (**ty).clone()

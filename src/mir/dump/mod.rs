@@ -195,6 +195,13 @@ impl<'ctxt> MirDump<'ctxt> {
                     }
                     Ok(())
                 }
+                ConstantValue::Builtin(builtin, ref args) => {
+                    write!(self.output, "{}", builtin.name())?;
+                    if !args.is_empty() {
+                        write!(self.output, "{}", DisplayGenericArgs(&args))?;
+                    }
+                    Ok(())
+                }
             },
         }
     }

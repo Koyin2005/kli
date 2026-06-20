@@ -1091,6 +1091,22 @@ impl<'f> Interpret<'f> {
             Some(values)
         }
         match b {
+            Builtin::Allocate => {
+                let ty = &tys[0];
+                let [arg] = args_as_array(args).unwrap();
+                let count = arg.into_int().unwrap();
+                let pointer = self
+                    .memory
+                    .allocate(MemLocation::Heap, size_of(ty) * count.into_size());
+                Ok(Value::Pointer(pointer))
+            }
+            Builtin::Deallocate => {
+                let ty = &tys[0];
+                let [arg] = args_as_array(args).unwrap();
+                let pointer = arg.as_pointer().unwrap();
+                self.memory.deallocate(MemLocation::Heap, pointer)?;
+                Ok(Value::unit())
+            }
             Builtin::AllocBox => {
                 let ty = &tys[0];
                 let pointer = self.memory.allocate(MemLocation::Heap, size_of(ty));

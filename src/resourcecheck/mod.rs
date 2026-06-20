@@ -411,7 +411,7 @@ impl ResourceCheck {
             }
             PlaceKind::Deref(expr) => match &expr.kind {
                 ExprKind::Load(place) => {
-                    let Ok((_,ref ty)) = place.ty.clone().as_pointer_type() else {
+                    let Ok((_, ref ty)) = place.ty.clone().as_pointer_type() else {
                         unreachable!()
                     };
                     let Some(var) = self.var_of(place) else {

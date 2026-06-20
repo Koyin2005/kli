@@ -104,6 +104,14 @@ impl TypeCheck {
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
         let (params, return_type) = match builtin {
+            Builtin::Allocate => (
+                vec![Type::Int],
+                (Type::pointer(Type::Param(Rc::from("T"), 0))),
+            ),
+            Builtin::Deallocate => (
+                vec![Type::pointer(Type::Param(Rc::from("T"), 0))],
+                (Type::Unit),
+            ),
             Builtin::Replace => (
                 vec![
                     Type::Mut(
@@ -182,7 +190,7 @@ impl TypeCheck {
         loc: SrcLoc,
     ) -> Vec<GenericArg> {
         match builtin {
-            Builtin::AllocBox | Builtin::DeallocBox => {
+            Builtin::AllocBox | Builtin::DeallocBox | Builtin::Allocate | Builtin::Deallocate => {
                 vec![GenericArg::Type(self.fresh_ty(loc))]
             }
             Builtin::DerefBox

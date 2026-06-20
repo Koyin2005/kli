@@ -5,6 +5,7 @@ use crate::{
     define_id,
     ident::Ident,
     index_vec::IndexVec,
+    names,
     src_loc::SrcLoc,
 };
 define_id!(FunctionId);
@@ -61,6 +62,8 @@ pub enum PlaceKind {
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Builtin {
+    Allocate,
+    Deallocate,
     AllocBox,
     DeallocBox,
     DerefBox,
@@ -72,6 +75,19 @@ pub enum Builtin {
 impl Builtin {
     const LAST: Self = Self::Swap;
     pub const COUNT: usize = Self::LAST as usize + 1;
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Builtin::Allocate => names::ALLOCATE,
+            Builtin::Deallocate => names::DEALLOCATE,
+            Builtin::AllocBox => names::ALLOC_BOX,
+            Builtin::DeallocBox => names::DEALLOC_BOX,
+            Builtin::DerefBox => names::DEREF_BOX,
+            Builtin::DerefBoxMut => names::DEREF_BOX_MUT,
+            Builtin::Freeze => names::FREEZE,
+            Builtin::Replace => names::REPLACE,
+            Builtin::Swap => names::SWAP,
+        }
+    }
 }
 #[derive(Debug)]
 pub struct LetBinding {

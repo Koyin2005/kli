@@ -62,6 +62,8 @@ impl Resolve {
             (names::FREEZE.into(), Builtin::Freeze),
             (names::REPLACE.into(), Builtin::Replace),
             (names::SWAP.into(), Builtin::Swap),
+            (names::ALLOCATE.into(), Builtin::Allocate),
+            (names::DEALLOCATE.into(), Builtin::Deallocate),
         ];
         let env = Scope::from_iter(
             builtins
