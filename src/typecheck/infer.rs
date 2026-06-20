@@ -110,6 +110,9 @@ impl TypeInfer {
             (Type::List(ty1), Type::List(ty2)) => {
                 self.unify_ty(*ty1, *ty2).map(|ty| Type::List(Box::new(ty)))
             }
+            (Type::RawPointer(ty1), Type::RawPointer(ty2)) => self
+                .unify_ty(*ty1, *ty2)
+                .map(|ty| Type::RawPointer(Box::new(ty))),
             (Type::Record(fields1), Type::Record(fields2)) if fields1.len() == fields2.len() => {
                 fields1
                     .into_iter()

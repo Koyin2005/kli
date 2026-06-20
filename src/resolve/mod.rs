@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::{BorrowExpr, ModuleId, Path, StmtKind};
+use crate::ast::{BorrowExpr, GenericArgs, ModuleId, Path, StmtKind};
 use crate::diagnostics::DiagnosticReporter;
 use crate::ident::Ident;
 use crate::index_vec::IndexVec;
@@ -19,6 +19,10 @@ struct ModuleInfo {
     env: Scope,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum TypeAlias {
+    Ptr,
+}
 type Scope = HashMap<Rc<str>, Res>;
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Res {
@@ -28,6 +32,7 @@ pub(super) enum Res {
     Function(FunctionId),
     Var(VarId),
     Module(ModuleId),
+    TypeAlias(TypeAlias)
 }
 pub struct Resolve {
     modules: HashMap<ModuleId, ModuleInfo>,
@@ -49,7 +54,7 @@ impl Default for Resolve {
 }
 impl Resolve {
     pub fn new() -> Self {
-        let builtins = HashMap::from([
+        let builtins: [(String, Builtin); Builtin::COUNT] = ([
             (names::ALLOC_BOX.to_string(), Builtin::AllocBox),
             (names::DEALLOC_BOX.into(), Builtin::DeallocBox),
             (names::DEREF_BOX.into(), Builtin::DerefBox),
@@ -61,7 +66,10 @@ impl Resolve {
         let env = Scope::from_iter(
             builtins
                 .into_iter()
-                .map(|(name, builtin)| (name.into(), Res::Builtin(builtin))),
+                .map(|(name, builtin)| (name.into(), Res::Builtin(builtin)))
+                .chain([
+                    ("ptr".into(),Res::TypeAlias(TypeAlias::Ptr)),
+                ]),
         );
         Self {
             modules: HashMap::new(),
@@ -149,7 +157,7 @@ impl Resolve {
                         }
                         res::RegionKind::Param(name.content, index)
                     }
-                    Some(Res::Builtin(_) | Res::Function(_) | Res::Var(_) | Res::Module(_)) => {
+                    Some(Res::TypeAlias(_) | Res::Builtin(_) | Res::Function(_) | Res::Var(_) | Res::Module(_)) => {
                         self.cannot_use_as_error(&name.content, "region", name.loc);
                         res::RegionKind::Unknown
                     }
@@ -168,6 +176,16 @@ impl Resolve {
                 .rev()
                 .find_map(|kinds| kinds.get(name).copied())
         })
+    }
+    fn resolve_generic_args(&mut self, args: Option<GenericArgs>) -> Vec<res::Type> {
+        if let Some(args) = args {
+            args.args
+                .into_iter()
+                .map(|arg| self.resolve_type(arg.ty))
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
     fn resolve_generics<T>(
         &mut self,
@@ -238,8 +256,9 @@ impl Resolve {
                 self.resolve_region(region),
                 Box::new(self.resolve_type(*ty)),
             ),
-            ast::TypeKind::Named(name) => match self.resolve_name(&name.content) {
+            ast::TypeKind::Named(name, args) => match self.resolve_name(&name.content) {
                 None => {
+                    self.resolve_generic_args(args);
                     self.not_in_scope_error(&name.content, name.loc);
                     res::TypeKind::Unknown
                 }
@@ -251,10 +270,36 @@ impl Resolve {
                     {
                         self.diag.add_diagnostic(
                             format!("Generic kind mismatch for '{}'", name.content),
+                            name.loc.clone(),
+                        );
+                    }
+                    if args.is_some() {
+                        self.diag.add_diagnostic(
+                            format!(
+                                "Generic param '{}' cannot have generic arguments",
+                                name.content
+                            ),
                             name.loc,
                         );
                     }
+                    self.resolve_generic_args(args);
                     res::TypeKind::Param(name.content, index)
+                }
+                Some(Res::TypeAlias(alias)) => {
+                    match alias{
+                        TypeAlias::Ptr => {
+                            let args = self.resolve_generic_args(args);
+                            let arg:Result<[_;1], _> = args.try_into();
+                            let ty  = match arg{
+                                Ok([arg]) => arg,
+                                Err(args) => {
+                                    self.diag.add_diagnostic(format!("Expected '{}' generic arg but got '{}'",1,args.len()), name.loc.clone());
+                                    res::Type { loc: name.loc.clone(), kind: res::TypeKind::Unknown }
+                                }
+                            };
+                            res::TypeKind::Ptr(Box::new(ty))
+                        }
+                    }
                 }
                 Some(
                     Res::Builtin(_)
@@ -263,6 +308,13 @@ impl Resolve {
                     | Res::Var(_)
                     | Res::Module(_),
                 ) => {
+                    if args.is_some() {
+                        self.diag.add_diagnostic(
+                            format!("'{}' cannot have generic arguments", name.content),
+                            name.loc.clone(),
+                        );
+                    }
+                    self.resolve_generic_args(args);
                     self.cannot_use_as_error(&name.content, "type", name.loc);
                     res::TypeKind::Unknown
                 }
@@ -407,7 +459,8 @@ impl Resolve {
                         | Res::Function(..)
                         | Res::Param(_)
                         | Res::LocalRegion(_)
-                        | Res::Module(_),
+                        | Res::Module(_)
+                        | Res::TypeAlias(_),
                     ) => {
                         self.diag.add_diagnostic(
                             format!("Can't use '{}' as place", path.display()),
@@ -464,7 +517,8 @@ impl Resolve {
                 | Res::Function(_)
                 | Res::Param(_)
                 | Res::Var(_)
-                | Res::LocalRegion(_) => return Err(NameResolutionError::InvalidPathStart),
+                | Res::LocalRegion(_)
+                | Res::TypeAlias(_) => return Err(NameResolutionError::InvalidPathStart),
             }
         }
         Ok(curr)
@@ -546,7 +600,7 @@ impl Resolve {
                     Res::Function(function) => {
                         res::ExprKind::Function(path.into_last().content, function)
                     }
-                    Res::Param(_) | Res::LocalRegion(_) | Res::Module(_) => {
+                    Res::Param(_) | Res::LocalRegion(_) | Res::Module(_) | Res::TypeAlias(_) => {
                         self.diag.add_diagnostic(
                             format!("Can't use '{}' as a value", path.display()),
                             loc.clone(),

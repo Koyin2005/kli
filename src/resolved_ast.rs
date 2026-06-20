@@ -69,6 +69,10 @@ pub enum Builtin {
     Replace,
     Swap,
 }
+impl Builtin{
+    const LAST : Self = Self::Swap;
+    pub const COUNT : usize = Self::LAST as usize + 1;
+}
 #[derive(Debug)]
 pub struct LetBinding {
     pub pattern: Pattern,
@@ -204,6 +208,7 @@ pub enum TypeKind {
     Bool,
     String,
     Char,
+    Ptr(Box<Type>),
     List(Box<Type>),
     Box(Box<Type>),
     Option(Box<Type>),

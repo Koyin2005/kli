@@ -3,9 +3,9 @@ use std::{iter::Peekable, rc::Rc, vec::IntoIter};
 use crate::{
     ast::{
         Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, Expr, ExprKind,
-        FieldInit, Function, FunctionType, Generics, IsResource, Lambda, LetBinding, Module,
-        ModuleId, Mutable, Param, Path, Pattern, PatternField, PatternKind, RecordExpr,
-        RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeKind,
+        FieldInit, Function, FunctionType, GenericArg, GenericArgs, Generics, IsResource, Lambda,
+        LetBinding, Module, ModuleId, Mutable, Param, Path, Pattern, PatternField, PatternKind,
+        RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::Ident,
@@ -730,6 +730,25 @@ impl Parser {
     fn parse_single_expr(&mut self) -> Result<Expr, ParseError> {
         self.parse_assign()
     }
+    fn parse_generic_arg(&mut self) -> Result<GenericArg, ParseError> {
+        let ty = self.parse_type()?;
+        Ok(GenericArg { ty })
+    }
+    fn parse_optional_generic_args(&mut self) -> Result<Option<GenericArgs>, ParseError> {
+        if let Some(Token { loc, .. }) = self.match_token(&TokenKind::LeftBracket) {
+            let mut args = Vec::new();
+            while self.not_matches_token(&TokenKind::RightBracket) {
+                args.push(self.parse_generic_arg()?);
+                if self.not_matches_token(&TokenKind::Coma) {
+                    break;
+                }
+            }
+            let _ = self.expect(&TokenKind::RightBracket);
+            Ok(Some(GenericArgs { loc, args }))
+        } else {
+            Ok(None)
+        }
+    }
     fn parse_optional_generics(&mut self) -> Result<Option<Generics>, ParseError> {
         if let Some(Token { loc, .. }) = self.match_token(&TokenKind::LeftBracket) {
             let mut names = Vec::new();
@@ -876,9 +895,10 @@ impl Parser {
             }
             TokenKind::Ident(_) => {
                 let name = self.match_ident().expect("Expected valid ident");
+                let args = self.parse_optional_generic_args()?;
                 Ok(Type {
                     loc,
-                    kind: TypeKind::Named(name),
+                    kind: TypeKind::Named(name, args),
                 })
             }
             TokenKind::Fun => {

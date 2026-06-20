@@ -36,6 +36,7 @@ impl<'a> Lower<'a> {
     }
     pub(super) fn lower_type(&self, ty: &res::Type) -> Type {
         match &ty.kind {
+            res::TypeKind::Ptr(pointee) => Type::pointer(self.lower_type(pointee)),
             res::TypeKind::Record(fields) => Type::Record({
                 let mut seen_fields = HashSet::new();
                 fields

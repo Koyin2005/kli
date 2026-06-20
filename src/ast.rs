@@ -236,7 +236,7 @@ pub enum TypeKind {
     Unit,
     Char,
     Record(RecordType),
-    Named(Ident),
+    Named(Ident, Option<GenericArgs>),
     Function(FunctionType),
     Option(Box<Type>),
     List(Box<Type>),
@@ -269,6 +269,15 @@ pub struct Annotation {
     pub loc: SrcLoc,
     pub name: Ident,
     pub fields: Vec<AnnotationField>,
+}
+#[derive(Debug, Clone)]
+pub struct GenericArg {
+    pub ty: Type,
+}
+#[derive(Debug, Clone)]
+pub struct GenericArgs {
+    pub loc: SrcLoc,
+    pub args: Vec<GenericArg>,
 }
 #[derive(Debug)]
 pub struct Function {
