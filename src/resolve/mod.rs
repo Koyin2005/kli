@@ -25,7 +25,7 @@ enum TypeAlias {
 }
 type Scope = HashMap<Rc<str>, Res>;
 #[derive(Clone, Copy, Debug)]
-pub(super) enum Res {
+enum Res {
     LocalRegion(LocalRegionId),
     Param(usize),
     Builtin(Builtin),
@@ -54,7 +54,7 @@ impl Default for Resolve {
 }
 impl Resolve {
     pub fn new() -> Self {
-        let builtins: [(String, Builtin); Builtin::COUNT] = ([
+        let builtins: [(String, Builtin); Builtin::COUNT] = [
             (names::ALLOC_BOX.to_string(), Builtin::AllocBox),
             (names::DEALLOC_BOX.into(), Builtin::DeallocBox),
             (names::DEREF_BOX.into(), Builtin::DerefBox),
@@ -62,7 +62,7 @@ impl Resolve {
             (names::FREEZE.into(), Builtin::Freeze),
             (names::REPLACE.into(), Builtin::Replace),
             (names::SWAP.into(), Builtin::Swap),
-        ]);
+        ];
         let env = Scope::from_iter(
             builtins
                 .into_iter()
