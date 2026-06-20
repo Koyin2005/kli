@@ -8,7 +8,7 @@ use crate::{
     src_loc::SrcLoc,
     typecheck::root::TypeCheck,
     typed_ast::{self, FieldId, RecordFieldInit},
-    types::{FunctionType, RecordField, Type},
+    types::{FunctionType, PointerType, RecordField, Type},
 };
 
 impl TypeCheck {
@@ -25,15 +25,12 @@ impl TypeCheck {
             PlaceKind::Deref(value) => {
                 let value = self.check_expr(*value, None);
                 (
-                    match self.simplify_type(value.ty.clone()).as_reference_type() {
-                        Ok((_, _, ty)) => ty.clone(),
-                        Err(ty) => {
-                            self.diag.borrow_mut().add_diagnostic(
-                                format!("Expected a reference but got '{ty}'"),
-                                value.loc.clone(),
-                            );
-                            Type::Unknown
+                    match self.simplify_type(value.ty.clone()).as_pointer_type() {
+                        Ok((PointerType::Raw | PointerType::Reference(..), ty)) => ty.clone(),
+                        Ok((p, ty)) => {
+                            self.non_deref_error(Type::pointer_type(p, ty), value.loc.clone())
                         }
+                        Err(ty) => self.non_deref_error(ty, value.loc.clone()),
                     },
                     typed_ast::PlaceKind::Deref(Box::new(value)),
                 )
@@ -127,7 +124,7 @@ impl TypeCheck {
             && expected.as_reference_type().is_err()
         {
             self.diag.borrow_mut().add_diagnostic(
-                format!("Expected a view but got '{}'", expected),
+                format!("Expected a reference but got '{}'", expected),
                 loc.clone(),
             );
         }
@@ -529,14 +526,10 @@ impl TypeCheck {
             }
             ExprKind::Deref(reference) => {
                 let reference = self.check_expr(*reference, None);
-                let pointee_ty = match reference.ty.as_reference_type() {
-                    Ok((_, _, ty)) => ty.clone(),
-                    Err(ty) => {
-                        self.diag
-                            .borrow_mut()
-                            .add_diagnostic(format!("Cannot deref '{ty}'"), loc.clone());
-                        Type::Unknown
-                    }
+                let pointee_ty = match reference.ty.clone().as_pointer_type() {
+                    Ok((PointerType::Raw | PointerType::Reference(..), ty)) => ty.clone(),
+                    Ok((p, ty)) => self.non_deref_error(Type::pointer_type(p, ty), loc.clone()),
+                    Err(ty) => self.non_deref_error(ty, loc.clone()),
                 };
                 typed_ast::Expr {
                     ty: pointee_ty.clone(),

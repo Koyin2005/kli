@@ -11,7 +11,7 @@ use crate::{
     typed_ast::{
         Expr, ExprKind, Function, Param, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind,
     },
-    types::{FunctionType, GenericKind, Region, Type},
+    types::{FunctionType, GenericKind, PointerType, Region, Type},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -237,8 +237,10 @@ impl ResourceCheck {
             PlaceKind::Deref(_) => {
                 let mut place = place;
                 while let PlaceKind::Deref(value) = &place.kind {
-                    let Ok((mutable, _, _)) = value.ty.as_reference_type() else {
-                        unreachable!()
+                    let mutable = match value.ty.clone().as_pointer_type() {
+                        Ok((PointerType::Raw, _)) => Mutable::Mutable,
+                        Ok((PointerType::Reference(_, mutable), _)) => mutable,
+                        _ => unreachable!(),
                     };
                     if mutable == Mutable::Immutable {
                         return Mutable::Immutable;
@@ -409,7 +411,7 @@ impl ResourceCheck {
             }
             PlaceKind::Deref(expr) => match &expr.kind {
                 ExprKind::Load(place) => {
-                    let Ok((_, _, ty)) = place.ty.as_reference_type() else {
+                    let Ok((_,ref ty)) = place.ty.clone().as_pointer_type() else {
                         unreachable!()
                     };
                     let Some(var) = self.var_of(place) else {

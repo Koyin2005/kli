@@ -6,6 +6,12 @@ use crate::{
     resolved_ast::LocalRegionId,
     typed_ast::FieldId,
 };
+#[derive(Clone, Debug)]
+pub enum PointerType {
+    Box,
+    Reference(Region, Mutable),
+    Raw,
+}
 #[derive(Clone, Copy, Debug)]
 pub enum GenericKind {
     Region,
@@ -184,6 +190,22 @@ impl Type {
         match mutable {
             Mutable::Immutable => Self::Imm(region, Box::new(self)),
             Mutable::Mutable => Self::Mut(region, Box::new(self)),
+        }
+    }
+    pub fn as_pointer_type(self) -> Result<(PointerType, Self), Self> {
+        match self {
+            Self::RawPointer(ty) => Ok((PointerType::Raw, *ty)),
+            Self::Box(ty) => Ok((PointerType::Box, *ty)),
+            Self::Imm(region, ty) => Ok((PointerType::Reference(region, Mutable::Immutable), *ty)),
+            Self::Mut(region, ty) => Ok((PointerType::Reference(region, Mutable::Mutable), *ty)),
+            _ => Err(self),
+        }
+    }
+    pub fn pointer_type(pointer: PointerType, pointee: Self) -> Self {
+        match pointer {
+            PointerType::Box => Self::Box(Box::new(pointee)),
+            PointerType::Reference(region, mutable) => pointee.reference(mutable, region),
+            PointerType::Raw => Self::pointer(pointee),
         }
     }
     pub fn as_reference_type(&self) -> Result<(Mutable, &Region, &Self), &Self> {

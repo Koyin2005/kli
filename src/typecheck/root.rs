@@ -250,6 +250,12 @@ impl TypeCheck {
             false
         }
     }
+    pub(super) fn non_deref_error(&mut self, ty: Type, loc: SrcLoc) -> Type {
+        self.diag
+            .borrow_mut()
+            .add_diagnostic(format!("Cannot deref '{ty}'"), loc);
+        Type::Unknown
+    }
     pub(super) fn declare_var(&mut self, var_id: VarId, ty: Type, name: Rc<str>) {
         assert_eq!(
             usize::from(var_id),
