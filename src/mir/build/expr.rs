@@ -252,8 +252,8 @@ impl Builder<'_> {
                     AggregateKind::String,
                     [
                         Operand::Load(Place::local(ptr)),
-                        Operand::Constant(Constant::int(value.bytes().len().try_into().unwrap())),
-                        Operand::Constant(Constant::int(value.bytes().len().try_into().unwrap())),
+                        Operand::Constant(Constant::int(value.len().try_into().unwrap())),
+                        Operand::Constant(Constant::int(value.len().try_into().unwrap())),
                     ]
                     .into(),
                 )
