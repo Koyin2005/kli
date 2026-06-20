@@ -22,6 +22,7 @@ struct ModuleInfo {
 #[derive(Clone, Copy, Debug)]
 enum TypeAlias {
     Ptr,
+    Byte,
 }
 type Scope = HashMap<Rc<str>, Res>;
 #[derive(Clone, Copy, Debug)]
@@ -69,7 +70,10 @@ impl Resolve {
             builtins
                 .into_iter()
                 .map(|(name, builtin)| (name.into(), Res::Builtin(builtin)))
-                .chain([("ptr".into(), Res::TypeAlias(TypeAlias::Ptr))]),
+                .chain([
+                    ("ptr".into(), Res::TypeAlias(TypeAlias::Ptr)),
+                    ("byte".into(), Res::TypeAlias(TypeAlias::Byte)),
+                ]),
         );
         Self {
             modules: HashMap::new(),
@@ -313,6 +317,25 @@ impl Resolve {
                             }
                         };
                         res::TypeKind::Ptr(Box::new(ty))
+                    }
+                    TypeAlias::Byte => {
+                        let args = self.resolve_generic_args(args);
+                        let arg: Result<[_; _], _> = args.try_into();
+
+                        match arg {
+                            Ok([]) => (),
+                            Err(args) => {
+                                self.diag.add_diagnostic(
+                                    format!(
+                                        "Expected '{}' generic arg but got '{}'",
+                                        1,
+                                        args.len()
+                                    ),
+                                    name.loc.clone(),
+                                );
+                            }
+                        };
+                        res::TypeKind::Byte
                     }
                 },
                 Some(

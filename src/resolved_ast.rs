@@ -224,6 +224,7 @@ pub enum TypeKind {
     Bool,
     String,
     Char,
+    Byte,
     Ptr(Box<Type>),
     List(Box<Type>),
     Box(Box<Type>),
