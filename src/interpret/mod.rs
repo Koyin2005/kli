@@ -1101,7 +1101,6 @@ impl<'f> Interpret<'f> {
                 Ok(Value::Pointer(pointer))
             }
             Builtin::Deallocate => {
-                let ty = &tys[0];
                 let [arg] = args_as_array(args).unwrap();
                 let pointer = arg.as_pointer().unwrap();
                 self.memory.deallocate(MemLocation::Heap, pointer)?;
