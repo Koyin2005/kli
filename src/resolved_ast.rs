@@ -69,9 +69,9 @@ pub enum Builtin {
     Replace,
     Swap,
 }
-impl Builtin{
-    const LAST : Self = Self::Swap;
-    pub const COUNT : usize = Self::LAST as usize + 1;
+impl Builtin {
+    const LAST: Self = Self::Swap;
+    pub const COUNT: usize = Self::LAST as usize + 1;
 }
 #[derive(Debug)]
 pub struct LetBinding {

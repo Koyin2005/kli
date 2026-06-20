@@ -32,7 +32,7 @@ pub(super) enum Res {
     Function(FunctionId),
     Var(VarId),
     Module(ModuleId),
-    TypeAlias(TypeAlias)
+    TypeAlias(TypeAlias),
 }
 pub struct Resolve {
     modules: HashMap<ModuleId, ModuleInfo>,
@@ -67,9 +67,7 @@ impl Resolve {
             builtins
                 .into_iter()
                 .map(|(name, builtin)| (name.into(), Res::Builtin(builtin)))
-                .chain([
-                    ("ptr".into(),Res::TypeAlias(TypeAlias::Ptr)),
-                ]),
+                .chain([("ptr".into(), Res::TypeAlias(TypeAlias::Ptr))]),
         );
         Self {
             modules: HashMap::new(),
@@ -157,7 +155,13 @@ impl Resolve {
                         }
                         res::RegionKind::Param(name.content, index)
                     }
-                    Some(Res::TypeAlias(_) | Res::Builtin(_) | Res::Function(_) | Res::Var(_) | Res::Module(_)) => {
+                    Some(
+                        Res::TypeAlias(_)
+                        | Res::Builtin(_)
+                        | Res::Function(_)
+                        | Res::Var(_)
+                        | Res::Module(_),
+                    ) => {
                         self.cannot_use_as_error(&name.content, "region", name.loc);
                         res::RegionKind::Unknown
                     }
@@ -285,22 +289,30 @@ impl Resolve {
                     self.resolve_generic_args(args);
                     res::TypeKind::Param(name.content, index)
                 }
-                Some(Res::TypeAlias(alias)) => {
-                    match alias{
-                        TypeAlias::Ptr => {
-                            let args = self.resolve_generic_args(args);
-                            let arg:Result<[_;1], _> = args.try_into();
-                            let ty  = match arg{
-                                Ok([arg]) => arg,
-                                Err(args) => {
-                                    self.diag.add_diagnostic(format!("Expected '{}' generic arg but got '{}'",1,args.len()), name.loc.clone());
-                                    res::Type { loc: name.loc.clone(), kind: res::TypeKind::Unknown }
+                Some(Res::TypeAlias(alias)) => match alias {
+                    TypeAlias::Ptr => {
+                        let args = self.resolve_generic_args(args);
+                        let arg: Result<[_; 1], _> = args.try_into();
+                        let ty = match arg {
+                            Ok([arg]) => arg,
+                            Err(args) => {
+                                self.diag.add_diagnostic(
+                                    format!(
+                                        "Expected '{}' generic arg but got '{}'",
+                                        1,
+                                        args.len()
+                                    ),
+                                    name.loc.clone(),
+                                );
+                                res::Type {
+                                    loc: name.loc.clone(),
+                                    kind: res::TypeKind::Unknown,
                                 }
-                            };
-                            res::TypeKind::Ptr(Box::new(ty))
-                        }
+                            }
+                        };
+                        res::TypeKind::Ptr(Box::new(ty))
                     }
-                }
+                },
                 Some(
                     Res::Builtin(_)
                     | Res::Function(_)

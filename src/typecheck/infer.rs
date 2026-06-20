@@ -96,7 +96,8 @@ impl TypeInfer {
             | (ty @ Type::Unit, Type::Unit)
             | (ty @ Type::Unknown, Type::Unknown)
             | (ty @ Type::String, Type::String)
-            | (ty @ Type::Char, Type::Char) => Some(ty),
+            | (ty @ Type::Char, Type::Char)
+            | (ty @ Type::Byte, Type::Byte) => Some(ty),
             (Type::Param(name1, index1), Type::Param(name2, index2)) if index1 == index2 => {
                 assert_eq!(name1, name2);
                 Some(Type::Param(name1, index1))
@@ -110,6 +111,9 @@ impl TypeInfer {
             (Type::List(ty1), Type::List(ty2)) => {
                 self.unify_ty(*ty1, *ty2).map(|ty| Type::List(Box::new(ty)))
             }
+            (Type::Array(ty1, count1), Type::Array(ty2, count2)) if count1 == count2 => self
+                .unify_ty(*ty1, *ty2)
+                .map(|ty| Type::Array(Box::new(ty), count1)),
             (Type::RawPointer(ty1), Type::RawPointer(ty2)) => self
                 .unify_ty(*ty1, *ty2)
                 .map(|ty| Type::RawPointer(Box::new(ty))),
@@ -177,7 +181,27 @@ impl TypeInfer {
                     Some(ty)
                 }
             },
-            _ => None,
+            //This will fail to compile if new variants are not matched
+            (
+                Type::Int
+                | Type::Bool
+                | Type::String
+                | Type::Unknown
+                | Type::Char
+                | Type::Box(_)
+                | Type::Param(..)
+                | Type::Option(_)
+                | Type::Array(..)
+                | Type::Function(..)
+                | Type::Byte
+                | Type::List(_)
+                | Type::Imm(..)
+                | Type::Mut(..)
+                | Type::Record(..)
+                | Type::Unit
+                | Type::RawPointer(_),
+                _,
+            ) => None,
         }
     }
 }
