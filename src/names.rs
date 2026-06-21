@@ -8,5 +8,5 @@ pub const SWAP: &str = "swap";
 pub const ALLOCATE: &str = "allocate";
 pub const DEALLOCATE: &str = "deallocate";
 pub const SIZEOF: &str = "size_of";
-pub const BOX_FROM_RAW : &str = "box_from_raw";
-pub const BOX_INTO_RAW : &str = "box_into_raw";
+pub const BOX_FROM_RAW: &str = "box_from_raw";
+pub const BOX_INTO_RAW: &str = "box_into_raw";

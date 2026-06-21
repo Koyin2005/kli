@@ -109,7 +109,7 @@ impl TypeCheck {
             | Builtin::Deallocate
             | Builtin::DeallocBox
             | Builtin::Sizeof
-            | Builtin::BoxFromRaw 
+            | Builtin::BoxFromRaw
             | Builtin::BoxIntoRaw => 1,
             Builtin::DerefBox | Builtin::DerefBoxMut => 2,
             Builtin::Freeze | Builtin::Replace | Builtin::Swap => 2,
@@ -119,11 +119,11 @@ impl TypeCheck {
         let (params, return_type) = match builtin {
             Builtin::BoxFromRaw => (
                 vec![Type::pointer(Type::Param(Rc::from("T"), 0))],
-                Type::Box(Box::new(Type::Param(Rc::from("T"), 0)))
+                Type::Box(Box::new(Type::Param(Rc::from("T"), 0))),
             ),
             Builtin::BoxIntoRaw => (
-                vec![Type::Box(Box::new(Type::Param(Rc::from("T"), 0))),],
-                Type::pointer(Type::Param(Rc::from("T"), 0))
+                vec![Type::Box(Box::new(Type::Param(Rc::from("T"), 0)))],
+                Type::pointer(Type::Param(Rc::from("T"), 0)),
             ),
             Builtin::Sizeof => (Vec::new(), Type::Int),
             Builtin::Allocate => (

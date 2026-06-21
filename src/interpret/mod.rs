@@ -1094,16 +1094,16 @@ impl<'f> Interpret<'f> {
             Builtin::BoxFromRaw => {
                 let [arg] = args_as_array(args).unwrap();
                 let pointer = arg.as_pointer().unwrap();
-                let live = match self.memory.points_to_live(pointer){
+                let live = match self.memory.points_to_live(pointer) {
                     Some(live) => live,
-                    None => size_of(&tys[0]) == 0
+                    None => size_of(&tys[0]) == 0,
                 };
-                if !live || !pointer.aligned(align_of(&tys[0])){
+                if !live || !pointer.aligned(align_of(&tys[0])) {
                     return Err(InterpretError::InvalidPointer);
                 }
                 Ok(Value::Pointer(pointer))
-            },
-            Builtin::BoxIntoRaw =>{
+            }
+            Builtin::BoxIntoRaw => {
                 let [arg] = args_as_array(args).unwrap();
                 let pointer = arg.as_pointer().unwrap();
                 Ok(Value::Pointer(pointer))

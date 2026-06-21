@@ -5,8 +5,8 @@ pub struct Pointer {
     pub address: usize,
     pub alloc: Option<usize>,
 }
-impl Pointer{
-    pub fn aligned(self, alignment: usize) -> bool{
+impl Pointer {
+    pub fn aligned(self, alignment: usize) -> bool {
         self.address.is_multiple_of(alignment)
     }
 }

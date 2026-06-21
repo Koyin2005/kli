@@ -7,7 +7,7 @@ use crate::ident::Ident;
 use crate::index_vec::IndexVec;
 use crate::resolved_ast::{Builtin, FunctionId, GenericKind, LambdaId, LocalRegionId, VarId};
 use crate::src_loc::SrcLoc;
-use crate::{ast, names, resolved_ast as res};
+use crate::{ast, resolved_ast as res};
 
 pub struct ResolveErrored;
 
@@ -56,24 +56,11 @@ impl Default for Resolve {
 }
 impl Resolve {
     pub fn new() -> Self {
-        let builtins: [(String, Builtin); Builtin::COUNT] = [
-            (names::ALLOC_BOX.to_string(), Builtin::AllocBox),
-            (names::DEALLOC_BOX.into(), Builtin::DeallocBox),
-            (names::DEREF_BOX.into(), Builtin::DerefBox),
-            (names::DEREF_BOX_MUT.into(), (Builtin::DerefBoxMut)),
-            (names::FREEZE.into(), Builtin::Freeze),
-            (names::REPLACE.into(), Builtin::Replace),
-            (names::SWAP.into(), Builtin::Swap),
-            (names::ALLOCATE.into(), Builtin::Allocate),
-            (names::DEALLOCATE.into(), Builtin::Deallocate),
-            (names::SIZEOF.into(), Builtin::Sizeof),
-            (names::BOX_FROM_RAW.into(),Builtin::BoxFromRaw),
-            (names::BOX_INTO_RAW.into(),Builtin::BoxIntoRaw),
-        ];
+        let builtins = Builtin::ALL_BUILTINS;
         let env = Scope::from_iter(
             builtins
                 .into_iter()
-                .map(|(name, builtin)| (name.into(), Res::Builtin(builtin)))
+                .map(|builtin| (builtin.name().into(), Res::Builtin(builtin)))
                 .chain([
                     ("ptr".into(), Res::TypeAlias(TypeAlias::Ptr)),
                     ("byte".into(), Res::TypeAlias(TypeAlias::Byte)),

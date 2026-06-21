@@ -73,11 +73,25 @@ pub enum Builtin {
     Swap,
     Sizeof,
     BoxFromRaw,
-    BoxIntoRaw
+    BoxIntoRaw,
 }
 impl Builtin {
     const LAST: Self = Self::BoxIntoRaw;
     pub const COUNT: usize = Self::LAST as usize + 1;
+    pub const ALL_BUILTINS: [Self; Self::COUNT] = [
+        Builtin::AllocBox,
+        Builtin::DeallocBox,
+        Builtin::DerefBox,
+        Builtin::DerefBoxMut,
+        Builtin::Freeze,
+        Builtin::Replace,
+        Builtin::Swap,
+        Builtin::Allocate,
+        Builtin::Deallocate,
+        Builtin::Sizeof,
+        Builtin::BoxFromRaw,
+        Builtin::BoxIntoRaw,
+    ];
     pub const fn name(&self) -> &'static str {
         match self {
             Builtin::Allocate => names::ALLOCATE,
@@ -91,7 +105,7 @@ impl Builtin {
             Builtin::Swap => names::SWAP,
             Builtin::Sizeof => names::SIZEOF,
             Builtin::BoxFromRaw => names::BOX_FROM_RAW,
-            Builtin::BoxIntoRaw => names::BOX_INTO_RAW
+            Builtin::BoxIntoRaw => names::BOX_INTO_RAW,
         }
     }
 }
