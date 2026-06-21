@@ -75,7 +75,6 @@ pub enum Builtin {
     RawIntoRef(Mutable),
 }
 impl Builtin {
-    const LAST: Self = Self::BoxIntoRaw;
     pub const COUNT: usize = 14;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
         Builtin::DerefBox,
