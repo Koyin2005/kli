@@ -908,16 +908,6 @@ impl Parser {
                     kind: TypeKind::Function(function),
                 })
             }
-            TokenKind::Box => {
-                self.next_token();
-                let _ = self.expect(&TokenKind::LeftBracket);
-                let ty = self.parse_type()?;
-                let _ = self.expect(&TokenKind::RightBracket);
-                Ok(Type {
-                    loc,
-                    kind: TypeKind::Box(Box::new(ty)),
-                })
-            }
             TokenKind::Char => {
                 self.next_token();
                 Ok(Type {

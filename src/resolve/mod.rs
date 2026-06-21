@@ -23,6 +23,7 @@ struct ModuleInfo {
 enum TypeAlias {
     Ptr,
     Byte,
+    Box,
 }
 type Scope = HashMap<Rc<str>, Res>;
 #[derive(Clone, Copy, Debug)]
@@ -73,6 +74,7 @@ impl Resolve {
                 .chain([
                     ("ptr".into(), Res::TypeAlias(TypeAlias::Ptr)),
                     ("byte".into(), Res::TypeAlias(TypeAlias::Byte)),
+                    ("box".into(), Res::TypeAlias(TypeAlias::Box))
                 ]),
         );
         Self {
@@ -236,7 +238,6 @@ impl Resolve {
             ast::TypeKind::Int => res::TypeKind::Int,
             ast::TypeKind::Unit => res::TypeKind::Unit,
             ast::TypeKind::String => res::TypeKind::String,
-            ast::TypeKind::Box(ty) => res::TypeKind::Box(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::Option(ty) => res::TypeKind::Option(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::List(ty) => res::TypeKind::List(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::Record(ast::RecordType { fields }) => {
@@ -317,6 +318,29 @@ impl Resolve {
                             }
                         };
                         res::TypeKind::Ptr(Box::new(ty))
+                    }
+                    TypeAlias::Box => {
+                        
+                        let args = self.resolve_generic_args(args);
+                        let arg: Result<[_; 1], _> = args.try_into();
+                        let ty = match arg {
+                            Ok([arg]) => arg,
+                            Err(args) => {
+                                self.diag.add_diagnostic(
+                                    format!(
+                                        "Expected '{}' generic arg but got '{}'",
+                                        1,
+                                        args.len()
+                                    ),
+                                    name.loc.clone(),
+                                );
+                                res::Type {
+                                    loc: name.loc.clone(),
+                                    kind: res::TypeKind::Unknown,
+                                }
+                            }
+                        };
+                        res::TypeKind::Box(Box::new(ty))
                     }
                     TypeAlias::Byte => {
                         let args = self.resolve_generic_args(args);

@@ -168,6 +168,7 @@ fn find_std_lib() -> FileEntry {
     let bool_file = include_str!("std/bools.kli");
     let int_file = include_str!("std/ints.kli");
     let io_file = include_str!("std/io.kli");
+    let box_file = include_str!("std/box.kli");
     fn file_from(name: &str, src: &str) -> (Rc<str>, FileEntry) {
         let name: Rc<str> = Rc::from(name);
         (
@@ -186,6 +187,7 @@ fn find_std_lib() -> FileEntry {
             file_from("bools", bool_file),
             file_from("ints", int_file),
             file_from("io", io_file),
+            file_from("box", box_file)
         ])),
     }
 }

@@ -240,7 +240,6 @@ pub enum TypeKind {
     Function(FunctionType),
     Option(Box<Type>),
     List(Box<Type>),
-    Box(Box<Type>),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
 }

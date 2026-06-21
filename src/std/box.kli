@@ -1,0 +1,7 @@
+fun alloc[T](value : T) -> box[T] = panic[box[T]]
+
+fun deallox[T](value : box[T]) -> T = panic[T]
+
+fun deref[r,T](x : imm[r] box[T]) -> imm[r] T = panic[imm[r] T]
+
+fun derefMut[r,T](x : mut[r] box[T]) -> mut[r] T = panic[mut[r] T]
