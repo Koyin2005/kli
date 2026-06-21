@@ -1101,7 +1101,7 @@ impl<'f> Interpret<'f> {
                 }
                 Ok(Value::Pointer(pointer))
             }
-            Builtin::BoxIntoRaw | Builtin::RawIntoRef(_) | Builtin::RefFromRaw(_) => {
+            Builtin::BoxIntoRaw | Builtin::RefIntoRaw(_) | Builtin::RefFromRaw(_) => {
                 let [arg] = args_as_array(args).unwrap();
                 let pointer = arg.as_pointer().unwrap();
                 Ok(Value::Pointer(pointer))

@@ -8,7 +8,13 @@ pub enum Mutable {
     Immutable,
 }
 impl Mutable {
-    pub fn usable_as(self, other: Self) -> bool {
+    pub const fn eq(self, other: Self) -> bool {
+        match (self, other) {
+            (Self::Immutable, Self::Immutable) | (Self::Mutable, Self::Mutable) => true,
+            (Self::Immutable | Self::Mutable, _) => false,
+        }
+    }
+    pub const fn usable_as(self, other: Self) -> bool {
         match (self, other) {
             (Self::Mutable, Self::Mutable)
             | (Self::Immutable, Self::Immutable)

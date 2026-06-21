@@ -72,9 +72,58 @@ pub enum Builtin {
     BoxFromRaw,
     BoxIntoRaw,
     RefFromRaw(Mutable),
-    RawIntoRef(Mutable),
+    RefIntoRaw(Mutable),
 }
 impl Builtin {
+    const fn equal(b1: Builtin, b2: Builtin) -> bool {
+        match (b1, b2) {
+            (Builtin::Allocate, Builtin::Allocate)
+            | (Builtin::Deallocate, Builtin::Deallocate)
+            | (Builtin::Replace, Builtin::Replace)
+            | (Builtin::DerefBox, Builtin::DerefBox)
+            | (Builtin::DerefBoxMut, Builtin::DerefBoxMut)
+            | (Builtin::Freeze, Builtin::Freeze)
+            | (Builtin::Swap, Builtin::Swap)
+            | (Builtin::Sizeof, Builtin::Sizeof)
+            | (Builtin::BoxFromRaw, Builtin::BoxFromRaw)
+            | (Builtin::BoxIntoRaw, Builtin::BoxIntoRaw) => true,
+            (Builtin::RefFromRaw(mutable1), Builtin::RefFromRaw(mutable2))
+            | (Builtin::RefIntoRaw(mutable1), Builtin::RefIntoRaw(mutable2)) => {
+                Mutable::eq(mutable1, mutable2)
+            }
+            (
+                Builtin::Allocate
+                | Builtin::BoxFromRaw
+                | Builtin::DerefBox
+                | Builtin::DerefBoxMut
+                | Builtin::Deallocate
+                | Builtin::Swap
+                | Builtin::Sizeof
+                | Builtin::Freeze
+                | Builtin::Replace
+                | Builtin::BoxIntoRaw
+                | Builtin::RefFromRaw(_)
+                | Builtin::RefIntoRaw(_),
+                _,
+            ) => false,
+        }
+    }
+    const _NO_REPEATS: () = {
+        let mut i = 0;
+        while i < Self::ALL_BUILTINS.len() {
+            let mut j = 0;
+            while j < Self::ALL_BUILTINS.len() {
+                if i == j {
+                    continue;
+                }
+                if Self::equal(Self::ALL_BUILTINS[i], Self::ALL_BUILTINS[j]) {
+                    panic!("repeated const")
+                }
+                j += 1;
+            }
+            i += 1;
+        }
+    };
     pub const COUNT: usize = 14;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
         Builtin::DerefBox,
@@ -89,8 +138,8 @@ impl Builtin {
         Builtin::BoxIntoRaw,
         Builtin::RefFromRaw(Mutable::Immutable),
         Builtin::RefFromRaw(Mutable::Mutable),
-        Builtin::RawIntoRef(Mutable::Immutable),
-        Builtin::RawIntoRef(Mutable::Immutable),
+        Builtin::RefIntoRaw(Mutable::Immutable),
+        Builtin::RefIntoRaw(Mutable::Mutable),
     ];
     pub const fn name(&self) -> &'static str {
         match self {
@@ -104,13 +153,13 @@ impl Builtin {
             Builtin::Sizeof => "size_of",
             Builtin::BoxFromRaw => "box_from_raw",
             Builtin::BoxIntoRaw => "box_into_raw",
-            Builtin::RawIntoRef(mutable) => match mutable {
-                Mutable::Immutable => "raw_into_ref",
-                Mutable::Mutable => "raw_into_ref_mut",
+            Builtin::RefIntoRaw(mutable) => match mutable {
+                Mutable::Immutable => "ref_into_raw",
+                Mutable::Mutable => "ref_into_raw_mut",
             },
             Builtin::RefFromRaw(mutable) => match mutable {
                 Mutable::Immutable => "ref_from_raw",
-                Mutable::Mutable => "ref_mut_from_raw",
+                Mutable::Mutable => "ref_from_raw_mut",
             },
         }
     }

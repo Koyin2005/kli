@@ -111,7 +111,7 @@ impl TypeCheck {
             | Builtin::BoxIntoRaw => 1,
             Builtin::DerefBox
             | Builtin::DerefBoxMut
-            | Builtin::RawIntoRef(_)
+            | Builtin::RefIntoRaw(_)
             | Builtin::RefFromRaw(_) => 2,
             Builtin::Freeze | Builtin::Replace | Builtin::Swap => 2,
         }
@@ -122,7 +122,7 @@ impl TypeCheck {
                 vec![Type::pointer(Type::Param(Rc::from("T"), 1))],
                 Type::Param(Rc::from("T"), 1).reference(mutable, Region::Param(Rc::from("r"), 0)),
             ),
-            Builtin::RawIntoRef(mutable) => (
+            Builtin::RefIntoRaw(mutable) => (
                 vec![
                     Type::Param(Rc::from("T"), 1)
                         .reference(mutable, Region::Param(Rc::from("r"), 0)),
@@ -228,7 +228,7 @@ impl TypeCheck {
             | Builtin::Freeze
             | Builtin::Replace
             | Builtin::Swap
-            | Builtin::RawIntoRef(_)
+            | Builtin::RefIntoRaw(_)
             | Builtin::RefFromRaw(_) => {
                 vec![
                     GenericArg::Region(self.fresh_region(loc.clone())),
