@@ -131,11 +131,9 @@ impl<'f> Interpret<'f> {
             })
             .collect();
         let mut builtin_functions = HashMap::new();
-        builtin_functions.insert(Builtin::DerefBox, HashMap::new());
-        builtin_functions.insert(Builtin::DerefBoxMut, HashMap::new());
-        builtin_functions.insert(Builtin::Swap, HashMap::new());
-        builtin_functions.insert(Builtin::Replace, HashMap::new());
-        builtin_functions.insert(Builtin::Freeze, HashMap::new());
+        for b in Builtin::ALL_BUILTINS{
+            builtin_functions.insert(b, HashMap::new());
+        }
         Self {
             functions,
             entry,
@@ -1121,27 +1119,6 @@ impl<'f> Interpret<'f> {
                 let pointer = arg.as_pointer().unwrap();
                 self.memory.deallocate(MemLocation::Heap, pointer)?;
                 Ok(Value::unit())
-            }
-            Builtin::DerefBoxMut => {
-                let ty = &tys[0];
-
-                let [arg] = args_as_array(args).unwrap();
-                let pointer_to_box = arg.as_pointer().unwrap();
-                let pointer = self
-                    .typed_read(pointer_to_box, &Type::Box(Box::new(ty.clone())))?
-                    .as_pointer()
-                    .unwrap();
-                Ok(Value::Pointer(pointer))
-            }
-            Builtin::DerefBox => {
-                let ty = &tys[0];
-                let [arg] = args_as_array(args).unwrap();
-                let pointer_to_box = arg.as_pointer().unwrap();
-                let pointer = self
-                    .typed_read(pointer_to_box, &Type::Box(Box::new(ty.clone())))?
-                    .as_pointer()
-                    .unwrap();
-                Ok(Value::Pointer(pointer))
             }
             Builtin::Freeze => {
                 let [arg] = args_as_array(args).unwrap();

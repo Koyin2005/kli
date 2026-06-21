@@ -63,8 +63,6 @@ pub enum PlaceKind {
 pub enum Builtin {
     Allocate,
     Deallocate,
-    DerefBox,
-    DerefBoxMut,
     Freeze,
     Replace,
     Swap,
@@ -75,13 +73,11 @@ pub enum Builtin {
     RefIntoRaw(Mutable),
 }
 impl Builtin {
-    const fn equal(b1: Builtin, b2: Builtin) -> bool {
+    const fn _equal(b1: Builtin, b2: Builtin) -> bool {
         match (b1, b2) {
             (Builtin::Allocate, Builtin::Allocate)
             | (Builtin::Deallocate, Builtin::Deallocate)
             | (Builtin::Replace, Builtin::Replace)
-            | (Builtin::DerefBox, Builtin::DerefBox)
-            | (Builtin::DerefBoxMut, Builtin::DerefBoxMut)
             | (Builtin::Freeze, Builtin::Freeze)
             | (Builtin::Swap, Builtin::Swap)
             | (Builtin::Sizeof, Builtin::Sizeof)
@@ -94,8 +90,6 @@ impl Builtin {
             (
                 Builtin::Allocate
                 | Builtin::BoxFromRaw
-                | Builtin::DerefBox
-                | Builtin::DerefBoxMut
                 | Builtin::Deallocate
                 | Builtin::Swap
                 | Builtin::Sizeof
@@ -116,7 +110,7 @@ impl Builtin {
                 if i == j {
                     continue;
                 }
-                if Self::equal(Self::ALL_BUILTINS[i], Self::ALL_BUILTINS[j]) {
+                if Self::_equal(Self::ALL_BUILTINS[i], Self::ALL_BUILTINS[j]) {
                     panic!("repeated const")
                 }
                 j += 1;
@@ -124,10 +118,8 @@ impl Builtin {
             i += 1;
         }
     };
-    pub const COUNT: usize = 14;
+    pub const COUNT: usize = 12;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
-        Builtin::DerefBox,
-        Builtin::DerefBoxMut,
         Builtin::Freeze,
         Builtin::Replace,
         Builtin::Swap,
@@ -145,8 +137,6 @@ impl Builtin {
         match self {
             Builtin::Allocate => "allocate",
             Builtin::Deallocate => "deallocate",
-            Builtin::DerefBox => "deref_box",
-            Builtin::DerefBoxMut => "deref_box_mut",
             Builtin::Freeze => "freeze",
             Builtin::Replace => "replace",
             Builtin::Swap => "swap",

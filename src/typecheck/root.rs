@@ -109,8 +109,6 @@ impl TypeCheck {
             | Builtin::Sizeof
             | Builtin::BoxFromRaw
             | Builtin::BoxIntoRaw => 1,
-            Builtin::DerefBox
-            | Builtin::DerefBoxMut
             | Builtin::RefIntoRaw(_)
             | Builtin::RefFromRaw(_) => 2,
             Builtin::Freeze | Builtin::Replace | Builtin::Swap => 2,
@@ -172,28 +170,6 @@ impl TypeCheck {
                 ],
                 Type::Param(Rc::from("T"), 1),
             ),
-            Builtin::DerefBox => {
-                let r_param = Region::Param(Rc::from("r"), 0);
-                let t_param = Type::Param(Rc::from("T"), 1);
-                (
-                    vec![Type::Imm(
-                        r_param.clone(),
-                        Box::new(Type::Box(Box::new(t_param.clone()))),
-                    )],
-                    (Type::Imm(r_param, Box::new(t_param))),
-                )
-            }
-            Builtin::DerefBoxMut => {
-                let r_param = Region::Param(Rc::from("r"), 0);
-                let t_param = Type::Param(Rc::from("T"), 1);
-                (
-                    vec![Type::Mut(
-                        r_param.clone(),
-                        Box::new(Type::Box(Box::new(t_param.clone()))),
-                    )],
-                    (Type::Mut(r_param, Box::new(t_param))),
-                )
-            }
             Builtin::Freeze => (
                 vec![Type::Mut(
                     Region::Param(Rc::from("r"), 0),
@@ -223,9 +199,7 @@ impl TypeCheck {
             | Builtin::BoxIntoRaw => {
                 vec![GenericArg::Type(self.fresh_ty(loc))]
             }
-            Builtin::DerefBox
-            | Builtin::DerefBoxMut
-            | Builtin::Freeze
+            Builtin::Freeze
             | Builtin::Replace
             | Builtin::Swap
             | Builtin::RefIntoRaw(_)
