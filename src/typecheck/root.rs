@@ -108,13 +108,23 @@ impl TypeCheck {
             | Builtin::Allocate
             | Builtin::Deallocate
             | Builtin::DeallocBox
-            | Builtin::Sizeof => 1,
+            | Builtin::Sizeof
+            | Builtin::BoxFromRaw 
+            | Builtin::BoxIntoRaw => 1,
             Builtin::DerefBox | Builtin::DerefBoxMut => 2,
             Builtin::Freeze | Builtin::Replace | Builtin::Swap => 2,
         }
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
         let (params, return_type) = match builtin {
+            Builtin::BoxFromRaw => (
+                vec![Type::pointer(Type::Param(Rc::from("T"), 0))],
+                Type::Box(Box::new(Type::Param(Rc::from("T"), 0)))
+            ),
+            Builtin::BoxIntoRaw => (
+                vec![Type::Box(Box::new(Type::Param(Rc::from("T"), 0))),],
+                Type::pointer(Type::Param(Rc::from("T"), 0))
+            ),
             Builtin::Sizeof => (Vec::new(), Type::Int),
             Builtin::Allocate => (
                 vec![Type::Int],
@@ -206,7 +216,9 @@ impl TypeCheck {
             | Builtin::DeallocBox
             | Builtin::Allocate
             | Builtin::Deallocate
-            | Builtin::Sizeof => {
+            | Builtin::Sizeof
+            | Builtin::BoxFromRaw
+            | Builtin::BoxIntoRaw => {
                 vec![GenericArg::Type(self.fresh_ty(loc))]
             }
             Builtin::DerefBox

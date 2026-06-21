@@ -72,9 +72,11 @@ pub enum Builtin {
     Replace,
     Swap,
     Sizeof,
+    BoxFromRaw,
+    BoxIntoRaw
 }
 impl Builtin {
-    const LAST: Self = Self::Sizeof;
+    const LAST: Self = Self::BoxIntoRaw;
     pub const COUNT: usize = Self::LAST as usize + 1;
     pub const fn name(&self) -> &'static str {
         match self {
@@ -88,6 +90,8 @@ impl Builtin {
             Builtin::Replace => names::REPLACE,
             Builtin::Swap => names::SWAP,
             Builtin::Sizeof => names::SIZEOF,
+            Builtin::BoxFromRaw => names::BOX_FROM_RAW,
+            Builtin::BoxIntoRaw => names::BOX_INTO_RAW
         }
     }
 }

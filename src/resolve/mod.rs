@@ -67,6 +67,8 @@ impl Resolve {
             (names::ALLOCATE.into(), Builtin::Allocate),
             (names::DEALLOCATE.into(), Builtin::Deallocate),
             (names::SIZEOF.into(), Builtin::Sizeof),
+            (names::BOX_FROM_RAW.into(),Builtin::BoxFromRaw),
+            (names::BOX_INTO_RAW.into(),Builtin::BoxIntoRaw),
         ];
         let env = Scope::from_iter(
             builtins

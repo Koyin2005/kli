@@ -4,7 +4,12 @@ fun alloc[T](value : T) -> box[T] = do
     box_from_raw(ptr)
 end
 
-fun dealloc[T](value : box[T]) -> T = panic[T]
+fun dealloc[T](b : box[T]) -> T = do 
+    let ptr = box_into_raw(b);
+    let value = ptr^;
+    deallocate(ptr);
+    value
+end
 
 fun deref[r,T](x : imm[r] box[T]) -> imm[r] T = panic[imm[r] T]
 

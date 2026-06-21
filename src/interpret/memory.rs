@@ -68,6 +68,11 @@ impl Memory {
             alloc: Some(alloc_id),
         }
     }
+    pub fn points_to_live(&self, pointer: Pointer) -> Option<bool>{
+        pointer.alloc.map(|alloc|{
+            self.allocations[alloc].live
+        })
+    }
     pub fn deallocate(
         &mut self,
         location: MemLocation,
