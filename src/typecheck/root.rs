@@ -104,17 +104,31 @@ impl TypeCheck {
     }
     pub(super) fn generic_arg_count_of_builtin(&self, builtin: Builtin) -> usize {
         match builtin {
-            | Builtin::Allocate
+            Builtin::Allocate
             | Builtin::Deallocate
             | Builtin::Sizeof
             | Builtin::BoxFromRaw
             | Builtin::BoxIntoRaw => 1,
-            Builtin::DerefBox | Builtin::DerefBoxMut => 2,
+            Builtin::DerefBox
+            | Builtin::DerefBoxMut
+            | Builtin::RawIntoRef(_)
+            | Builtin::RefFromRaw(_) => 2,
             Builtin::Freeze | Builtin::Replace | Builtin::Swap => 2,
         }
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
         let (params, return_type) = match builtin {
+            Builtin::RefFromRaw(mutable) => (
+                vec![Type::pointer(Type::Param(Rc::from("T"), 1))],
+                Type::Param(Rc::from("T"), 1).reference(mutable, Region::Param(Rc::from("r"), 0)),
+            ),
+            Builtin::RawIntoRef(mutable) => (
+                vec![
+                    Type::Param(Rc::from("T"), 1)
+                        .reference(mutable, Region::Param(Rc::from("r"), 0)),
+                ],
+                Type::pointer(Type::Param(Rc::from("T"), 1)),
+            ),
             Builtin::BoxFromRaw => (
                 vec![Type::pointer(Type::Param(Rc::from("T"), 0))],
                 Type::Box(Box::new(Type::Param(Rc::from("T"), 0))),
@@ -202,7 +216,7 @@ impl TypeCheck {
         loc: SrcLoc,
     ) -> Vec<GenericArg> {
         match builtin {
-            | Builtin::Allocate
+            Builtin::Allocate
             | Builtin::Deallocate
             | Builtin::Sizeof
             | Builtin::BoxFromRaw
@@ -213,7 +227,9 @@ impl TypeCheck {
             | Builtin::DerefBoxMut
             | Builtin::Freeze
             | Builtin::Replace
-            | Builtin::Swap => {
+            | Builtin::Swap
+            | Builtin::RawIntoRef(_)
+            | Builtin::RefFromRaw(_) => {
                 vec![
                     GenericArg::Region(self.fresh_region(loc.clone())),
                     GenericArg::Type(self.fresh_ty(loc)),

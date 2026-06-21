@@ -2,7 +2,7 @@ use std::{fmt::Display, rc::Rc};
 
 use crate::{ident::Ident, src_loc::SrcLoc};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq,Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Mutable {
     Mutable,
     Immutable,

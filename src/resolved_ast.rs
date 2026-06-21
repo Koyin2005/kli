@@ -72,10 +72,12 @@ pub enum Builtin {
     Sizeof,
     BoxFromRaw,
     BoxIntoRaw,
+    RefFromRaw(Mutable),
+    RawIntoRef(Mutable),
 }
 impl Builtin {
     const LAST: Self = Self::BoxIntoRaw;
-    pub const COUNT: usize = Self::LAST as usize + 1;
+    pub const COUNT: usize = 14;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
         Builtin::DerefBox,
         Builtin::DerefBoxMut,
@@ -87,19 +89,31 @@ impl Builtin {
         Builtin::Sizeof,
         Builtin::BoxFromRaw,
         Builtin::BoxIntoRaw,
+        Builtin::RefFromRaw(Mutable::Immutable),
+        Builtin::RefFromRaw(Mutable::Mutable),
+        Builtin::RawIntoRef(Mutable::Immutable),
+        Builtin::RawIntoRef(Mutable::Immutable),
     ];
     pub const fn name(&self) -> &'static str {
         match self {
-            Builtin::Allocate => names::ALLOCATE,
-            Builtin::Deallocate => names::DEALLOCATE,
-            Builtin::DerefBox => names::DEREF_BOX,
-            Builtin::DerefBoxMut => names::DEREF_BOX_MUT,
-            Builtin::Freeze => names::FREEZE,
-            Builtin::Replace => names::REPLACE,
-            Builtin::Swap => names::SWAP,
-            Builtin::Sizeof => names::SIZEOF,
-            Builtin::BoxFromRaw => names::BOX_FROM_RAW,
-            Builtin::BoxIntoRaw => names::BOX_INTO_RAW,
+            Builtin::Allocate => "allocate",
+            Builtin::Deallocate => "deallocate",
+            Builtin::DerefBox => "deref_box",
+            Builtin::DerefBoxMut => "deref_box_mut",
+            Builtin::Freeze => "freeze",
+            Builtin::Replace => "replace",
+            Builtin::Swap => "swap",
+            Builtin::Sizeof => "size_of",
+            Builtin::BoxFromRaw => "box_from_raw",
+            Builtin::BoxIntoRaw => "box_into_raw",
+            Builtin::RawIntoRef(mutable) => match mutable {
+                Mutable::Immutable => "raw_into_ref",
+                Mutable::Mutable => "raw_into_ref_mut",
+            },
+            Builtin::RefFromRaw(mutable) => match mutable {
+                Mutable::Immutable => "ref_from_raw",
+                Mutable::Mutable => "ref_mut_from_raw",
+            },
         }
     }
 }
