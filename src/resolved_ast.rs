@@ -71,9 +71,10 @@ pub enum Builtin {
     Freeze,
     Replace,
     Swap,
+    Sizeof,
 }
 impl Builtin {
-    const LAST: Self = Self::Swap;
+    const LAST: Self = Self::Sizeof;
     pub const COUNT: usize = Self::LAST as usize + 1;
     pub const fn name(&self) -> &'static str {
         match self {
@@ -86,6 +87,7 @@ impl Builtin {
             Builtin::Freeze => names::FREEZE,
             Builtin::Replace => names::REPLACE,
             Builtin::Swap => names::SWAP,
+            Builtin::Sizeof => names::SIZEOF,
         }
     }
 }

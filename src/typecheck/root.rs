@@ -104,13 +104,18 @@ impl TypeCheck {
     }
     pub(super) fn generic_arg_count_of_builtin(&self, builtin: Builtin) -> usize {
         match builtin {
-            Builtin::AllocBox | Builtin::Allocate | Builtin::Deallocate | Builtin::DeallocBox => 1,
+            Builtin::AllocBox
+            | Builtin::Allocate
+            | Builtin::Deallocate
+            | Builtin::DeallocBox
+            | Builtin::Sizeof => 1,
             Builtin::DerefBox | Builtin::DerefBoxMut => 2,
             Builtin::Freeze | Builtin::Replace | Builtin::Swap => 2,
         }
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
         let (params, return_type) = match builtin {
+            Builtin::Sizeof => (Vec::new(), Type::Int),
             Builtin::Allocate => (
                 vec![Type::Int],
                 (Type::pointer(Type::Param(Rc::from("T"), 0))),
@@ -197,7 +202,11 @@ impl TypeCheck {
         loc: SrcLoc,
     ) -> Vec<GenericArg> {
         match builtin {
-            Builtin::AllocBox | Builtin::DeallocBox | Builtin::Allocate | Builtin::Deallocate => {
+            Builtin::AllocBox
+            | Builtin::DeallocBox
+            | Builtin::Allocate
+            | Builtin::Deallocate
+            | Builtin::Sizeof => {
                 vec![GenericArg::Type(self.fresh_ty(loc))]
             }
             Builtin::DerefBox

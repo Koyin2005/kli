@@ -7,3 +7,4 @@ pub const REPLACE: &str = "replace";
 pub const SWAP: &str = "swap";
 pub const ALLOCATE: &str = "allocate";
 pub const DEALLOCATE: &str = "deallocate";
+pub const SIZEOF: &str = "size_of";
