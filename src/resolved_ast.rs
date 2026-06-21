@@ -5,7 +5,6 @@ use crate::{
     define_id,
     ident::Ident,
     index_vec::IndexVec,
-    names,
     src_loc::SrcLoc,
 };
 define_id!(FunctionId);

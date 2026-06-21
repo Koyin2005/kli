@@ -5,7 +5,6 @@ mod index_vec;
 pub mod interpret;
 pub mod mir;
 pub mod monomorph;
-mod names;
 pub mod parsing;
 pub mod patterns;
 pub mod resolve;
