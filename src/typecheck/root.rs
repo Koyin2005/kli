@@ -104,10 +104,8 @@ impl TypeCheck {
     }
     pub(super) fn generic_arg_count_of_builtin(&self, builtin: Builtin) -> usize {
         match builtin {
-            Builtin::AllocBox
             | Builtin::Allocate
             | Builtin::Deallocate
-            | Builtin::DeallocBox
             | Builtin::Sizeof
             | Builtin::BoxFromRaw
             | Builtin::BoxIntoRaw => 1,
@@ -160,14 +158,6 @@ impl TypeCheck {
                 ],
                 Type::Param(Rc::from("T"), 1),
             ),
-            Builtin::AllocBox => (
-                vec![Type::Param(Rc::from("T"), 0)],
-                (Type::Box(Box::new(Type::Param(Rc::from("T"), 0)))),
-            ),
-            Builtin::DeallocBox => (
-                vec![Type::Box(Box::new(Type::Param(Rc::from("T"), 0)))],
-                (Type::Param(Rc::from("T"), 0)),
-            ),
             Builtin::DerefBox => {
                 let r_param = Region::Param(Rc::from("r"), 0);
                 let t_param = Type::Param(Rc::from("T"), 1);
@@ -212,8 +202,6 @@ impl TypeCheck {
         loc: SrcLoc,
     ) -> Vec<GenericArg> {
         match builtin {
-            Builtin::AllocBox
-            | Builtin::DeallocBox
             | Builtin::Allocate
             | Builtin::Deallocate
             | Builtin::Sizeof

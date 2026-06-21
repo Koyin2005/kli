@@ -64,8 +64,6 @@ pub enum PlaceKind {
 pub enum Builtin {
     Allocate,
     Deallocate,
-    AllocBox,
-    DeallocBox,
     DerefBox,
     DerefBoxMut,
     Freeze,
@@ -79,8 +77,6 @@ impl Builtin {
     const LAST: Self = Self::BoxIntoRaw;
     pub const COUNT: usize = Self::LAST as usize + 1;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
-        Builtin::AllocBox,
-        Builtin::DeallocBox,
         Builtin::DerefBox,
         Builtin::DerefBoxMut,
         Builtin::Freeze,
@@ -96,8 +92,6 @@ impl Builtin {
         match self {
             Builtin::Allocate => names::ALLOCATE,
             Builtin::Deallocate => names::DEALLOCATE,
-            Builtin::AllocBox => names::ALLOC_BOX,
-            Builtin::DeallocBox => names::DEALLOC_BOX,
             Builtin::DerefBox => names::DEREF_BOX,
             Builtin::DerefBoxMut => names::DEREF_BOX_MUT,
             Builtin::Freeze => names::FREEZE,

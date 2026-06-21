@@ -131,8 +131,6 @@ impl<'f> Interpret<'f> {
             })
             .collect();
         let mut builtin_functions = HashMap::new();
-        builtin_functions.insert(Builtin::AllocBox, HashMap::new());
-        builtin_functions.insert(Builtin::DeallocBox, HashMap::new());
         builtin_functions.insert(Builtin::DerefBox, HashMap::new());
         builtin_functions.insert(Builtin::DerefBoxMut, HashMap::new());
         builtin_functions.insert(Builtin::Swap, HashMap::new());
@@ -1123,21 +1121,6 @@ impl<'f> Interpret<'f> {
                 let pointer = arg.as_pointer().unwrap();
                 self.memory.deallocate(MemLocation::Heap, pointer)?;
                 Ok(Value::unit())
-            }
-            Builtin::AllocBox => {
-                let ty = &tys[0];
-                let pointer = self.memory.allocate(MemLocation::Heap, size_of(ty));
-                let [arg] = args_as_array(args).unwrap();
-                self.typed_write(pointer, ty, arg)?;
-                Ok(Value::Pointer(pointer))
-            }
-            Builtin::DeallocBox => {
-                let [arg] = args_as_array(args).unwrap();
-                let pointer = arg.as_pointer().unwrap();
-                let ty = &tys[0];
-                let value = self.typed_read(pointer, ty)?;
-                self.memory.deallocate(MemLocation::Heap, pointer)?;
-                Ok(value)
             }
             Builtin::DerefBoxMut => {
                 let ty = &tys[0];
