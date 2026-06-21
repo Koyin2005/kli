@@ -102,6 +102,13 @@ impl TypeCheck {
             | Type::Array(..) => Err(ty),
         }
     }
+    pub(super) fn generic_arg_count_of_builtin(&self, builtin: Builtin) -> usize {
+        match builtin {
+            Builtin::AllocBox | Builtin::Allocate | Builtin::Deallocate | Builtin::DeallocBox => 1,
+            Builtin::DerefBox | Builtin::DerefBoxMut => 2,
+            Builtin::Freeze | Builtin::Replace | Builtin::Swap => 2,
+        }
+    }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
         let (params, return_type) = match builtin {
             Builtin::Allocate => (
@@ -222,6 +229,9 @@ impl TypeCheck {
     }
     pub(super) fn fresh_ty(&mut self, loc: SrcLoc) -> Type {
         Type::Infer(self.infer.fresh_ty(loc))
+    }
+    pub(super) fn generic_arg_count_of_function(&self, function: FunctionId) -> usize {
+        self.function_generic_kinds[function].len()
     }
     pub(super) fn instantiate_function_args(
         &mut self,

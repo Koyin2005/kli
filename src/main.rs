@@ -187,7 +187,7 @@ fn find_std_lib() -> FileEntry {
             file_from("bools", bool_file),
             file_from("ints", int_file),
             file_from("io", io_file),
-            file_from("box", box_file)
+            file_from("box", box_file),
         ])),
     }
 }

@@ -8,7 +8,7 @@ use crate::{
     src_loc::SrcLoc,
     typecheck::root::TypeCheck,
     typed_ast::{self, FieldId, RecordFieldInit},
-    types::{FunctionType, PointerType, RecordField, Type},
+    types::{FunctionType, GenericArg, PointerType, RecordField, Type},
 };
 
 impl TypeCheck {
@@ -405,16 +405,56 @@ impl TypeCheck {
                     loc,
                 )
             }
-            ExprKind::Builtin(builtin) => {
-                let args = self.instantiate_builtin_args(builtin, loc.clone());
+            ExprKind::Builtin(builtin, args) => {
+                let args = if let Some(args) = args {
+                    let arg_count = self.generic_arg_count_of_builtin(builtin);
+                    if arg_count != args.len() {
+                        self.diag.borrow_mut().add_diagnostic(
+                            format!(
+                                "Expected '{}' generic args but got '{}'",
+                                arg_count,
+                                args.len()
+                            ),
+                            loc.clone(),
+                        );
+                    }
+                    let remaining = args.len().abs_diff(arg_count);
+                    args.into_iter()
+                        .map(|arg| self.lower_type(arg))
+                        .chain(std::iter::repeat_n(Type::Unknown, remaining))
+                        .map(GenericArg::Type)
+                        .collect()
+                } else {
+                    self.instantiate_builtin_args(builtin, loc.clone())
+                };
                 make_expr(
                     Type::Function(self.signature_of_builtin(builtin).bind(&args)),
                     typed_ast::ExprKind::Builtin(builtin, args),
                     loc,
                 )
             }
-            ExprKind::Function(name, function) => {
-                let args = self.instantiate_function_args(function, loc.clone());
+            ExprKind::Function(name, function, args) => {
+                let args = if let Some(args) = args {
+                    let arg_count = self.generic_arg_count_of_function(function);
+                    if arg_count != args.len() {
+                        self.diag.borrow_mut().add_diagnostic(
+                            format!(
+                                "Expected '{}' generic args but got '{}'",
+                                arg_count,
+                                args.len()
+                            ),
+                            loc.clone(),
+                        );
+                    }
+                    let remaining = args.len().abs_diff(arg_count);
+                    args.into_iter()
+                        .map(|arg| self.lower_type(arg))
+                        .chain(std::iter::repeat_n(Type::Unknown, remaining))
+                        .map(GenericArg::Type)
+                        .collect()
+                } else {
+                    self.instantiate_function_args(function, loc.clone())
+                };
                 make_expr(
                     Type::Function(self.signature_of_function(function).bind(&args)),
                     typed_ast::ExprKind::Function(name, function, args),

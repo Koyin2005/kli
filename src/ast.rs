@@ -194,7 +194,7 @@ pub enum ExprKind {
     For(Box<Pattern>, Box<Expr>, Box<Expr>),
     Assign(Box<Expr>, Box<Expr>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
-    Path(Path),
+    Path(Path, Option<GenericArgs>),
     Lambda(Box<Lambda>),
     Block(BlockBody, Option<Ident>),
     Deref(Box<Expr>),

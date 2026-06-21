@@ -528,9 +528,10 @@ impl Parser {
                         let name = self.expect_ident("field name or sub path")?;
                         path.push(name);
                     }
+                    let generic_args = self.parse_optional_generic_args()?;
                     Ok(Expr {
                         loc,
-                        kind: ExprKind::Path(Path::new(path)),
+                        kind: ExprKind::Path(Path::new(path), generic_args),
                     })
                 }
                 TokenKind::Some => {

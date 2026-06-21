@@ -74,7 +74,7 @@ impl Resolve {
                 .chain([
                     ("ptr".into(), Res::TypeAlias(TypeAlias::Ptr)),
                     ("byte".into(), Res::TypeAlias(TypeAlias::Byte)),
-                    ("box".into(), Res::TypeAlias(TypeAlias::Box))
+                    ("box".into(), Res::TypeAlias(TypeAlias::Box)),
                 ]),
         );
         Self {
@@ -189,15 +189,23 @@ impl Resolve {
                 .find_map(|kinds| kinds.get(name).copied())
         })
     }
-    fn resolve_generic_args(&mut self, args: Option<GenericArgs>) -> Vec<res::Type> {
-        if let Some(args) = args {
+    fn error_on_generic_args(&mut self, name: &str, loc: SrcLoc, args: Option<GenericArgs>) {
+        if args.is_some() {
+            self.diag.add_diagnostic(
+                format!("Generic param '{}' cannot have generic arguments", name),
+                loc,
+            );
+        }
+        self.resolve_generic_args(args);
+    }
+    fn resolve_generic_args(&mut self, args: Option<GenericArgs>) -> Option<Vec<res::Type>> {
+        let args = args?;
+        Some(
             args.args
                 .into_iter()
                 .map(|arg| self.resolve_type(arg.ty))
-                .collect()
-        } else {
-            Vec::new()
-        }
+                .collect(),
+        )
     }
     fn resolve_generics<T>(
         &mut self,
@@ -284,22 +292,13 @@ impl Resolve {
                             name.loc.clone(),
                         );
                     }
-                    if args.is_some() {
-                        self.diag.add_diagnostic(
-                            format!(
-                                "Generic param '{}' cannot have generic arguments",
-                                name.content
-                            ),
-                            name.loc,
-                        );
-                    }
-                    self.resolve_generic_args(args);
+                    self.error_on_generic_args(&name.content, name.loc, args);
                     res::TypeKind::Param(name.content, index)
                 }
                 Some(Res::TypeAlias(alias)) => match alias {
                     TypeAlias::Ptr => {
                         let args = self.resolve_generic_args(args);
-                        let arg: Result<[_; 1], _> = args.try_into();
+                        let arg: Result<[_; 1], _> = args.unwrap_or_default().try_into();
                         let ty = match arg {
                             Ok([arg]) => arg,
                             Err(args) => {
@@ -320,9 +319,8 @@ impl Resolve {
                         res::TypeKind::Ptr(Box::new(ty))
                     }
                     TypeAlias::Box => {
-                        
                         let args = self.resolve_generic_args(args);
-                        let arg: Result<[_; 1], _> = args.try_into();
+                        let arg: Result<[_; 1], _> = args.unwrap_or_default().try_into();
                         let ty = match arg {
                             Ok([arg]) => arg,
                             Err(args) => {
@@ -344,15 +342,14 @@ impl Resolve {
                     }
                     TypeAlias::Byte => {
                         let args = self.resolve_generic_args(args);
-                        let arg: Result<[_; _], _> = args.try_into();
-
+                        let arg: Result<[_; _], _> = args.unwrap_or_default().try_into();
                         match arg {
                             Ok([]) => (),
                             Err(args) => {
                                 self.diag.add_diagnostic(
                                     format!(
-                                        "Expected '{}' generic arg but got '{}'",
-                                        1,
+                                        "Expected '{}' generic args but got '{}'",
+                                        0,
                                         args.len()
                                     ),
                                     name.loc.clone(),
@@ -506,14 +503,17 @@ impl Resolve {
                 loc,
                 kind: res::PlaceKind::Deref(Box::new(self.resolve_expr(*expr))),
             }),
-            ast::ExprKind::Path(path) => {
+            ast::ExprKind::Path(path, args) => {
                 let kind = match self.resolve_path(&path) {
                     Err(err) => {
+                        self.resolve_generic_args(args);
                         self.path_error(&path, loc, err);
                         return None;
                     }
                     Ok(Res::Var(var)) => {
-                        res::PlaceKind::Var(res::Var(path.expect_head().content, var))
+                        let name = path.expect_head().content;
+                        self.error_on_generic_args(&name, loc.clone(), args);
+                        res::PlaceKind::Var(res::Var(name, var))
                     }
                     Ok(
                         Res::Builtin(_)
@@ -643,8 +643,9 @@ impl Resolve {
                     })
                     .collect(),
             ),
-            ast::ExprKind::Path(path) => match self.resolve_path(&path) {
+            ast::ExprKind::Path(path, args) => match self.resolve_path(&path) {
                 Err(error) => {
+                    self.resolve_generic_args(args);
                     match error {
                         NameResolutionError::NotInScope => {
                             self.path_not_in_scope_error(&path, loc.clone());
@@ -656,12 +657,21 @@ impl Resolve {
                     res::ExprKind::Err
                 }
                 Ok(res) => match res {
-                    Res::Builtin(builtin) => res::ExprKind::Builtin(builtin),
-                    Res::Var(id) => res::ExprKind::Var(path.into_last().content, id),
-                    Res::Function(function) => {
-                        res::ExprKind::Function(path.into_last().content, function)
+                    Res::Builtin(builtin) => {
+                        res::ExprKind::Builtin(builtin, self.resolve_generic_args(args))
                     }
+                    Res::Var(id) => {
+                        let name = path.into_last().content;
+                        self.error_on_generic_args(&name, loc.clone(), args);
+                        res::ExprKind::Var(name, id)
+                    }
+                    Res::Function(function) => res::ExprKind::Function(
+                        path.into_last().content,
+                        function,
+                        self.resolve_generic_args(args),
+                    ),
                     Res::Param(_) | Res::LocalRegion(_) | Res::Module(_) | Res::TypeAlias(_) => {
+                        self.resolve_generic_args(args);
                         self.diag.add_diagnostic(
                             format!("Can't use '{}' as a value", path.display()),
                             loc.clone(),
