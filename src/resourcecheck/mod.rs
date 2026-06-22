@@ -418,18 +418,19 @@ impl ResourceCheck {
                         return self.check_place_use(place, place_use);
                     };
                     self.capture_if_upvar(var, place.loc.clone());
-                    if !self.is_resource(ty) {
-                        return;
-                    }
                     match place_use {
-                        PlaceUse::Read => self.err.add_diagnostic(
+                        PlaceUse::Read => if self.is_resource(ty){ 
+                            self.err.add_diagnostic(
                             "Cannot move out of reference".to_string(),
                             place.loc.clone(),
-                        ),
-                        PlaceUse::Write => self.err.add_diagnostic(
-                            "Cannot re-assign reference".to_string(),
+                        )
+                    },
+                        PlaceUse::Write => if self.is_strict_resource(ty){ 
+                            self.err.add_diagnostic(
+                            "Cannot re-assign to reference".to_string(),
                             place.loc.clone(),
-                        ),
+                        )
+                    },
                     }
                 }
                 _ => self.check_expr(expr),
