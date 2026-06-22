@@ -163,8 +163,8 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, "ref {} ", mutable)?;
                 self.write_place(place)?;
             }
-            Rvalue::PointerCast(pointer) => {
-                write!(self.output, "ptr_cast(")?;
+            Rvalue::PointerCast(cast, pointer) => {
+                write!(self.output, "ptr_cast({:?})(",cast)?;
                 self.write_operand(pointer)?;
                 write!(self.output, ")")?;
             }
@@ -215,6 +215,11 @@ impl<'ctxt> MirDump<'ctxt> {
                     if let Some(value) = value {
                         self.write_operand(value)?;
                     }
+                    writeln!(self.output, ")")?;
+                }
+                Stmt::Deallocate(value) => {
+                    write!(self.output, "deallocate(")?;
+                    self.write_operand(value)?;
                     writeln!(self.output, ")")?;
                 }
                 Stmt::Noop => writeln!(self.output, "noop")?,

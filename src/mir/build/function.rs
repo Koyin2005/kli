@@ -2,7 +2,7 @@ use crate::{
     ast::IsResource,
     mir::{
         BodySource, Captures, Constant, ConstantValue, Context, Local, LocalKind, Operand, Place,
-        Rvalue, Terminator, build::Builder,
+        PointerCast, Rvalue, Terminator, build::Builder,
     },
     resolved_ast::{FunctionId, Var},
     typed_ast::{self, Lambda},
@@ -105,7 +105,10 @@ impl Builder<'_> {
             let env_ty = builder.body.capture_info.as_ref().unwrap().env_type();
             let casted = builder.assign_to_temp(
                 Type::pointer(env_ty),
-                Rvalue::PointerCast(Operand::Load(Place::local(Local::zero()))),
+                Rvalue::PointerCast(
+                    PointerCast::RawToRaw,
+                    Operand::Load(Place::local(Local::zero())),
+                ),
             );
             builder.body.capture_info.as_mut().unwrap().env_ptr = Some(casted);
         }

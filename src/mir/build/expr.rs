@@ -4,13 +4,25 @@ use crate::{
     ast::{BinaryOp, IsResource},
     index_vec::IndexVec,
     mir::{
-        self, AggregateKind, Constant, ConstantValue, Local, Operand, OverflowOp, Place, Rvalue,
-        build::Builder,
+        self, AggregateKind, Constant, ConstantValue, Local, Operand, OverflowOp, Place,
+        PointerCast, Rvalue, build::Builder,
     },
+    resolved_ast::Builtin,
     typed_ast::{self, Expr, ExprKind, FieldId, Pattern},
-    types::{FunctionType, Type},
+    types::{FunctionType, GenericArg, Type},
 };
-
+pub(super) enum BuiltinResult {
+    Rvalue(Rvalue),
+    Unit,
+}
+impl From<BuiltinResult> for Rvalue {
+    fn from(value: BuiltinResult) -> Self {
+        match value {
+            BuiltinResult::Rvalue(value) => value,
+            BuiltinResult::Unit => Rvalue::Use(Operand::Constant(Constant::unit())),
+        }
+    }
+}
 impl Builder<'_> {
     fn as_constant(&mut self, expr: &Expr) -> Option<Constant> {
         match expr.kind {
@@ -27,10 +39,6 @@ impl Builder<'_> {
             ExprKind::Lambda(ref lambda) if lambda.is_resource == IsResource::Data => {
                 Some(self.lambda_code(lambda))
             }
-            ExprKind::Builtin(builtin, ref args) => Some(Constant {
-                ty: expr.ty.clone(),
-                value: ConstantValue::Builtin(builtin, args.clone()),
-            }),
             _ => None,
         }
     }
@@ -181,7 +189,7 @@ impl Builder<'_> {
             | ExprKind::String(_)
             | ExprKind::Lambda(_)
             | ExprKind::Case(..)
-            | ExprKind::Builtin(..) => {
+            | ExprKind::BuiltinCall(..) => {
                 let rvalue = self.build_rvalue(expr);
                 self.assign(dest, rvalue);
             }
@@ -190,6 +198,62 @@ impl Builder<'_> {
     fn binary_op_rvalue(op: mir::BinaryOp, left: Operand, right: Operand) -> Rvalue {
         Rvalue::Binary(op, Box::new((left, right)))
     }
+    pub(super) fn builtin_call(
+        &mut self,
+        ty: &Type,
+        builtin: Builtin,
+        generic_args: &[GenericArg],
+        args: &[Expr],
+    ) -> BuiltinResult {
+        let operands = args
+            .iter()
+            .map(|operand| self.operand(operand))
+            .collect::<Vec<_>>();
+        match builtin {
+            Builtin::Allocate => BuiltinResult::Rvalue(Rvalue::Allocate {
+                ty: args[0].ty.clone(),
+                count: { operands }.swap_remove(0),
+            }),
+            Builtin::Deallocate => {
+                self.push_stmt(mir::Stmt::Deallocate({ operands }.swap_remove(0)));
+                BuiltinResult::Unit
+            }
+            Builtin::Freeze => BuiltinResult::Rvalue(Rvalue::PointerCast(
+                PointerCast::Freeze,
+                { operands }.swap_remove(0),
+            )),
+            Builtin::Replace => todo!(),
+            Builtin::Swap => todo!(),
+            Builtin::Sizeof => todo!("Get rid of me"),
+            Builtin::BoxFromRaw => BuiltinResult::Rvalue(Rvalue::PointerCast(
+                PointerCast::RawToBox,
+                { operands }.swap_remove(0),
+            )),
+            Builtin::BoxIntoRaw => BuiltinResult::Rvalue(Rvalue::PointerCast(
+                PointerCast::BoxToRaw,
+                { operands }.swap_remove(0),
+            )),
+            Builtin::RefFromRaw(mutable) => BuiltinResult::Rvalue(Rvalue::PointerCast(
+                PointerCast::RawToRef(mutable),
+                { operands }.swap_remove(0),
+            )),
+            Builtin::RefIntoRaw(mutable) => BuiltinResult::Rvalue(Rvalue::PointerCast(
+                PointerCast::RefToRaw(mutable),
+                { operands }.swap_remove(0),
+            )),
+            Builtin::PtrRead => {
+                let [ptr] = { operands }.try_into().unwrap();
+                let deref = self.operand_as_place(args[0].ty.clone(), ptr).with_deref();
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Load(deref)))
+            }
+            Builtin::PtrWrite => {
+                let [ptr, value] = { operands }.try_into().unwrap();
+                let deref = self.operand_as_place(args[0].ty.clone(), ptr).with_deref();
+                self.assign(deref, Rvalue::Use(value));
+                BuiltinResult::Unit
+            }
+        }
+    }
     pub fn build_rvalue(&mut self, expr: &Expr) -> Rvalue {
         match &expr.kind {
             ExprKind::Err => unreachable!("Cannot have err here"),
@@ -197,8 +261,7 @@ impl Builder<'_> {
             | ExprKind::Int(_)
             | ExprKind::Bool(_)
             | ExprKind::Load(_)
-            | ExprKind::Function(..)
-            | ExprKind::Builtin(..) => {
+            | ExprKind::Function(..) => {
                 let operand = self
                     .as_operand(expr)
                     .unwrap_or_else(|| unreachable!("Should be an operand '{:?}' ", expr));
@@ -246,7 +309,7 @@ impl Builder<'_> {
                 );
                 let ptr = self.assign_to_temp(
                     Type::pointer(Type::Byte),
-                    Rvalue::PointerCast(Operand::Load(Place::local(bytes))),
+                    Rvalue::PointerCast(PointerCast::RawToRaw, Operand::Load(Place::local(bytes))),
                 );
                 Rvalue::Aggregate(
                     AggregateKind::String,
@@ -308,7 +371,10 @@ impl Builder<'_> {
                 );
                 let ptr = self.assign_to_temp(
                     Type::pointer(ty.clone()),
-                    Rvalue::PointerCast(Operand::Load(Place::local(ptr_to_buf))),
+                    Rvalue::PointerCast(
+                        PointerCast::RawToRaw,
+                        Operand::Load(Place::local(ptr_to_buf)),
+                    ),
                 );
 
                 Rvalue::Aggregate(
@@ -467,7 +533,10 @@ impl Builder<'_> {
 
                     let erased_env = self.assign_to_temp(
                         Type::pointer(Type::Byte),
-                        Rvalue::PointerCast(Operand::Load(Place::local(env))),
+                        Rvalue::PointerCast(
+                            PointerCast::RawToRaw,
+                            Operand::Load(Place::local(env)),
+                        ),
                     );
                     Rvalue::Aggregate(
                         AggregateKind::Closure,
@@ -479,6 +548,9 @@ impl Builder<'_> {
                     Rvalue::Use(function)
                 }
             }
+            &ExprKind::BuiltinCall(builtin, ref generic_args, ref args) => self
+                .builtin_call(&expr.ty, builtin, generic_args, args)
+                .into(),
         }
     }
 }

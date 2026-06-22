@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     resolved_ast::{
-        BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, Lambda, LocalRegionId, Pattern, Place,
-        PlaceKind, Var,
+        self, BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, Lambda, LocalRegionId, Pattern,
+        Place, PlaceKind, Var,
     },
     src_loc::SrcLoc,
     typecheck::root::TypeCheck,
@@ -85,6 +85,35 @@ impl TypeCheck {
                 body: Box::new(body),
             },
         }
+    }
+    fn check_builtin(
+        &mut self,
+        loc: SrcLoc,
+        builtin: crate::resolved_ast::Builtin,
+        args: Option<Vec<resolved_ast::Type>>,
+    ) -> (FunctionType, Vec<GenericArg>) {
+        let args = if let Some(args) = args {
+            let arg_count = self.generic_arg_count_of_builtin(builtin);
+            if arg_count != args.len() {
+                self.diag.borrow_mut().add_diagnostic(
+                    format!(
+                        "Expected '{}' generic args but got '{}'",
+                        arg_count,
+                        args.len()
+                    ),
+                    loc.clone(),
+                );
+            }
+            let remaining = args.len().abs_diff(arg_count);
+            args.into_iter()
+                .map(|arg| self.lower_type(arg))
+                .chain(std::iter::repeat_n(Type::Unknown, remaining))
+                .map(GenericArg::Type)
+                .collect()
+        } else {
+            self.instantiate_builtin_args(builtin, loc.clone())
+        };
+        (self.signature_of_builtin(builtin).bind(&args), args)
     }
     fn check_borrow(
         &mut self,
@@ -213,60 +242,102 @@ impl TypeCheck {
         args: Vec<Expr>,
         expected_ty: Option<Type>,
     ) -> typed_ast::Expr {
-        let callee = self.check_expr(callee, None);
-        let callee_type = self.simplify_type(callee.ty.clone());
-        let (params, return_type) = match callee_type {
-            Type::Function(FunctionType {
-                resource: _,
+        fn check_call_sig(
+            this: &mut TypeCheck,
+            callee_loc: SrcLoc,
+            args: Vec<Expr>,
+            params: Vec<Type>,
+            return_type: Option<Type>,
+            expected_ty: Option<Type>,
+        ) -> (Type, Vec<typed_ast::Expr>) {
+            if params.len() != args.len() {
+                this.diag.borrow_mut().add_diagnostic(
+                    format!(
+                        "Expected '{}' arguments but got '{}'",
+                        params.len(),
+                        args.len()
+                    ),
+                    callee_loc.clone(),
+                );
+            }
+
+            let arg_map = |(arg, expected_ty)| this.check_expr(arg, expected_ty);
+            let args = if args.len() > params.len() {
+                let diff = args.len() - params.len();
+                args.into_iter()
+                    .zip(
+                        params
+                            .into_iter()
+                            .map(Some)
+                            .chain(std::iter::repeat_n(None, diff)),
+                    )
+                    .map(arg_map)
+                    .collect::<Vec<_>>()
+            } else {
+                args.into_iter()
+                    .zip(params.into_iter().map(Some))
+                    .map(arg_map)
+                    .collect::<Vec<_>>()
+            };
+            let ty = match (expected_ty, return_type) {
+                (None, None) => Type::Unknown,
+                (None, Some(ty)) | (Some(ty), None) => ty,
+                (Some(ty), Some(return_type)) => this.unify(ty, return_type, callee_loc),
+            };
+            (ty, args)
+        }
+        if let ExprKind::Builtin(id, generic_args) = callee.kind {
+            let (
+                FunctionType {
+                    resource: _,
+                    params,
+                    return_type,
+                },
+                generic_args,
+            ) = self.check_builtin(callee.loc.clone(), id, generic_args);
+            let (ty, args) = check_call_sig(
+                self,
+                callee.loc,
+                args,
+                params,
+                Some(*return_type),
+                expected_ty,
+            );
+            typed_ast::Expr {
+                ty,
+                loc,
+                kind: typed_ast::ExprKind::BuiltinCall(id, generic_args, args),
+            }
+        } else {
+            let callee = self.check_expr(callee, None);
+            let callee_type = self.simplify_type(callee.ty.clone());
+            let (params, return_type) = match callee_type {
+                Type::Function(FunctionType {
+                    resource: _,
+                    params,
+                    return_type,
+                }) => (params, Some(*return_type)),
+                ty => {
+                    self.diag.borrow_mut().add_diagnostic(
+                        format!("Expected a function type but got '{ty}'"),
+                        callee.loc.clone(),
+                    );
+                    (Vec::new(), None)
+                }
+            };
+            let (ty, args) = check_call_sig(
+                self,
+                callee.loc.clone(),
+                args,
                 params,
                 return_type,
-            }) => (params, Some(*return_type)),
-            ty => {
-                self.diag.borrow_mut().add_diagnostic(
-                    format!("Expected a function type but got '{ty}'"),
-                    callee.loc.clone(),
-                );
-                (Vec::new(), None)
-            }
-        };
-        if params.len() != args.len() {
-            self.diag.borrow_mut().add_diagnostic(
-                format!(
-                    "Expected '{}' arguments but got '{}'",
-                    params.len(),
-                    args.len()
-                ),
-                callee.loc.clone(),
+                expected_ty,
             );
-        }
-
-        let arg_map = |(arg, expected_ty)| self.check_expr(arg, expected_ty);
-        let args = if args.len() > params.len() {
-            let diff = args.len() - params.len();
-            args.into_iter()
-                .zip(
-                    params
-                        .into_iter()
-                        .map(Some)
-                        .chain(std::iter::repeat_n(None, diff)),
-                )
-                .map(arg_map)
-                .collect::<Vec<_>>()
-        } else {
-            args.into_iter()
-                .zip(params.into_iter().map(Some))
-                .map(arg_map)
-                .collect::<Vec<_>>()
-        };
-        let ty = match (expected_ty, return_type) {
-            (None, None) => Type::Unknown,
-            (None, Some(ty)) | (Some(ty), None) => ty,
-            (Some(ty), Some(return_type)) => self.unify(ty, return_type, callee.loc.clone()),
-        };
-        typed_ast::Expr {
-            ty,
-            loc,
-            kind: typed_ast::ExprKind::Call(Box::new(callee), args),
+            typed_ast::Expr {
+                ty,
+                loc,
+                kind: typed_ast::ExprKind::Call(Box::new(callee), args),
+            }
         }
     }
     fn check_block(
@@ -406,32 +477,15 @@ impl TypeCheck {
                 )
             }
             ExprKind::Builtin(builtin, args) => {
-                let args = if let Some(args) = args {
-                    let arg_count = self.generic_arg_count_of_builtin(builtin);
-                    if arg_count != args.len() {
-                        self.diag.borrow_mut().add_diagnostic(
-                            format!(
-                                "Expected '{}' generic args but got '{}'",
-                                arg_count,
-                                args.len()
-                            ),
-                            loc.clone(),
-                        );
-                    }
-                    let remaining = args.len().abs_diff(arg_count);
-                    args.into_iter()
-                        .map(|arg| self.lower_type(arg))
-                        .chain(std::iter::repeat_n(Type::Unknown, remaining))
-                        .map(GenericArg::Type)
-                        .collect()
-                } else {
-                    self.instantiate_builtin_args(builtin, loc.clone())
-                };
-                make_expr(
-                    Type::Function(self.signature_of_builtin(builtin).bind(&args)),
-                    typed_ast::ExprKind::Builtin(builtin, args),
-                    loc,
-                )
+                let (ty, _) = self.check_builtin(loc.clone(), builtin, args);
+                self.diag.borrow_mut().add_diagnostic(
+                    format!(
+                        "Cannot use builtin '{}' in non-call position",
+                        builtin.name()
+                    ),
+                    loc.clone(),
+                );
+                make_expr(Type::Function(ty), typed_ast::ExprKind::Err, loc)
             }
             ExprKind::Function(name, function, args) => {
                 let args = if let Some(args) = args {

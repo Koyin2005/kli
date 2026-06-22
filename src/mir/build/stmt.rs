@@ -1,5 +1,8 @@
 use crate::{
-    mir::{Stmt, build::Builder},
+    mir::{
+        Stmt,
+        build::{Builder, expr::BuiltinResult},
+    },
     typed_ast::{Expr, ExprKind},
 };
 
@@ -33,6 +36,14 @@ impl Builder<'_> {
             } => {
                 self.for_loop(pattern, iterator, iterator_type, body);
             }
+            ExprKind::BuiltinCall(builtin, generic_args, args) => {
+                match self.builtin_call(&expr.ty, *builtin, generic_args, args) {
+                    BuiltinResult::Rvalue(value) => {
+                        self.assign_to_temp(expr.ty.clone(), value);
+                    }
+                    BuiltinResult::Unit => (),
+                }
+            }
             //Evaluate
             ExprKind::Record(..)
             | ExprKind::String(_)
@@ -48,7 +59,6 @@ impl Builder<'_> {
             | ExprKind::None
             | ExprKind::Some(..)
             | ExprKind::List(..)
-            | ExprKind::Builtin(..)
             | ExprKind::Lambda(..) => {
                 self.expr_into_temp(expr);
             }

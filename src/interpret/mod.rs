@@ -871,17 +871,14 @@ impl<'f> Interpret<'f> {
                 };
                 self.call_value(resource, callee_value, args)
             }
-            typed_ast::ExprKind::Builtin(builtin, args) => self
-                .builtin_functions
-                .get_mut(builtin)
-                .map(|instances| {
-                    let args = Self::generic_args_to_instance_args(args.to_vec());
-                    let function_ptr = *instances
-                        .entry(args)
-                        .or_insert_with(|| self.memory.allocate(MemLocation::Function, 0));
-                    Ok(Value::Pointer(function_ptr))
-                })
-                .unwrap_or_else(|| panic!("{:?} should be supported", builtin)),
+            typed_ast::ExprKind::BuiltinCall(builtin, args, operands) => {
+                let tys = Self::generic_args_to_instance_args(args.clone());
+                let operands = operands
+                    .iter()
+                    .map(|operand| self.interpret_expr(operand))
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.handle_builtin_call(*builtin, tys, operands)
+            }
             typed_ast::ExprKind::Borrow {
                 mutable: _,
                 place,

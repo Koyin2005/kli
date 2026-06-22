@@ -27,6 +27,14 @@ pub enum GenericArg {
     Region(Region),
     Type(Type),
 }
+impl GenericArg {
+    pub fn expect_ty(&self) -> &Type {
+        let GenericArg::Type(ty) = self else {
+            unreachable!("expected a type")
+        };
+        ty
+    }
+}
 impl TypeMappable for GenericArg {
     fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         match self {

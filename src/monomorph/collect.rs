@@ -95,7 +95,9 @@ impl<'ctxt> InstanceCollector<'ctxt> {
                 for stmt in block.stmts.iter() {
                     match stmt {
                         Stmt::Noop | Stmt::Print(None) => (),
-                        Stmt::Print(Some(operand)) | Stmt::Assert(operand, _) => {
+                        Stmt::Print(Some(operand))
+                        | Stmt::Assert(operand, _)
+                        | Stmt::Deallocate(operand) => {
                             self.add_new_instances_from_operand(
                                 &mut unvisited,
                                 operand,
@@ -151,7 +153,7 @@ impl<'ctxt> InstanceCollector<'ctxt> {
                                     args.clone(),
                                 );
                             }
-                            Rvalue::PointerCast(operand) => {
+                            Rvalue::PointerCast(_, operand) => {
                                 self.add_new_instances_from_operand(
                                     &mut unvisited,
                                     operand,

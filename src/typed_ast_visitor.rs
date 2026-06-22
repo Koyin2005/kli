@@ -73,7 +73,6 @@ where
         ExprKind::Err
         | ExprKind::Int(_)
         | ExprKind::Bool(_)
-        | ExprKind::Builtin(..)
         | ExprKind::String(_)
         | ExprKind::Function(..)
         | ExprKind::Unit
@@ -82,6 +81,11 @@ where
         ExprKind::Print(value) => {
             if let Some(value) = value {
                 v.visit_expr(value);
+            }
+        }
+        ExprKind::BuiltinCall(_, _, exprs) => {
+            for expr in exprs {
+                v.visit_expr(expr);
             }
         }
         ExprKind::Some(value) => v.visit_expr(value),

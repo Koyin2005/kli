@@ -104,7 +104,7 @@ pub enum ExprKind {
     None,
     Panic,
     Some(Box<Expr>),
-    Builtin(Builtin, Vec<GenericArg>),
+    BuiltinCall(Builtin, Vec<GenericArg>, Vec<Expr>),
     Function(Rc<str>, FunctionId, Vec<GenericArg>),
     Print(Option<Box<Expr>>),
     List(Vec<Expr>),

@@ -175,6 +175,15 @@ pub enum BinaryOp {
     Lesser,
 }
 #[derive(Clone, Debug)]
+pub enum PointerCast {
+    RawToRaw,
+    BoxToRaw,
+    RawToBox,
+    RefToRaw(Mutable),
+    RawToRef(Mutable),
+    Freeze,
+}
+#[derive(Clone, Debug)]
 pub enum Rvalue {
     Aggregate(AggregateKind, IndexVec<FieldId, Operand>),
     Use(Operand),
@@ -182,7 +191,7 @@ pub enum Rvalue {
     Binary(BinaryOp, Box<(Operand, Operand)>),
     Ref(Mutable, Place),
     Allocate { ty: Type, count: Operand },
-    PointerCast(Operand),
+    PointerCast(PointerCast, Operand),
     Len(Place),
 }
 #[derive(Clone)]
@@ -215,6 +224,7 @@ pub enum Stmt {
     Assign(Place, Rvalue),
     Assert(Operand, AssertKind),
     Print(Option<Operand>),
+    Deallocate(Operand),
 }
 define_id!(BasicBlockId);
 define_id!(StmtId);

@@ -168,9 +168,17 @@ impl<'a> TypeSubst<'a> {
                     self.subst_expr(&mut arm.body);
                 }
             }
-            ExprKind::Builtin(_, args) | ExprKind::Function(.., args) => {
+            ExprKind::Function(.., args) => {
                 for arg in args {
                     self.subst_generic_arg(arg);
+                }
+            }
+            ExprKind::BuiltinCall(_, generic_args, args) => {
+                for arg in generic_args {
+                    self.subst_generic_arg(arg);
+                }
+                for expr in args {
+                    self.subst_expr(expr);
                 }
             }
             ExprKind::Lambda(lambda) => {

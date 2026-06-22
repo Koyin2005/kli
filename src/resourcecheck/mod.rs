@@ -484,8 +484,7 @@ impl ResourceCheck {
             | ExprKind::Panic
             | ExprKind::Unit
             | ExprKind::String(_)
-            | ExprKind::Int(_)
-            | ExprKind::Builtin(..) => (),
+            | ExprKind::Int(_) => {}
             ExprKind::Function(..) => {}
             ExprKind::Some(value) => {
                 self.check_expr(value);
@@ -503,6 +502,11 @@ impl ResourceCheck {
             }
             ExprKind::Call(callee, args) => {
                 self.check_expr(callee);
+                for arg in args {
+                    self.check_expr(arg);
+                }
+            }
+            ExprKind::BuiltinCall(.., args) => {
                 for arg in args {
                     self.check_expr(arg);
                 }
