@@ -108,14 +108,26 @@ impl TypeCheck {
             | Builtin::Deallocate
             | Builtin::Sizeof
             | Builtin::BoxFromRaw
-            | Builtin::BoxIntoRaw => 1,
-            | Builtin::RefIntoRaw(_)
-            | Builtin::RefFromRaw(_) => 2,
+            | Builtin::BoxIntoRaw
+            | Builtin::PtrRead
+            | Builtin::PtrWrite => 1,
+            Builtin::RefIntoRaw(_) | Builtin::RefFromRaw(_) => 2,
             Builtin::Freeze | Builtin::Replace | Builtin::Swap => 2,
         }
     }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
         let (params, return_type) = match builtin {
+            Builtin::PtrRead => (
+                vec![Type::pointer(Type::Param(Rc::from("T"), 0))],
+                Type::Param(Rc::from("T"), 0),
+            ),
+            Builtin::PtrWrite => (
+                vec![
+                    Type::pointer(Type::Param(Rc::from("T"), 0)),
+                    Type::Param(Rc::from("T"), 0),
+                ],
+                Type::Unit,
+            ),
             Builtin::RefFromRaw(mutable) => (
                 vec![Type::pointer(Type::Param(Rc::from("T"), 1))],
                 Type::Param(Rc::from("T"), 1).reference(mutable, Region::Param(Rc::from("r"), 0)),
@@ -196,7 +208,9 @@ impl TypeCheck {
             | Builtin::Deallocate
             | Builtin::Sizeof
             | Builtin::BoxFromRaw
-            | Builtin::BoxIntoRaw => {
+            | Builtin::BoxIntoRaw
+            | Builtin::PtrRead
+            | Builtin::PtrWrite => {
                 vec![GenericArg::Type(self.fresh_ty(loc))]
             }
             Builtin::Freeze

@@ -71,6 +71,8 @@ pub enum Builtin {
     BoxIntoRaw,
     RefFromRaw(Mutable),
     RefIntoRaw(Mutable),
+    PtrRead,
+    PtrWrite,
 }
 impl Builtin {
     const fn _equal(b1: Builtin, b2: Builtin) -> bool {
@@ -82,7 +84,9 @@ impl Builtin {
             | (Builtin::Swap, Builtin::Swap)
             | (Builtin::Sizeof, Builtin::Sizeof)
             | (Builtin::BoxFromRaw, Builtin::BoxFromRaw)
-            | (Builtin::BoxIntoRaw, Builtin::BoxIntoRaw) => true,
+            | (Builtin::BoxIntoRaw, Builtin::BoxIntoRaw)
+            | (Builtin::PtrRead, Builtin::PtrRead)
+            | (Builtin::PtrWrite, Builtin::PtrWrite) => true,
             (Builtin::RefFromRaw(mutable1), Builtin::RefFromRaw(mutable2))
             | (Builtin::RefIntoRaw(mutable1), Builtin::RefIntoRaw(mutable2)) => {
                 Mutable::eq(mutable1, mutable2)
@@ -97,7 +101,9 @@ impl Builtin {
                 | Builtin::Replace
                 | Builtin::BoxIntoRaw
                 | Builtin::RefFromRaw(_)
-                | Builtin::RefIntoRaw(_),
+                | Builtin::RefIntoRaw(_)
+                | Builtin::PtrRead
+                | Builtin::PtrWrite,
                 _,
             ) => false,
         }
@@ -118,7 +124,7 @@ impl Builtin {
             i += 1;
         }
     };
-    pub const COUNT: usize = 12;
+    pub const COUNT: usize = 14;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
         Builtin::Freeze,
         Builtin::Replace,
@@ -132,6 +138,8 @@ impl Builtin {
         Builtin::RefFromRaw(Mutable::Mutable),
         Builtin::RefIntoRaw(Mutable::Immutable),
         Builtin::RefIntoRaw(Mutable::Mutable),
+        Builtin::PtrRead,
+        Builtin::PtrWrite,
     ];
     pub const fn name(&self) -> &'static str {
         match self {
@@ -151,6 +159,8 @@ impl Builtin {
                 Mutable::Immutable => "ref_from_raw",
                 Mutable::Mutable => "ref_from_raw_mut",
             },
+            Builtin::PtrRead => "ptr_read",
+            Builtin::PtrWrite => "ptr_write",
         }
     }
 }

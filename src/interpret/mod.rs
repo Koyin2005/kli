@@ -131,7 +131,7 @@ impl<'f> Interpret<'f> {
             })
             .collect();
         let mut builtin_functions = HashMap::new();
-        for b in Builtin::ALL_BUILTINS{
+        for b in Builtin::ALL_BUILTINS {
             builtin_functions.insert(b, HashMap::new());
         }
         Self {
@@ -1087,6 +1087,20 @@ impl<'f> Interpret<'f> {
             Some(values)
         }
         match b {
+            Builtin::PtrRead => {
+                let ty = &tys[0];
+                let [arg] = args_as_array(args).unwrap();
+                let pointer = arg.as_pointer().unwrap();
+                self.typed_read(pointer, ty)
+            }
+            Builtin::PtrWrite => {
+                let ty = &tys[0];
+                let [arg1, arg2] = args_as_array(args).unwrap();
+                let pointer = arg1.as_pointer().unwrap();
+                let value = arg2;
+                self.typed_write(pointer, ty, value)?;
+                Ok(Value::unit())
+            }
             Builtin::BoxFromRaw => {
                 let [arg] = args_as_array(args).unwrap();
                 let pointer = arg.as_pointer().unwrap();
