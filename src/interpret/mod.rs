@@ -1115,7 +1115,6 @@ impl<'f> Interpret<'f> {
                 let pointer = arg.as_pointer().unwrap();
                 Ok(Value::Pointer(pointer))
             }
-            Builtin::Sizeof => Ok(Value::Int(Int::from_size(size_of(&tys[0])))),
             Builtin::Allocate => {
                 let ty = &tys[0];
                 let [arg] = args_as_array(args).unwrap();

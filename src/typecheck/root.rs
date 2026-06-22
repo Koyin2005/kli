@@ -107,7 +107,6 @@ impl TypeCheck {
             Builtin::Allocate
             | Builtin::PtrRead
             | Builtin::PtrWrite
-            | Builtin::Sizeof
             | Builtin::Deallocate
             | Builtin::BoxFromRaw
             | Builtin::BoxIntoRaw => vec![types::GenericParam {
@@ -164,7 +163,6 @@ impl TypeCheck {
                 vec![Type::Box(Box::new(ty_param(0)))],
                 Type::pointer(ty_param(0)),
             ),
-            Builtin::Sizeof => (Vec::new(), Type::Int),
             Builtin::Allocate => (vec![Type::Int], (Type::pointer(ty_param(0)))),
             Builtin::Deallocate => (vec![Type::pointer(ty_param(0))], (Type::Unit)),
             Builtin::Replace => (

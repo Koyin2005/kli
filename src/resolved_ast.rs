@@ -66,7 +66,6 @@ pub enum Builtin {
     Freeze,
     Replace,
     Swap,
-    Sizeof,
     BoxFromRaw,
     BoxIntoRaw,
     RefFromRaw(Mutable),
@@ -82,7 +81,6 @@ impl Builtin {
             | (Builtin::Replace, Builtin::Replace)
             | (Builtin::Freeze, Builtin::Freeze)
             | (Builtin::Swap, Builtin::Swap)
-            | (Builtin::Sizeof, Builtin::Sizeof)
             | (Builtin::BoxFromRaw, Builtin::BoxFromRaw)
             | (Builtin::BoxIntoRaw, Builtin::BoxIntoRaw)
             | (Builtin::PtrRead, Builtin::PtrRead)
@@ -96,7 +94,6 @@ impl Builtin {
                 | Builtin::BoxFromRaw
                 | Builtin::Deallocate
                 | Builtin::Swap
-                | Builtin::Sizeof
                 | Builtin::Freeze
                 | Builtin::Replace
                 | Builtin::BoxIntoRaw
@@ -124,14 +121,13 @@ impl Builtin {
             i += 1;
         }
     };
-    pub const COUNT: usize = 14;
+    pub const COUNT: usize = 13;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
         Builtin::Freeze,
         Builtin::Replace,
         Builtin::Swap,
         Builtin::Allocate,
         Builtin::Deallocate,
-        Builtin::Sizeof,
         Builtin::BoxFromRaw,
         Builtin::BoxIntoRaw,
         Builtin::RefFromRaw(Mutable::Immutable),
@@ -148,7 +144,6 @@ impl Builtin {
             Builtin::Freeze => "freeze",
             Builtin::Replace => "replace",
             Builtin::Swap => "swap",
-            Builtin::Sizeof => "size_of",
             Builtin::BoxFromRaw => "box_from_raw",
             Builtin::BoxIntoRaw => "box_into_raw",
             Builtin::RefIntoRaw(mutable) => match mutable {

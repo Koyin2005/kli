@@ -224,7 +224,6 @@ impl Builder<'_> {
             )),
             Builtin::Replace => todo!(),
             Builtin::Swap => todo!(),
-            Builtin::Sizeof => todo!("Get rid of me"),
             Builtin::BoxFromRaw => BuiltinResult::Rvalue(Rvalue::PointerCast(
                 PointerCast::RawToBox,
                 { operands }.swap_remove(0),

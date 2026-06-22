@@ -164,7 +164,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_place(place)?;
             }
             Rvalue::PointerCast(cast, pointer) => {
-                write!(self.output, "ptr_cast({:?})(",cast)?;
+                write!(self.output, "ptr_cast({:?})(", cast)?;
                 self.write_operand(pointer)?;
                 write!(self.output, ")")?;
             }
