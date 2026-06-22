@@ -418,7 +418,7 @@ impl ResourceCheck {
                         return self.check_place_use(place, place_use);
                     };
                     self.capture_if_upvar(var, place.loc.clone());
-                    if !self.is_resource(ty) || place.ty.as_pointer().is_some() {
+                    if !self.is_resource(ty) {
                         return;
                     }
                     match place_use {
