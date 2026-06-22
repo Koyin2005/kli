@@ -1,8 +1,12 @@
 use crate::{
     ast::IsResource,
+    diagnostics::DiagnosticReporter,
     mir::{
         BodySource, Captures, Constant, ConstantValue, Context, Local, LocalKind, Operand, Place,
-        PointerCast, Rvalue, Terminator, build::Builder,
+        PointerCast, Rvalue, Terminator,
+        build::Builder,
+        visitor::Visit,
+        well_formed::{CHECK_WELL_FORMED, WellFormed},
     },
     resolved_ast::{FunctionId, Var},
     typed_ast::{self, Lambda},
@@ -14,6 +18,12 @@ impl Builder<'_> {
         let body = self.body;
         let context = self.context;
         context.body_sources.push(body.src);
+        if CHECK_WELL_FORMED {
+            let mut diag = DiagnosticReporter::new();
+            let mut wf = WellFormed::new(&body, context, &mut diag);
+            wf.visit_body(&body);
+            diag.report_all();
+        }
         assert!(
             context.bodies.insert(body.src, body).is_none(),
             "Can only have one source for each body"

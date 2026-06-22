@@ -11,8 +11,10 @@ use crate::{
 };
 pub mod build;
 pub mod dump;
+pub mod visitor;
+pub mod well_formed;
 define_id!(Local);
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
 pub enum PlaceProjection {
     DowncastSome,
     Field(FieldId),
@@ -20,7 +22,7 @@ pub enum PlaceProjection {
     Index(Local),
     Deref,
 }
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
 pub enum PlaceBase {
     Local(Local),
     ReturnPlace,

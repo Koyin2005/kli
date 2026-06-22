@@ -14,6 +14,16 @@ impl DiagnosticReporter {
             diagnostics: Vec::new(),
         }
     }
+    fn emit_diagnostic(diagnostic: Diagnostic) {
+        if diagnostic.loc.line > 0 {
+            eprintln!(
+                "Line [{}] in '{}': {}",
+                diagnostic.loc.line, diagnostic.loc.file, diagnostic.msg
+            );
+        } else {
+            eprintln!("Error : {}", diagnostic.msg);
+        }
+    }
     pub fn add_diagnostic(&mut self, msg: String, loc: SrcLoc) {
         self.diagnostics.push(Diagnostic { msg, loc });
     }
@@ -22,14 +32,7 @@ impl DiagnosticReporter {
         let mut emit_diagnostic = false;
         for diagnostic in self.diagnostics {
             emit_diagnostic = true;
-            if diagnostic.loc.line > 0 {
-                eprintln!(
-                    "Line [{}] in '{}': {}",
-                    diagnostic.loc.line, diagnostic.loc.file, diagnostic.msg
-                );
-            } else {
-                eprintln!("Error : {}", diagnostic.msg);
-            }
+            Self::emit_diagnostic(diagnostic);
         }
         emit_diagnostic
     }
