@@ -309,7 +309,10 @@ impl Body {
                 ty.field_type(field).expect("should be a record type")
             }
             PlaceProjection::Index(_) | PlaceProjection::ConstantIndex(_) => {
-                todo!("Handle index projections")
+                let Type::Array(ty, _) = ty else {
+                    unreachable!("Should be an array")
+                };
+                *ty
             }
             PlaceProjection::DowncastSome => {
                 ty.as_option().expect("should be an option type").clone()
