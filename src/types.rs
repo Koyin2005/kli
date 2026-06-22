@@ -12,10 +12,15 @@ pub enum PointerType {
     Reference(Region, Mutable),
     Raw,
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GenericKind {
     Region,
     Type,
+}
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct GenericParam {
+    pub name: Rc<str>,
+    pub kind: GenericKind,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GenericArg {

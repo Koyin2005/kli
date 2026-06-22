@@ -9,7 +9,7 @@ use crate::{
     src_loc::SrcLoc,
     typecheck::{infer::TypeInfer, lower::Lower, subst::TypeSubst},
     typed_ast::{self, Function, GenericParam, IteratorType, LetBinding},
-    types::{FunctionType, GenericArg, GenericKind, Region, Type},
+    types::{self, FunctionType, GenericArg, GenericKind, Region, Type},
 };
 pub struct TypeError;
 #[derive(Debug)]
@@ -102,95 +102,88 @@ impl TypeCheck {
             | Type::Array(..) => Err(ty),
         }
     }
-    pub(super) fn generic_arg_count_of_builtin(&self, builtin: Builtin) -> usize {
+    fn generic_params_for_builtin(&self, builtin: Builtin) -> Vec<types::GenericParam> {
         match builtin {
             Builtin::Allocate
-            | Builtin::Deallocate
-            | Builtin::Sizeof
-            | Builtin::BoxFromRaw
-            | Builtin::BoxIntoRaw
             | Builtin::PtrRead
-            | Builtin::PtrWrite => 1,
-            Builtin::RefIntoRaw(_) | Builtin::RefFromRaw(_) => 2,
-            Builtin::Freeze | Builtin::Replace | Builtin::Swap => 2,
+            | Builtin::PtrWrite
+            | Builtin::Sizeof
+            | Builtin::Deallocate
+            | Builtin::BoxFromRaw
+            | Builtin::BoxIntoRaw => vec![types::GenericParam {
+                name: Rc::from("T"),
+                kind: GenericKind::Type,
+            }],
+            Builtin::Freeze
+            | Builtin::Replace
+            | Builtin::Swap
+            | Builtin::RefFromRaw(_)
+            | Builtin::RefIntoRaw(_) => vec![
+                types::GenericParam {
+                    name: Rc::from("r"),
+                    kind: GenericKind::Region,
+                },
+                types::GenericParam {
+                    name: Rc::from("T"),
+                    kind: GenericKind::Type,
+                },
+            ],
         }
     }
+    pub(super) fn generic_arg_count_of_builtin(&self, builtin: Builtin) -> usize {
+        self.generic_params_for_builtin(builtin).len()
+    }
     pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionType> {
+        let generics = self.generic_params_for_builtin(builtin);
+        let ty_param = |index: usize| {
+            let param = &generics[index];
+            assert_eq!(param.kind, GenericKind::Type);
+            Type::Param(param.name.clone(), index)
+        };
+        let region_param = |index: usize| {
+            let param = &generics[index];
+            assert_eq!(param.kind, GenericKind::Region);
+            Region::Param(param.name.clone(), index)
+        };
         let (params, return_type) = match builtin {
-            Builtin::PtrRead => (
-                vec![Type::pointer(Type::Param(Rc::from("T"), 0))],
-                Type::Param(Rc::from("T"), 0),
-            ),
-            Builtin::PtrWrite => (
-                vec![
-                    Type::pointer(Type::Param(Rc::from("T"), 0)),
-                    Type::Param(Rc::from("T"), 0),
-                ],
-                Type::Unit,
-            ),
+            Builtin::PtrRead => (vec![Type::pointer(ty_param(0))], ty_param(0)),
+            Builtin::PtrWrite => (vec![Type::pointer(ty_param(0)), ty_param(0)], Type::Unit),
             Builtin::RefFromRaw(mutable) => (
-                vec![Type::pointer(Type::Param(Rc::from("T"), 1))],
-                Type::Param(Rc::from("T"), 1).reference(mutable, Region::Param(Rc::from("r"), 0)),
+                vec![Type::pointer(ty_param(1))],
+                ty_param(1).reference(mutable, region_param(0)),
             ),
             Builtin::RefIntoRaw(mutable) => (
-                vec![
-                    Type::Param(Rc::from("T"), 1)
-                        .reference(mutable, Region::Param(Rc::from("r"), 0)),
-                ],
-                Type::pointer(Type::Param(Rc::from("T"), 1)),
+                vec![ty_param(1).reference(mutable, region_param(0))],
+                Type::pointer(ty_param(1)),
             ),
             Builtin::BoxFromRaw => (
-                vec![Type::pointer(Type::Param(Rc::from("T"), 0))],
-                Type::Box(Box::new(Type::Param(Rc::from("T"), 0))),
+                vec![Type::pointer(ty_param(0))],
+                Type::Box(Box::new(ty_param(0))),
             ),
             Builtin::BoxIntoRaw => (
-                vec![Type::Box(Box::new(Type::Param(Rc::from("T"), 0)))],
-                Type::pointer(Type::Param(Rc::from("T"), 0)),
+                vec![Type::Box(Box::new(ty_param(0)))],
+                Type::pointer(ty_param(0)),
             ),
             Builtin::Sizeof => (Vec::new(), Type::Int),
-            Builtin::Allocate => (
-                vec![Type::Int],
-                (Type::pointer(Type::Param(Rc::from("T"), 0))),
-            ),
-            Builtin::Deallocate => (
-                vec![Type::pointer(Type::Param(Rc::from("T"), 0))],
-                (Type::Unit),
-            ),
+            Builtin::Allocate => (vec![Type::Int], (Type::pointer(ty_param(0)))),
+            Builtin::Deallocate => (vec![Type::pointer(ty_param(0))], (Type::Unit)),
             Builtin::Replace => (
                 vec![
-                    Type::Mut(
-                        Region::Param(Rc::from("r"), 0),
-                        Box::new(Type::Param(Rc::from("T"), 1)),
-                    ),
-                    Type::Function(FunctionType::new_resource(
-                        vec![Type::Param(Rc::from("T"), 1)],
-                        Type::Param(Rc::from("T"), 1),
-                    )),
+                    Type::Mut(region_param(0), Box::new(ty_param(1))),
+                    Type::Function(FunctionType::new_resource(vec![ty_param(1)], ty_param(1))),
                 ],
-                Type::Mut(
-                    Region::Param(Rc::from("r"), 0),
-                    Box::new(Type::Param(Rc::from("T"), 1)),
-                ),
+                Type::Mut(region_param(0), Box::new(ty_param(1))),
             ),
             Builtin::Swap => (
                 vec![
-                    Type::Mut(
-                        Region::Param(Rc::from("r"), 0),
-                        Box::new(Type::Param(Rc::from("T"), 1)),
-                    ),
-                    Type::Param(Rc::from("T"), 1),
+                    Type::Mut(region_param(0), Box::new(ty_param(1))),
+                    ty_param(1),
                 ],
-                Type::Param(Rc::from("T"), 1),
+                ty_param(1),
             ),
             Builtin::Freeze => (
-                vec![Type::Mut(
-                    Region::Param(Rc::from("r"), 0),
-                    Box::new(Type::Param(Rc::from("T"), 1)),
-                )],
-                (Type::Imm(
-                    Region::Param(Rc::from("r"), 0),
-                    Box::new(Type::Param(Rc::from("T"), 1)),
-                )),
+                vec![Type::Mut(region_param(0), Box::new(ty_param(1)))],
+                (Type::Imm(region_param(0), Box::new(ty_param(1)))),
             ),
         };
         Scheme::new(FunctionType::new_data(params, return_type))
@@ -203,27 +196,11 @@ impl TypeCheck {
         builtin: Builtin,
         loc: SrcLoc,
     ) -> Vec<GenericArg> {
-        match builtin {
-            Builtin::Allocate
-            | Builtin::Deallocate
-            | Builtin::Sizeof
-            | Builtin::BoxFromRaw
-            | Builtin::BoxIntoRaw
-            | Builtin::PtrRead
-            | Builtin::PtrWrite => {
-                vec![GenericArg::Type(self.fresh_ty(loc))]
-            }
-            Builtin::Freeze
-            | Builtin::Replace
-            | Builtin::Swap
-            | Builtin::RefIntoRaw(_)
-            | Builtin::RefFromRaw(_) => {
-                vec![
-                    GenericArg::Region(self.fresh_region(loc.clone())),
-                    GenericArg::Type(self.fresh_ty(loc)),
-                ]
-            }
-        }
+        let kinds = self
+            .generic_params_for_builtin(builtin)
+            .into_iter()
+            .map(|param| param.kind);
+        Self::instantiate_args(&mut self.infer, loc, kinds)
     }
     pub(super) fn with_capture_scope<T>(
         &mut self,
@@ -237,11 +214,22 @@ impl TypeCheck {
             (Vec::new(), value)
         }
     }
-    pub(super) fn fresh_region(&mut self, loc: SrcLoc) -> Region {
-        Region::Infer(self.infer.fresh_region(loc))
-    }
     pub(super) fn fresh_ty(&mut self, loc: SrcLoc) -> Type {
         Type::Infer(self.infer.fresh_ty(loc))
+    }
+    fn instantiate_args(
+        infer: &mut TypeInfer,
+        loc: SrcLoc,
+        kinds: impl Iterator<Item = GenericKind>,
+    ) -> Vec<GenericArg> {
+        kinds
+            .map(|kind| match kind {
+                GenericKind::Region => {
+                    GenericArg::Region(Region::Infer(infer.fresh_region(loc.clone())))
+                }
+                GenericKind::Type => GenericArg::Type(Type::Infer(infer.fresh_ty(loc.clone()))),
+            })
+            .collect()
     }
     pub(super) fn generic_arg_count_of_function(&self, function: FunctionId) -> usize {
         self.function_generic_kinds[function].len()
@@ -251,17 +239,11 @@ impl TypeCheck {
         function: FunctionId,
         loc: SrcLoc,
     ) -> Vec<GenericArg> {
-        self.function_generic_kinds[function]
-            .iter()
-            .map(|kind| match *kind {
-                GenericKind::Region => {
-                    GenericArg::Region(Region::Infer(self.infer.fresh_region(loc.clone())))
-                }
-                GenericKind::Type => {
-                    GenericArg::Type(Type::Infer(self.infer.fresh_ty(loc.clone())))
-                }
-            })
-            .collect()
+        Self::instantiate_args(
+            &mut self.infer,
+            loc,
+            self.function_generic_kinds[function].iter().copied(),
+        )
     }
     pub(super) fn var_type(&self, var: VarId) -> &Type {
         &self.variables[usize::from(var)].ty
