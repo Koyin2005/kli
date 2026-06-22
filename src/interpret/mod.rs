@@ -1135,23 +1135,6 @@ impl<'f> Interpret<'f> {
                 let pointer = arg.as_pointer().unwrap();
                 Ok(Value::Pointer(pointer))
             }
-            Builtin::Replace => {
-                let ty = &tys[0];
-                let [mut_ref, f] = args_as_array(args).unwrap();
-                let mut_ref = mut_ref.as_pointer().unwrap();
-                let old_value = self.typed_read(mut_ref, ty)?;
-                let result = self.call_value(IsResource::Resource, f, vec![old_value])?;
-                self.typed_write(mut_ref, ty, result)?;
-                Ok(Value::Pointer(mut_ref))
-            }
-            Builtin::Swap => {
-                let [dest, src] = args_as_array(args).unwrap();
-                let dest = dest.as_pointer().unwrap();
-                let ty = &tys[0];
-                let result = self.typed_read(dest, ty)?;
-                self.typed_write(dest, ty, src)?;
-                Ok(result)
-            }
         }
     }
     fn interpret_function(

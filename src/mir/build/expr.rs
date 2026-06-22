@@ -222,8 +222,6 @@ impl Builder<'_> {
                 PointerCast::Freeze,
                 { operands }.swap_remove(0),
             )),
-            Builtin::Replace => todo!(),
-            Builtin::Swap => todo!(),
             Builtin::BoxFromRaw => BuiltinResult::Rvalue(Rvalue::PointerCast(
                 PointerCast::RawToBox,
                 { operands }.swap_remove(0),

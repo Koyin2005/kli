@@ -114,8 +114,6 @@ impl TypeCheck {
                 kind: GenericKind::Type,
             }],
             Builtin::Freeze
-            | Builtin::Replace
-            | Builtin::Swap
             | Builtin::RefFromRaw(_)
             | Builtin::RefIntoRaw(_) => vec![
                 types::GenericParam {
@@ -165,20 +163,6 @@ impl TypeCheck {
             ),
             Builtin::Allocate => (vec![Type::Int], (Type::pointer(ty_param(0)))),
             Builtin::Deallocate => (vec![Type::pointer(ty_param(0))], (Type::Unit)),
-            Builtin::Replace => (
-                vec![
-                    Type::Mut(region_param(0), Box::new(ty_param(1))),
-                    Type::Function(FunctionType::new_resource(vec![ty_param(1)], ty_param(1))),
-                ],
-                Type::Mut(region_param(0), Box::new(ty_param(1))),
-            ),
-            Builtin::Swap => (
-                vec![
-                    Type::Mut(region_param(0), Box::new(ty_param(1))),
-                    ty_param(1),
-                ],
-                ty_param(1),
-            ),
             Builtin::Freeze => (
                 vec![Type::Mut(region_param(0), Box::new(ty_param(1)))],
                 (Type::Imm(region_param(0), Box::new(ty_param(1)))),
