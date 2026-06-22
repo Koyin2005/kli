@@ -113,9 +113,7 @@ impl TypeCheck {
                 name: Rc::from("T"),
                 kind: GenericKind::Type,
             }],
-            Builtin::Freeze
-            | Builtin::RefFromRaw(_)
-            | Builtin::RefIntoRaw(_) => vec![
+            Builtin::Freeze | Builtin::RefFromRaw(_) | Builtin::RefIntoRaw(_) => vec![
                 types::GenericParam {
                     name: Rc::from("r"),
                     kind: GenericKind::Region,

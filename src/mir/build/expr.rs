@@ -9,7 +9,7 @@ use crate::{
     },
     resolved_ast::Builtin,
     typed_ast::{self, Expr, ExprKind, FieldId, Pattern},
-    types::{FunctionType, GenericArg, Type},
+    types::{FunctionType, Type},
 };
 pub(super) enum BuiltinResult {
     Rvalue(Rvalue),
@@ -198,13 +198,7 @@ impl Builder<'_> {
     fn binary_op_rvalue(op: mir::BinaryOp, left: Operand, right: Operand) -> Rvalue {
         Rvalue::Binary(op, Box::new((left, right)))
     }
-    pub(super) fn builtin_call(
-        &mut self,
-        ty: &Type,
-        builtin: Builtin,
-        generic_args: &[GenericArg],
-        args: &[Expr],
-    ) -> BuiltinResult {
+    pub(super) fn builtin_call(&mut self, builtin: Builtin, args: &[Expr]) -> BuiltinResult {
         let operands = args
             .iter()
             .map(|operand| self.operand(operand))
@@ -545,9 +539,7 @@ impl Builder<'_> {
                     Rvalue::Use(function)
                 }
             }
-            &ExprKind::BuiltinCall(builtin, ref generic_args, ref args) => self
-                .builtin_call(&expr.ty, builtin, generic_args, args)
-                .into(),
+            &ExprKind::BuiltinCall(builtin, _, ref args) => self.builtin_call(builtin, args).into(),
         }
     }
 }

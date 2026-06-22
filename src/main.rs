@@ -189,7 +189,7 @@ fn find_std_lib() -> FileEntry {
             file_from("ints", int_file),
             file_from("io", io_file),
             file_from("boxed", box_file),
-            file_from("refs", ref_file)
+            file_from("refs", ref_file),
         ])),
     }
 }

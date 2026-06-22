@@ -36,14 +36,12 @@ impl Builder<'_> {
             } => {
                 self.for_loop(pattern, iterator, iterator_type, body);
             }
-            ExprKind::BuiltinCall(builtin, generic_args, args) => {
-                match self.builtin_call(&expr.ty, *builtin, generic_args, args) {
-                    BuiltinResult::Rvalue(value) => {
-                        self.assign_to_temp(expr.ty.clone(), value);
-                    }
-                    BuiltinResult::Unit => (),
+            ExprKind::BuiltinCall(builtin, _, args) => match self.builtin_call(*builtin, args) {
+                BuiltinResult::Rvalue(value) => {
+                    self.assign_to_temp(expr.ty.clone(), value);
                 }
-            }
+                BuiltinResult::Unit => (),
+            },
             //Evaluate
             ExprKind::Record(..)
             | ExprKind::String(_)
