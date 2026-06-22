@@ -192,6 +192,7 @@ pub enum Rvalue {
     Ref(Mutable, Place),
     Allocate { ty: Type, count: Operand },
     PointerCast(PointerCast, Operand),
+    DecodeUtf8(Operand, Operand),
     Len(Place),
 }
 #[derive(Clone)]

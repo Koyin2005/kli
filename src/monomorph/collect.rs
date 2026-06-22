@@ -110,6 +110,18 @@ impl<'ctxt> InstanceCollector<'ctxt> {
                                 operand,
                                 args.clone(),
                             ),
+                            Rvalue::DecodeUtf8(operand1, operand2) => {
+                                self.add_new_instances_from_operand(
+                                    &mut unvisited,
+                                    operand1,
+                                    args.clone(),
+                                );
+                                self.add_new_instances_from_operand(
+                                    &mut unvisited,
+                                    operand2,
+                                    args.clone(),
+                                )
+                            }
                             Rvalue::Aggregate(_, fields) => {
                                 for field in fields {
                                     self.add_new_instances_from_operand(

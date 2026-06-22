@@ -9,7 +9,7 @@ use crate::{
     },
     resolved_ast::Builtin,
     typed_ast::{self, Expr, ExprKind, FieldId, Pattern},
-    types::{FunctionType, Type},
+    types::{FunctionType, LIST_LEN_FIELD, Type},
 };
 pub(super) enum BuiltinResult {
     Rvalue(Rvalue),
@@ -63,10 +63,17 @@ impl Builder<'_> {
             Place::local(self.expr_into_temp(expr))
         }
     }
-    pub(super) fn len_operand(&mut self, place: Place) -> Operand {
-        Operand::Load(Place::local(
-            self.assign_to_temp(Type::Int, Rvalue::Len(place)),
-        ))
+    pub(super) fn len_operand(&mut self, ty: &Type, place: Place) -> Operand {
+        if let Type::List(_) = ty {
+            Operand::Load(Place::local(self.assign_to_temp(
+                Type::Int,
+                Rvalue::Use(Operand::Load(place.with_field(LIST_LEN_FIELD))),
+            )))
+        } else {
+            Operand::Load(Place::local(
+                self.assign_to_temp(Type::Int, Rvalue::Len(place)),
+            ))
+        }
     }
     fn operand_as_place(&mut self, ty: Type, operand: Operand) -> Place {
         match operand {
