@@ -5,7 +5,6 @@ use crate::{
     src_loc::SrcLoc,
     types::{FunctionType, PointerType, Type},
 };
-pub const CHECK_WELL_FORMED: bool = true;
 pub struct WellFormed<'ctxt> {
     _ctxt: &'ctxt Context,
     body: &'ctxt Body,
@@ -251,7 +250,6 @@ impl Visit for WellFormed<'_> {
                     || "Can only call data functions".to_string(),
                     loc.clone(),
                 );
-                println!("{:?} {:?}",operands,params);
                 let operand_tys = operands
                     .iter()
                     .map(|operand| self.body.type_of_operand(operand))

@@ -232,7 +232,7 @@ impl Builder<'_> {
             .collect::<Vec<_>>();
         match builtin {
             Builtin::Allocate => BuiltinResult::Rvalue(Rvalue::Allocate {
-                ty:  ty.as_pointer().cloned().expect("should be a pointer"),
+                ty: ty.as_pointer().cloned().expect("should be a pointer"),
                 count: { operands }.swap_remove(0),
             }),
             Builtin::Deallocate => {

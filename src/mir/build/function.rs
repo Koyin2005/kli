@@ -2,10 +2,8 @@ use crate::{
     ast::IsResource,
     mir::{
         BodySource, Captures, Constant, ConstantValue, Context, Local, LocalKind, Operand, Place,
-        PointerCast, Rvalue, TerminatorKind,
-        build::Builder,
-        visitor::Visit,
-        well_formed::{CHECK_WELL_FORMED, WellFormed},
+        PointerCast, Rvalue, TerminatorKind, build::Builder, visitor::Visit,
+        well_formed::WellFormed,
     },
     resolved_ast::FunctionId,
     src_loc::SrcLoc,
@@ -18,7 +16,7 @@ impl Builder<'_> {
         let body = self.body;
         let context = self.context;
         context.body_sources.push(body.src);
-        if CHECK_WELL_FORMED {
+        if context.check_well_formed {
             let mut wf = WellFormed::new(&body, context);
             wf.visit_body(&body);
         }

@@ -1,4 +1,9 @@
-use std::{collections::BTreeMap, env, path::Path, rc::Rc};
+use std::{
+    collections::{BTreeMap, HashSet},
+    env,
+    path::Path,
+    rc::Rc,
+};
 
 use kli::{
     ast::{self, Module, ModuleId},
@@ -193,22 +198,62 @@ fn find_std_lib() -> FileEntry {
         ])),
     }
 }
-
-fn main() {
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+pub enum Feature {
+    NoStd,
+    ValidateMir,
+    OutputMir,
+    OutputInstances,
+}
+struct Config {
+    path: String,
+    flags: HashSet<Feature>,
+}
+struct ConfigError;
+fn config() -> Result<Config, ConfigError> {
     let mut args = env::args().skip(1).collect::<Vec<_>>();
-    let path = if !args.is_empty() {
-        args.remove(0)
-    } else {
+    if args.is_empty() {
         eprintln!("Invalid format");
-        eprintln!("Expected 'program_path'");
+        eprintln!("Expected 'program_path' and features ");
+        return Err(ConfigError);
+    }
+    let path = args.remove(0);
+    let arg_src = args
+        .into_iter()
+        .fold(String::from(""), |mut output, current| {
+            output.extend(current.chars());
+            output.push(' ');
+            output
+        });
+    let features = arg_src
+        .split("--")
+        .filter_map(|src| {
+            if src.is_empty() {
+                return None;
+            }
+            let mut pieces = src.trim().split_whitespace();
+            let name = pieces.next()?;
+            let feature = match name {
+                "no-std" => Feature::NoStd,
+                "check-mir" => Feature::ValidateMir,
+                "output-mir" => Feature::OutputMir,
+                "output-instances" => Feature::OutputInstances,
+                _ => return None,
+            };
+            Some(feature)
+        })
+        .collect();
+    Ok(Config {
+        path,
+        flags: features,
+    })
+}
+fn main() {
+    let Ok(config) = config() else {
         return;
     };
-    let include_std = if args.is_empty() {
-        true
-    } else {
-        (&args)[0] != "--no_std"
-    };
-
+    let path = config.path;
+    let include_std = !config.flags.contains(&Feature::NoStd);
     let file_tree = match find_all_src_files(Path::new(&path)) {
         Ok(mut file_tree) => {
             if include_std {
@@ -248,22 +293,25 @@ fn main() {
     if had_error {
         return;
     }
-    let mut context = mir::Context::default();
+    let mut context = mir::Context::new(config.flags.contains(&Feature::ValidateMir));
     for function in program.functions.iter() {
         context.function_names.push(function.name.clone());
     }
     for (id, function) in program.functions.iter_enumerated() {
         mir::build::Builder::build_from_function(&mut context, id, function);
     }
-    for body in context.body_iter() {
-        mir::dump::MirDump::new(std::io::stdout(), &context)
-            .write_body(body)
-            .unwrap();
+    if config.flags.contains(&Feature::OutputMir) {
+        for body in context.body_iter() {
+            mir::dump::MirDump::new(std::io::stdout(), &context)
+                .write_body(body)
+                .unwrap();
+        }
     }
-
-    let instances = InstanceCollector::new(&context)
-        .collect(Instance::non_generic(InstanceKind::Function(program.main)));
-    for instance in &instances {
-        println!("{:?}", instance);
+    if config.flags.contains(&Feature::OutputInstances) {
+        let instances = InstanceCollector::new(&context)
+            .collect(Instance::non_generic(InstanceKind::Function(program.main)));
+        for instance in &instances {
+            println!("{:?}", instance);
+        }
     }
 }

@@ -446,10 +446,17 @@ pub type Locals = IndexVec<Local, LocalInfo>;
 #[derive(Default)]
 pub struct Context {
     pub function_names: IndexVec<FunctionId, Ident>,
+    pub check_well_formed: bool,
     pub(super) bodies: HashMap<BodySource, Body>,
     pub(super) body_sources: Vec<BodySource>,
 }
 impl Context {
+    pub fn new(well_formed: bool) -> Self {
+        Self {
+            check_well_formed: well_formed,
+            ..Default::default()
+        }
+    }
     pub fn body_iter(&self) -> impl Iterator<Item = &Body> {
         self.body_sources.iter().map(|src| &self.bodies[src])
     }
