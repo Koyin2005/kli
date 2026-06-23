@@ -101,7 +101,19 @@ impl<'ctxt> MirDump<'ctxt> {
             Rvalue::Aggregate(kind, fields) => {
                 let name = match kind {
                     AggregateKind::Array(..) | AggregateKind::Record { .. } => "".to_string(),
-                    AggregateKind::Closure => "Closure".to_string(),
+                    AggregateKind::Closure(params, return_type) => {
+                        let mut first = true;
+                        let mut output = "Closure(".to_string();
+                        for param in params {
+                            if !first {
+                                output.push(',');
+                            }
+                            output.push_str(&param.to_string());
+                            first = false;
+                        }
+                        output.push_str(&return_type.to_string());
+                        output
+                    }
                     AggregateKind::ArrayList(ty) => format!("array_list[{}]", ty),
                     AggregateKind::String => "string".to_string(),
                     AggregateKind::Option { inner, is_some } => {
@@ -126,7 +138,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     AggregateKind::Array(..) => None,
                     AggregateKind::Option { .. } => Some(i.into_usize().to_string()),
                     AggregateKind::Record { field_names } => Some(field_names[i].to_string()),
-                    AggregateKind::Closure => Some(match i {
+                    AggregateKind::Closure(..) => Some(match i {
                         i if i == FieldId::zero() => "env".to_string(),
                         i if i == FieldId::new(1) => "code".to_string(),
                         _ => unreachable!("Should only have 2 fields"),

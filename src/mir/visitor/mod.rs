@@ -88,7 +88,7 @@ pub trait Visit {
         match projection {
             PlaceProjection::ConstantIndex(_)
             | PlaceProjection::DowncastSome
-            | PlaceProjection::Field(_) => todo!(),
+            | PlaceProjection::Field(_) => (),
             PlaceProjection::Index(local) => self.visit_local(loc, local),
             PlaceProjection::Deref => (),
         }

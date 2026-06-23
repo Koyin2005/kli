@@ -42,7 +42,7 @@ impl Visit for WellFormed<'_> {
                     || "Field names should be same length as fields".to_string(),
                     loc,
                 ),
-                super::AggregateKind::Closure => {
+                super::AggregateKind::Closure(..) => {
                     let (env, code) = self.assert_with_some(
                         fields.as_slice(),
                         |fields| match fields {

@@ -586,8 +586,9 @@ impl Builder<'_> {
                             Operand::Load(Place::local(env)),
                         ),
                     );
+                    let param_tys = lambda.params.iter().map(|param| param.ty.clone()).collect();
                     Rvalue::Aggregate(
-                        AggregateKind::Closure,
+                        AggregateKind::Closure(param_tys, Box::new(lambda.return_type.clone())),
                         [Operand::Load(Place::local(erased_env)), function]
                             .into_iter()
                             .collect(),

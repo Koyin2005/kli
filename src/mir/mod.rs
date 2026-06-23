@@ -151,7 +151,7 @@ pub enum AggregateKind {
     Record {
         field_names: IndexVec<FieldId, Rc<str>>,
     },
-    Closure,
+    Closure(Vec<Type>, Box<Type>),
     Option {
         inner: Type,
         is_some: bool,
@@ -379,11 +379,31 @@ impl Body {
                 }
                 BinaryOp::Divide | BinaryOp::BitwiseAnd => Type::Int,
                 BinaryOp::Equals => Type::Bool,
-                BinaryOp::Lesser => todo!(),
+                BinaryOp::Lesser => Type::Bool,
             },
             Rvalue::Allocate { ty, count: _ } => Type::pointer(ty.clone()),
             Rvalue::DecodeUtf8(_, _) => Type::record([Type::Char, Type::Int].into()),
-            Rvalue::Aggregate(..) => todo!(),
+            Rvalue::Aggregate(aggregate, operands) => match aggregate {
+                AggregateKind::Array(ty, count) => Type::Array(Box::new(ty.clone()), *count),
+                AggregateKind::Record { field_names } => Type::Record(
+                    field_names
+                        .iter()
+                        .zip(operands)
+                        .map(|(name, operand)| crate::types::RecordField {
+                            name: name.clone(),
+                            ty: self.type_of_operand(operand),
+                        })
+                        .collect(),
+                ),
+                AggregateKind::Closure(params, return_type) => Type::function_type(
+                    crate::ast::IsResource::Resource,
+                    params.clone(),
+                    (**return_type).clone(),
+                ),
+                AggregateKind::Option { inner, .. } => Type::Option(Box::new(inner.clone())),
+                AggregateKind::ArrayList(ty) => Type::List(Box::new(ty.clone())),
+                AggregateKind::String => Type::String,
+            },
             Rvalue::PointerCast(cast, operand) => {
                 let (pointer_type, pointee) = self
                     .type_of_operand(operand)
