@@ -1,5 +1,6 @@
 use crate::src_loc::SrcLoc;
 
+#[track_caller]
 pub fn emit_fatal_diagnostic(loc: SrcLoc, msg: String) -> ! {
     if loc.line > 0 {
         panic!("Line [{}] in '{}': {}", loc.line, loc.file, msg);

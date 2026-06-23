@@ -142,7 +142,11 @@ impl Type {
                 id if id == FieldId::zero() => Some(Type::pointer(Type::Byte)),
                 id if id == FieldId::new(1) => Some(Type::function_type(
                     IsResource::Data,
-                    params.clone(),
+                    {
+                        let mut params = params.clone();
+                        params.insert(0, Self::pointer(Type::Byte));
+                        params
+                    },
                     (**return_type).clone(),
                 )),
                 _ => None,

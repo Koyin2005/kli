@@ -5,7 +5,7 @@ use crate::{
     src_loc::SrcLoc,
     types::{FunctionType, PointerType, Type},
 };
-pub const CHECK_WELL_FORMED: bool = false;
+pub const CHECK_WELL_FORMED: bool = true;
 pub struct WellFormed<'ctxt> {
     _ctxt: &'ctxt Context,
     body: &'ctxt Body,
@@ -14,11 +14,13 @@ impl<'ctxt> WellFormed<'ctxt> {
     pub fn new(body: &'ctxt Body, _ctxt: &'ctxt Context) -> Self {
         Self { _ctxt, body }
     }
+    #[track_caller]
     fn assert(&mut self, condition: bool, msg: impl FnOnce() -> String, loc: SrcLoc) {
         if !condition {
             emit_fatal_diagnostic(loc, msg());
         }
     }
+    #[track_caller]
     fn assert_with_some<T, U>(
         &mut self,
         value: T,
@@ -33,7 +35,58 @@ impl<'ctxt> WellFormed<'ctxt> {
     }
 }
 impl Visit for WellFormed<'_> {
+    fn visit_place(&mut self, loc: Location, place: &super::Place) {
+        let mut ty = self.body.type_of_base(&place.base);
+        for proj in &place.projections {
+            let loc = self.body.src_info(loc);
+            match proj {
+                super::PlaceProjection::DowncastSome => {
+                    ty = self.assert_with_some(
+                        ty,
+                        |ty| match ty {
+                            Type::Option(ty) => Some(*ty),
+                            _ => None,
+                        },
+                        || "Cannot downcast a non-option".to_string(),
+                        loc,
+                    );
+                }
+                super::PlaceProjection::Field(field_id) => {
+                    ty = self.assert_with_some(
+                        &ty,
+                        |ty| ty.field_type(*field_id),
+                        || format!("Cannot take a field of '{}'", ty),
+                        loc,
+                    )
+                }
+                super::PlaceProjection::ConstantIndex(_) | super::PlaceProjection::Index(_) => {
+                    ty = self.assert_with_some(
+                        ty,
+                        |ty| match ty {
+                            Type::Array(ty, _) => Some(*ty),
+                            _ => None,
+                        },
+                        || "Cannot take an index for non-array".to_string(),
+                        loc,
+                    )
+                }
+                super::PlaceProjection::Deref => {
+                    ty = self.assert_with_some(
+                        ty,
+                        |ty| match ty {
+                            Type::RawPointer(ty) => Some(*ty),
+                            Type::Imm(_, ty) | Type::Mut(_, ty) => Some(*ty),
+                            _ => None,
+                        },
+                        || "Cannot deref non pointer or non ref".to_string(),
+                        loc,
+                    )
+                }
+            }
+        }
+    }
     fn visit_rvalue(&mut self, loc: Location, rvalue: &super::Rvalue) {
+        self.super_visit_rvalue(loc, rvalue);
         let loc = self.body.src_info(loc);
         match rvalue {
             super::Rvalue::Aggregate(aggregate_kind, fields) => match aggregate_kind {
@@ -198,13 +251,14 @@ impl Visit for WellFormed<'_> {
                     || "Can only call data functions".to_string(),
                     loc.clone(),
                 );
+                println!("{:?} {:?}",operands,params);
                 let operand_tys = operands
                     .iter()
                     .map(|operand| self.body.type_of_operand(operand))
                     .collect::<Vec<_>>();
                 self.assert(
                     operand_tys == params,
-                    || format!("Expected '{:?}' but got '{:?}'", operand_tys, params),
+                    || format!("Expected '{:?}' but got '{:?}'", params, operand_tys),
                     loc,
                 );
             }
@@ -251,7 +305,9 @@ impl Visit for WellFormed<'_> {
                     (PointerCast::BoxToRaw, PointerType::Box) => (),
                     (PointerCast::Freeze, PointerType::Reference(_, Mutable::Mutable)) => (),
                     (
-                        PointerCast::RawToRaw | PointerCast::RawToBox | PointerCast::RawToRef(..),
+                        PointerCast::RawToRaw(_)
+                        | PointerCast::RawToBox
+                        | PointerCast::RawToRef(..),
                         PointerType::Raw,
                     ) => (),
                     (
@@ -329,7 +385,7 @@ impl Visit for WellFormed<'_> {
             StmtKind::Deallocate(operand) => {
                 let pointer = self.body.type_of_operand(operand);
                 self.assert(
-                    pointer.as_pointer().is_none(),
+                    pointer.as_pointer().is_some(),
                     || format!("Cannot deallocate {}", pointer),
                     stmt.loc.clone(),
                 );

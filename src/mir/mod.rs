@@ -123,7 +123,7 @@ impl Constant {
     }
     pub fn unit() -> Self {
         Self {
-            ty: Box::new(Type::Bool),
+            ty: Box::new(Type::Unit),
             value: ConstantValue::ZeroSized,
         }
     }
@@ -179,7 +179,7 @@ pub enum BinaryOp {
 }
 #[derive(Clone, Debug)]
 pub enum PointerCast {
-    RawToRaw,
+    RawToRaw(Type),
     BoxToRaw,
     RawToBox,
     RefToRaw(Mutable),
@@ -325,7 +325,14 @@ impl Body {
     }
     pub fn apply_projection_to_type(&self, ty: Type, projection: &PlaceProjection) -> Type {
         match projection {
-            PlaceProjection::Deref => ty.as_pointer().expect("should be a pointer type").clone(),
+            PlaceProjection::Deref => ty
+                .as_pointer_type()
+                .ok()
+                .and_then(|(pointer, ty)| match pointer {
+                    PointerType::Raw | PointerType::Reference(..) => Some(ty),
+                    _ => None,
+                })
+                .expect("should be a pointer type"),
             &PlaceProjection::Field(field) => {
                 ty.field_type(field).expect("should be a record type")
             }
@@ -367,7 +374,8 @@ impl Body {
                 *function.return_type
             }
             Rvalue::Binary(op, left_and_right) => match op {
-                BinaryOp::Overflow(_) | BinaryOp::Unchecked(_) | BinaryOp::Wrapping(_) => Type::Int,
+                BinaryOp::Overflow(_) => Type::record([Type::Bool, Type::Int].into()),
+                BinaryOp::Unchecked(_) | BinaryOp::Wrapping(_) => Type::Int,
                 BinaryOp::Offset => {
                     let (left, _) = left_and_right.as_ref();
                     let (PointerType::Raw, ty) =
@@ -416,9 +424,8 @@ impl Body {
                         };
                         Type::Imm(region, Box::new(pointee))
                     }
-                    PointerCast::RawToRaw | PointerCast::BoxToRaw | PointerCast::RefToRaw(_) => {
-                        Type::RawPointer(Box::new(pointee))
-                    }
+                    PointerCast::BoxToRaw | PointerCast::RefToRaw(_) => Type::pointer(pointee),
+                    PointerCast::RawToRaw(ty) => Type::pointer(ty.clone()),
                     PointerCast::RawToBox => Type::Box(Box::new(pointee)),
                     PointerCast::RawToRef(mutable, region) => {
                         Type::reference(pointee, *mutable, region.clone())

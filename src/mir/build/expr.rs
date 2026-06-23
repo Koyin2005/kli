@@ -232,7 +232,7 @@ impl Builder<'_> {
             .collect::<Vec<_>>();
         match builtin {
             Builtin::Allocate => BuiltinResult::Rvalue(Rvalue::Allocate {
-                ty: args[0].ty.clone(),
+                ty:  ty.as_pointer().cloned().expect("should be a pointer"),
                 count: { operands }.swap_remove(0),
             }),
             Builtin::Deallocate => {
@@ -337,7 +337,10 @@ impl Builder<'_> {
                 let ptr = self.assign_to_temp(
                     expr.loc.clone(),
                     Type::pointer(Type::Byte),
-                    Rvalue::PointerCast(PointerCast::RawToRaw, Operand::Load(Place::local(bytes))),
+                    Rvalue::PointerCast(
+                        PointerCast::RawToRaw(Type::Byte),
+                        Operand::Load(Place::local(bytes)),
+                    ),
                 );
                 Rvalue::Aggregate(
                     AggregateKind::String,
@@ -378,10 +381,8 @@ impl Builder<'_> {
                     unreachable!("Should be an array")
                 };
                 let array_ty = Type::Array(Box::new(ty.clone()), exprs.len().try_into().unwrap());
-
                 let len_constant =
                     Operand::Constant(Constant::int(exprs.len().try_into().unwrap()));
-
                 let ptr_to_buf = self.assign_to_temp(
                     expr.loc.clone(),
                     Type::pointer(array_ty.clone()),
@@ -403,11 +404,10 @@ impl Builder<'_> {
                     expr.loc.clone(),
                     Type::pointer(ty.clone()),
                     Rvalue::PointerCast(
-                        PointerCast::RawToRaw,
+                        PointerCast::RawToRaw(ty.clone()),
                         Operand::Load(Place::local(ptr_to_buf)),
                     ),
                 );
-
                 Rvalue::Aggregate(
                     AggregateKind::ArrayList(ty),
                     [
@@ -582,7 +582,7 @@ impl Builder<'_> {
                         expr.loc.clone(),
                         Type::pointer(Type::Byte),
                         Rvalue::PointerCast(
-                            PointerCast::RawToRaw,
+                            PointerCast::RawToRaw(Type::Byte),
                             Operand::Load(Place::local(env)),
                         ),
                     );

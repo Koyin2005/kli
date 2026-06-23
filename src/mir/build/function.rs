@@ -7,7 +7,7 @@ use crate::{
         visitor::Visit,
         well_formed::{CHECK_WELL_FORMED, WellFormed},
     },
-    resolved_ast::{FunctionId, Var},
+    resolved_ast::FunctionId,
     src_loc::SrcLoc,
     typed_ast::{self, Lambda},
     types::{FunctionType, Type},
@@ -49,12 +49,6 @@ impl Builder<'_> {
                 .iter()
                 .map(|param| (LocalKind::Param(param.var()), param.ty.clone())),
         );
-        for param in function.params.iter() {
-            builder.new_local(
-                param.ty.clone(),
-                LocalKind::Param(Var(param.name.content.clone(), param.var)),
-            );
-        }
         if let Some(body) = function.body.as_ref() {
             builder.expr_into_dest(Place::return_place(), body);
             builder.finish_block(body.loc.clone(), TerminatorKind::Return);
@@ -115,7 +109,7 @@ impl Builder<'_> {
                 lambda.body.loc.clone(),
                 Type::pointer(env_ty),
                 Rvalue::PointerCast(
-                    PointerCast::RawToRaw,
+                    PointerCast::RawToRaw(Type::Byte),
                     Operand::Load(Place::local(Local::zero())),
                 ),
             );
