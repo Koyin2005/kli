@@ -2,9 +2,11 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         AssertKind, BasicBlock, BasicBlockId, Body, BodySource, Context, Local, LocalInfo,
-        LocalKind, Locals, Operand, Place, Rvalue, Stmt, SwitchTargets, Terminator,
+        LocalKind, Locals, Operand, Place, Rvalue, Stmt, StmtKind, SwitchTargets, Terminator,
+        TerminatorKind,
     },
     resolved_ast::Var,
+    src_loc::SrcLoc,
     types::Type,
 };
 mod expr;
@@ -41,8 +43,8 @@ impl<'ctxt> Builder<'ctxt> {
     pub(super) fn new_local_from_info(&mut self, info: LocalInfo) -> Local {
         self.body.locals.push(info)
     }
-    pub(super) fn assert(&mut self, operand: Operand, assert_kind: AssertKind) {
-        self.push_stmt(Stmt::Assert(operand, assert_kind));
+    pub(super) fn assert(&mut self, loc: SrcLoc, operand: Operand, assert_kind: AssertKind) {
+        self.push_stmt(loc, StmtKind::Assert(operand, assert_kind));
     }
     pub(super) fn new_temp(&mut self, ty: Type) -> Local {
         self.new_local_from_info(LocalInfo {
@@ -66,34 +68,44 @@ impl<'ctxt> Builder<'ctxt> {
         let block = self.new_block();
         std::mem::replace(&mut self.current_block, block)
     }
-    pub(super) fn goto_to_new_block(&mut self) -> BasicBlockId {
+    pub(super) fn goto_to_new_block(&mut self, loc: SrcLoc) -> BasicBlockId {
         let block = self.new_block();
-        self.finish_block(Terminator::Goto(block));
+        self.finish_block(loc, TerminatorKind::Goto(block));
         std::mem::replace(&mut self.current_block, block)
     }
-    pub(super) fn finish_block(&mut self, terminator: Terminator) {
-        self.body.blocks[self.current_block].terminator = Some(terminator);
+    pub(super) fn finish_block(&mut self, loc: SrcLoc, terminator: TerminatorKind) {
+        self.body.blocks[self.current_block].terminator = Some(Terminator {
+            src_info: loc,
+            kind: terminator,
+        });
     }
-    pub(super) fn finish_block_with_switch(&mut self, operand: Operand, targets: SwitchTargets) {
-        self.finish_block(Terminator::Switch(operand, targets));
+    pub(super) fn finish_block_with_switch(
+        &mut self,
+        loc: SrcLoc,
+        operand: Operand,
+        targets: SwitchTargets,
+    ) {
+        self.finish_block(loc, TerminatorKind::Switch(operand, targets));
     }
-    pub(super) fn finish_block_with_goto(&mut self, block: BasicBlockId) {
-        self.finish_block(Terminator::Goto(block));
+    pub(super) fn finish_block_with_goto(&mut self, loc: SrcLoc, block: BasicBlockId) {
+        self.finish_block(loc, TerminatorKind::Goto(block));
     }
-    pub(super) fn push_stmt(&mut self, stmt: Stmt) {
-        self.body.blocks[self.current_block].stmts.push(stmt);
+    pub(super) fn push_stmt(&mut self, loc: SrcLoc, kind: StmtKind) {
+        self.body.blocks[self.current_block]
+            .stmts
+            .push(Stmt { loc, kind });
     }
-    pub(super) fn assign_to_temp(&mut self, ty: Type, value: Rvalue) -> Local {
+    pub(super) fn assign_to_temp(&mut self, loc: SrcLoc, ty: Type, value: Rvalue) -> Local {
         let temp = self.new_temp(ty);
-        self.push_stmt(Stmt::Assign(Place::local(temp), value));
+        self.assign(loc, Place::local(temp), value);
         temp
     }
-    pub(super) fn panic(&mut self) {
+    pub(super) fn panic(&mut self, loc: SrcLoc) {
         let block = self.new_block();
-        self.finish_block(Terminator::Panic);
+        self.finish_block(loc, TerminatorKind::Panic);
         self.switch_to_block(block);
     }
-    pub(super) fn assign(&mut self, place: Place, value: Rvalue) {
-        self.push_stmt(Stmt::Assign(place, value));
+    pub(super) fn assign(&mut self, loc: SrcLoc, place: Place, value: Rvalue) {
+        self.push_stmt(loc, StmtKind::Assign(place, Box::new(value)));
     }
 }

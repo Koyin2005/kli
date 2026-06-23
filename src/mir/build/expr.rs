@@ -8,6 +8,7 @@ use crate::{
         PointerCast, Rvalue, build::Builder,
     },
     resolved_ast::Builtin,
+    src_loc::SrcLoc,
     typed_ast::{self, Expr, ExprKind, FieldId, Pattern},
     types::{FunctionType, LIST_LEN_FIELD, Type},
 };
@@ -32,7 +33,7 @@ impl Builder<'_> {
             ExprKind::Function(_, id, ref generic_args) => {
                 let ty = expr.ty.clone();
                 Some(Constant {
-                    ty,
+                    ty: Box::new(ty),
                     value: ConstantValue::Function(id, generic_args.clone()),
                 })
             }
@@ -63,22 +64,27 @@ impl Builder<'_> {
             Place::local(self.expr_into_temp(expr))
         }
     }
-    pub(super) fn len_operand(&mut self, ty: &Type, place: Place) -> Operand {
+    pub(super) fn len_operand(&mut self, loc: SrcLoc, ty: &Type, place: Place) -> Operand {
         if let Type::List(_) = ty {
             Operand::Load(Place::local(self.assign_to_temp(
+                loc,
                 Type::Int,
                 Rvalue::Use(Operand::Load(place.with_field(LIST_LEN_FIELD))),
             )))
         } else {
-            Operand::Load(Place::local(
-                self.assign_to_temp(Type::Int, Rvalue::Len(place)),
-            ))
+            Operand::Load(Place::local(self.assign_to_temp(
+                loc,
+                Type::Int,
+                Rvalue::Len(place),
+            )))
         }
     }
-    fn operand_as_place(&mut self, ty: Type, operand: Operand) -> Place {
+    fn operand_as_place(&mut self, loc: SrcLoc, ty: Type, operand: Operand) -> Place {
         match operand {
             Operand::Load(place) => place,
-            Operand::Constant(_) => Place::local(self.assign_to_temp(ty, Rvalue::Use(operand))),
+            Operand::Constant(_) => {
+                Place::local(self.assign_to_temp(loc, ty, Rvalue::Use(operand)))
+            }
         }
     }
     pub(super) fn operand(&mut self, expr: &Expr) -> Operand {
@@ -131,11 +137,19 @@ impl Builder<'_> {
         match &pattern.kind {
             typed_ast::PatternKind::Binding(borrowed, _, var, ty) => {
                 let var_place = Place::local(self.new_var(var.clone(), (**ty).clone()));
-                if let Some(borrowed) = borrowed {
-                    self.assign(var_place, Rvalue::Ref(*borrowed, place));
+                if let Some((mutable, region)) = borrowed {
+                    self.assign(
+                        pattern.loc.clone(),
+                        var_place,
+                        Rvalue::Ref(*mutable, region.clone(), place),
+                    );
                     return;
                 }
-                self.assign(var_place, Rvalue::Use(Operand::Load(place)));
+                self.assign(
+                    pattern.loc.clone(),
+                    var_place,
+                    Rvalue::Use(Operand::Load(place)),
+                );
             }
             typed_ast::PatternKind::Ref(pattern) => {
                 self.assign_place_to_pattern(pattern, place.with_deref());
@@ -176,7 +190,7 @@ impl Builder<'_> {
                 self.expr_into_dest(dest, &block_body.expr);
             }
             ExprKind::Panic => {
-                self.panic();
+                self.panic(expr.loc.clone());
             }
             ExprKind::Record(_)
             | ExprKind::Function(..)
@@ -198,14 +212,20 @@ impl Builder<'_> {
             | ExprKind::Case(..)
             | ExprKind::BuiltinCall(..) => {
                 let rvalue = self.build_rvalue(expr);
-                self.assign(dest, rvalue);
+                self.assign(expr.loc.clone(), dest, rvalue);
             }
         }
     }
     fn binary_op_rvalue(op: mir::BinaryOp, left: Operand, right: Operand) -> Rvalue {
         Rvalue::Binary(op, Box::new((left, right)))
     }
-    pub(super) fn builtin_call(&mut self, builtin: Builtin, args: &[Expr]) -> BuiltinResult {
+    pub(super) fn builtin_call(
+        &mut self,
+        loc: SrcLoc,
+        ty: &Type,
+        builtin: Builtin,
+        args: &[Expr],
+    ) -> BuiltinResult {
         let operands = args
             .iter()
             .map(|operand| self.operand(operand))
@@ -216,7 +236,7 @@ impl Builder<'_> {
                 count: { operands }.swap_remove(0),
             }),
             Builtin::Deallocate => {
-                self.push_stmt(mir::Stmt::Deallocate({ operands }.swap_remove(0)));
+                self.push_stmt(loc, mir::StmtKind::Deallocate({ operands }.swap_remove(0)));
                 BuiltinResult::Unit
             }
             Builtin::Freeze => BuiltinResult::Rvalue(Rvalue::PointerCast(
@@ -231,23 +251,30 @@ impl Builder<'_> {
                 PointerCast::BoxToRaw,
                 { operands }.swap_remove(0),
             )),
-            Builtin::RefFromRaw(mutable) => BuiltinResult::Rvalue(Rvalue::PointerCast(
-                PointerCast::RawToRef(mutable),
-                { operands }.swap_remove(0),
-            )),
+            Builtin::RefFromRaw(mutable) => {
+                let (_, region, _) = ty.as_reference_type().expect("should be a reference type");
+                BuiltinResult::Rvalue(Rvalue::PointerCast(
+                    PointerCast::RawToRef(mutable, region.clone()),
+                    { operands }.swap_remove(0),
+                ))
+            }
             Builtin::RefIntoRaw(mutable) => BuiltinResult::Rvalue(Rvalue::PointerCast(
                 PointerCast::RefToRaw(mutable),
                 { operands }.swap_remove(0),
             )),
             Builtin::PtrRead => {
                 let [ptr] = { operands }.try_into().unwrap();
-                let deref = self.operand_as_place(args[0].ty.clone(), ptr).with_deref();
+                let deref = self
+                    .operand_as_place(loc, args[0].ty.clone(), ptr)
+                    .with_deref();
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Load(deref)))
             }
             Builtin::PtrWrite => {
                 let [ptr, value] = { operands }.try_into().unwrap();
-                let deref = self.operand_as_place(args[0].ty.clone(), ptr).with_deref();
-                self.assign(deref, Rvalue::Use(value));
+                let deref = self
+                    .operand_as_place(loc.clone(), args[0].ty.clone(), ptr)
+                    .with_deref();
+                self.assign(loc, deref, Rvalue::Use(value));
                 BuiltinResult::Unit
             }
         }
@@ -289,6 +316,7 @@ impl Builder<'_> {
                 let len = value.len().try_into().unwrap();
                 let array_ty = Type::Array(Box::new(Type::Byte), len);
                 let bytes = self.assign_to_temp(
+                    expr.loc.clone(),
                     Type::pointer(array_ty.clone()),
                     Rvalue::Allocate {
                         ty: array_ty.clone(),
@@ -296,6 +324,7 @@ impl Builder<'_> {
                     },
                 );
                 self.assign(
+                    expr.loc.clone(),
                     Place::local(bytes).with_deref(),
                     Rvalue::Aggregate(
                         AggregateKind::Array(Type::Byte, len),
@@ -306,6 +335,7 @@ impl Builder<'_> {
                     ),
                 );
                 let ptr = self.assign_to_temp(
+                    expr.loc.clone(),
                     Type::pointer(Type::Byte),
                     Rvalue::PointerCast(PointerCast::RawToRaw, Operand::Load(Place::local(bytes))),
                 );
@@ -353,6 +383,7 @@ impl Builder<'_> {
                     Operand::Constant(Constant::int(exprs.len().try_into().unwrap()));
 
                 let ptr_to_buf = self.assign_to_temp(
+                    expr.loc.clone(),
                     Type::pointer(array_ty.clone()),
                     Rvalue::Allocate {
                         ty: array_ty.clone(),
@@ -361,6 +392,7 @@ impl Builder<'_> {
                 );
                 let operands = exprs.iter().map(|expr| self.operand(expr)).collect();
                 self.assign(
+                    expr.loc.clone(),
                     Place::local(ptr_to_buf).with_deref(),
                     Rvalue::Aggregate(
                         AggregateKind::Array(ty.clone(), exprs.len().try_into().unwrap()),
@@ -368,6 +400,7 @@ impl Builder<'_> {
                     ),
                 );
                 let ptr = self.assign_to_temp(
+                    expr.loc.clone(),
                     Type::pointer(ty.clone()),
                     Rvalue::PointerCast(
                         PointerCast::RawToRaw,
@@ -393,8 +426,11 @@ impl Builder<'_> {
                     match resource {
                         IsResource::Data => Rvalue::Call(callee_value, arg_values),
                         IsResource::Resource => {
-                            let closure_place =
-                                self.operand_as_place(callee.ty.clone(), callee_value);
+                            let closure_place = self.operand_as_place(
+                                callee.loc.clone(),
+                                callee.ty.clone(),
+                                callee_value,
+                            );
                             let env = closure_place.clone().with_field(FieldId::new(0));
                             let code = closure_place.clone().with_field(FieldId::new(1));
                             let mut arg_values = arg_values;
@@ -415,6 +451,7 @@ impl Builder<'_> {
                         //Divide by zero
                         //Divide int min by -1
                         let is_zero = self.assign_to_temp(
+                            expr.loc.clone(),
                             Type::Bool,
                             Self::binary_op_rvalue(
                                 mir::BinaryOp::Equals,
@@ -423,10 +460,12 @@ impl Builder<'_> {
                             ),
                         );
                         self.assert(
+                            expr.loc.clone(),
                             Operand::Load(Place::local(is_zero)),
                             mir::AssertKind::DivideByZero,
                         );
                         let is_left_min = self.assign_to_temp(
+                            expr.loc.clone(),
                             Type::Bool,
                             Self::binary_op_rvalue(
                                 mir::BinaryOp::Equals,
@@ -435,6 +474,7 @@ impl Builder<'_> {
                             ),
                         );
                         let is_right_neg_1 = self.assign_to_temp(
+                            expr.loc.clone(),
                             Type::Bool,
                             Self::binary_op_rvalue(
                                 mir::BinaryOp::Equals,
@@ -443,6 +483,7 @@ impl Builder<'_> {
                             ),
                         );
                         let overflow = self.assign_to_temp(
+                            expr.loc.clone(),
                             Type::Bool,
                             Self::binary_op_rvalue(
                                 mir::BinaryOp::BitwiseAnd,
@@ -451,6 +492,7 @@ impl Builder<'_> {
                             ),
                         );
                         self.assert(
+                            expr.loc.clone(),
                             Operand::Load(Place::local(overflow)),
                             mir::AssertKind::DivideOverflow,
                         );
@@ -464,6 +506,7 @@ impl Builder<'_> {
                     BinaryOp::Multiply => OverflowOp::Multiply,
                 };
                 let checked_result = self.assign_to_temp(
+                    expr.loc.clone(),
                     Type::record(vec![Type::Bool, Type::Int]),
                     Rvalue::Binary(
                         mir::BinaryOp::Overflow(overflow_op),
@@ -472,7 +515,11 @@ impl Builder<'_> {
                 );
                 let overflow =
                     Operand::Load(Place::local(checked_result).with_field(FieldId::new(0)));
-                self.assert(overflow, mir::AssertKind::Overflow(overflow_op));
+                self.assert(
+                    expr.loc.clone(),
+                    overflow,
+                    mir::AssertKind::Overflow(overflow_op),
+                );
                 let result =
                     Operand::Load(Place::local(checked_result).with_field(FieldId::new(1)));
                 Rvalue::Use(result)
@@ -488,8 +535,8 @@ impl Builder<'_> {
             ExprKind::Borrow {
                 mutable,
                 place,
-                region: _,
-            } => Rvalue::Ref(*mutable, self.lower_place(place)),
+                region,
+            } => Rvalue::Ref(*mutable, region.clone(), self.lower_place(place)),
             ExprKind::Case(..) => todo!("case"),
             ExprKind::Lambda(lambda) => {
                 let is_resource = lambda.is_resource == IsResource::Resource;
@@ -499,6 +546,7 @@ impl Builder<'_> {
                         Type::record(lambda.captures.iter().map(|(_, ty)| ty.clone()).collect());
 
                     let env = self.assign_to_temp(
+                        expr.loc.clone(),
                         Type::pointer(env_ty.clone()),
                         Rvalue::Allocate {
                             ty: env_ty,
@@ -506,6 +554,7 @@ impl Builder<'_> {
                         },
                     );
                     self.assign(
+                        expr.loc.clone(),
                         Place::local(env).with_deref(),
                         Rvalue::Aggregate(
                             AggregateKind::Record {
@@ -530,6 +579,7 @@ impl Builder<'_> {
                     );
 
                     let erased_env = self.assign_to_temp(
+                        expr.loc.clone(),
                         Type::pointer(Type::Byte),
                         Rvalue::PointerCast(
                             PointerCast::RawToRaw,
@@ -546,7 +596,9 @@ impl Builder<'_> {
                     Rvalue::Use(function)
                 }
             }
-            &ExprKind::BuiltinCall(builtin, _, ref args) => self.builtin_call(builtin, args).into(),
+            &ExprKind::BuiltinCall(builtin, _, ref args) => self
+                .builtin_call(expr.loc.clone(), &expr.ty, builtin, args)
+                .into(),
         }
     }
 }

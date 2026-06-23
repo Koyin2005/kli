@@ -1,6 +1,6 @@
 use crate::{
     mir::{
-        Stmt,
+        StmtKind,
         build::{Builder, expr::BuiltinResult},
     },
     typed_ast::{Expr, ExprKind},
@@ -10,13 +10,13 @@ impl Builder<'_> {
     pub(super) fn expr_stmt(&mut self, expr: &Expr) {
         match &expr.kind {
             ExprKind::Err => (),
-            ExprKind::Assign(place, expr) => {
+            ExprKind::Assign(place, value) => {
                 let place = self.lower_place(place);
-                let value = self.build_rvalue(expr);
-                self.assign(place, value);
+                let value = self.build_rvalue(value);
+                self.assign(expr.loc.clone(), place, value);
             }
             ExprKind::Panic => {
-                self.panic();
+                self.panic(expr.loc.clone());
             }
             ExprKind::Block(block_body, ..) => {
                 for stmt in block_body.stmts.iter() {
@@ -24,9 +24,9 @@ impl Builder<'_> {
                 }
                 self.expr_stmt(&block_body.expr);
             }
-            ExprKind::Print(expr) => {
-                let stmt = Stmt::Print(expr.as_ref().map(|expr| self.operand(expr)));
-                self.push_stmt(stmt);
+            ExprKind::Print(value) => {
+                let stmt = StmtKind::Print(value.as_ref().map(|expr| self.operand(expr)));
+                self.push_stmt(expr.loc.clone(), stmt);
             }
             ExprKind::For {
                 pattern,
@@ -36,12 +36,14 @@ impl Builder<'_> {
             } => {
                 self.for_loop(pattern, iterator, iterator_type, body);
             }
-            ExprKind::BuiltinCall(builtin, _, args) => match self.builtin_call(*builtin, args) {
-                BuiltinResult::Rvalue(value) => {
-                    self.assign_to_temp(expr.ty.clone(), value);
+            ExprKind::BuiltinCall(builtin, _, args) => {
+                match self.builtin_call(expr.loc.clone(), &expr.ty, *builtin, args) {
+                    BuiltinResult::Rvalue(value) => {
+                        self.assign_to_temp(expr.loc.clone(), expr.ty.clone(), value);
+                    }
+                    BuiltinResult::Unit => (),
                 }
-                BuiltinResult::Unit => (),
-            },
+            }
             //Evaluate
             ExprKind::Record(..)
             | ExprKind::String(_)

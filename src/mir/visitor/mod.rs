@@ -1,129 +1,144 @@
 use crate::mir::{
-    BasicBlock, BasicBlockId, Body, Constant, Local, Operand, Place, PlaceBase, PlaceProjection,
-    Rvalue, Stmt, Terminator,
+    BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Place, PlaceBase,
+    PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
 };
 
 pub trait Visit {
-    fn visit_stmt(&mut self, stmt: &Stmt) {
-        super_visit_stmt(self, stmt);
+    fn super_visit_stmt(&mut self, loc: Location, stmt: &Stmt) {
+        match &stmt.kind {
+            StmtKind::Noop => (),
+            StmtKind::Assert(operand, _) | StmtKind::Deallocate(operand) => {
+                self.visit_operand(loc, operand)
+            }
+            StmtKind::Assign(place, rvalue) => {
+                self.visit_place(loc, place);
+                self.visit_rvalue(loc, rvalue);
+            }
+            StmtKind::Print(operand) => {
+                if let Some(operand) = operand {
+                    self.visit_operand(loc, operand);
+                }
+            }
+        }
     }
-    fn visit_operand(&mut self, operand: &Operand) {
-        super_visit_operand(self, operand);
+    fn super_visit_constant(&mut self, _loc: Location, _constant: &Constant) {}
+    fn super_visit_terminator(&mut self, loc: Location, terminator: &Terminator) {
+        match &terminator.kind {
+            TerminatorKind::Goto(_)
+            | TerminatorKind::Panic
+            | TerminatorKind::Return
+            | TerminatorKind::Unreachable => (),
+            TerminatorKind::Switch(operand, _) => self.visit_operand(loc, operand),
+        }
     }
-    fn visit_local(&mut self, local: Local) {
-        super_visit_local(self, local);
+    fn super_visit_block(&mut self, id: BasicBlockId, info: &BasicBlock) {
+        for (stmt_id, stmt) in info.stmts.iter_enumerated() {
+            self.visit_stmt(
+                Location {
+                    block: id,
+                    stmt: Some(stmt_id),
+                },
+                stmt,
+            );
+        }
+        self.visit_terminator(
+            Location {
+                block: id,
+                stmt: None,
+            },
+            info.expect_terminator(),
+        );
     }
-    fn visit_place(&mut self, place: &Place) {
-        super_visit_place(self, place);
+    fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue) {
+        match rvalue {
+            Rvalue::Len(place) => self.visit_place(loc, place),
+            Rvalue::Use(operand) => self.visit_operand(loc, operand),
+            Rvalue::Aggregate(_, fields) => {
+                for field in fields {
+                    self.visit_operand(loc, field);
+                }
+            }
+            Rvalue::Call(operand, operands) => {
+                self.visit_operand(loc, operand);
+                for operand in operands {
+                    self.visit_operand(loc, operand);
+                }
+            }
+            Rvalue::Binary(_, operands) => {
+                let (left, right) = operands.as_ref();
+                self.visit_operand(loc, left);
+                self.visit_operand(loc, right);
+            }
+            Rvalue::Ref(_, _, place) => {
+                self.visit_place(loc, place);
+            }
+            Rvalue::Allocate { ty: _, count } => {
+                self.visit_operand(loc, count);
+            }
+            Rvalue::PointerCast(_, operand) => {
+                self.visit_operand(loc, operand);
+            }
+            Rvalue::DecodeUtf8(operand1, operand2) => {
+                self.visit_operand(loc, operand1);
+                self.visit_operand(loc, operand2);
+            }
+        }
     }
-    fn visit_projection(&mut self, projection: PlaceProjection) {
-        super_visit_projection(self, projection);
+    fn super_visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
+        match projection {
+            PlaceProjection::ConstantIndex(_)
+            | PlaceProjection::DowncastSome
+            | PlaceProjection::Field(_) => todo!(),
+            PlaceProjection::Index(local) => self.visit_local(loc, local),
+            PlaceProjection::Deref => (),
+        }
     }
-    fn visit_constant(&mut self, constant: &Constant) {
-        super_visit_constant(self, constant);
+    fn super_visit_local(&mut self, _loc: Location, _local: Local) {}
+    fn super_visit_place(&mut self, loc: Location, place: &Place) {
+        if let PlaceBase::Local(local) = place.base {
+            self.visit_local(loc, local);
+        }
+        for projection in place.projections.iter() {
+            self.visit_projection(loc, *projection);
+        }
     }
-    fn visit_rvalue(&mut self, rvalue: &Rvalue) {
-        super_visit_rvalue(self, rvalue);
+    fn super_visit_operand(&mut self, loc: Location, operand: &Operand) {
+        match operand {
+            Operand::Load(place) => self.visit_place(loc, place),
+            Operand::Constant(constant) => self.visit_constant(loc, constant),
+        }
     }
-    fn visit_terminator(&mut self, terminator: &Terminator) {
-        super_visit_terminator(self, terminator);
+
+    fn visit_stmt(&mut self, loc: Location, stmt: &Stmt) {
+        self.super_visit_stmt(loc, stmt);
+    }
+    fn visit_operand(&mut self, loc: Location, operand: &Operand) {
+        self.super_visit_operand(loc, operand);
+    }
+    fn visit_local(&mut self, loc: Location, local: Local) {
+        self.super_visit_local(loc, local);
+    }
+    fn visit_place(&mut self, loc: Location, place: &Place) {
+        self.super_visit_place(loc, place);
+    }
+    fn visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
+        self.super_visit_projection(loc, projection);
+    }
+    fn visit_constant(&mut self, loc: Location, constant: &Constant) {
+        self.super_visit_constant(loc, constant);
+    }
+    fn visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue) {
+        self.super_visit_rvalue(loc, rvalue);
+    }
+    fn visit_terminator(&mut self, loc: Location, terminator: &Terminator) {
+        self.super_visit_terminator(loc, terminator);
     }
     fn visit_block(&mut self, id: BasicBlockId, block: &BasicBlock) {
-        super_visit_block(self, id, block)
+        self.super_visit_block(id, block)
     }
     fn visit_body(&mut self, body: &Body) {
         for (id, block) in body.blocks.iter_enumerated() {
             self.visit_block(id, block);
-        }
-    }
-}
-pub fn super_visit_terminator<V: Visit + ?Sized>(v: &mut V, terminator: &Terminator) {
-    match terminator {
-        Terminator::Goto(_) | Terminator::Panic | Terminator::Return | Terminator::Unreachable => {
-            ()
-        }
-        Terminator::Switch(operand, _) => v.visit_operand(operand),
-    }
-}
-pub fn super_visit_block<V: Visit + ?Sized>(v: &mut V, _: BasicBlockId, info: &BasicBlock) {
-    for stmt in info.stmts.iter() {
-        v.visit_stmt(stmt);
-    }
-    v.visit_terminator(info.expect_terminator());
-}
-pub fn super_visit_rvalue<V: Visit + ?Sized>(v: &mut V, rvalue: &Rvalue) {
-    match rvalue {
-        Rvalue::Len(place) => v.visit_place(place),
-        Rvalue::Use(operand) => v.visit_operand(operand),
-        Rvalue::Aggregate(_, fields) => {
-            for field in fields {
-                v.visit_operand(field);
-            }
-        }
-        Rvalue::Call(operand, operands) => {
-            v.visit_operand(operand);
-            for operand in operands {
-                v.visit_operand(operand);
-            }
-        }
-        Rvalue::Binary(_, operands) => {
-            let (left, right) = operands.as_ref();
-            v.visit_operand(left);
-            v.visit_operand(right);
-        }
-        Rvalue::Ref(_, place) => {
-            v.visit_place(place);
-        }
-        Rvalue::Allocate { ty: _, count } => {
-            v.visit_operand(count);
-        }
-        Rvalue::PointerCast(_, operand) => {
-            v.visit_operand(operand);
-        }
-        Rvalue::DecodeUtf8(operand1, operand2) => {
-            v.visit_operand(operand1);
-            v.visit_operand(operand2);
-        }
-    }
-}
-pub fn super_visit_projection<V: Visit + ?Sized>(v: &mut V, projection: PlaceProjection) {
-    match projection {
-        PlaceProjection::ConstantIndex(_)
-        | PlaceProjection::DowncastSome
-        | PlaceProjection::Field(_) => todo!(),
-        PlaceProjection::Index(local) => v.visit_local(local),
-        PlaceProjection::Deref => (),
-    }
-}
-pub fn super_visit_local<V: Visit + ?Sized>(_v: &mut V, _local: Local) {}
-pub fn super_visit_place<V: Visit + ?Sized>(v: &mut V, place: &Place) {
-    match place.base {
-        PlaceBase::Local(local) => v.visit_local(local),
-        _ => (),
-    }
-    for projection in place.projections.iter() {
-        v.visit_projection(*projection);
-    }
-}
-pub fn super_visit_constant<V: Visit + ?Sized>(_v: &mut V, _constant: &Constant) {}
-pub fn super_visit_operand<V: Visit + ?Sized>(v: &mut V, operand: &Operand) {
-    match operand {
-        Operand::Load(place) => v.visit_place(place),
-        Operand::Constant(constant) => v.visit_constant(constant),
-    }
-}
-pub fn super_visit_stmt<V: Visit + ?Sized>(v: &mut V, stmt: &Stmt) {
-    match stmt {
-        Stmt::Noop => (),
-        Stmt::Assert(operand, _) | Stmt::Deallocate(operand) => v.visit_operand(operand),
-        Stmt::Assign(place, rvalue) => {
-            v.visit_place(place);
-            v.visit_rvalue(rvalue);
-        }
-        Stmt::Print(operand) => {
-            if let Some(operand) = operand {
-                v.visit_operand(operand);
-            }
         }
     }
 }

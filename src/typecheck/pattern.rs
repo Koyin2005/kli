@@ -177,15 +177,15 @@ impl TypeCheck {
             }
             PatternKind::Binding(borrow, mutable, ident, var) => {
                 let name = ident.content.clone();
-                let var_ty = match (borrow, binding_mode) {
-                    (None, None) => expected_type.clone(),
-                    (None, Some(_)) => expected_type.clone(),
+
+                let (borrow, var_ty) = match (borrow, binding_mode) {
+                    (None, _) => (None, expected_type.clone()),
                     (Some(_), None) => {
                         self.diag.borrow_mut().add_diagnostic(
                             format!("Cannot create borrow binding '{}'", ident.content.clone()),
                             ident.loc.clone(),
                         );
-                        expected_type.clone()
+                        (None, expected_type.clone())
                     }
                     (Some(borrow), Some((region, mutable))) => {
                         if !mutable.usable_as(borrow) {
@@ -194,7 +194,10 @@ impl TypeCheck {
                                 ident.loc.clone(),
                             );
                         }
-                        Type::reference(expected_type.clone(), borrow, region)
+                        (
+                            Some((mutable, region.clone())),
+                            Type::reference(expected_type.clone(), borrow, region),
+                        )
                     }
                 };
                 self.declare_var(var, var_ty.clone(), name.clone());

@@ -29,7 +29,7 @@ pub enum PatternKind {
     Some(Box<Pattern>),
     None,
     Ref(Box<Pattern>),
-    Binding(Option<Mutable>, Mutable, Var, Box<Type>),
+    Binding(Option<(Mutable, Region)>, Mutable, Var, Box<Type>),
     Record(Vec<PatternField>),
 }
 #[derive(Debug)]

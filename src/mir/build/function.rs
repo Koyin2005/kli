@@ -1,14 +1,14 @@
 use crate::{
     ast::IsResource,
-    diagnostics::DiagnosticReporter,
     mir::{
         BodySource, Captures, Constant, ConstantValue, Context, Local, LocalKind, Operand, Place,
-        PointerCast, Rvalue, Terminator,
+        PointerCast, Rvalue, TerminatorKind,
         build::Builder,
         visitor::Visit,
         well_formed::{CHECK_WELL_FORMED, WellFormed},
     },
     resolved_ast::{FunctionId, Var},
+    src_loc::SrcLoc,
     typed_ast::{self, Lambda},
     types::{FunctionType, Type},
 };
@@ -19,10 +19,8 @@ impl Builder<'_> {
         let context = self.context;
         context.body_sources.push(body.src);
         if CHECK_WELL_FORMED {
-            let mut diag = DiagnosticReporter::new();
-            let mut wf = WellFormed::new(&body, context, &mut diag);
+            let mut wf = WellFormed::new(&body, context);
             wf.visit_body(&body);
-            diag.report_all();
         }
         assert!(
             context.bodies.insert(body.src, body).is_none(),
@@ -59,9 +57,9 @@ impl Builder<'_> {
         }
         if let Some(body) = function.body.as_ref() {
             builder.expr_into_dest(Place::return_place(), body);
-            builder.finish_block(Terminator::Return);
+            builder.finish_block(body.loc.clone(), TerminatorKind::Return);
         } else {
-            builder.finish_block(Terminator::Unreachable);
+            builder.finish_block(SrcLoc::dummy(), TerminatorKind::Unreachable);
         }
         builder.add_finished_body();
     }
@@ -77,7 +75,7 @@ impl Builder<'_> {
             .contains_key(&BodySource::Lambda(lambda.id))
         {
             return Constant {
-                ty,
+                ty: Box::new(ty),
                 value: ConstantValue::Lambda(lambda.id, Vec::new()),
             };
         }
@@ -114,6 +112,7 @@ impl Builder<'_> {
         if !lambda.captures.is_empty() {
             let env_ty = builder.body.capture_info.as_ref().unwrap().env_type();
             let casted = builder.assign_to_temp(
+                lambda.body.loc.clone(),
                 Type::pointer(env_ty),
                 Rvalue::PointerCast(
                     PointerCast::RawToRaw,
@@ -123,10 +122,10 @@ impl Builder<'_> {
             builder.body.capture_info.as_mut().unwrap().env_ptr = Some(casted);
         }
         builder.expr_into_dest(Place::return_place(), &lambda.body);
-        builder.finish_block(Terminator::Return);
+        builder.finish_block(lambda.body.loc.clone(), TerminatorKind::Return);
         builder.add_finished_body();
         Constant {
-            ty,
+            ty: Box::new(ty),
             value: ConstantValue::Lambda(lambda.id, Vec::new()),
         }
     }

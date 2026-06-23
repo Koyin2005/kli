@@ -1,7 +1,7 @@
 use std::collections::{HashSet, VecDeque};
 
 use crate::{
-    mir::{BodySource, Constant, ConstantValue, Context, visitor::Visit},
+    mir::{BodySource, Constant, ConstantValue, Context, Location, visitor::Visit},
     resolved_ast::{FunctionId, LambdaId},
     types::GenericArg,
 };
@@ -53,7 +53,7 @@ impl<'ctxt> InstanceCollector<'ctxt> {
                 args: &'unv Vec<GenericArg>,
             }
             impl Visit for Collector<'_> {
-                fn visit_constant(&mut self, constant: &Constant) {
+                fn visit_constant(&mut self, _: Location, constant: &Constant) {
                     let new_instance = match constant.value {
                         ConstantValue::Function(id, ref args) => Some(Instance {
                             args: args.clone(),

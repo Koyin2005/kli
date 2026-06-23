@@ -1,5 +1,12 @@
 use crate::src_loc::SrcLoc;
 
+pub fn emit_fatal_diagnostic(loc: SrcLoc, msg: String) -> ! {
+    if loc.line > 0 {
+        panic!("Line [{}] in '{}': {}", loc.line, loc.file, msg);
+    } else {
+        panic!("Error : {}", msg);
+    }
+}
 struct Diagnostic {
     msg: String,
     loc: SrcLoc,

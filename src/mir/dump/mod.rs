@@ -1,7 +1,7 @@
 use crate::{
     mir::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstantValue,
-        Context, LocalKind, Operand, Place, PlaceProjection, Rvalue, Stmt, Terminator,
+        Context, LocalKind, Operand, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
     },
     typed_ast::FieldId,
     types::{self, DisplayGenericArgs},
@@ -159,8 +159,8 @@ impl<'ctxt> MirDump<'ctxt> {
                 }
                 write!(self.output, ")")?;
             }
-            Rvalue::Ref(mutable, place) => {
-                write!(self.output, "ref {} ", mutable)?;
+            Rvalue::Ref(mutable, region, place) => {
+                write!(self.output, "ref {} [{}]", mutable, region)?;
                 self.write_place(place)?;
             }
             Rvalue::PointerCast(cast, pointer) => {
@@ -216,27 +216,27 @@ impl<'ctxt> MirDump<'ctxt> {
         writeln!(self.output, " bb{}", id.into_usize())?;
         for stmt in &block.stmts {
             write!(self.output, "  ")?;
-            match stmt {
-                Stmt::Print(value) => {
+            match &stmt.kind {
+                StmtKind::Print(value) => {
                     write!(self.output, "print(")?;
                     if let Some(value) = value {
                         self.write_operand(value)?;
                     }
                     writeln!(self.output, ")")?;
                 }
-                Stmt::Deallocate(value) => {
+                StmtKind::Deallocate(value) => {
                     write!(self.output, "deallocate(")?;
                     self.write_operand(value)?;
                     writeln!(self.output, ")")?;
                 }
-                Stmt::Noop => writeln!(self.output, "noop")?,
-                Stmt::Assign(place, value) => {
+                StmtKind::Noop => writeln!(self.output, "noop")?,
+                StmtKind::Assign(place, value) => {
                     self.write_place(place)?;
                     write!(self.output, " = ")?;
                     self.write_rvalue(value)?;
                     writeln!(self.output)?;
                 }
-                Stmt::Assert(operand, kind) => {
+                StmtKind::Assert(operand, kind) => {
                     write!(self.output, "assert(!")?;
                     self.write_operand(operand)?;
                     write!(self.output, ", ")?;
@@ -254,14 +254,14 @@ impl<'ctxt> MirDump<'ctxt> {
             }
         }
         write!(self.output, "  ")?;
-        match block.expect_terminator() {
-            Terminator::Unreachable => {
+        match &block.expect_terminator().kind {
+            TerminatorKind::Unreachable => {
                 write!(self.output, "unreachable")?;
             }
-            Terminator::Return => {
+            TerminatorKind::Return => {
                 write!(self.output, "return")?;
             }
-            Terminator::Switch(operand, targets) => {
+            TerminatorKind::Switch(operand, targets) => {
                 write!(self.output, "switch ")?;
                 self.write_operand(operand)?;
                 write!(self.output, " ")?;
@@ -270,8 +270,8 @@ impl<'ctxt> MirDump<'ctxt> {
                 }
                 write!(self.output, "otherwise -> bb{}", targets.otherwise.0)?;
             }
-            Terminator::Goto(block) => write!(self.output, "goto bb{}", block.0)?,
-            Terminator::Panic => write!(self.output, "panic")?,
+            TerminatorKind::Goto(block) => write!(self.output, "goto bb{}", block.0)?,
+            TerminatorKind::Panic => write!(self.output, "panic")?,
         }
         writeln!(self.output)
     }

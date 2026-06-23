@@ -240,6 +240,34 @@ impl Type {
         let Ok(ty) = EraseRegions.map_type(self);
         ty
     }
+    pub fn is_resource(&self) -> bool {
+        match self {
+            Type::Bool
+            | Type::Unit
+            | Type::Unknown
+            | Type::Int
+            | Type::Imm(..)
+            | Type::Char
+            | Type::Byte
+            | Type::RawPointer(_)
+            | Type::Function(FunctionType {
+                resource: IsResource::Data,
+                ..
+            }) => false,
+            Type::Option(ty) | Type::Array(ty, _) => ty.is_resource(),
+            Type::Mut(..)
+            | Type::Function(FunctionType {
+                resource: IsResource::Resource,
+                ..
+            })
+            | Type::String
+            | Type::Box(_)
+            | Type::Param(..)
+            | Type::List(_) => true,
+            Type::Record(fields) => fields.iter().any(|field| field.ty.is_resource()),
+            Type::Infer(_) => unreachable!("Cannot 'infer' its a resource"),
+        }
+    }
 }
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

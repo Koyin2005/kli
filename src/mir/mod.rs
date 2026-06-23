@@ -6,8 +6,9 @@ use crate::{
     ident::Ident,
     index_vec::IndexVec,
     resolved_ast::{Builtin, FunctionId, LambdaId, Var, VarId},
+    src_loc::SrcLoc,
     typed_ast::FieldId,
-    types::{GenericArg, Type},
+    types::{GenericArg, PointerType, Region, Type},
 };
 pub mod build;
 pub mod dump;
@@ -91,38 +92,38 @@ impl Place {
 }
 #[derive(Clone, Debug)]
 pub struct Constant {
-    pub ty: Type,
+    pub ty: Box<Type>,
 
     pub value: ConstantValue,
 }
 impl Constant {
-    pub const fn bool(value: bool) -> Self {
+    pub fn bool(value: bool) -> Self {
         Self {
-            ty: Type::Bool,
+            ty: Box::new(Type::Bool),
             value: ConstantValue::Bool(value),
         }
     }
-    pub const fn byte(value: u8) -> Self {
+    pub fn byte(value: u8) -> Self {
         Self {
-            ty: Type::Byte,
+            ty: Box::new(Type::Byte),
             value: ConstantValue::Int(value as i64),
         }
     }
-    pub const fn int(value: i64) -> Self {
+    pub fn int(value: i64) -> Self {
         Self {
-            ty: Type::Int,
+            ty: Box::new(Type::Int),
             value: ConstantValue::Int(value),
         }
     }
-    pub const fn zero_sized(ty: Type) -> Self {
+    pub fn zero_sized(ty: Type) -> Self {
         Self {
-            ty,
+            ty: Box::new(ty),
             value: ConstantValue::ZeroSized,
         }
     }
-    pub const fn unit() -> Self {
+    pub fn unit() -> Self {
         Self {
-            ty: Type::Unit,
+            ty: Box::new(Type::Bool),
             value: ConstantValue::ZeroSized,
         }
     }
@@ -182,7 +183,7 @@ pub enum PointerCast {
     BoxToRaw,
     RawToBox,
     RefToRaw(Mutable),
-    RawToRef(Mutable),
+    RawToRef(Mutable, Region),
     Freeze,
 }
 #[derive(Clone, Debug)]
@@ -191,7 +192,7 @@ pub enum Rvalue {
     Use(Operand),
     Call(Operand, Vec<Operand>),
     Binary(BinaryOp, Box<(Operand, Operand)>),
-    Ref(Mutable, Place),
+    Ref(Mutable, Region, Place),
     Allocate { ty: Type, count: Operand },
     PointerCast(PointerCast, Operand),
     DecodeUtf8(Operand, Operand),
@@ -214,17 +215,34 @@ pub enum AssertKind {
     DivideByZero,
 }
 #[derive(Clone)]
-pub enum Terminator {
+pub struct Terminator {
+    pub src_info: SrcLoc,
+    pub kind: TerminatorKind,
+}
+#[derive(Clone)]
+pub enum TerminatorKind {
     Switch(Operand, SwitchTargets),
     Unreachable,
     Return,
     Goto(BasicBlockId),
     Panic,
 }
+
+#[derive(Clone, Copy)]
+pub struct Location {
+    pub block: BasicBlockId,
+    pub stmt: Option<StmtId>,
+}
+
 #[derive(Clone)]
-pub enum Stmt {
+pub struct Stmt {
+    pub loc: SrcLoc,
+    pub kind: StmtKind,
+}
+#[derive(Clone)]
+pub enum StmtKind {
     Noop,
-    Assign(Place, Rvalue),
+    Assign(Place, Box<Rvalue>),
     Assert(Operand, AssertKind),
     Print(Option<Operand>),
     Deallocate(Operand),
@@ -331,8 +349,68 @@ impl Body {
     }
     pub fn type_of_operand(&self, operand: &Operand) -> Type {
         match operand {
-            Operand::Constant(constant) => constant.ty.clone(),
+            Operand::Constant(constant) => (*constant.ty).clone(),
             Operand::Load(place) => self.type_of_place(place),
+        }
+    }
+    pub fn type_of_rvalue(&self, rvalue: &Rvalue) -> Type {
+        match rvalue {
+            Rvalue::Use(operand) => self.type_of_operand(operand),
+            Rvalue::Len(_) => Type::Int,
+            Rvalue::Ref(mutable, region, place) => self
+                .type_of_place(place)
+                .reference(*mutable, region.clone()),
+            Rvalue::Call(operand, _) => {
+                let Type::Function(function) = self.type_of_operand(operand) else {
+                    unreachable!("Should be a function type")
+                };
+                *function.return_type
+            }
+            Rvalue::Binary(op, left_and_right) => match op {
+                BinaryOp::Overflow(_) | BinaryOp::Unchecked(_) | BinaryOp::Wrapping(_) => Type::Int,
+                BinaryOp::Offset => {
+                    let (left, _) = left_and_right.as_ref();
+                    let (PointerType::Raw, ty) =
+                        self.type_of_operand(left).as_pointer_type().unwrap()
+                    else {
+                        unreachable!("should be a raw pointer")
+                    };
+                    Type::pointer(ty)
+                }
+                BinaryOp::Divide | BinaryOp::BitwiseAnd => Type::Int,
+                BinaryOp::Equals => Type::Bool,
+                BinaryOp::Lesser => todo!(),
+            },
+            Rvalue::Allocate { ty, count: _ } => Type::pointer(ty.clone()),
+            Rvalue::DecodeUtf8(_, _) => Type::record([Type::Char, Type::Int].into()),
+            Rvalue::Aggregate(..) => todo!(),
+            Rvalue::PointerCast(cast, operand) => {
+                let (pointer_type, pointee) = self
+                    .type_of_operand(operand)
+                    .as_pointer_type()
+                    .expect("should be a pointer type");
+                match cast {
+                    PointerCast::Freeze => {
+                        let PointerType::Reference(region, Mutable::Mutable) = pointer_type else {
+                            unreachable!("should be a reference")
+                        };
+                        Type::Imm(region, Box::new(pointee))
+                    }
+                    PointerCast::RawToRaw | PointerCast::BoxToRaw | PointerCast::RefToRaw(_) => {
+                        Type::RawPointer(Box::new(pointee))
+                    }
+                    PointerCast::RawToBox => Type::Box(Box::new(pointee)),
+                    PointerCast::RawToRef(mutable, region) => {
+                        Type::reference(pointee, *mutable, region.clone())
+                    }
+                }
+            }
+        }
+    }
+    pub fn src_info(&self, loc: Location) -> SrcLoc {
+        match loc.stmt {
+            Some(stmt) => self.blocks[loc.block].stmts[stmt].loc.clone(),
+            None => self.blocks[loc.block].expect_terminator().src_info.clone(),
         }
     }
 }
