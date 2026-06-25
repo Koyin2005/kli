@@ -192,6 +192,9 @@ impl Builder<'_> {
             ExprKind::Panic => {
                 self.panic(expr.loc.clone());
             }
+            ExprKind::Case(expr, arms) => {
+                self.build_match(dest, expr, arms);
+            }
             ExprKind::Record(_)
             | ExprKind::Function(..)
             | ExprKind::Bool(_)
@@ -209,7 +212,6 @@ impl Builder<'_> {
             | ExprKind::None
             | ExprKind::String(_)
             | ExprKind::Lambda(_)
-            | ExprKind::Case(..)
             | ExprKind::BuiltinCall(..) => {
                 let rvalue = self.build_rvalue(expr);
                 self.assign(expr.loc.clone(), dest, rvalue);
@@ -450,46 +452,32 @@ impl Builder<'_> {
                         //Division can fail in 2 ways
                         //Divide by zero
                         //Divide int min by -1
-                        let is_zero = self.assign_to_temp(
+                        let is_zero = self.assign_equals(
                             expr.loc.clone(),
-                            Type::Bool,
-                            Self::binary_op_rvalue(
-                                mir::BinaryOp::Equals,
-                                right_operand.clone(),
-                                Operand::Constant(Constant::int(0)),
-                            ),
+                            right_operand.clone(),
+                            Operand::Constant(Constant::int(0)),
                         );
                         self.assert(
                             expr.loc.clone(),
                             Operand::Load(Place::local(is_zero)),
                             mir::AssertKind::DivideByZero,
                         );
-                        let is_left_min = self.assign_to_temp(
+                        let is_left_min = self.assign_equals(
                             expr.loc.clone(),
-                            Type::Bool,
-                            Self::binary_op_rvalue(
-                                mir::BinaryOp::Equals,
-                                left_operand.clone(),
-                                Operand::Constant(Constant::int(ConstantValue::MIN_INT)),
-                            ),
+                            left_operand.clone(),
+                            Operand::Constant(Constant::int(ConstantValue::MIN_INT)),
                         );
-                        let is_right_neg_1 = self.assign_to_temp(
+                        let is_right_neg_1 = self.assign_equals(
                             expr.loc.clone(),
-                            Type::Bool,
-                            Self::binary_op_rvalue(
-                                mir::BinaryOp::Equals,
-                                left_operand.clone(),
-                                Operand::Constant(Constant::int(-1)),
-                            ),
+                            left_operand.clone(),
+                            Operand::Constant(Constant::int(-1)),
                         );
-                        let overflow = self.assign_to_temp(
+                        let overflow = self.assign_binary_result(
                             expr.loc.clone(),
                             Type::Bool,
-                            Self::binary_op_rvalue(
-                                mir::BinaryOp::BitwiseAnd,
-                                Operand::Load(Place::local(is_left_min)),
-                                Operand::Load(Place::local(is_right_neg_1)),
-                            ),
+                            mir::BinaryOp::BitwiseAnd,
+                            Operand::Load(Place::local(is_left_min)),
+                            Operand::Load(Place::local(is_right_neg_1)),
                         );
                         self.assert(
                             expr.loc.clone(),
@@ -524,7 +512,7 @@ impl Builder<'_> {
                     Operand::Load(Place::local(checked_result).with_field(FieldId::new(1)));
                 Rvalue::Use(result)
             }
-            ExprKind::Block(..) | ExprKind::Panic => {
+            ExprKind::Block(..) | ExprKind::Panic | ExprKind::Case(..) => {
                 let temp = self.expr_into_temp(expr);
                 Rvalue::Use(Operand::Load(Place::local(temp)))
             }
@@ -537,7 +525,6 @@ impl Builder<'_> {
                 place,
                 region,
             } => Rvalue::Ref(*mutable, region.clone(), self.lower_place(place)),
-            ExprKind::Case(..) => todo!("case"),
             ExprKind::Lambda(lambda) => {
                 let is_resource = lambda.is_resource == IsResource::Resource;
                 let function = Operand::Constant(self.lambda_code(lambda));

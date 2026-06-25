@@ -263,18 +263,27 @@ impl ResourceCheck {
             Mutable::Mutable => (),
         }
     }
-    fn check_pattern(&mut self, pattern: &Pattern) {
+    fn check_pattern(&mut self, pattern: &Pattern, in_ref: bool) {
         match &pattern.kind {
             PatternKind::None | PatternKind::Bool(_) | PatternKind::Int(_) => (),
             PatternKind::Record(fields) => {
                 for field in fields {
-                    self.check_pattern(&field.pattern);
+                    self.check_pattern(&field.pattern, in_ref);
                 }
             }
-            PatternKind::Some(sub_pattern) | PatternKind::Ref(sub_pattern) => {
-                self.check_pattern(sub_pattern);
+            PatternKind::Ref(sub_pattern) => {
+                self.check_pattern(sub_pattern, true);
             }
-            PatternKind::Binding(_, mutable, var, ty) => {
+            PatternKind::Some(sub_pattern) => {
+                self.check_pattern(sub_pattern, in_ref);
+            }
+            PatternKind::Binding(borrow, mutable, var, ty) => {
+                if in_ref && ty.is_resource() && borrow.is_none() {
+                    self.err.add_diagnostic(
+                        "Cannot move out of reference".to_string(),
+                        pattern.loc.clone(),
+                    )
+                }
                 self.init_var(
                     *mutable,
                     var.1,
@@ -453,7 +462,7 @@ impl ResourceCheck {
                 }
             }
             StmtKind::Let(let_binding) => {
-                self.check_pattern(&let_binding.pattern);
+                self.check_pattern(&let_binding.pattern, false);
                 self.check_expr(&let_binding.value);
             }
         }
@@ -653,7 +662,7 @@ impl ResourceCheck {
                 let old_loop = std::mem::replace(&mut self.loops, new_loop);
 
                 self.in_drop_scope(|this| {
-                    this.check_pattern(pattern);
+                    this.check_pattern(pattern, false);
                     this.check_expr(body);
                 });
                 self.loops = old_loop;
@@ -668,7 +677,7 @@ impl ResourceCheck {
                 for arm in arms {
                     let old_state = self.var_states.clone();
                     self.in_drop_scope(|this| {
-                        this.check_pattern(&arm.pattern);
+                        this.check_pattern(&arm.pattern, false);
                         this.check_expr(&arm.body);
                     });
                     let new_state = std::mem::replace(&mut self.var_states, old_state);

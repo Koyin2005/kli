@@ -221,7 +221,7 @@ fn config() -> Result<Config, ConfigError> {
     let arg_src = args
         .into_iter()
         .fold(String::from(""), |mut output, current| {
-            output.extend(current.chars());
+            output.push_str(&current);
             output.push(' ');
             output
         });
@@ -231,7 +231,7 @@ fn config() -> Result<Config, ConfigError> {
             if src.is_empty() {
                 return None;
             }
-            let mut pieces = src.trim().split_whitespace();
+            let mut pieces = src.split_whitespace();
             let name = pieces.next()?;
             let feature = match name {
                 "no-std" => Feature::NoStd,

@@ -88,6 +88,13 @@ impl Visit for WellFormed<'_> {
         self.super_visit_rvalue(loc, rvalue);
         let loc = self.body.src_info(loc);
         match rvalue {
+            super::Rvalue::Discriminant(place) => {
+                self.assert(
+                    matches!(self.body.type_of_place(place), Type::Option(_)),
+                    || "type does not have a discriminant".to_string(),
+                    loc,
+                );
+            }
             super::Rvalue::Aggregate(aggregate_kind, fields) => match aggregate_kind {
                 super::AggregateKind::Record { field_names } => self.assert(
                     fields.len() == field_names.len(),

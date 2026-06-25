@@ -98,6 +98,11 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_place(place)?;
                 write!(self.output, ")")?;
             }
+            Rvalue::Discriminant(place) => {
+                write!(self.output, "discriminant(")?;
+                self.write_place(place)?;
+                write!(self.output, ")")?;
+            }
             Rvalue::Aggregate(kind, fields) => {
                 let name = match kind {
                     AggregateKind::Array(..) | AggregateKind::Record { .. } => "".to_string(),
@@ -266,24 +271,26 @@ impl<'ctxt> MirDump<'ctxt> {
             }
         }
         write!(self.output, "  ")?;
-        match &block.expect_terminator().kind {
-            TerminatorKind::Unreachable => {
-                write!(self.output, "unreachable")?;
-            }
-            TerminatorKind::Return => {
-                write!(self.output, "return")?;
-            }
-            TerminatorKind::Switch(operand, targets) => {
-                write!(self.output, "switch ")?;
-                self.write_operand(operand)?;
-                write!(self.output, " ")?;
-                for target in &targets.targets {
-                    write!(self.output, "{} -> bb{}, ", target.value, target.target.0)?;
+        if let Some(ref terminator) = block.terminator {
+            match &terminator.kind {
+                TerminatorKind::Unreachable => {
+                    write!(self.output, "unreachable")?;
                 }
-                write!(self.output, "otherwise -> bb{}", targets.otherwise.0)?;
+                TerminatorKind::Return => {
+                    write!(self.output, "return")?;
+                }
+                TerminatorKind::Switch(operand, targets) => {
+                    write!(self.output, "switch ")?;
+                    self.write_operand(operand)?;
+                    write!(self.output, " ")?;
+                    for target in &targets.targets {
+                        write!(self.output, "{} -> bb{}, ", target.value, target.target.0)?;
+                    }
+                    write!(self.output, "otherwise -> bb{}", targets.otherwise.0)?;
+                }
+                TerminatorKind::Goto(block) => write!(self.output, "goto bb{}", block.0)?,
+                TerminatorKind::Panic => write!(self.output, "panic")?,
             }
-            TerminatorKind::Goto(block) => write!(self.output, "goto bb{}", block.0)?,
-            TerminatorKind::Panic => write!(self.output, "panic")?,
         }
         writeln!(self.output)
     }

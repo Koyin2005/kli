@@ -197,6 +197,7 @@ pub enum Rvalue {
     PointerCast(PointerCast, Operand),
     DecodeUtf8(Operand, Operand),
     Len(Place),
+    Discriminant(Place),
 }
 #[derive(Clone)]
 pub struct SwitchTarget {
@@ -432,6 +433,7 @@ impl Body {
                     }
                 }
             }
+            Rvalue::Discriminant(_) => Type::Int,
         }
     }
     pub fn src_info(&self, loc: Location) -> SrcLoc {

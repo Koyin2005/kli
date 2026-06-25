@@ -1,9 +1,9 @@
 use crate::{
     index_vec::IndexVec,
     mir::{
-        AssertKind, BasicBlock, BasicBlockId, Body, BodySource, Context, Local, LocalInfo,
-        LocalKind, Locals, Operand, Place, Rvalue, Stmt, StmtKind, SwitchTargets, Terminator,
-        TerminatorKind,
+        AssertKind, BasicBlock, BasicBlockId, BinaryOp, Body, BodySource, Context, Local,
+        LocalInfo, LocalKind, Locals, Operand, Place, Rvalue, Stmt, StmtKind, SwitchTarget,
+        SwitchTargets, Terminator, TerminatorKind,
     },
     resolved_ast::Var,
     src_loc::SrcLoc,
@@ -12,6 +12,7 @@ use crate::{
 mod expr;
 mod function;
 mod loops;
+mod matches;
 mod stmt;
 pub struct Builder<'ctxt> {
     pub context: &'ctxt mut Context,
@@ -64,20 +65,36 @@ impl<'ctxt> Builder<'ctxt> {
     pub(super) fn switch_to_block(&mut self, block: BasicBlockId) {
         self.current_block = block;
     }
+    /// Returns the new block and switches to it
     pub(super) fn switch_to_new_block(&mut self) -> BasicBlockId {
         let block = self.new_block();
-        std::mem::replace(&mut self.current_block, block)
+        self.current_block = block;
+        block
     }
+    /// Returns the new block while terminating the old block with a goto to the new block
     pub(super) fn goto_to_new_block(&mut self, loc: SrcLoc) -> BasicBlockId {
         let block = self.new_block();
         self.finish_block(loc, TerminatorKind::Goto(block));
-        std::mem::replace(&mut self.current_block, block)
+        self.current_block = block;
+        block
     }
     pub(super) fn finish_block(&mut self, loc: SrcLoc, terminator: TerminatorKind) {
         self.body.blocks[self.current_block].terminator = Some(Terminator {
             src_info: loc,
             kind: terminator,
         });
+    }
+    pub(super) fn finish_block_with_switch_targets(
+        &mut self,
+        loc: SrcLoc,
+        operand: Operand,
+        targets: Vec<SwitchTarget>,
+        otherwise: BasicBlockId,
+    ) {
+        self.finish_block(
+            loc,
+            TerminatorKind::Switch(operand, SwitchTargets { targets, otherwise }),
+        );
     }
     pub(super) fn finish_block_with_switch(
         &mut self,
@@ -86,6 +103,25 @@ impl<'ctxt> Builder<'ctxt> {
         targets: SwitchTargets,
     ) {
         self.finish_block(loc, TerminatorKind::Switch(operand, targets));
+    }
+    pub(super) fn finish_block_with_if(
+        &mut self,
+        loc: SrcLoc,
+        operand: Operand,
+        true_block: BasicBlockId,
+        false_block: BasicBlockId,
+    ) {
+        self.finish_block_with_switch(
+            loc,
+            operand,
+            SwitchTargets {
+                targets: vec![SwitchTarget {
+                    value: 0,
+                    target: false_block,
+                }],
+                otherwise: true_block,
+            },
+        );
     }
     pub(super) fn finish_block_with_goto(&mut self, loc: SrcLoc, block: BasicBlockId) {
         self.finish_block(loc, TerminatorKind::Goto(block));
@@ -99,6 +135,19 @@ impl<'ctxt> Builder<'ctxt> {
         let temp = self.new_temp(ty);
         self.assign(loc, Place::local(temp), value);
         temp
+    }
+    pub(super) fn assign_equals(&mut self, loc: SrcLoc, left: Operand, right: Operand) -> Local {
+        self.assign_binary_result(loc, Type::Bool, BinaryOp::Equals, left, right)
+    }
+    pub(super) fn assign_binary_result(
+        &mut self,
+        loc: SrcLoc,
+        ty: Type,
+        op: BinaryOp,
+        left: Operand,
+        right: Operand,
+    ) -> Local {
+        self.assign_to_temp(loc, ty, Rvalue::Binary(op, Box::new((left, right))))
     }
     pub(super) fn panic(&mut self, loc: SrcLoc) {
         let block = self.new_block();

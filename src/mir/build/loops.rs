@@ -1,8 +1,5 @@
 use crate::{
-    mir::{
-        self, BinaryOp, Constant, Operand, OverflowOp, Place, Rvalue, SwitchTarget, SwitchTargets,
-        build::Builder,
-    },
+    mir::{self, BinaryOp, Constant, Operand, OverflowOp, Place, Rvalue, build::Builder},
     typed_ast::{Expr, FieldId, IteratorType, Pattern},
     types::{self, LIST_LEN_FIELD, LIST_PTR_FIELD, Type},
 };
@@ -101,16 +98,11 @@ impl Builder<'_> {
                 self.switch_to_new_block();
                 let end_block = self.current_block;
                 self.switch_to_block(cond_block);
-                self.finish_block_with_switch(
+                self.finish_block_with_if(
                     iterator.loc.clone(),
                     Operand::Load(Place::local(in_bounds)),
-                    SwitchTargets {
-                        targets: vec![SwitchTarget {
-                            value: 0,
-                            target: end_block,
-                        }],
-                        otherwise: loop_body_start_block,
-                    },
+                    loop_body_start_block,
+                    end_block,
                 );
                 self.switch_to_block(end_block);
             }
@@ -183,16 +175,11 @@ impl Builder<'_> {
 
                 let end_block = self.current_block;
                 self.switch_to_block(loop_block);
-                self.finish_block_with_switch(
+                self.finish_block_with_if(
                     iterator.loc.clone(),
                     Operand::Load(Place::local(in_bounds)),
-                    SwitchTargets {
-                        targets: vec![SwitchTarget {
-                            value: 1,
-                            target: body_block,
-                        }],
-                        otherwise: end_block,
-                    },
+                    body_block,
+                    end_block,
                 );
                 self.switch_to_block(end_block);
             }
