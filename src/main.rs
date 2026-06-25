@@ -201,7 +201,6 @@ fn find_std_lib() -> FileEntry {
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Feature {
     NoStd,
-    ValidateMir,
     OutputMir,
     OutputInstances,
 }
@@ -235,7 +234,6 @@ fn config() -> Result<Config, ConfigError> {
             let name = pieces.next()?;
             let feature = match name {
                 "no-std" => Feature::NoStd,
-                "check-mir" => Feature::ValidateMir,
                 "output-mir" => Feature::OutputMir,
                 "output-instances" => Feature::OutputInstances,
                 _ => return None,
@@ -293,7 +291,7 @@ fn main() {
     if had_error {
         return;
     }
-    let mut context = mir::Context::new(config.flags.contains(&Feature::ValidateMir));
+    let mut context = mir::Context::new(true);
     for function in program.functions.iter() {
         context.function_names.push(function.name.clone());
     }
