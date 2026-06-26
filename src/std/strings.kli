@@ -1,0 +1,1 @@
+fun decode_utf8(byte_ptr : ptr[byte]) -> option[char];
