@@ -515,6 +515,30 @@ impl TypeCheck {
                     loc,
                 )
             }
+            ExprKind::VariantCase(name, case, args) => {
+                let args = if let Some(args) = args {
+                    let arg_count = todo!("type def generic args");
+                    if arg_count != args.len() {
+                        self.diag.borrow_mut().add_diagnostic(
+                            format!(
+                                "Expected '{}' generic args but got '{}'",
+                                arg_count,
+                                args.len()
+                            ),
+                            loc.clone(),
+                        );
+                    };
+                    let remaining = args.len().abs_diff(arg_count);
+                    args.into_iter()
+                        .map(|arg| self.lower_type(arg))
+                        .chain(std::iter::repeat_n(Type::Unknown, remaining))
+                        .map(GenericArg::Type)
+                        .collect::<Vec<_>>()
+                } else {
+                    todo!("type def generic args")
+                };
+                todo!()
+            }
             ExprKind::None(ty) => {
                 let given = ty.map(|ty| self.lower_type(ty));
                 let ty = match (given, expected_ty.clone()) {

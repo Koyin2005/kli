@@ -300,14 +300,14 @@ pub enum Region {
     Named(Ident),
 }
 #[derive(Debug, Clone)]
-pub struct VariantDef {
+pub struct CaseDef {
     pub name: Ident,
     pub ty: Option<Type>,
 }
 #[derive(Debug, Clone)]
 pub enum TypeDefKind {
     Record(RecordType),
-    Variant(Vec<VariantDef>),
+    Variant(Vec<CaseDef>),
 }
 #[derive(Debug)]
 pub enum Item {
@@ -318,7 +318,7 @@ pub enum Item {
 pub struct TypeDef {
     pub annotations: Vec<Annotation>,
     pub name: Ident,
-    pub generics : Option<Generics>,
+    pub generics: Option<Generics>,
     pub kind: TypeDefKind,
 }
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
@@ -327,6 +327,7 @@ pub struct ModuleId(pub u32);
 pub struct Module {
     pub id: ModuleId,
     pub name: Rc<str>,
+    pub type_defs: Vec<TypeDef>,
     pub functions: Vec<Function>,
     pub child_modules: Vec<Module>,
 }

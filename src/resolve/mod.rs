@@ -5,7 +5,9 @@ use crate::ast::{BorrowExpr, GenericArgs, ModuleId, Path, StmtKind};
 use crate::diagnostics::DiagnosticReporter;
 use crate::ident::Ident;
 use crate::index_vec::IndexVec;
-use crate::resolved_ast::{Builtin, FunctionId, GenericKind, LambdaId, LocalRegionId, VarId};
+use crate::resolved_ast::{
+    Builtin, FunctionId, GenericKind, LambdaId, LocalRegionId, TypeDefId, VarId, VariantCaseId,
+};
 use crate::src_loc::SrcLoc;
 use crate::{ast, resolved_ast as res};
 
@@ -35,12 +37,18 @@ enum Res {
     Var(VarId),
     Module(ModuleId),
     TypeAlias(TypeAlias),
+    TypeDef(TypeDefId),
+    VariantCase(VariantCaseId),
+}
+struct TypeDefInfo {
+    pub cases: Vec<Ident>,
 }
 pub struct Resolve {
     modules: HashMap<ModuleId, ModuleInfo>,
     env: Scope,
     prev_envs: Vec<Scope>,
     functions: Vec<Option<res::Function>>,
+    type_defs: IndexVec<TypeDefId, TypeDefInfo>,
     vars: usize,
     regions: usize,
     generics: usize,
@@ -79,6 +87,7 @@ impl Resolve {
             generic_kinds: HashMap::new(),
             prev_kinds: Vec::new(),
             lambdas: 0,
+            type_defs: IndexVec::new(),
         }
     }
     fn resolve_name(&self, name: &str) -> Option<Res> {
@@ -158,7 +167,9 @@ impl Resolve {
                         | Res::Builtin(_)
                         | Res::Function(_)
                         | Res::Var(_)
-                        | Res::Module(_),
+                        | Res::Module(_)
+                        | Res::TypeDef(_)
+                        | Res::VariantCase(..),
                     ) => {
                         self.cannot_use_as_error(&name.content, "region", name.loc);
                         res::RegionKind::Unknown
@@ -349,6 +360,12 @@ impl Resolve {
                         res::TypeKind::Byte
                     }
                 },
+                Some(Res::TypeDef(_)) => todo!(),
+                Some(Res::VariantCase(..)) => {
+                    self.resolve_generic_args(args);
+                    self.cannot_use_as_error(&name.content, "type", name.loc);
+                    res::TypeKind::Unknown
+                }
                 Some(
                     Res::Builtin(_)
                     | Res::Function(_)
@@ -356,13 +373,7 @@ impl Resolve {
                     | Res::Var(_)
                     | Res::Module(_),
                 ) => {
-                    if args.is_some() {
-                        self.diag.add_diagnostic(
-                            format!("'{}' cannot have generic arguments", name.content),
-                            name.loc.clone(),
-                        );
-                    }
-                    self.resolve_generic_args(args);
+                    self.error_on_generic_args(&name.content, name.loc.clone(), args);
                     self.cannot_use_as_error(&name.content, "type", name.loc);
                     res::TypeKind::Unknown
                 }
@@ -511,7 +522,9 @@ impl Resolve {
                         | Res::Param(_)
                         | Res::LocalRegion(_)
                         | Res::Module(_)
-                        | Res::TypeAlias(_),
+                        | Res::TypeAlias(_)
+                        | Res::VariantCase(..)
+                        | Res::TypeDef(_),
                     ) => {
                         self.diag.add_diagnostic(
                             format!("Can't use '{}' as place", path.display()),
@@ -564,12 +577,26 @@ impl Resolve {
                         return Err(NameResolutionError::NotInScope);
                     }
                 }
+                Res::TypeDef(id) => {
+                    let Some(index) = self.type_defs[id]
+                        .cases
+                        .iter()
+                        .position(|case| case.content == segment.content)
+                    else {
+                        return Err(NameResolutionError::NotInScope);
+                    };
+                    Res::VariantCase(VariantCaseId {
+                        ty: id,
+                        index: index.try_into().unwrap(),
+                    })
+                }
                 Res::Builtin(_)
                 | Res::Function(_)
                 | Res::Param(_)
                 | Res::Var(_)
                 | Res::LocalRegion(_)
-                | Res::TypeAlias(_) => return Err(NameResolutionError::InvalidPathStart),
+                | Res::TypeAlias(_)
+                | Res::VariantCase(..) => return Err(NameResolutionError::InvalidPathStart),
             }
         }
         Ok(curr)
@@ -660,7 +687,11 @@ impl Resolve {
                         function,
                         self.resolve_generic_args(args),
                     ),
-                    Res::Param(_) | Res::LocalRegion(_) | Res::Module(_) | Res::TypeAlias(_) => {
+                    Res::Param(_)
+                    | Res::LocalRegion(_)
+                    | Res::Module(_)
+                    | Res::TypeAlias(_)
+                    | Res::TypeDef(_) => {
                         self.resolve_generic_args(args);
                         self.diag.add_diagnostic(
                             format!("Can't use '{}' as a value", path.display()),
@@ -668,6 +699,11 @@ impl Resolve {
                         );
                         res::ExprKind::Err
                     }
+                    Res::VariantCase(id) => res::ExprKind::VariantCase(
+                        path.into_last().content,
+                        id,
+                        self.resolve_generic_args(args),
+                    ),
                 },
             },
             ast::ExprKind::Lambda(lambda) => self.in_scope(|this| {
@@ -760,35 +796,108 @@ impl Resolve {
         (params, return_type)
     }
     fn resolve_function(&mut self, function: ast::Function) -> res::Function {
-        let function = self.in_scope(|this| {
-            let (generics, (params, return_type)) = if let Some(generics) = function.generics {
-                let (generics, sig) = this.resolve_generics(generics, |this| {
-                    this.resolve_signature(function.params, function.return_type)
-                });
-                (Some(generics), sig)
+        self.resolve_item(|this| {
+            this.in_scope(|this| {
+                let (generics, (params, return_type)) = if let Some(generics) = function.generics {
+                    let (generics, sig) = this.resolve_generics(generics, |this| {
+                        this.resolve_signature(function.params, function.return_type)
+                    });
+                    (Some(generics), sig)
+                } else {
+                    (
+                        None,
+                        this.resolve_signature(function.params, function.return_type),
+                    )
+                };
+                let body = function.body.map(|body| this.resolve_expr(body));
+                res::Function {
+                    loc: function.loc,
+                    name: function.name,
+                    generics,
+                    params,
+                    return_type,
+                    body,
+                }
+            })
+        })
+    }
+    fn resolve_type_def_body(&mut self, body: ast::TypeDefKind) -> res::TypeDefKind {
+        match body {
+            ast::TypeDefKind::Record(record) => res::TypeDefKind::Record(res::RecordDef {
+                fields: record
+                    .fields
+                    .into_iter()
+                    .map(|field| res::RecordFieldType {
+                        name: field.name,
+                        ty: self.resolve_type(field.ty),
+                    })
+                    .collect(),
+            }),
+            ast::TypeDefKind::Variant(cases) => res::TypeDefKind::Variant(
+                cases
+                    .into_iter()
+                    .map(|case| res::VariantDef {
+                        name: case.name,
+                        ty: case.ty.map(|ty| self.resolve_type(ty)),
+                    })
+                    .collect(),
+            ),
+        }
+    }
+    fn resolve_type_def(&mut self, type_def: ast::TypeDef) -> res::TypeDef {
+        self.resolve_item(|this| {
+            let (generics, kind) = if let Some(generics) = type_def.generics {
+                let (generics, kind) = this
+                    .resolve_generics(generics, |this| this.resolve_type_def_body(type_def.kind));
+                (Some(generics), kind)
             } else {
-                (
-                    None,
-                    this.resolve_signature(function.params, function.return_type),
-                )
+                (None, this.resolve_type_def_body(type_def.kind))
             };
-            let body = function.body.map(|body| this.resolve_expr(body));
-            res::Function {
-                loc: function.loc,
-                name: function.name,
+            res::TypeDef {
+                name: type_def.name,
                 generics,
-                params,
-                return_type,
-                body,
+                kind,
             }
-        });
+        })
+    }
+    fn resolve_item<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        let value = f(self);
         self.generics = 0;
         self.vars = 0;
-        function
+        value
+    }
+    fn declare_type_def(&mut self, name: Ident, cases: Vec<Ident>) {
+        let id = self.type_defs.push(TypeDefInfo { cases: cases });
+        match self.env.entry(name.content) {
+            std::collections::hash_map::Entry::Occupied(mut occupied) => {
+                if let Res::Function(_) = occupied.get() {
+                    self.diag.add_diagnostic(
+                        format!("Cannot redeclare type '{}'", occupied.key()),
+                        name.loc.clone(),
+                    );
+                } else {
+                    occupied.insert(Res::TypeDef(id));
+                }
+            }
+            std::collections::hash_map::Entry::Vacant(vacant) => {
+                vacant.insert(Res::TypeDef(id));
+            }
+        }
     }
     fn declare_module_items(&mut self, module: &ast::Module) {
         self.declare_module(module.id, module.name.clone());
         let scope = self.take_new_scope(|this| {
+            for type_def in &module.type_defs {
+                this.declare_type_def(
+                    type_def.name.clone(),
+                    match type_def.kind {
+                        ast::TypeDefKind::Record(_) => Vec::new(),
+                        ast::TypeDefKind::Variant(ref cases) => {
+                            cases.iter().map(|case| case.name.clone()).collect()
+                        }
+                    },
+                );
+            }
             for function in &module.functions {
                 this.declare_function(function.name.clone());
             }
@@ -806,14 +915,18 @@ impl Resolve {
     fn resolve_module(
         &mut self,
         functions: &mut IndexVec<FunctionId, res::Function>,
+        type_defs: &mut IndexVec<TypeDefId, res::TypeDef>,
         module: ast::Module,
     ) {
         self.in_module_scope(module.id, |this| {
+            for type_def in module.type_defs {
+                type_defs.push(this.resolve_type_def(type_def));
+            }
             for function in module.functions {
                 functions.push(this.resolve_function(function));
             }
             for child in module.child_modules {
-                this.resolve_module(functions, child);
+                this.resolve_module(functions, type_defs, child);
             }
         });
     }
@@ -822,10 +935,14 @@ impl Resolve {
         self.declare(&modules);
         //Second pass : Resolve
         let mut functions = IndexVec::new();
+        let mut type_defs = IndexVec::new();
         for module in modules.into_iter() {
-            self.resolve_module(&mut functions, module);
+            self.resolve_module(&mut functions, &mut type_defs, module);
         }
-        let program = res::Program { functions };
+        let program = res::Program {
+            functions,
+            type_defs,
+        };
         if !self.diag.report_all() {
             Ok(program)
         } else {

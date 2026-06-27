@@ -1,15 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    diagnostics::DiagnosticReporter,
-    ident::Ident,
-    index_vec::IndexVec,
-    resolved_ast::{self as res, Builtin, FunctionId, Program, VarId},
-    scheme::Scheme,
-    src_loc::SrcLoc,
-    typecheck::{infer::TypeInfer, lower::Lower, subst::TypeSubst},
-    typed_ast::{self, Function, GenericParam, IteratorType, LetBinding},
-    types::{self, FunctionType, GenericArg, GenericKind, Region, Type},
+    diagnostics::DiagnosticReporter, ident::Ident, index_vec::IndexVec, resolved_ast::{self as res, Builtin, FunctionId, Program, TypeDefId, VarId}, scheme::Scheme, src_loc::SrcLoc, typecheck::{infer::TypeInfer, lower::Lower, subst::TypeSubst}, typed_ast::{self, Function, GenericParam, IteratorType, LetBinding}, types::{self, FunctionType, GenericArg, GenericKind, Region, Type},
 };
 pub struct TypeError;
 #[derive(Debug)]
@@ -18,8 +10,26 @@ struct VarInfo {
     ty: Type,
     function_scope: usize,
 }
+struct Generics{
+    generics : Vec<GenericKind>
+}
+fn lower_generics(generics: Option<&res::Generics>) -> Generics{
+    Generics{generics:match generics {
+                None => Vec::new(),
+                Some(ref generics) => generics
+                    .kinds
+                    .iter()
+                    .map(|kind| match kind {
+                        res::GenericKind::Region => GenericKind::Region,
+                        res::GenericKind::Type => GenericKind::Type,
+                    })
+                    .collect::<Vec<_>>(),
+            }
+        }
+}
 pub struct TypeCheck {
-    function_generic_kinds: IndexVec<FunctionId, Vec<GenericKind>>,
+    function_generics: IndexVec<FunctionId, Generics>,
+    type_def_generics : IndexVec<TypeDefId,Generics>,
     pub(super) diag: RefCell<DiagnosticReporter>,
     variables: Vec<VarInfo>,
     generics: Vec<GenericKind>,
@@ -32,11 +42,11 @@ impl TypeCheck {
     pub fn new(program: &Program) -> Self {
         let mut signatures = Vec::new();
         let diag = RefCell::new(DiagnosticReporter::new());
-        let mut function_kinds = IndexVec::new();
+        let mut function_generics = IndexVec::new();
         for function in program.functions.iter() {
+            function_generics.push(lower_generics(function.generics.as_ref()));
             let kinds = match function.generics {
                 None => Vec::new(),
-
                 Some(ref generics) => generics
                     .kinds
                     .iter()
@@ -52,13 +62,17 @@ impl TypeCheck {
                 lower.lower_type(&function.return_type),
             ));
             signatures.push(signature);
-            function_kinds.push(kinds);
+        }
+        let mut type_def_generics = IndexVec::new();
+        for type_def in program.type_defs.iter(){
+            type_def_generics.push(lower_generics(type_def.generics.as_ref()));
         }
         Self {
+            type_def_generics,
             generics: Vec::new(),
             signatures,
             infer: TypeInfer::new(),
-            function_generic_kinds: function_kinds,
+            function_generics,
             diag: RefCell::new(DiagnosticReporter::new()),
             variables: Vec::new(),
             captures: Vec::new(),
@@ -212,7 +226,7 @@ impl TypeCheck {
             .collect()
     }
     pub(super) fn generic_arg_count_of_function(&self, function: FunctionId) -> usize {
-        self.function_generic_kinds[function].len()
+        todo!()
     }
     pub(super) fn instantiate_function_args(
         &mut self,
@@ -222,7 +236,7 @@ impl TypeCheck {
         Self::instantiate_args(
             &mut self.infer,
             loc,
-            self.function_generic_kinds[function].iter().copied(),
+            [todo!() as GenericKind].into_iter(),
         )
     }
     pub(super) fn var_type(&self, var: VarId) -> &Type {
@@ -347,7 +361,7 @@ impl TypeCheck {
         LetBinding { pattern, value }
     }
     pub(super) fn check_function(&mut self, id: FunctionId, f: res::Function) -> Function {
-        self.generics.clone_from(&self.function_generic_kinds[id]);
+        self.generics.clone_from(todo!());
         let FunctionType {
             resource: _,
             params,

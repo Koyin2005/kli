@@ -206,6 +206,7 @@ pub enum ExprKind {
     List(Vec<Expr>),
     Call(Box<Expr>, Vec<Expr>),
     Record(Vec<FieldInit>),
+    VariantCase(Rc<str>, VariantCaseId, Option<Vec<Type>>),
 }
 #[derive(Debug, Clone)]
 pub enum RegionKind {
@@ -301,7 +302,34 @@ pub struct Type {
     pub loc: SrcLoc,
     pub kind: TypeKind,
 }
+define_id!(TypeDefId);
+#[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
+pub struct VariantCaseId {
+    pub ty: TypeDefId,
+    pub index: u32,
+}
+#[derive(Debug)]
+pub struct VariantDef {
+    pub name: Ident,
+    pub ty: Option<Type>,
+}
+#[derive(Debug)]
+pub struct RecordDef {
+    pub fields: Vec<RecordFieldType>,
+}
+#[derive(Debug)]
+pub enum TypeDefKind {
+    Variant(Vec<VariantDef>),
+    Record(RecordDef),
+}
+#[derive(Debug)]
+pub struct TypeDef {
+    pub name: Ident,
+    pub generics: Option<Generics>,
+    pub kind: TypeDefKind,
+}
 #[derive(Debug)]
 pub struct Program {
     pub functions: IndexVec<FunctionId, Function>,
+    pub type_defs: IndexVec<TypeDefId, TypeDef>,
 }

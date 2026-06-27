@@ -154,6 +154,7 @@ fn parse_modules(module_counter: &mut u32, entry: FileEntry) -> Option<Module> {
                 id,
                 name,
                 functions: Vec::new(),
+                type_defs: Vec::new(),
                 child_modules: modules.into_iter().collect::<Option<Vec<_>>>()?,
             }
         }

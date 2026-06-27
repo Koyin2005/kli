@@ -2,11 +2,11 @@ use std::{iter::Peekable, rc::Rc, vec::IntoIter};
 
 use crate::{
     ast::{
-        Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, Expr, ExprKind,
-        FieldInit, Function, FunctionType, GenericArg, GenericArgs, Generics, IsResource, Item,
-        Lambda, LetBinding, Module, ModuleId, Mutable, Param, Path, Pattern, PatternField,
+        Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, CaseDef, Expr,
+        ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, Generics, IsResource,
+        Item, Lambda, LetBinding, Module, ModuleId, Mutable, Param, Path, Pattern, PatternField,
         PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeDef,
-        TypeDefKind, TypeKind, VariantDef,
+        TypeDefKind, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::Ident,
@@ -856,17 +856,17 @@ impl Parser {
             body,
         })
     }
-    fn parse_variant_def(&mut self) -> Result<VariantDef, ParseError> {
+    fn parse_case_def(&mut self) -> Result<CaseDef, ParseError> {
         self.next_token();
         let name = self.expect_ident("variant name")?;
-        let ty = if self.matches_token(&TokenKind::LeftParen){
+        let ty = if self.matches_token(&TokenKind::LeftParen) {
             let ty = self.parse_type()?;
             self.expect(&TokenKind::RightParen)?;
             Some(ty)
         } else {
             None
         };
-        Ok(VariantDef { name, ty })
+        Ok(CaseDef { name, ty })
     }
     fn parse_type_def(&mut self) -> Result<TypeDef, ParseError> {
         self.next_token();
@@ -881,7 +881,7 @@ impl Parser {
             TokenKind::Pipe => {
                 let mut variant_defs = Vec::new();
                 while let TokenKind::Pipe = self.peek_token().kind {
-                    variant_defs.push(self.parse_variant_def()?);
+                    variant_defs.push(self.parse_case_def()?);
                 }
                 TypeDefKind::Variant(variant_defs)
             }
@@ -942,6 +942,7 @@ impl Parser {
             id,
             name,
             functions,
+            type_defs,
             child_modules: Vec::new(),
         })
     }
