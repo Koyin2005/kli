@@ -299,9 +299,30 @@ pub enum Region {
     Static(SrcLoc),
     Named(Ident),
 }
+#[derive(Debug, Clone)]
+pub struct VariantDef {
+    pub name: Ident,
+    pub ty: Option<Type>,
+}
+#[derive(Debug, Clone)]
+pub enum TypeDefKind {
+    Record(RecordType),
+    Variant(Vec<VariantDef>),
+}
+#[derive(Debug)]
+pub enum Item {
+    TypeDef(TypeDef),
+    Function(Function),
+}
+#[derive(Debug)]
+pub struct TypeDef {
+    pub annotations: Vec<Annotation>,
+    pub name: Ident,
+    pub generics : Option<Generics>,
+    pub kind: TypeDefKind,
+}
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
 pub struct ModuleId(pub u32);
-
 #[derive(Debug)]
 pub struct Module {
     pub id: ModuleId,

@@ -2,12 +2,12 @@ use std::fmt::Display;
 
 use crate::src_loc::SrcLoc;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub loc: SrcLoc,
     pub kind: TokenKind,
 }
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TokenKind {
     LeftBrace,
     RightBrace,
@@ -59,6 +59,8 @@ pub enum TokenKind {
     Region,
     ArrayList,
     At,
+    Type,
+    Eof,
 }
 
 impl Display for TokenKind {
@@ -118,6 +120,8 @@ impl Display for TokenKind {
             Self::Error => "{error}",
             Self::Region => "region",
             Self::ArrayList => "arraylist",
+            Self::Type => "type",
+            Self::Eof => "EOF",
         };
         f.write_str(txt)
     }

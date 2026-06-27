@@ -3,9 +3,10 @@ use std::{iter::Peekable, rc::Rc, vec::IntoIter};
 use crate::{
     ast::{
         Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, Expr, ExprKind,
-        FieldInit, Function, FunctionType, GenericArg, GenericArgs, Generics, IsResource, Lambda,
-        LetBinding, Module, ModuleId, Mutable, Param, Path, Pattern, PatternField, PatternKind,
-        RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeKind,
+        FieldInit, Function, FunctionType, GenericArg, GenericArgs, Generics, IsResource, Item,
+        Lambda, LetBinding, Module, ModuleId, Mutable, Param, Path, Pattern, PatternField,
+        PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeDef,
+        TypeDefKind, TypeKind, VariantDef,
     },
     diagnostics::DiagnosticReporter,
     ident::Ident,
@@ -24,57 +25,49 @@ enum Precedence {
 pub struct ParseError;
 pub struct Parser {
     diag: DiagnosticReporter,
-    file: Rc<str>,
     tokens: Peekable<IntoIter<Token>>,
+    eof_token: Token,
 }
 impl Parser {
     pub fn new(file: Rc<str>, src: &str) -> Self {
-        let tokens = Lexer::new(file.clone(), src).lex();
+        let (tokens, eof_token) = Lexer::new(file, src).lex();
         Self {
             diag: DiagnosticReporter::new(),
-            file,
             tokens: tokens.into_iter().peekable(),
+            eof_token,
         }
     }
     fn current_loc(&mut self) -> SrcLoc {
-        self.peek_token()
-            .map(|token| token.loc.clone())
-            .unwrap_or(SrcLoc {
-                line: 1,
-                file: self.file.clone(),
-            })
+        self.peek_token().loc.clone()
     }
-    fn peek_token(&mut self) -> Option<&Token> {
-        self.tokens.peek()
+    fn peek_token(&mut self) -> &Token {
+        self.tokens.peek().unwrap_or(&self.eof_token)
     }
-    fn next_token(&mut self) -> Option<Token> {
-        self.tokens.next()
+    fn next_token(&mut self) -> Token {
+        self.tokens.next().unwrap_or_else(|| self.eof_token.clone())
     }
     fn check_token(&mut self, kind: &TokenKind) -> bool {
-        let Some(token) = self.peek_token() else {
-            return false;
-        };
-        token.kind == *kind
+        &self.peek_token().kind == kind
+    }
+    fn is_eof(&mut self) -> bool {
+        self.peek_token().kind == TokenKind::Eof
     }
     fn check_is_not_token(&mut self, kind: &TokenKind) -> bool {
-        let Some(token) = self.peek_token() else {
-            return false;
-        };
-        token.kind != *kind
+        self.peek_token().kind != *kind
     }
     fn check_token_is_ident(&mut self) -> bool {
-        let Some(token) = self.peek_token() else {
-            return false;
-        };
-        matches!(token.kind, TokenKind::Ident(_))
+        matches!(self.peek_token().kind, TokenKind::Ident(_))
     }
     fn match_token(&mut self, kind: &TokenKind) -> Option<Token> {
-        let token = self.peek_token()?;
+        let token = self.peek_token();
         if token.kind == *kind {
-            self.next_token()
+            Some(self.next_token())
         } else {
             None
         }
+    }
+    fn match_coma(&mut self) -> bool {
+        self.matches_token(&TokenKind::Coma)
     }
     fn matches_token(&mut self, kind: &TokenKind) -> bool {
         if self.check_token(kind) {
@@ -84,22 +77,14 @@ impl Parser {
             false
         }
     }
-    fn not_matches_token(&mut self, kind: &TokenKind) -> bool {
-        if self.check_token(kind) {
-            self.next_token();
-            false
-        } else {
-            true
-        }
-    }
     fn match_ident(&mut self) -> Option<Ident> {
         if self.check_token_is_ident() {
             let Token {
                 loc,
                 kind: TokenKind::Ident(name),
-            } = self.next_token().expect("There should be a token")
+            } = self.next_token()
             else {
-                unreachable!("Has to be a name")
+                unreachable!("Has to be an ident")
             };
             Some(Ident {
                 content: name.into(),
@@ -114,68 +99,48 @@ impl Parser {
             Ok(ident)
         } else {
             let loc = self.current_loc();
-            let msg = if let Some(token) = self.peek_token() {
-                format!("Expected '{kind}' but got '{}'", token.kind)
-            } else {
-                format!("Expected '{kind}' but got 'EOF'")
-            };
+            let token = self.peek_token();
+            let msg = format!("Expected '{kind}' but got '{}'", token.kind);
             self.diag.add_diagnostic(msg, loc);
             Err(ParseError)
         }
     }
-    fn match_string_literal(&mut self) -> Option<(SrcLoc, String)> {
-        if self.peek_token().is_some_and(|token| {
-            matches!(
-                token,
-                Token {
-                    loc: _,
-                    kind: TokenKind::StringLiteral(_)
-                }
-            )
-        }) {
-            let Token {
-                loc,
-                kind: TokenKind::StringLiteral(value),
-            } = self.next_token().expect("Should be a string literal")
-            else {
-                unreachable!("Should be a string literal")
-            };
-            Some((loc, value))
+    fn expect(&mut self, kind: &TokenKind) -> Result<(), ParseError> {
+        let token = self.peek_token();
+        if token.kind == *kind {
+            self.next_token();
+            Ok(())
         } else {
-            None
+            let loc = token.loc.clone();
+            let kind = &token.kind;
+            let msg = format!("Expected '{}' but got '{}'", kind, token.kind);
+            self.diag.add_diagnostic(msg, loc);
+            Err(ParseError)
         }
     }
-    fn expect(&mut self, kind: &TokenKind) -> Result<(), ParseError> {
-        let (loc, tok) = match self.peek_token() {
-            Some(token) => {
-                if token.kind == *kind {
-                    self.next_token();
-                    return Ok(());
-                } else {
-                    (token.loc.clone(), Some(&token.kind))
-                }
-            }
-            None => (self.current_loc(), None),
-        };
-        let msg = if let Some(tok) = tok {
-            format!("Expected '{}' but got '{}'", kind, tok)
-        } else {
-            format!("Expected '{}' but got EOF", kind)
-        };
+    fn expect_error(&mut self, expected: &str) -> ParseError {
+        let (loc, kind) = (self.current_loc(), &self.peek_token().kind);
+        let msg = format!("Expected {} but got '{}'", expected, kind);
         self.diag.add_diagnostic(msg, loc);
-        Err(ParseError)
+        ParseError
     }
-    fn expect_error(
+    fn delimited_by<T>(
         &mut self,
-        msg: impl FnOnce(Option<&TokenKind>) -> String,
-    ) -> Result<(), ParseError> {
-        let (loc, kind) = (self.current_loc(), self.peek_token().map(|tok| &tok.kind));
-        let msg = msg(kind);
-        self.diag.add_diagnostic(msg, loc);
-        Err(ParseError)
+        end: &TokenKind,
+        mut f: impl FnMut(&mut Self) -> Result<T, ParseError>,
+    ) -> Result<Vec<T>, ParseError> {
+        let mut results = Vec::new();
+        while !self.is_eof() && !self.matches_token(end) {
+            results.push(f(self)?);
+            if !self.match_coma() {
+                break;
+            }
+        }
+        let _ = self.expect(end);
+        Ok(results)
     }
     fn binary_op(&mut self) -> Option<(Precedence, BinaryOp)> {
-        match self.peek_token()?.kind {
+        match self.peek_token().kind {
             TokenKind::Plus => Some((Precedence::Factor, BinaryOp::Add)),
             TokenKind::Minus => Some((Precedence::Factor, BinaryOp::Subtract)),
             TokenKind::Slash => Some((Precedence::Term, BinaryOp::Divide)),
@@ -218,97 +183,85 @@ impl Parser {
     }
     fn parse_pattern(&mut self) -> Result<Pattern, ParseError> {
         let loc = self.current_loc();
-        match self.peek_token() {
-            None => {
+        match self.peek_token().kind {
+            TokenKind::Number(number) => {
+                self.next_token();
+                Ok(Pattern {
+                    loc,
+                    kind: PatternKind::Int(number),
+                })
+            }
+            TokenKind::Ref => {
+                self.next_token();
+                let pattern = self.parse_pattern()?;
+                Ok(Pattern {
+                    loc,
+                    kind: PatternKind::Ref(Box::new(pattern)),
+                })
+            }
+            TokenKind::Borrow => {
+                self.next_token();
+                let mutable = if self.matches_token(&TokenKind::Mut) {
+                    Mutable::Mutable
+                } else {
+                    Mutable::Immutable
+                };
+                self.parse_pattern_ident(Some(mutable), loc, Mutable::Immutable)
+            }
+            TokenKind::Ident(_) => self.parse_pattern_ident(None, loc, Mutable::Immutable),
+            TokenKind::Mut => {
+                self.next_token();
+                self.parse_pattern_ident(None, loc, Mutable::Mutable)
+            }
+            TokenKind::Some => {
+                self.next_token();
+                let _ = self.expect(&TokenKind::LeftParen);
+                let pat = self.parse_pattern()?;
+                let _ = self.expect(&TokenKind::RightParen);
+                Ok(Pattern {
+                    loc,
+                    kind: PatternKind::Some(Box::new(pat)),
+                })
+            }
+            TokenKind::None => {
+                self.next_token();
+                Ok(Pattern {
+                    loc,
+                    kind: PatternKind::None,
+                })
+            }
+            TokenKind::True => {
+                self.next_token();
+                Ok(Pattern {
+                    loc,
+                    kind: PatternKind::Bool(true),
+                })
+            }
+            TokenKind::False => {
+                self.next_token();
+                Ok(Pattern {
+                    loc,
+                    kind: PatternKind::Bool(false),
+                })
+            }
+            TokenKind::LeftBrace => {
+                self.next_token();
+                let fields = self.delimited_by(&TokenKind::RightBrace, |this| {
+                    let name = this.expect_ident("field name")?;
+                    let _ = this.expect(&TokenKind::Equal);
+                    let pattern = this.parse_pattern()?;
+                    Ok(PatternField { name, pattern })
+                })?;
+                Ok(Pattern {
+                    loc,
+                    kind: PatternKind::Record(fields),
+                })
+            }
+            _ => {
                 self.diag
-                    .add_diagnostic("Expected a pattern".to_string(), loc);
+                    .add_diagnostic("Expected a valid pattern".to_string(), loc);
                 Err(ParseError)
             }
-            Some(Token { loc: _, kind }) => match kind {
-                &TokenKind::Number(number) => {
-                    self.next_token();
-                    Ok(Pattern {
-                        loc,
-                        kind: PatternKind::Int(number),
-                    })
-                }
-                TokenKind::Ref => {
-                    self.next_token();
-                    let pattern = self.parse_pattern()?;
-                    Ok(Pattern {
-                        loc,
-                        kind: PatternKind::Ref(Box::new(pattern)),
-                    })
-                }
-                TokenKind::Borrow => {
-                    self.next_token();
-                    let mutable = if self.matches_token(&TokenKind::Mut) {
-                        Mutable::Mutable
-                    } else {
-                        Mutable::Immutable
-                    };
-                    self.parse_pattern_ident(Some(mutable), loc, Mutable::Immutable)
-                }
-                TokenKind::Ident(_) => self.parse_pattern_ident(None, loc, Mutable::Immutable),
-                TokenKind::Mut => {
-                    self.next_token();
-                    self.parse_pattern_ident(None, loc, Mutable::Mutable)
-                }
-                TokenKind::Some => {
-                    self.next_token();
-                    let _ = self.expect(&TokenKind::LeftParen);
-                    let pat = self.parse_pattern()?;
-                    let _ = self.expect(&TokenKind::RightParen);
-                    Ok(Pattern {
-                        loc,
-                        kind: PatternKind::Some(Box::new(pat)),
-                    })
-                }
-                TokenKind::None => {
-                    self.next_token();
-                    Ok(Pattern {
-                        loc,
-                        kind: PatternKind::None,
-                    })
-                }
-                TokenKind::True => {
-                    self.next_token();
-                    Ok(Pattern {
-                        loc,
-                        kind: PatternKind::Bool(true),
-                    })
-                }
-                TokenKind::False => {
-                    self.next_token();
-                    Ok(Pattern {
-                        loc,
-                        kind: PatternKind::Bool(false),
-                    })
-                }
-                TokenKind::LeftBrace => {
-                    self.next_token();
-                    let mut fields = Vec::new();
-                    while self.check_is_not_token(&TokenKind::RightBrace) {
-                        let name = self.expect_ident("field name")?;
-                        let _ = self.expect(&TokenKind::Equal);
-                        let pattern = self.parse_pattern()?;
-                        fields.push(PatternField { name, pattern });
-                        if self.not_matches_token(&TokenKind::Coma) {
-                            break;
-                        }
-                    }
-                    let _ = self.expect(&TokenKind::RightBrace);
-                    Ok(Pattern {
-                        loc,
-                        kind: PatternKind::Record(fields),
-                    })
-                }
-                _ => {
-                    self.diag
-                        .add_diagnostic("Expected a valid pattern".to_string(), loc);
-                    Err(ParseError)
-                }
-            },
         }
     }
     fn parse_case_arm(&mut self) -> Result<CaseArm, ParseError> {
@@ -323,11 +276,7 @@ impl Parser {
         } else if self.matches_token(&TokenKind::ThickArrow) {
             Ok(IsResource::Resource)
         } else {
-            let _ = self.expect_error(|msg| match msg {
-                Some(kind) => format!("Expected '->' or '=>' but got '{kind}'"),
-                None => "Expected '->' or '=>' but got EOF".to_string(),
-            });
-            Err(ParseError)
+            Err(self.expect_error("'-> or =>'"))
         }
     }
     fn parse_block_body(&mut self) -> Result<BlockBody, ParseError> {
@@ -380,12 +329,10 @@ impl Parser {
         })
     }
     fn parse_definition_stmt(&mut self) -> Result<Option<Stmt>, ParseError> {
-        let Some(Token { loc, kind }) = self.peek_token() else {
-            return Ok(None);
-        };
-        match kind {
+        let token = self.peek_token();
+        match token.kind {
             TokenKind::Let => {
-                let loc = loc.clone();
+                let loc = token.loc.clone();
                 self.parse_let_stmt(loc).map(Some)
             }
             _ => Ok(None),
@@ -417,17 +364,12 @@ impl Parser {
     }
     fn parse_record_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.next_token();
-        let mut fields = Vec::new();
-        while self.check_is_not_token(&TokenKind::RightBrace) {
-            let name = self.expect_ident("field name")?;
-            let _ = self.expect(&TokenKind::Equal);
-            let value = self.parse_expr()?;
-            fields.push(FieldInit { name, value });
-            if self.not_matches_token(&TokenKind::Coma) {
-                break;
-            }
-        }
-        self.expect(&TokenKind::RightBrace)?;
+        let fields = self.delimited_by(&TokenKind::RightBrace, |this| {
+            let name = this.expect_ident("field name")?;
+            let _ = this.expect(&TokenKind::Equal);
+            let value = this.parse_expr()?;
+            Ok(FieldInit { name, value })
+        })?;
         Ok(Expr {
             loc,
             kind: ExprKind::Record(RecordExpr { fields }),
@@ -458,218 +400,211 @@ impl Parser {
     }
     fn parse_expr_prefix(&mut self) -> Result<Expr, ParseError> {
         let loc = self.current_loc();
-        match self.peek_token() {
-            None => {
-                self.diag.add_diagnostic("Expected expr".to_string(), loc);
+        match self.peek_token().kind {
+            TokenKind::Number(num) => {
+                self.next_token();
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::Number(num),
+                })
+            }
+            TokenKind::True => {
+                self.next_token();
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::Bool(true),
+                })
+            }
+            TokenKind::False => {
+                self.next_token();
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::Bool(false),
+                })
+            }
+            TokenKind::LeftParen => self.parse_paren_expr(loc),
+            TokenKind::For => {
+                self.next_token();
+                let pattern = self.parse_pattern()?;
+                let _ = self.expect(&TokenKind::In);
+                let iterator = self.parse_expr()?;
+                let body = {
+                    let loc = self.current_loc();
+                    self.parse_block_expr(loc)?
+                };
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::For(Box::new(pattern), Box::new(iterator), Box::new(body)),
+                })
+            }
+            TokenKind::Borrow => {
+                self.next_token();
+                let mutable = if self.matches_token(&TokenKind::Mut) {
+                    Mutable::Mutable
+                } else {
+                    Mutable::Immutable
+                };
+                let expr = self.parse_expr()?;
+                let _ = self.expect(&TokenKind::In);
+                let region = self.parse_region()?;
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::Borrow(Box::new(BorrowExpr {
+                        mutable,
+                        expr,
+                        region,
+                    })),
+                })
+            }
+            TokenKind::Ident(_) => {
+                let Some(name) = self.match_ident() else {
+                    unreachable!("Should be an ident here")
+                };
+                let mut path = vec![name];
+                while self.matches_token(&TokenKind::Dot) {
+                    let name = self.expect_ident("field name or sub path")?;
+                    path.push(name);
+                }
+                let generic_args = self.parse_optional_generic_args()?;
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::Path(Path::new(path), generic_args),
+                })
+            }
+            TokenKind::Some => {
+                self.next_token();
+                let _ = self.expect(&TokenKind::LeftParen);
+                let expr = self.parse_expr()?;
+                let _ = self.expect(&TokenKind::RightParen);
+
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::Some(Box::new(expr)),
+                })
+            }
+            TokenKind::None => {
+                self.next_token();
+                let ty = if self.matches_token(&TokenKind::LeftBracket) {
+                    let ty = self.parse_type()?;
+                    let _ = self.expect(&TokenKind::RightBracket);
+                    Some(ty)
+                } else {
+                    None
+                };
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::None(ty),
+                })
+            }
+            TokenKind::Print => {
+                self.next_token();
+                let _ = self.expect(&TokenKind::LeftParen);
+                let expr = if self.check_token(&TokenKind::RightParen) {
+                    None
+                } else {
+                    let expr = self.parse_expr()?;
+                    Some(expr)
+                };
+                let _ = self.expect(&TokenKind::RightParen);
+
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::Print(expr.map(Box::new)),
+                })
+            }
+            TokenKind::Panic => {
+                self.next_token();
+                let ty = if self.matches_token(&TokenKind::LeftBracket) {
+                    let ty = self.parse_type()?;
+                    let _ = self.expect(&TokenKind::RightBracket);
+                    Some(ty)
+                } else {
+                    None
+                };
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::Panic(ty),
+                })
+            }
+            TokenKind::Case => self.parse_case_expr(loc),
+            TokenKind::Do => self.parse_block_expr(loc),
+            TokenKind::StringLiteral(_) => {
+                let Token {
+                    loc,
+                    kind: TokenKind::StringLiteral(string),
+                } = self.next_token()
+                else {
+                    unreachable!("Should be a string literal here")
+                };
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::String(string),
+                })
+            }
+            TokenKind::ArrayList => {
+                self.next_token();
+                self.expect(&TokenKind::LeftBracket)?;
+                let mut values = Vec::new();
+                while self.check_is_not_token(&TokenKind::RightBracket) {
+                    values.push(self.parse_expr()?);
+                    if !self.match_coma() {
+                        break;
+                    }
+                }
+                self.expect(&TokenKind::RightBracket)?;
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::List(values),
+                })
+            }
+            TokenKind::Fun => {
+                self.next_token();
+                let _ = self.expect(&TokenKind::LeftParen);
+                let mut params = Vec::new();
+                while let Some(name) = self.match_ident() {
+                    let param_type = if self.matches_token(&TokenKind::Colon) {
+                        Some(self.parse_type()?)
+                    } else {
+                        None
+                    };
+                    params.push((name, param_type));
+                    if !self.match_coma() {
+                        break;
+                    }
+                }
+                let _ = self.expect(&TokenKind::RightParen);
+
+                let resource = self.parse_resource_arrow()?;
+                let body = self.parse_expr()?;
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::Lambda(Box::new(Lambda {
+                        params,
+                        resource,
+                        body: Box::new(body),
+                    })),
+                })
+            }
+            TokenKind::LeftBrace => self.parse_record_expr(loc),
+            ref kind => {
+                let msg = format!("Expected valid expr but got {kind}");
+                let loc = self.current_loc();
+                self.diag.add_diagnostic(msg, loc);
                 Err(ParseError)
             }
-            Some(token) => match token.kind {
-                TokenKind::Number(num) => {
-                    self.next_token();
-                    Ok(Expr {
-                        loc,
-                        kind: ExprKind::Number(num),
-                    })
-                }
-                TokenKind::True => {
-                    self.next_token();
-                    Ok(Expr {
-                        loc,
-                        kind: ExprKind::Bool(true),
-                    })
-                }
-                TokenKind::False => {
-                    self.next_token();
-                    Ok(Expr {
-                        loc,
-                        kind: ExprKind::Bool(false),
-                    })
-                }
-                TokenKind::LeftParen => self.parse_paren_expr(loc),
-                TokenKind::For => {
-                    self.next_token();
-                    let pattern = self.parse_pattern()?;
-                    let _ = self.expect(&TokenKind::In);
-                    let iterator = self.parse_expr()?;
-                    let body = {
-                        let loc = self.current_loc();
-                        self.parse_block_expr(loc)?
-                    };
-                    Ok(Expr {
-                        loc,
-                        kind: ExprKind::For(Box::new(pattern), Box::new(iterator), Box::new(body)),
-                    })
-                }
-                TokenKind::Borrow => {
-                    self.next_token();
-                    let mutable = if self.matches_token(&TokenKind::Mut) {
-                        Mutable::Mutable
-                    } else {
-                        Mutable::Immutable
-                    };
-                    let expr = self.parse_expr()?;
-                    let _ = self.expect(&TokenKind::In);
-                    let region = self.parse_region()?;
-                    Ok(Expr {
-                        loc,
-                        kind: ExprKind::Borrow(Box::new(BorrowExpr {
-                            mutable,
-                            expr,
-                            region,
-                        })),
-                    })
-                }
-                TokenKind::Ident(_) => {
-                    let Some(name) = self.match_ident() else {
-                        unreachable!("Should be an ident here")
-                    };
-                    let mut path = vec![name];
-                    while self.matches_token(&TokenKind::Dot) {
-                        let name = self.expect_ident("field name or sub path")?;
-                        path.push(name);
-                    }
-                    let generic_args = self.parse_optional_generic_args()?;
-                    Ok(Expr {
-                        loc,
-                        kind: ExprKind::Path(Path::new(path), generic_args),
-                    })
-                }
-                TokenKind::Some => {
-                    self.next_token();
-                    let _ = self.expect(&TokenKind::LeftParen);
-                    let expr = self.parse_expr()?;
-                    let _ = self.expect(&TokenKind::RightParen);
-
-                    Ok(Expr {
-                        loc,
-                        kind: ExprKind::Some(Box::new(expr)),
-                    })
-                }
-                TokenKind::None => {
-                    self.next_token();
-                    let ty = if self.matches_token(&TokenKind::LeftBracket) {
-                        let ty = self.parse_type()?;
-                        let _ = self.expect(&TokenKind::RightBracket);
-                        Some(ty)
-                    } else {
-                        None
-                    };
-                    Ok(Expr {
-                        loc,
-                        kind: ExprKind::None(ty),
-                    })
-                }
-                TokenKind::Print => {
-                    self.next_token();
-                    let _ = self.expect(&TokenKind::LeftParen);
-                    let expr = if self.check_token(&TokenKind::RightParen) {
-                        None
-                    } else {
-                        let expr = self.parse_expr()?;
-                        Some(expr)
-                    };
-                    let _ = self.expect(&TokenKind::RightParen);
-
-                    Ok(Expr {
-                        loc,
-                        kind: ExprKind::Print(expr.map(Box::new)),
-                    })
-                }
-                TokenKind::Panic => {
-                    self.next_token();
-                    let ty = if self.matches_token(&TokenKind::LeftBracket) {
-                        let ty = self.parse_type()?;
-                        let _ = self.expect(&TokenKind::RightBracket);
-                        Some(ty)
-                    } else {
-                        None
-                    };
-                    Ok(Expr {
-                        loc,
-                        kind: ExprKind::Panic(ty),
-                    })
-                }
-                TokenKind::Case => self.parse_case_expr(loc),
-                TokenKind::Do => self.parse_block_expr(loc),
-                TokenKind::StringLiteral(_) => {
-                    let Some(Token {
-                        loc,
-                        kind: TokenKind::StringLiteral(string),
-                    }) = self.next_token()
-                    else {
-                        unreachable!("Should be a string literal here")
-                    };
-                    Ok(Expr {
-                        loc,
-                        kind: ExprKind::String(string),
-                    })
-                }
-                TokenKind::ArrayList => {
-                    self.next_token();
-                    self.expect(&TokenKind::LeftBracket)?;
-                    let mut values = Vec::new();
-                    while self.check_is_not_token(&TokenKind::RightBracket) {
-                        values.push(self.parse_expr()?);
-                        if self.not_matches_token(&TokenKind::Coma) {
-                            break;
-                        }
-                    }
-                    self.expect(&TokenKind::RightBracket)?;
-                    Ok(Expr {
-                        loc,
-                        kind: ExprKind::List(values),
-                    })
-                }
-                TokenKind::Fun => {
-                    self.next_token();
-                    let _ = self.expect(&TokenKind::LeftParen);
-                    let mut params = Vec::new();
-                    while let Some(name) = self.match_ident() {
-                        let param_type = if self.matches_token(&TokenKind::Colon) {
-                            Some(self.parse_type()?)
-                        } else {
-                            None
-                        };
-                        params.push((name, param_type));
-                        if self.not_matches_token(&TokenKind::Coma) {
-                            break;
-                        }
-                    }
-                    let _ = self.expect(&TokenKind::RightParen);
-
-                    let resource = self.parse_resource_arrow()?;
-                    let body = self.parse_expr()?;
-                    Ok(Expr {
-                        loc,
-                        kind: ExprKind::Lambda(Box::new(Lambda {
-                            params,
-                            resource,
-                            body: Box::new(body),
-                        })),
-                    })
-                }
-                TokenKind::LeftBrace => self.parse_record_expr(loc),
-                ref kind => {
-                    let msg = format!("Expected valid expr but got {kind}");
-                    let loc = self.current_loc();
-                    self.diag.add_diagnostic(msg, loc);
-                    Err(ParseError)
-                }
-            },
         }
     }
     fn parse_expr_postfix(&mut self) -> Result<Expr, ParseError> {
         let mut expr = self.parse_expr_prefix()?;
         loop {
             expr = match self.peek_token() {
-                None => break Ok(expr),
-                Some(token) => match token.kind {
+                token => match token.kind {
                     TokenKind::LeftParen => {
                         self.next_token();
                         let mut args = Vec::new();
                         while self.check_is_not_token(&TokenKind::RightParen) {
                             args.push(self.parse_expr()?);
-                            if self.not_matches_token(&TokenKind::Coma) {
+                            if !self.match_coma() {
                                 break;
                             }
                         }
@@ -737,14 +672,7 @@ impl Parser {
     }
     fn parse_optional_generic_args(&mut self) -> Result<Option<GenericArgs>, ParseError> {
         if let Some(Token { loc, .. }) = self.match_token(&TokenKind::LeftBracket) {
-            let mut args = Vec::new();
-            while self.not_matches_token(&TokenKind::RightBracket) {
-                args.push(self.parse_generic_arg()?);
-                if self.not_matches_token(&TokenKind::Coma) {
-                    break;
-                }
-            }
-            let _ = self.expect(&TokenKind::RightBracket);
+            let args = self.delimited_by(&TokenKind::RightBracket, Self::parse_generic_arg)?;
             Ok(Some(GenericArgs { loc, args }))
         } else {
             Ok(None)
@@ -755,7 +683,7 @@ impl Parser {
             let mut names = Vec::new();
             while let Some(name) = self.match_ident() {
                 names.push(name);
-                if self.not_matches_token(&TokenKind::Coma) {
+                if !self.match_coma() {
                     break;
                 }
             }
@@ -773,27 +701,13 @@ impl Parser {
     }
     fn parse_record_type(&mut self) -> Result<RecordType, ParseError> {
         let _ = self.expect(&TokenKind::LeftBrace);
-        let mut fields = Vec::new();
-        while self.check_is_not_token(&TokenKind::RightBrace) {
-            fields.push(self.parse_record_field()?);
-            if self.not_matches_token(&TokenKind::Coma) {
-                break;
-            }
-        }
-        let _ = self.expect(&TokenKind::RightBrace);
+        let fields = self.delimited_by(&TokenKind::RightBrace, Self::parse_record_field)?;
         Ok(RecordType { fields })
     }
     fn parse_type_function(&mut self) -> Result<FunctionType, ParseError> {
         let _ = self.expect(&TokenKind::Fun);
         let _ = self.expect(&TokenKind::LeftParen);
-        let mut params = Vec::new();
-        while self.check_is_not_token(&TokenKind::RightParen) {
-            params.push(self.parse_type()?);
-            if self.not_matches_token(&TokenKind::Coma) {
-                break;
-            }
-        }
-        let _ = self.expect(&TokenKind::RightParen);
+        let params = self.delimited_by(&TokenKind::RightParen, Self::parse_type)?;
         let is_resource = self.parse_resource_arrow().unwrap_or(IsResource::Data);
 
         let return_type = self.parse_type()?;
@@ -805,19 +719,7 @@ impl Parser {
     }
     fn parse_type(&mut self) -> Result<Type, ParseError> {
         let loc = self.current_loc();
-        fn type_parse_error(this: &mut Parser, loc: SrcLoc) -> ParseError {
-            let msg = if let Some(kind) = this.peek_token().map(|token| &token.kind) {
-                format!("Expected a type but got '{kind}'",)
-            } else {
-                "Expected a type but got eof".to_string()
-            };
-            this.diag.add_diagnostic(msg, loc);
-            ParseError
-        }
-        let Some(Token { loc: _, kind }) = self.peek_token() else {
-            return Err(type_parse_error(self, loc));
-        };
-        match kind {
+        match self.peek_token().kind {
             TokenKind::Mut => {
                 self.next_token();
                 let _ = self.expect(&TokenKind::LeftBracket);
@@ -923,7 +825,7 @@ impl Parser {
                     kind: TypeKind::Record(record_ty),
                 })
             }
-            _ => Err(type_parse_error(self, loc)),
+            _ => Err(self.expect_error("'valid type'")),
         }
     }
     fn parse_param(&mut self) -> Result<Param, ParseError> {
@@ -939,25 +841,30 @@ impl Parser {
             let name = self.expect_ident("annotation name")?;
             let mut fields = Vec::new();
             if self.matches_token(&TokenKind::LeftParen) {
-                while self.not_matches_token(&TokenKind::RightParen) {
-                    let (loc, string) = self.match_string_literal().ok_or_else(|| {
-                        self.diag
-                            .add_diagnostic("Expected a string".to_string(), loc.clone());
-                        ParseError
-                    })?;
-                    fields.push(AnnotationField::String(loc, string));
-                    if self.not_matches_token(&TokenKind::Coma) {
-                        break;
-                    }
-                }
-                self.expect(&TokenKind::RightParen)?;
+                fields = self.delimited_by(&TokenKind::RightParen, |this| {
+                    Ok(match this.peek_token() {
+                        Token {
+                            loc: _,
+                            kind: TokenKind::StringLiteral(_),
+                        } => {
+                            let Token {
+                                loc,
+                                kind: TokenKind::StringLiteral(string),
+                            } = this.next_token()
+                            else {
+                                unreachable!("Should be a string literal")
+                            };
+                            AnnotationField::String(loc, string)
+                        }
+                        _ => return Err(this.expect_error("'valid annotation'")),
+                    })
+                })?;
             }
             annotations.push(Annotation { loc, name, fields });
         }
         Ok(annotations)
     }
-    fn parse_function(&mut self) -> Result<Function, ParseError> {
-        let annotations = self.parse_annotations()?;
+    fn parse_function(&mut self, annotations: Vec<Annotation>) -> Result<Function, ParseError> {
         let loc = self.current_loc();
         let _ = self.expect(&TokenKind::Fun);
         let name = self.expect_ident("function name")?;
@@ -967,7 +874,7 @@ impl Parser {
         while self.check_token_is_ident() {
             let param = self.parse_param()?;
             params.push(param);
-            if self.not_matches_token(&TokenKind::Coma) {
+            if !self.match_coma() {
                 break;
             }
         }
@@ -991,16 +898,84 @@ impl Parser {
             body,
         })
     }
+    fn parse_variant_def(&mut self) -> Result<VariantDef, ParseError> {
+        self.next_token();
+        let name = self.expect_ident("variant name")?;
+        let ty = if self.matches_token(&TokenKind::LeftParen){
+            let ty = self.parse_type()?;
+            self.expect(&TokenKind::RightParen)?;
+            Some(ty)
+        } else {
+            None
+        };
+        Ok(VariantDef { name, ty })
+    }
+    fn parse_type_def(&mut self) -> Result<TypeDef, ParseError> {
+        self.next_token();
+        let name = self.expect_ident("type name")?;
+        let generics = self.parse_optional_generics()?;
+        self.expect(&TokenKind::Equal)?;
+        let kind = match self.peek_token().kind {
+            TokenKind::LeftBrace => {
+                let record_def = self.parse_record_type()?;
+                TypeDefKind::Record(record_def)
+            }
+            TokenKind::Pipe => {
+                let mut variant_defs = Vec::new();
+                while let TokenKind::Pipe = self.peek_token().kind {
+                    variant_defs.push(self.parse_variant_def()?);
+                }
+                TypeDefKind::Variant(variant_defs)
+            }
+            _ => {
+                return Err(self.expect_error("'valid type def'"));
+            }
+        };
+        Ok(TypeDef {
+            annotations: Vec::new(),
+            generics,
+            name,
+            kind,
+        })
+    }
+    fn parse_item(&mut self) -> Result<Item, ParseError> {
+        let annotations = self.parse_annotations()?;
+        Ok(match self.peek_token().kind {
+            TokenKind::Fun => Item::Function(self.parse_function(annotations)?),
+            TokenKind::Type => Item::TypeDef(self.parse_type_def()?),
+            _ => return Err(self.expect_error("'valid item'")),
+        })
+    }
     pub fn parse_module(mut self, name: Rc<str>, id: ModuleId) -> Result<Module, ParseError> {
         let mut functions = Vec::new();
-        while self.peek_token().is_some() {
-            let Ok(function) = self.parse_function() else {
-                while self.check_is_not_token(&TokenKind::Fun) {
+        let mut type_defs = Vec::new();
+        let mut recovery = false;
+
+        while !self.is_eof() {
+            match &self.peek_token().kind {
+                _ if recovery => {
                     self.next_token();
+                    if matches!(
+                        self.peek_token(),
+                        Token {
+                            kind: TokenKind::Fun | TokenKind::Type | TokenKind::At,
+                            ..
+                        }
+                    ) {
+                        recovery = false;
+                    }
                 }
-                continue;
-            };
-            functions.push(function);
+                _ => {
+                    let Ok(item) = self.parse_item() else {
+                        recovery = true;
+                        continue;
+                    };
+                    match item {
+                        Item::Function(function) => functions.push(function),
+                        Item::TypeDef(type_def) => type_defs.push(type_def),
+                    }
+                }
+            }
         }
         if self.diag.report_all() {
             return Err(ParseError);

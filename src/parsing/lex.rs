@@ -167,6 +167,7 @@ impl<'s> Lexer<'s> {
                 "do" => TokenKind::Do,
                 "region" => TokenKind::Region,
                 "arraylist" => TokenKind::ArrayList,
+                "type" => TokenKind::Type,
                 _ => TokenKind::Ident(src),
             },
         })
@@ -211,12 +212,16 @@ impl<'s> Lexer<'s> {
             }
         }
     }
-    pub fn lex(mut self) -> Vec<Token> {
+    pub fn lex(mut self) -> (Vec<Token>, Token) {
         let mut tokens = Vec::new();
         while let Some(token) = self.next_token() {
             tokens.push(token);
         }
+        let eof_token = Token {
+            loc: self.current_loc(),
+            kind: TokenKind::Eof,
+        };
         self.diag.report_all();
-        tokens
+        (tokens, eof_token)
     }
 }
