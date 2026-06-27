@@ -213,23 +213,6 @@ impl Parser {
                 self.next_token();
                 self.parse_pattern_ident(None, loc, Mutable::Mutable)
             }
-            TokenKind::Some => {
-                self.next_token();
-                let _ = self.expect(&TokenKind::LeftParen);
-                let pat = self.parse_pattern()?;
-                let _ = self.expect(&TokenKind::RightParen);
-                Ok(Pattern {
-                    loc,
-                    kind: PatternKind::Some(Box::new(pat)),
-                })
-            }
-            TokenKind::None => {
-                self.next_token();
-                Ok(Pattern {
-                    loc,
-                    kind: PatternKind::None,
-                })
-            }
             TokenKind::True => {
                 self.next_token();
                 Ok(Pattern {
@@ -469,31 +452,6 @@ impl Parser {
                 Ok(Expr {
                     loc,
                     kind: ExprKind::Path(Path::new(path), generic_args),
-                })
-            }
-            TokenKind::Some => {
-                self.next_token();
-                let _ = self.expect(&TokenKind::LeftParen);
-                let expr = self.parse_expr()?;
-                let _ = self.expect(&TokenKind::RightParen);
-
-                Ok(Expr {
-                    loc,
-                    kind: ExprKind::Some(Box::new(expr)),
-                })
-            }
-            TokenKind::None => {
-                self.next_token();
-                let ty = if self.matches_token(&TokenKind::LeftBracket) {
-                    let ty = self.parse_type()?;
-                    let _ = self.expect(&TokenKind::RightBracket);
-                    Some(ty)
-                } else {
-                    None
-                };
-                Ok(Expr {
-                    loc,
-                    kind: ExprKind::None(ty),
                 })
             }
             TokenKind::Print => {

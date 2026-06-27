@@ -145,8 +145,6 @@ impl<'s> Lexer<'s> {
                 "imm" => TokenKind::Imm,
                 "mut" => TokenKind::Mut,
                 "borrow" => TokenKind::Borrow,
-                "Some" => TokenKind::Some,
-                "None" => TokenKind::None,
                 "in" => TokenKind::In,
                 "for" => TokenKind::For,
                 "panic" => TokenKind::Panic,
