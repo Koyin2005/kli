@@ -9,46 +9,47 @@ use crate::{
 
 use super::root::TypeCheck;
 
-impl TypeCheck {
+impl TypeCheck<'_> {
     pub fn check_pattern(
-        &mut self,
-        pattern: Pattern,
+        &self,
+        pattern: &Pattern,
         expected_type: Type,
         binding_mode: Option<(Region, Mutable)>,
     ) -> typed_ast::Pattern {
+        let loc = pattern.loc.clone();
         let expected_type = self.simplify_type(expected_type);
         match pattern.kind {
             PatternKind::Int(value) => {
                 let _ = self.unify(expected_type, Type::Int, pattern.loc.clone());
                 typed_ast::Pattern {
                     ty: Type::Int,
-                    loc: pattern.loc,
+                    loc,
                     kind: typed_ast::PatternKind::Int(value),
                 }
             }
-            PatternKind::Ref(inner) => {
+            PatternKind::Ref(ref inner) => {
                 let (mutable, region, ty) =
                     if let Ok((mutable, region, ty)) = expected_type.as_reference_type() {
                         (mutable, region.clone(), ty.clone())
                     } else {
-                        self.diag.borrow_mut().add_diagnostic(
+                        self.ctxt().diag().add_diagnostic(
                             format!("Expected a reference type but got '{}'", expected_type),
                             pattern.loc.clone(),
                         );
                         (Mutable::Mutable, Region::Unknown, Type::Unknown)
                     };
-                let inner = self.check_pattern(*inner, ty.clone(), Some((region.clone(), mutable)));
+                let inner = self.check_pattern(inner, ty.clone(), Some((region.clone(), mutable)));
                 typed_ast::Pattern {
                     ty: Type::reference(inner.ty.clone(), mutable, region),
-                    loc: pattern.loc,
+                    loc,
                     kind: typed_ast::PatternKind::Ref(Box::new(inner)),
                 }
             }
-            PatternKind::Record(fields) => {
+            PatternKind::Record(ref pat_fields) => {
                 let expected_fields = match self.simplify_type(expected_type) {
                     Type::Record(fields) => Some(fields),
                     ref ty => {
-                        self.diag.borrow_mut().add_diagnostic(
+                        self.ctxt().diag().add_diagnostic(
                             format!("Expected 'record' type but got '{}'", ty),
                             pattern.loc.clone(),
                         );
@@ -62,8 +63,8 @@ impl TypeCheck {
                     .map(|(i, field)| (field.name.clone(), i))
                     .collect::<HashMap<_, _>>();
                 let mut seen_fields = HashSet::new();
-                let fields = fields
-                    .into_iter()
+                let fields = pat_fields
+                    .iter()
                     .enumerate()
                     .filter_map(|(i, PatternField { name, pattern })| {
                         let field_id = field_names.get(&name.content).copied().map(FieldId::new);
@@ -79,7 +80,7 @@ impl TypeCheck {
                             binding_mode.clone(),
                         );
                         if expected_fields.is_some() && !seen_fields.insert(name.content.clone()) {
-                            self.diag.borrow_mut().add_diagnostic(
+                            self.ctxt().diag().add_diagnostic(
                                 format!("Repeated field '{}'", name.content),
                                 name.loc.clone(),
                             );
@@ -89,16 +90,15 @@ impl TypeCheck {
                         let field_id = if let Some(field_id) = field_id {
                             field_id
                         } else if expected_fields.is_some() {
-                            self.diag.borrow_mut().add_diagnostic(
+                            self.ctxt().diag().add_diagnostic(
                                 format!("'record' has no field '{}'", name.content),
-                                name.loc,
+                                name.loc.clone(),
                             );
                             return None;
                         } else {
                             FieldId::new(i)
                         };
                         Some(typed_ast::PatternField {
-                            name,
                             pattern,
                             index: field_id,
                         })
@@ -110,7 +110,7 @@ impl TypeCheck {
                         if !seen_fields.contains(&field.name)
                             && field_names.remove(&field.name).is_some()
                         {
-                            self.diag.borrow_mut().add_diagnostic(
+                            self.ctxt().diag().add_diagnostic(
                                 format!("Missing field '{}'", field.name),
                                 pattern.loc.clone(),
                             );
@@ -120,8 +120,9 @@ impl TypeCheck {
                 } else {
                     fields
                         .iter()
-                        .map(|field| RecordField {
-                            name: field.name.content.clone(),
+                        .zip(pat_fields)
+                        .map(|(field, pat_field)| RecordField {
+                            name: pat_field.name.content.clone(),
                             ty: field.pattern.ty.clone(),
                         })
                         .collect()
@@ -129,14 +130,14 @@ impl TypeCheck {
                 let ty = Type::Record(record_fields);
                 typed_ast::Pattern {
                     ty,
-                    loc: pattern.loc,
+                    loc,
                     kind: typed_ast::PatternKind::Record(fields),
                 }
             }
             PatternKind::Bool(value) => {
                 self.unify(expected_type, Type::Bool, pattern.loc.clone());
                 typed_ast::Pattern {
-                    loc: pattern.loc,
+                    loc,
                     ty: Type::Bool,
                     kind: typed_ast::PatternKind::Bool(value),
                 }
@@ -145,7 +146,7 @@ impl TypeCheck {
                 let inner_ty = match expected_type {
                     Type::Option(ty) => *ty,
                     expected_type => {
-                        self.diag.borrow_mut().add_diagnostic(
+                        self.ctxt().diag().add_diagnostic(
                             format!("Expected an option type but got '{}'", expected_type),
                             pattern.loc.clone(),
                         );
@@ -154,34 +155,34 @@ impl TypeCheck {
                 };
                 typed_ast::Pattern {
                     ty: Type::Option(Box::new(inner_ty)),
-                    loc: pattern.loc,
+                    loc: pattern.loc.clone(),
                     kind: typed_ast::PatternKind::None,
                 }
             }
-            PatternKind::Some(inner) => {
+            PatternKind::Some(ref inner) => {
                 let inner = match expected_type {
-                    Type::Option(ty) => self.check_pattern(*inner, *ty, binding_mode),
+                    Type::Option(ty) => self.check_pattern(inner, *ty, binding_mode),
                     expected_type => {
-                        self.diag.borrow_mut().add_diagnostic(
+                        self.ctxt().diag().add_diagnostic(
                             format!("Expected an option type but got '{}'", expected_type),
                             pattern.loc.clone(),
                         );
-                        self.check_pattern(*inner, Type::Unknown, binding_mode)
+                        self.check_pattern(inner, Type::Unknown, binding_mode)
                     }
                 };
                 typed_ast::Pattern {
                     ty: Type::Option(Box::new(inner.ty.clone())),
-                    loc: pattern.loc,
+                    loc: pattern.loc.clone(),
                     kind: typed_ast::PatternKind::Some(Box::new(inner)),
                 }
             }
-            PatternKind::Binding(borrow, mutable, ident, var) => {
+            PatternKind::Binding(borrow, mutable, ref ident, var) => {
                 let name = ident.content.clone();
 
                 let (borrow, var_ty) = match (borrow, binding_mode) {
                     (None, _) => (None, expected_type.clone()),
                     (Some(_), None) => {
-                        self.diag.borrow_mut().add_diagnostic(
+                        self.ctxt().diag().add_diagnostic(
                             format!("Cannot create borrow binding '{}'", ident.content.clone()),
                             ident.loc.clone(),
                         );
@@ -189,7 +190,7 @@ impl TypeCheck {
                     }
                     (Some(borrow), Some((region, mutable))) => {
                         if !mutable.usable_as(borrow) {
-                            self.diag.borrow_mut().add_diagnostic(
+                            self.ctxt().diag().add_diagnostic(
                                 format!("Cannot create borrow binding '{}'", ident.content.clone()),
                                 ident.loc.clone(),
                             );
@@ -203,7 +204,7 @@ impl TypeCheck {
                 self.declare_var(var, var_ty.clone(), name.clone());
                 typed_ast::Pattern {
                     ty: expected_type,
-                    loc: pattern.loc,
+                    loc,
                     kind: typed_ast::PatternKind::Binding(
                         borrow,
                         mutable,

@@ -1,11 +1,11 @@
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{BinaryOp, IsResource, Mutable},
     define_id,
     ident::Ident,
     index_vec::IndexVec,
-    resolved_ast::{Builtin, FunctionId, LambdaId, LocalRegionId, Var, VarId},
+    resolved_ast::{Builtin, DefId, LambdaId, LocalRegionId, Var, VarId},
     src_loc::SrcLoc,
     types::{GenericArg, GenericKind, Region, Type},
 };
@@ -13,7 +13,6 @@ use crate::{
 #[derive(Debug)]
 pub struct PatternField {
     pub index: FieldId,
-    pub name: Ident,
     pub pattern: Pattern,
 }
 #[derive(Debug)]
@@ -84,7 +83,6 @@ define_id!(FieldId);
 #[derive(Debug)]
 pub struct RecordFieldInit {
     pub index: FieldId,
-    pub name: Ident,
     pub value: Expr,
 }
 #[derive(Debug)]
@@ -105,7 +103,7 @@ pub enum ExprKind {
     Panic,
     Some(Box<Expr>),
     BuiltinCall(Builtin, Vec<GenericArg>, Vec<Expr>),
-    Function(Rc<str>, FunctionId, Vec<GenericArg>),
+    Function(DefId, Vec<GenericArg>),
     Print(Option<Box<Expr>>),
     List(Vec<Expr>),
     Call(Box<Expr>, Vec<Expr>),
@@ -147,14 +145,11 @@ impl Param {
     }
 }
 pub struct Function {
-    pub name: Ident,
-    pub generics: Vec<GenericParam>,
     pub params: Vec<Param>,
     pub return_type: Type,
     pub body: Option<Expr>,
 }
 
 pub struct Program {
-    pub functions: IndexVec<FunctionId, Function>,
-    pub main: FunctionId,
+    pub functions: HashMap<DefId, Function>,
 }

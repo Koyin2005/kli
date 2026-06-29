@@ -1,4 +1,5 @@
 use crate::{
+    collect::CtxtRef,
     mir::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstantValue,
         Context, LocalKind, Operand, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
@@ -9,10 +10,10 @@ use crate::{
 
 pub struct MirDump<'ctxt> {
     output: Box<dyn std::io::Write>,
-    ctxt: &'ctxt Context,
+    ctxt: CtxtRef<'ctxt>,
 }
 impl<'ctxt> MirDump<'ctxt> {
-    pub fn new(output: impl std::io::Write + 'static, ctxt: &'ctxt Context) -> Self {
+    pub fn new(output: impl std::io::Write + 'static, ctxt: CtxtRef<'ctxt>) -> Self {
         Self {
             output: Box::new(output),
             ctxt,
@@ -21,7 +22,7 @@ impl<'ctxt> MirDump<'ctxt> {
     fn write_header(&mut self, body: &Body) -> std::io::Result<()> {
         match body.src {
             BodySource::Function(f) => {
-                write!(self.output, "fun {}", self.ctxt.function_names[f].content)?;
+                write!(self.output, "fun {}", self.ctxt.display(f))?;
             }
             BodySource::Lambda(lambda) => {
                 write!(self.output, "lambda {}", lambda.into_usize())?;
@@ -205,22 +206,8 @@ impl<'ctxt> MirDump<'ctxt> {
                 ConstantValue::Int(value) => write!(self.output, "{}", value),
                 ConstantValue::Bool(value) => write!(self.output, "{}", value),
                 ConstantValue::ZeroSized => write!(self.output, "{}", constant.ty),
-                ConstantValue::Function(id, ref args) => {
-                    write!(self.output, "{}", self.ctxt.function_names[id].content)?;
-                    if !args.is_empty() {
-                        write!(self.output, "{}", DisplayGenericArgs(args))?;
-                    }
-                    Ok(())
-                }
-                ConstantValue::Lambda(id, ref args) => {
-                    write!(self.output, "lambda {}", id.into_usize())?;
-                    if !args.is_empty() {
-                        write!(self.output, "{}", DisplayGenericArgs(args))?;
-                    }
-                    Ok(())
-                }
-                ConstantValue::Builtin(builtin, ref args) => {
-                    write!(self.output, "{}", builtin.name())?;
+                ConstantValue::NamedConst(id, ref args) => {
+                    write!(self.output, "{}", self.ctxt.display(id))?;
                     if !args.is_empty() {
                         write!(self.output, "{}", DisplayGenericArgs(args))?;
                     }

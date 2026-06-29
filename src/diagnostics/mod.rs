@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use crate::src_loc::SrcLoc;
 
 #[track_caller]
@@ -14,12 +16,12 @@ struct Diagnostic {
 }
 #[derive(Default)]
 pub struct DiagnosticReporter {
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: RefCell<Vec<Diagnostic>>,
 }
 impl DiagnosticReporter {
     pub fn new() -> Self {
         Self {
-            diagnostics: Vec::new(),
+            diagnostics: RefCell::new(Vec::new()),
         }
     }
     fn emit_diagnostic(diagnostic: Diagnostic) {
@@ -32,13 +34,13 @@ impl DiagnosticReporter {
             eprintln!("Error : {}", diagnostic.msg);
         }
     }
-    pub fn add_diagnostic(&mut self, msg: String, loc: SrcLoc) {
-        self.diagnostics.push(Diagnostic { msg, loc });
+    pub fn add_diagnostic(&self, msg: String, loc: SrcLoc) {
+        self.diagnostics.borrow_mut().push(Diagnostic { msg, loc });
     }
 
-    pub fn report_all(self) -> bool {
+    pub fn report_all(&self) -> bool {
         let mut emit_diagnostic = false;
-        for diagnostic in self.diagnostics {
+        for diagnostic in self.diagnostics.borrow_mut().drain(..) {
             emit_diagnostic = true;
             Self::emit_diagnostic(diagnostic);
         }

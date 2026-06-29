@@ -7,6 +7,7 @@ use std::{
 
 use kli::{
     ast::{self, Module, ModuleId},
+    collect::build_global_context,
     mir,
     monomorph::collect::{Instance, InstanceCollector, InstanceKind},
     parsing::parse::Parser,
@@ -141,8 +142,8 @@ fn find_all_src_files(path: &Path) -> Result<Files, FileError> {
     Ok(Files { files })
 }
 
-fn parse_modules(module_counter: &mut u32, entry: FileEntry) -> Option<Module> {
-    let id = ModuleId(std::mem::replace(module_counter, *module_counter + 1));
+fn parse_modules(module_counter: &mut ModuleId, entry: FileEntry) -> Option<Module> {
+    let id = std::mem::replace(module_counter, module_counter.next());
     let name = entry.name;
     Some(match entry.kind {
         FileEntryKind::Folder(modules) => {
@@ -153,8 +154,7 @@ fn parse_modules(module_counter: &mut u32, entry: FileEntry) -> Option<Module> {
             Module {
                 id,
                 name,
-                functions: Vec::new(),
-                type_defs: Vec::new(),
+                items: Vec::new(),
                 child_modules: modules.into_iter().collect::<Option<Vec<_>>>()?,
             }
         }
@@ -162,7 +162,7 @@ fn parse_modules(module_counter: &mut u32, entry: FileEntry) -> Option<Module> {
     })
 }
 fn parse_all_modules(file_tree: Files) -> Option<Vec<Module>> {
-    let module_counter = &mut 0;
+    let module_counter = &mut ModuleId::zero();
     let modules = file_tree
         .files
         .into_values()
@@ -281,38 +281,36 @@ fn main() {
     let Ok(program) = Resolve::new().resolve(modules) else {
         return;
     };
-    let Ok(program) = TypeCheck::new(&program).check(program) else {
+    let context = build_global_context(program);
+    let Ok(program) = TypeCheck::new(context.as_ref()).check() else {
         return;
     };
     let mut had_error = false;
-    for function in &program.functions {
+    for function in program.functions.values() {
         if let Some(ref body) = function.body {
             had_error |= PatternCheck::new().check(body);
         }
     }
-    for function in &program.functions {
+    for function in program.functions.values() {
         had_error |= ResourceCheck::new().check_function(function);
     }
     if had_error {
         return;
     }
-    let mut context = mir::Context::new(true);
-    for function in program.functions.iter() {
-        context.function_names.push(function.name.clone());
-    }
-    for (id, function) in program.functions.iter_enumerated() {
-        mir::build::Builder::build_from_function(&mut context, id, function);
+    let mut mir_context = mir::Context::new(true);
+    for (&id, function) in program.functions.iter() {
+        mir::build::Builder::build_from_function(context.as_ref(), &mut mir_context, id, function);
     }
     if config.flags.contains(&Feature::OutputMir) {
-        for body in context.body_iter() {
-            mir::dump::MirDump::new(std::io::stdout(), &context)
+        for body in mir_context.body_iter() {
+            mir::dump::MirDump::new(std::io::stdout(), context.as_ref())
                 .write_body(body)
                 .unwrap();
         }
     }
-    if config.flags.contains(&Feature::OutputInstances) {
-        let instances = InstanceCollector::new(&context)
-            .collect(Instance::non_generic(InstanceKind::Function(program.main)));
+    if config.flags.contains(&Feature::OutputInstances) && let Some(main) = context.as_ref().main_id() {
+        let instances = InstanceCollector::new(&mir_context)
+            .collect(Instance::non_generic(InstanceKind::Function(main)));
         for instance in &instances {
             println!("{:?}", instance);
         }

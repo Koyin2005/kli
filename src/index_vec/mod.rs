@@ -14,7 +14,8 @@ impl<I, V> Default for IndexVec<I, V> {
 }
 #[macro_export]
 macro_rules! define_id {
-    ($name:ident) => {
+    ($(#[$meta:meta])*$name:ident) => {
+        $(#[$meta])*
         #[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
         pub struct $name(u32);
         impl $name {
@@ -105,6 +106,9 @@ impl<I: Id, V> IndexVec<I, V> {
     }
     pub fn as_slice(&self) -> &[V] {
         &self.0
+    }
+    pub fn extend(&mut self, iter: impl IntoIterator<Item = V>) {
+        self.0.extend(iter);
     }
 }
 

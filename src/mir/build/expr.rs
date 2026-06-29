@@ -30,11 +30,11 @@ impl Builder<'_> {
             ExprKind::Bool(value) => Some(Constant::bool(value)),
             ExprKind::Int(value) => Some(Constant::int(value)),
             ExprKind::Unit => Some(Constant::unit()),
-            ExprKind::Function(_, id, ref generic_args) => {
+            ExprKind::Function(id, ref generic_args) => {
                 let ty = expr.ty.clone();
                 Some(Constant {
                     ty: Box::new(ty),
-                    value: ConstantValue::Function(id, generic_args.clone()),
+                    value: ConstantValue::NamedConst(id, generic_args.clone()),
                 })
             }
             ExprKind::Lambda(ref lambda) if lambda.is_resource == IsResource::Data => {
@@ -297,21 +297,20 @@ impl Builder<'_> {
             ExprKind::Record(fields) => {
                 let mut field_map = fields
                     .iter()
-                    .map(|field| {
-                        (
-                            field.index,
-                            (field.name.clone(), self.operand(&field.value)),
-                        )
-                    })
+                    .map(|field| (field.index, self.operand(&field.value)))
                     .collect::<HashMap<_, _>>();
-                let mut field_names = IndexVec::new();
                 let fields = (0..fields.len())
+                    .map(FieldId::new)
                     .map(|field| {
-                        let (name, operand) = field_map.remove(&FieldId::new(field)).unwrap();
-                        field_names.push(name.content);
+                        let operand = field_map.remove(&field).unwrap();
                         operand
                     })
                     .collect::<IndexVec<FieldId, _>>();
+
+                let Type::Record(ref rec_fields) = expr.ty else {
+                    unreachable!("Should be a record")
+                };
+                let field_names = rec_fields.iter().map(|field| field.name.clone()).collect();
                 Rvalue::Aggregate(AggregateKind::Record { field_names }, fields)
             }
             ExprKind::String(value) => {

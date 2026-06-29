@@ -1,13 +1,14 @@
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{BinaryOp, IsResource, Mutable},
     define_id,
     ident::Ident,
-    index_vec::IndexVec,
+    index_vec::{Id, IndexVec},
     src_loc::SrcLoc,
 };
-define_id!(FunctionId);
+#[derive(Debug, PartialEq, Eq)]
+pub struct FunctionDefId(pub DefId);
 define_id!(LambdaId);
 #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Copy)]
 pub struct VarId(usize);
@@ -181,6 +182,24 @@ pub struct FieldInit {
     pub value: Expr,
 }
 #[derive(Debug)]
+pub struct GenericArgs {
+    pub loc: Option<SrcLoc>,
+    pub tys: Vec<Type>,
+}
+impl GenericArgs {
+    pub const NONE: Self = Self {
+        loc: None,
+        tys: Vec::new(),
+    };
+    pub fn tys(&self) -> Option<&[Type]> {
+        if self.loc.is_some() {
+            Some(&self.tys)
+        } else {
+            None
+        }
+    }
+}
+#[derive(Debug)]
 pub enum ExprKind {
     Block(BlockBody, Option<LocalRegionId>),
     Unit,
@@ -190,7 +209,7 @@ pub enum ExprKind {
     Bool(bool),
     String(Rc<str>),
     Var(Rc<str>, VarId),
-    Function(Rc<str>, FunctionId, Option<Vec<Type>>),
+    Function(Rc<str>, FunctionDefId, GenericArgs),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Borrow(Box<BorrowExpr>),
     Some(Box<Expr>),
@@ -200,13 +219,13 @@ pub enum ExprKind {
     Deref(Box<Expr>),
     Assign(Place, Box<Expr>),
     For(Pattern, Box<Expr>, Box<Expr>),
-    Builtin(Builtin, Option<Vec<Type>>),
+    Builtin(Builtin, GenericArgs),
     Case(Box<Expr>, Vec<CaseArm>),
     Print(Option<Box<Expr>>),
     List(Vec<Expr>),
     Call(Box<Expr>, Vec<Expr>),
     Record(Vec<FieldInit>),
-    VariantCase(Rc<str>, VariantCaseId, Option<Vec<Type>>),
+    VariantCase(Rc<str>, VariantCaseId, GenericArgs),
 }
 #[derive(Debug, Clone)]
 pub enum RegionKind {
@@ -266,7 +285,6 @@ pub struct Generics {
 }
 #[derive(Debug)]
 pub struct Function {
-    pub loc: SrcLoc,
     pub name: Ident,
     pub generics: Option<Generics>,
     pub params: Vec<Param>,
@@ -328,8 +346,23 @@ pub struct TypeDef {
     pub generics: Option<Generics>,
     pub kind: TypeDefKind,
 }
-#[derive(Debug)]
+pub struct Module {
+    pub name: Ident,
+    pub items: Vec<DefId>,
+}
+pub enum ItemKind {
+    TypeDef(TypeDef),
+    Function(Function),
+    Module(Module),
+}
+pub struct Item {
+    pub id: ItemId,
+    pub loc: SrcLoc,
+    pub kind: ItemKind,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ItemId(pub DefId);
+define_id!(DefId);
 pub struct Program {
-    pub functions: IndexVec<FunctionId, Function>,
-    pub type_defs: IndexVec<TypeDefId, TypeDef>,
+    pub items: Vec<Item>,
 }

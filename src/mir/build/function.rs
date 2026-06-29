@@ -1,11 +1,12 @@
 use crate::{
     ast::IsResource,
+    collect::CtxtRef,
     mir::{
         BodySource, Captures, Constant, ConstantValue, Context, Local, LocalKind, Operand, Place,
         PointerCast, Rvalue, TerminatorKind, build::Builder, visitor::Visit,
         well_formed::WellFormed,
     },
-    resolved_ast::FunctionId,
+    resolved_ast::DefId,
     src_loc::SrcLoc,
     typed_ast::{self, Lambda},
     types::{FunctionType, Type},
@@ -14,7 +15,7 @@ use crate::{
 impl Builder<'_> {
     fn add_finished_body(self) {
         let body = self.body;
-        let context = self.context;
+        let context = self.mir_context;
         context.body_sources.push(body.src);
         if context.check_well_formed {
             let mut wf = WellFormed::new(&body, context);
@@ -31,15 +32,17 @@ impl Builder<'_> {
         }
     }
     pub fn build_from_function(
-        context: &mut Context,
-        id: FunctionId,
+        ctxt: CtxtRef,
+        mir_context: &mut Context,
+        id: DefId,
         function: &typed_ast::Function,
     ) {
         let mut builder = Builder::new(
-            context,
+            mir_context,
             BodySource::Function(id),
             function.return_type.clone(),
             None,
+            ctxt,
         );
         builder.add_param_locals(
             function
@@ -62,17 +65,17 @@ impl Builder<'_> {
             return_type: Box::new(lambda.return_type.clone()),
         });
         if self
-            .context
+            .mir_context
             .bodies
             .contains_key(&BodySource::Lambda(lambda.id))
         {
             return Constant {
                 ty: Box::new(ty),
-                value: ConstantValue::Lambda(lambda.id, Vec::new()),
+                value: todo!("Handle lambdas"),
             };
         }
         let is_resource = lambda.is_resource == IsResource::Resource;
-        let context = &mut *self.context;
+        let context = &mut *self.mir_context;
         let mut builder = Builder::new(
             context,
             BodySource::Lambda(lambda.id),
@@ -85,6 +88,7 @@ impl Builder<'_> {
             } else {
                 None
             },
+            self.ctxt,
         );
 
         builder.add_param_locals(
@@ -118,7 +122,7 @@ impl Builder<'_> {
         builder.add_finished_body();
         Constant {
             ty: Box::new(ty),
-            value: ConstantValue::Lambda(lambda.id, Vec::new()),
+            value: todo!("Handle lambda ids"),
         }
     }
 }

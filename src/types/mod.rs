@@ -6,6 +6,7 @@ use crate::{
     resolved_ast::LocalRegionId,
     typed_ast::FieldId,
 };
+pub mod lower;
 #[derive(Clone, Debug)]
 pub enum PointerType {
     Box,
@@ -59,6 +60,28 @@ impl Display for DisplayGenericArgs<'_> {
             first = false;
         }
         write!(f, "]")
+    }
+}
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+pub struct FunctionSig {
+    pub params: Vec<Type>,
+    pub return_type: Box<Type>,
+}
+impl FunctionSig {
+    pub fn new(params: Vec<Type>, return_type: Type) -> Self {
+        Self {
+            params,
+            return_type: Box::new(return_type),
+        }
+    }
+    pub fn into_function_type(self) -> FunctionType {
+        #[derive(Clone, Copy)]
+        struct A(i32);
+        FunctionType {
+            resource: IsResource::Data,
+            params: self.params,
+            return_type: self.return_type,
+        }
     }
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
@@ -454,6 +477,21 @@ impl TypeMappable for FunctionType {
 impl TypeMappable for RecordField {
     fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         m.map_field(self)
+    }
+}
+impl TypeMappable for FunctionSig {
+    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Self {
+            params: self
+                .params
+                .into_iter()
+                .map(|param| m.map_type(param))
+                .collect::<Result<_, _>>()?,
+            return_type: Box::new(m.map_type(*self.return_type)?),
+        })
     }
 }
 impl<T: TypeMappable> TypeMappable for Box<T> {

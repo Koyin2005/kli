@@ -1,4 +1,5 @@
 use crate::{
+    collect::CtxtRef,
     index_vec::IndexVec,
     mir::{
         AssertKind, BasicBlock, BasicBlockId, BinaryOp, Body, BodySource, Context, Local,
@@ -15,19 +16,21 @@ mod loops;
 mod matches;
 mod stmt;
 pub struct Builder<'ctxt> {
-    pub context: &'ctxt mut Context,
+    pub mir_context: &'ctxt mut Context,
     body: Body,
     current_block: BasicBlockId,
+    pub ctxt: CtxtRef<'ctxt>,
 }
 impl<'ctxt> Builder<'ctxt> {
     pub fn new(
-        context: &'ctxt mut Context,
+        mir_context: &'ctxt mut Context,
         source: BodySource,
         return_type: Type,
         captures: Option<super::Captures>,
+        ctxt: CtxtRef<'ctxt>,
     ) -> Self {
         Self {
-            context,
+            mir_context,
             body: Body {
                 capture_info: captures,
                 src: source,
@@ -36,6 +39,7 @@ impl<'ctxt> Builder<'ctxt> {
                 return_type,
             },
             current_block: BasicBlockId::zero(),
+            ctxt,
         }
     }
     pub(super) fn new_local(&mut self, ty: Type, kind: LocalKind) -> Local {

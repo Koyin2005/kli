@@ -3,9 +3,8 @@ use std::{collections::HashMap, fmt::Display, rc::Rc};
 use crate::{
     ast::Mutable,
     define_id,
-    ident::Ident,
     index_vec::IndexVec,
-    resolved_ast::{Builtin, FunctionId, LambdaId, Var, VarId},
+    resolved_ast::{Builtin, DefId, LambdaId, Var, VarId},
     src_loc::SrcLoc,
     typed_ast::FieldId,
     types::{GenericArg, PointerType, Region, Type},
@@ -132,9 +131,7 @@ impl Constant {
 pub enum ConstantValue {
     Int(i64),
     Bool(bool),
-    Builtin(Builtin, Vec<GenericArg>),
-    Function(FunctionId, Vec<GenericArg>),
-    Lambda(LambdaId, Vec<GenericArg>),
+    NamedConst(DefId, Vec<GenericArg>),
     ZeroSized,
 }
 impl ConstantValue {
@@ -271,7 +268,7 @@ impl BasicBlock {
 }
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum BodySource {
-    Function(FunctionId),
+    Function(DefId),
     Lambda(LambdaId),
 }
 #[derive(Clone)]
@@ -447,7 +444,6 @@ pub type Locals = IndexVec<Local, LocalInfo>;
 
 #[derive(Default)]
 pub struct Context {
-    pub function_names: IndexVec<FunctionId, Ident>,
     pub check_well_formed: bool,
     pub(super) bodies: HashMap<BodySource, Body>,
     pub(super) body_sources: Vec<BodySource>,

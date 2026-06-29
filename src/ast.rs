@@ -1,6 +1,6 @@
 use std::{fmt::Display, rc::Rc};
 
-use crate::{ident::Ident, src_loc::SrcLoc};
+use crate::{define_id, ident::Ident, src_loc::SrcLoc};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Mutable {
@@ -286,8 +286,6 @@ pub struct GenericArgs {
 }
 #[derive(Debug)]
 pub struct Function {
-    pub loc: SrcLoc,
-    pub annotations: Vec<Annotation>,
     pub name: Ident,
     pub generics: Option<Generics>,
     pub params: Vec<Param>,
@@ -309,25 +307,32 @@ pub enum TypeDefKind {
     Record(RecordType),
     Variant(Vec<CaseDef>),
 }
+
 #[derive(Debug)]
-pub enum Item {
+pub struct Item {
+    pub id: NodeId,
+    pub loc: SrcLoc,
+    pub annotations: Vec<Annotation>,
+    pub kind: ItemKind,
+}
+#[derive(Debug)]
+pub enum ItemKind {
     TypeDef(TypeDef),
     Function(Function),
 }
 #[derive(Debug)]
 pub struct TypeDef {
-    pub annotations: Vec<Annotation>,
     pub name: Ident,
     pub generics: Option<Generics>,
     pub kind: TypeDefKind,
 }
-#[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
-pub struct ModuleId(pub u32);
+define_id!(NodeId);
+define_id!(ModuleId);
+
 #[derive(Debug)]
 pub struct Module {
     pub id: ModuleId,
     pub name: Rc<str>,
-    pub type_defs: Vec<TypeDef>,
-    pub functions: Vec<Function>,
+    pub items: Vec<Item>,
     pub child_modules: Vec<Module>,
 }

@@ -1,25 +1,26 @@
-use std::cell::RefCell;
 use std::collections::HashSet;
 
-use crate::diagnostics::DiagnosticReporter;
-use crate::resolved_ast as res;
-use crate::types::{FunctionType, GenericKind, RecordField, Region, Type};
+use crate::collect::CtxtRef;
+use crate::resolved_ast::{self as res, DefId};
+use crate::src_loc::SrcLoc;
+use crate::typecheck::infer::TypeInfer;
+use crate::types::{FunctionType, GenericArg, GenericKind, RecordField, Region, Type};
 pub struct Lower<'a> {
-    kinds: &'a [GenericKind],
-    diag: &'a RefCell<DiagnosticReporter>,
+    ctxt: CtxtRef<'a>,
+    id: DefId,
 }
 impl<'a> Lower<'a> {
-    pub fn new(kinds: &'a [GenericKind], diag: &'a RefCell<DiagnosticReporter>) -> Self {
-        Self { kinds, diag }
+    pub fn new(ctxt: CtxtRef<'a>, id: DefId) -> Self {
+        Self { ctxt, id }
     }
 
-    pub(super) fn lower_region(&self, region: &res::Region) -> Region {
+    pub fn lower_region(&self, region: &res::Region) -> Region {
         match &region.kind {
             res::RegionKind::Param(name, param) => {
-                if let GenericKind::Region = self.kinds[*param] {
+                if let GenericKind::Region = self.ctxt.generics(self.id).kind(*param) {
                     Region::Param(name.clone(), *param)
                 } else {
-                    self.diag.borrow_mut().add_diagnostic(
+                    self.ctxt.diag().add_diagnostic(
                         format!("Cannot use '{}' as region", name),
                         region.loc.clone(),
                     );
@@ -31,10 +32,52 @@ impl<'a> Lower<'a> {
             res::RegionKind::Unknown => Region::Unknown,
         }
     }
-    pub(super) fn lower_types(&self, tys: &mut dyn Iterator<Item = &res::Type>) -> Vec<Type> {
-        tys.map(|ty| self.lower_type(ty)).collect()
+    pub fn lower_types(
+        &self,
+        tys: &mut dyn Iterator<Item = &res::Type>,
+    ) -> impl Iterator<Item = Type> {
+        tys.map(|ty| self.lower_type(ty))
     }
-    pub(super) fn lower_type(&self, ty: &res::Type) -> Type {
+    pub fn lower_generic_args(
+        &self,
+        id: DefId,
+        loc: SrcLoc,
+        args: &res::GenericArgs,
+        infer: Option<&mut TypeInfer>,
+    ) -> Vec<GenericArg> {
+        let generics = self.ctxt.generics(id);
+        let arg_count = generics.count();
+        let loc = args.loc.clone().unwrap_or(loc);
+        if let Some(tys) = args.tys() {
+            if arg_count != tys.len() {
+                self.ctxt.diag().add_diagnostic(
+                    format!(
+                        "Expected '{}' generic args but got '{}'",
+                        arg_count,
+                        tys.len()
+                    ),
+                    loc,
+                );
+            }
+            let remaining = tys.len().abs_diff(arg_count);
+            tys.iter()
+                .map(|arg| self.lower_type(arg))
+                .chain(std::iter::repeat_n(Type::Unknown, remaining))
+                .map(GenericArg::Type)
+                .collect()
+        } else if let Some(infer) = infer {
+            generics.instantiate(infer, loc)
+        } else if arg_count > 0 {
+            self.ctxt.diag().add_diagnostic(
+                format!("Expected '{}' generic args but got none", arg_count,),
+                loc,
+            );
+            self.ctxt.generics(id).instantiate_unknown()
+        } else {
+            Vec::new()
+        }
+    }
+    pub fn lower_type(&self, ty: &res::Type) -> Type {
         match &ty.kind {
             res::TypeKind::Ptr(pointee) => Type::pointer(self.lower_type(pointee)),
             res::TypeKind::Record(fields) => Type::Record({
@@ -43,7 +86,7 @@ impl<'a> Lower<'a> {
                     .iter()
                     .filter_map(|field| {
                         if !seen_fields.insert(field.name.content.as_ref()) {
-                            self.diag.borrow_mut().add_diagnostic(
+                            self.ctxt.diag().add_diagnostic(
                                 format!("Repeated field '{}'", field.name.content),
                                 field.name.loc.clone(),
                             );
@@ -77,7 +120,7 @@ impl<'a> Lower<'a> {
                 Type::Mut(region, Box::new(ty))
             }
             res::TypeKind::Function(resource, params, return_ty) => {
-                let params = self.lower_types(&mut params.iter());
+                let params = self.lower_types(&mut params.iter()).collect();
                 let return_type = self.lower_type(return_ty);
                 Type::Function(FunctionType {
                     resource: *resource,
@@ -86,11 +129,11 @@ impl<'a> Lower<'a> {
                 })
             }
             &res::TypeKind::Param(ref name, param) => {
-                if let GenericKind::Type = self.kinds[param] {
+                if let GenericKind::Type = self.ctxt.generics(self.id).kind(param) {
                     Type::Param(name.clone(), param)
                 } else {
-                    self.diag
-                        .borrow_mut()
+                    self.ctxt
+                        .diag()
                         .add_diagnostic(format!("Cannot use '{}' as a type", name), ty.loc.clone());
                     Type::Unknown
                 }

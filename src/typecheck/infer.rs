@@ -13,9 +13,10 @@ pub struct RegionVarInfo {
     region: Option<Region>,
     loc: SrcLoc,
 }
+#[derive(Default)]
 pub struct TypeInfer {
-    pub type_vars: Vec<TypeVarInfo>,
-    pub region_vars: Vec<RegionVarInfo>,
+    type_vars: Vec<TypeVarInfo>,
+    region_vars: Vec<RegionVarInfo>,
 }
 impl TypeInfer {
     pub fn new() -> Self {

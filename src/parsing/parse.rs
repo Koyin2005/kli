@@ -4,9 +4,9 @@ use crate::{
     ast::{
         Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, CaseDef, Expr,
         ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, Generics, IsResource,
-        Item, Lambda, LetBinding, Module, ModuleId, Mutable, Param, Path, Pattern, PatternField,
-        PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeDef,
-        TypeDefKind, TypeKind,
+        Item, ItemKind, Lambda, LetBinding, Module, ModuleId, Mutable, NodeId, Param, Path,
+        Pattern, PatternField, PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt,
+        StmtKind, Type, TypeDef, TypeDefKind, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::Ident,
@@ -27,6 +27,7 @@ pub struct Parser {
     diag: DiagnosticReporter,
     tokens: Peekable<IntoIter<Token>>,
     eof_token: Token,
+    node_id: NodeId,
 }
 impl Parser {
     pub fn new(file: Rc<str>, src: &str) -> Self {
@@ -35,7 +36,12 @@ impl Parser {
             diag: DiagnosticReporter::new(),
             tokens: tokens.into_iter().peekable(),
             eof_token,
+            node_id: NodeId::zero(),
         }
+    }
+    fn next_node_id(&mut self) -> NodeId {
+        let next_id = self.node_id.next();
+        std::mem::replace(&mut self.node_id, next_id)
     }
     fn current_loc(&mut self) -> SrcLoc {
         self.peek_token().loc.clone()
@@ -822,8 +828,7 @@ impl Parser {
         }
         Ok(annotations)
     }
-    fn parse_function(&mut self, annotations: Vec<Annotation>) -> Result<Function, ParseError> {
-        let loc = self.current_loc();
+    fn parse_function(&mut self) -> Result<Function, ParseError> {
         let _ = self.expect(&TokenKind::Fun);
         let name = self.expect_ident("function name")?;
         let generics = self.parse_optional_generics()?;
@@ -847,8 +852,6 @@ impl Parser {
             Some(body)
         };
         Ok(Function {
-            loc,
-            annotations,
             name,
             generics,
             params,
@@ -890,23 +893,31 @@ impl Parser {
             }
         };
         Ok(TypeDef {
-            annotations: Vec::new(),
             generics,
             name,
             kind,
         })
     }
-    fn parse_item(&mut self) -> Result<Item, ParseError> {
+    fn parse_item(&mut self) -> Result<Option<Item>, ParseError> {
         let annotations = self.parse_annotations()?;
-        Ok(match self.peek_token().kind {
-            TokenKind::Fun => Item::Function(self.parse_function(annotations)?),
-            TokenKind::Type => Item::TypeDef(self.parse_type_def()?),
-            _ => return Err(self.expect_error("'valid item'")),
-        })
+        Ok(Some(match self.peek_token().kind {
+            TokenKind::Fun => Item {
+                id: self.next_node_id(),
+                loc: self.current_loc(),
+                annotations,
+                kind: ItemKind::Function(self.parse_function()?),
+            },
+            TokenKind::Type => Item {
+                id: self.next_node_id(),
+                loc: self.current_loc(),
+                annotations,
+                kind: ItemKind::TypeDef(self.parse_type_def()?),
+            },
+            _ => return Ok(None),
+        }))
     }
     pub fn parse_module(mut self, name: Rc<str>, id: ModuleId) -> Result<Module, ParseError> {
-        let mut functions = Vec::new();
-        let mut type_defs = Vec::new();
+        let mut items = Vec::new();
         let mut recovery = false;
 
         while !self.is_eof() {
@@ -928,10 +939,12 @@ impl Parser {
                         recovery = true;
                         continue;
                     };
-                    match item {
-                        Item::Function(function) => functions.push(function),
-                        Item::TypeDef(type_def) => type_defs.push(type_def),
-                    }
+                    let Some(item) = item else {
+                        self.expect_error("valid item");
+                        recovery = true;
+                        continue;
+                    };
+                    items.push(item);
                 }
             }
         }
@@ -941,8 +954,7 @@ impl Parser {
         Ok(Module {
             id,
             name,
-            functions,
-            type_defs,
+            items,
             child_modules: Vec::new(),
         })
     }

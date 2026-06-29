@@ -1,6 +1,5 @@
 mod expr;
-mod infer;
-mod lower;
+pub mod infer;
 mod pattern;
 pub mod root;
 mod stmt;

@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::{BorrowExpr, GenericArgs, ModuleId, Path, StmtKind};
+use crate::ast::{BorrowExpr, GenericArgs, ModuleId, NodeId, Path, StmtKind};
 use crate::diagnostics::DiagnosticReporter;
 use crate::ident::Ident;
 use crate::index_vec::IndexVec;
 use crate::resolved_ast::{
-    Builtin, FunctionId, GenericKind, LambdaId, LocalRegionId, TypeDefId, VarId, VariantCaseId,
+    Builtin, DefId, GenericKind, LambdaId, LocalRegionId, TypeDefId, VarId, VariantCaseId,
 };
 use crate::src_loc::SrcLoc;
 use crate::{ast, resolved_ast as res};
@@ -19,6 +19,7 @@ enum NameResolutionError {
 }
 struct ModuleInfo {
     env: Scope,
+    id: DefId,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -33,13 +34,15 @@ enum Res {
     LocalRegion(LocalRegionId),
     Param(usize),
     Builtin(Builtin),
-    Function(FunctionId),
+    Function(ModuleItemId),
     Var(VarId),
     Module(ModuleId),
     TypeAlias(TypeAlias),
     TypeDef(TypeDefId),
     VariantCase(VariantCaseId),
 }
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+struct ModuleItemId(ModuleId, NodeId);
 struct TypeDefInfo {
     pub cases: Vec<Ident>,
 }
@@ -47,7 +50,7 @@ pub struct Resolve {
     modules: HashMap<ModuleId, ModuleInfo>,
     env: Scope,
     prev_envs: Vec<Scope>,
-    functions: Vec<Option<res::Function>>,
+    functions: usize,
     type_defs: IndexVec<TypeDefId, TypeDefInfo>,
     vars: usize,
     regions: usize,
@@ -55,6 +58,9 @@ pub struct Resolve {
     prev_kinds: Vec<HashMap<Rc<str>, GenericKind>>,
     generic_kinds: HashMap<Rc<str>, GenericKind>,
     lambdas: usize,
+    next_def_id: DefId,
+    item_id_to_def_id: HashMap<ModuleItemId, DefId>,
+    current_module: Option<ModuleId>,
     diag: DiagnosticReporter,
 }
 impl Default for Resolve {
@@ -76,18 +82,21 @@ impl Resolve {
                 ]),
         );
         Self {
+            item_id_to_def_id: HashMap::new(),
             modules: HashMap::new(),
             prev_envs: Vec::new(),
             env,
             vars: 0,
             regions: 0,
-            functions: Vec::new(),
+            functions: 0,
             generics: 0,
             diag: DiagnosticReporter::new(),
             generic_kinds: HashMap::new(),
             prev_kinds: Vec::new(),
             lambdas: 0,
             type_defs: IndexVec::new(),
+            next_def_id: DefId::zero(),
+            current_module: None,
         }
     }
     fn resolve_name(&self, name: &str) -> Option<Res> {
@@ -119,25 +128,8 @@ impl Resolve {
         self.diag
             .add_diagnostic(format!("Cannot use '{}' as {}", name, expected), loc);
     }
-    fn declare_function(&mut self, name: Ident) -> FunctionId {
-        let function = FunctionId::new(self.functions.len());
-        self.functions.push(None);
-        match self.env.entry(name.content) {
-            std::collections::hash_map::Entry::Occupied(mut occupied) => {
-                if let Res::Function(_) = occupied.get() {
-                    self.diag.add_diagnostic(
-                        format!("Cannot redeclare function '{}'", occupied.key()),
-                        name.loc.clone(),
-                    );
-                } else {
-                    occupied.insert(Res::Function(function));
-                }
-            }
-            std::collections::hash_map::Entry::Vacant(vacant) => {
-                vacant.insert(Res::Function(function));
-            }
-        }
-        function
+    fn declare_function(&mut self, name: Ident, id: ModuleItemId) {
+        self.declare_item(name, "function", Res::Function(id));
     }
     fn resolve_region(&mut self, region: ast::Region) -> res::Region {
         match region {
@@ -199,14 +191,18 @@ impl Resolve {
         }
         self.resolve_generic_args(args);
     }
-    fn resolve_generic_args(&mut self, args: Option<GenericArgs>) -> Option<Vec<res::Type>> {
-        let args = args?;
-        Some(
-            args.args
+    fn resolve_generic_args(&mut self, args: Option<GenericArgs>) -> res::GenericArgs {
+        let Some(args) = args else {
+            return res::GenericArgs::NONE;
+        };
+        res::GenericArgs {
+            loc: Some(args.loc),
+            tys: args
+                .args
                 .into_iter()
                 .map(|arg| self.resolve_type(arg.ty))
                 .collect(),
-        )
+        }
     }
     fn resolve_generics<T>(
         &mut self,
@@ -299,7 +295,7 @@ impl Resolve {
                 Some(Res::TypeAlias(alias)) => match alias {
                     TypeAlias::Ptr => {
                         let args = self.resolve_generic_args(args);
-                        let arg: Result<[_; 1], _> = args.unwrap_or_default().try_into();
+                        let arg: Result<[_; 1], _> = args.tys.try_into();
                         let ty = match arg {
                             Ok([arg]) => arg,
                             Err(args) => {
@@ -321,7 +317,7 @@ impl Resolve {
                     }
                     TypeAlias::Box => {
                         let args = self.resolve_generic_args(args);
-                        let arg: Result<[_; 1], _> = args.unwrap_or_default().try_into();
+                        let arg: Result<[_; 1], _> = args.tys.try_into();
                         let ty = match arg {
                             Ok([arg]) => arg,
                             Err(args) => {
@@ -343,7 +339,7 @@ impl Resolve {
                     }
                     TypeAlias::Byte => {
                         let args = self.resolve_generic_args(args);
-                        let arg: Result<[_; _], _> = args.unwrap_or_default().try_into();
+                        let arg: Result<[_; _], _> = args.tys.try_into();
                         match arg {
                             Ok([]) => (),
                             Err(args) => {
@@ -399,9 +395,11 @@ impl Resolve {
         var_id
     }
     fn declare_module(&mut self, id: ModuleId, name: Rc<str>) {
+        let def_id = self.next_def_id();
         self.modules.insert(
             id,
             ModuleInfo {
+                id: def_id,
                 env: Default::default(),
             },
         );
@@ -423,6 +421,7 @@ impl Resolve {
         value
     }
     fn in_module_scope<T>(&mut self, module: ModuleId, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.current_module = Some(module);
         self.prev_envs.push({
             let old_env = std::mem::take(&mut self.env);
             self.env.clone_from(&self.modules[&module].env);
@@ -444,6 +443,9 @@ impl Resolve {
                 .pop()
                 .expect("There should be a pushed scope"),
         )
+    }
+    fn current_module(&self) -> ModuleId {
+        self.current_module.expect("should have a module")
     }
     fn path_error(&mut self, path: &ast::Path, loc: SrcLoc, error: NameResolutionError) {
         match error {
@@ -684,7 +686,7 @@ impl Resolve {
                     }
                     Res::Function(function) => res::ExprKind::Function(
                         path.into_last().content,
-                        function,
+                        res::FunctionDefId(self.def_id_for(function)),
                         self.resolve_generic_args(args),
                     ),
                     Res::Param(_)
@@ -811,7 +813,6 @@ impl Resolve {
                 };
                 let body = function.body.map(|body| this.resolve_expr(body));
                 res::Function {
-                    loc: function.loc,
                     name: function.name,
                     generics,
                     params,
@@ -866,40 +867,67 @@ impl Resolve {
         self.vars = 0;
         value
     }
-    fn declare_type_def(&mut self, name: Ident, cases: Vec<Ident>) {
-        let id = self.type_defs.push(TypeDefInfo { cases: cases });
+    fn next_def_id(&mut self) -> DefId {
+        let def_id = self.next_def_id.next();
+        std::mem::replace(&mut self.next_def_id, def_id)
+    }
+    fn declare_def_id_for(&mut self, module: ModuleId, id: NodeId) {
+        let def_id = self.next_def_id();
+        self.item_id_to_def_id
+            .insert(ModuleItemId(module, id), def_id);
+    }
+    #[track_caller]
+    fn def_id_for(&self, id: ModuleItemId) -> DefId {
+        *self
+            .item_id_to_def_id
+            .get(&id)
+            .expect("should have a def id")
+    }
+    fn declare_item(&mut self, name: Ident, kind: &str, res: Res) {
         match self.env.entry(name.content) {
-            std::collections::hash_map::Entry::Occupied(mut occupied) => {
-                if let Res::Function(_) = occupied.get() {
-                    self.diag.add_diagnostic(
-                        format!("Cannot redeclare type '{}'", occupied.key()),
-                        name.loc.clone(),
-                    );
-                } else {
-                    occupied.insert(Res::TypeDef(id));
-                }
+            std::collections::hash_map::Entry::Occupied(occupied) => {
+                self.diag.add_diagnostic(
+                    format!("Cannot redeclare '{}' '{}'", kind, occupied.key()),
+                    name.loc.clone(),
+                );
             }
             std::collections::hash_map::Entry::Vacant(vacant) => {
-                vacant.insert(Res::TypeDef(id));
+                vacant.insert(res);
             }
         }
+    }
+    fn declare_type_def(&mut self, name: Ident, cases: Vec<Ident>) {
+        let id = self.type_defs.push(TypeDefInfo { cases: cases });
+        self.declare_item(name, "type", Res::TypeDef(id));
     }
     fn declare_module_items(&mut self, module: &ast::Module) {
         self.declare_module(module.id, module.name.clone());
         let scope = self.take_new_scope(|this| {
-            for type_def in &module.type_defs {
-                this.declare_type_def(
-                    type_def.name.clone(),
-                    match type_def.kind {
-                        ast::TypeDefKind::Record(_) => Vec::new(),
-                        ast::TypeDefKind::Variant(ref cases) => {
-                            cases.iter().map(|case| case.name.clone()).collect()
-                        }
-                    },
-                );
-            }
-            for function in &module.functions {
-                this.declare_function(function.name.clone());
+            for item in module.items.iter() {
+                let &ast::Item {
+                    id,
+                    ref kind,
+                    loc: _,
+                    annotations: _,
+                } = item;
+                let full_id = ModuleItemId(module.id, id);
+                match kind {
+                    ast::ItemKind::TypeDef(type_def) => {
+                        this.declare_type_def(
+                            type_def.name.clone(),
+                            match type_def.kind {
+                                ast::TypeDefKind::Record(_) => Vec::new(),
+                                ast::TypeDefKind::Variant(ref cases) => {
+                                    cases.iter().map(|case| case.name.clone()).collect()
+                                }
+                            },
+                        );
+                    }
+                    ast::ItemKind::Function(function) => {
+                        this.declare_function(function.name.clone(), full_id);
+                    }
+                }
+                this.declare_def_id_for(module.id, item.id);
             }
             for module in &module.child_modules {
                 this.declare_module_items(module);
@@ -912,37 +940,52 @@ impl Resolve {
             self.declare_module_items(module);
         }
     }
-    fn resolve_module(
-        &mut self,
-        functions: &mut IndexVec<FunctionId, res::Function>,
-        type_defs: &mut IndexVec<TypeDefId, res::TypeDef>,
-        module: ast::Module,
-    ) {
+    fn resolve_module(&mut self, items: &mut Vec<res::Item>, module: ast::Module) {
         self.in_module_scope(module.id, |this| {
-            for type_def in module.type_defs {
-                type_defs.push(this.resolve_type_def(type_def));
-            }
-            for function in module.functions {
-                functions.push(this.resolve_function(function));
+            let mut mod_items = Vec::new();
+            for item in module.items.into_iter() {
+                let id = res::ItemId(this.item_id_to_def_id[&ModuleItemId(module.id, item.id)]);
+                items.push(res::Item {
+                    id,
+                    loc: item.loc,
+                    kind: match item.kind {
+                        ast::ItemKind::Function(function) => {
+                            res::ItemKind::Function(this.resolve_function(function))
+                        }
+                        ast::ItemKind::TypeDef(type_def) => {
+                            res::ItemKind::TypeDef(this.resolve_type_def(type_def))
+                        }
+                    },
+                });
+                mod_items.push(id.0);
             }
             for child in module.child_modules {
-                this.resolve_module(functions, type_defs, child);
+                let id = this.modules[&child.id].id;
+                this.resolve_module(items, child);
+                mod_items.push(id);
             }
-        });
+            items.push(res::Item {
+                id: res::ItemId(this.modules[&module.id].id),
+                loc: SrcLoc::dummy(),
+                kind: res::ItemKind::Module(res::Module {
+                    name: Ident {
+                        content: module.name,
+                        loc: SrcLoc::dummy(),
+                    },
+                    items: mod_items,
+                }),
+            });
+        })
     }
     pub fn resolve(mut self, modules: Vec<ast::Module>) -> Result<res::Program, ResolveErrored> {
         //First pass : Declare everything
         self.declare(&modules);
         //Second pass : Resolve
-        let mut functions = IndexVec::new();
-        let mut type_defs = IndexVec::new();
+        let mut items = Vec::new();
         for module in modules.into_iter() {
-            self.resolve_module(&mut functions, &mut type_defs, module);
+            self.resolve_module(&mut items, module);
         }
-        let program = res::Program {
-            functions,
-            type_defs,
-        };
+        let program = res::Program { items };
         if !self.diag.report_all() {
             Ok(program)
         } else {

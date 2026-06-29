@@ -2,10 +2,11 @@ use std::collections::{HashSet, VecDeque};
 
 use crate::{
     mir::{BodySource, Constant, ConstantValue, Context, Location, visitor::Visit},
-    resolved_ast::{FunctionId, LambdaId},
+    resolved_ast::{DefId, LambdaId},
     types::GenericArg,
 };
 
+type FunctionId = DefId;
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum InstanceKind {
     Lambda(LambdaId),
@@ -55,13 +56,9 @@ impl<'ctxt> InstanceCollector<'ctxt> {
             impl Visit for Collector<'_> {
                 fn visit_constant(&mut self, _: Location, constant: &Constant) {
                     let new_instance = match constant.value {
-                        ConstantValue::Function(id, ref args) => Some(Instance {
+                        ConstantValue::NamedConst(id, ref args) => Some(Instance {
                             args: args.clone(),
                             kind: InstanceKind::Function(id),
-                        }),
-                        ConstantValue::Lambda(id, _) => Some(Instance {
-                            args: self.args.clone(),
-                            kind: InstanceKind::Lambda(id),
                         }),
                         _ => None,
                     };

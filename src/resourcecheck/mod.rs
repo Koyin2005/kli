@@ -11,7 +11,7 @@ use crate::{
     typed_ast::{
         Expr, ExprKind, Function, Param, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind,
     },
-    types::{FunctionType, GenericKind, PointerType, Region, Type},
+    types::{FunctionType, PointerType, Region, Type},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -59,7 +59,6 @@ pub struct ResourceCheck {
     borrowed: HashMap<VarId, (Mutable, Region)>,
     scopes: Vec<Vec<VarId>>,
 
-    region_params: HashSet<usize>,
     function_level: usize,
     capture_set: Option<HashMap<VarId, SrcLoc>>,
     loops: usize,
@@ -68,7 +67,6 @@ impl ResourceCheck {
     pub fn new() -> Self {
         Self {
             is_current_function_resource: IsResource::Data,
-            region_params: HashSet::new(),
             vars: HashMap::new(),
             var_states: HashMap::new(),
             err: DiagnosticReporter::new(),
@@ -699,16 +697,6 @@ impl ResourceCheck {
         }
     }
     pub fn check_function(mut self, function: &Function) -> bool {
-        self.region_params.extend(
-            function
-                .generics
-                .iter()
-                .enumerate()
-                .filter_map(|(i, param)| match param.kind {
-                    GenericKind::Region => Some(i),
-                    _ => None,
-                }),
-        );
         self.in_drop_scope(|this| {
             for param in function.params.iter() {
                 this.init_var(

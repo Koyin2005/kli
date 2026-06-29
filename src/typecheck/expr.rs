@@ -2,28 +2,28 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     resolved_ast::{
-        self, BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, Lambda, LocalRegionId, Pattern,
-        Place, PlaceKind, Var,
+        self, BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, FunctionDefId, Lambda,
+        LocalRegionId, Pattern, Place, PlaceKind, Var,
     },
     src_loc::SrcLoc,
     typecheck::root::TypeCheck,
     typed_ast::{self, FieldId, RecordFieldInit},
-    types::{FunctionType, GenericArg, PointerType, RecordField, Type},
+    types::{FunctionSig, FunctionType, GenericArg, PointerType, RecordField, Type},
 };
 
-impl TypeCheck {
-    fn check_place(&mut self, place: Place, expected_ty: Option<Type>) -> typed_ast::Place {
-        let (ty, kind) = match place.kind {
+impl TypeCheck<'_> {
+    fn check_place(&self, place: &Place, expected_ty: Option<Type>) -> typed_ast::Place {
+        let (ty, kind) = match &place.kind {
             PlaceKind::Var(var) => (
                 self.var_type(var.1).clone(),
                 if self.capture(var.1) {
-                    typed_ast::PlaceKind::Upvar(var)
+                    typed_ast::PlaceKind::Upvar(var.clone())
                 } else {
-                    typed_ast::PlaceKind::Var(var)
+                    typed_ast::PlaceKind::Var(var.clone())
                 },
             ),
             PlaceKind::Deref(value) => {
-                let value = self.check_expr(*value, None);
+                let value = self.check_expr(value, None);
                 (
                     match self.simplify_type(value.ty.clone()).as_pointer_type() {
                         Ok((PointerType::Raw | PointerType::Reference(..), ty)) => ty.clone(),
@@ -43,23 +43,23 @@ impl TypeCheck {
         };
         typed_ast::Place {
             ty,
-            loc: place.loc,
+            loc: place.loc.clone(),
             kind,
         }
     }
     fn check_for_loop(
-        &mut self,
+        &self,
         loc: SrcLoc,
-        pattern: Pattern,
-        iterator: Expr,
-        body: Expr,
+        pattern: &Pattern,
+        iterator: &Expr,
+        body: &Expr,
     ) -> typed_ast::Expr {
         let iterator = self.check_expr(iterator, None);
         let element = self.iterator_element(iterator.ty.clone());
         let (iterator_type, element) = match element {
             Ok((iterator_type, ty)) => (Some(iterator_type), ty),
             Err(_) => {
-                self.diag.borrow_mut().add_diagnostic(
+                self.ctxt().diag().add_diagnostic(
                     format!("Cannot use '{}' as an iterator", iterator.ty),
                     iterator.loc.clone(),
                 );
@@ -87,44 +87,25 @@ impl TypeCheck {
         }
     }
     fn check_builtin(
-        &mut self,
+        &self,
         loc: SrcLoc,
         builtin: crate::resolved_ast::Builtin,
-        args: Option<Vec<resolved_ast::Type>>,
-    ) -> (FunctionType, Vec<GenericArg>) {
-        let args = if let Some(args) = args {
-            let arg_count = self.generic_arg_count_of_builtin(builtin);
-            if arg_count != args.len() {
-                self.diag.borrow_mut().add_diagnostic(
-                    format!(
-                        "Expected '{}' generic args but got '{}'",
-                        arg_count,
-                        args.len()
-                    ),
-                    loc.clone(),
-                );
-            }
-            let remaining = args.len().abs_diff(arg_count);
-            args.into_iter()
-                .map(|arg| self.lower_type(arg))
-                .chain(std::iter::repeat_n(Type::Unknown, remaining))
-                .map(GenericArg::Type)
-                .collect()
-        } else {
-            self.instantiate_builtin_args(builtin, loc.clone())
-        };
+        args: &resolved_ast::GenericArgs,
+    ) -> (FunctionSig, Vec<GenericArg>) {
+        let id = todo!("builtin id");
+        let args = self.lower_generic_args_for(id, args, loc);
         (self.signature_of_builtin(builtin).bind(&args), args)
     }
     fn check_borrow(
-        &mut self,
+        &self,
         loc: SrcLoc,
-        borrow: BorrowExpr,
+        borrow: &BorrowExpr,
         expected_ty: Option<Type>,
     ) -> typed_ast::Expr {
-        let BorrowExpr {
+        let &BorrowExpr {
             mutable,
-            place,
-            region,
+            ref place,
+            ref region,
         } = borrow;
         let (ty_mutable, ty_region, expected) = if let Some(ref expected) = expected_ty
             && let Ok((ty_mutable, ty_region, ty)) = expected.as_reference_type()
@@ -144,7 +125,7 @@ impl TypeCheck {
         if let Some(ty_mutable) = ty_mutable
             && ty_mutable != mutable
         {
-            self.diag.borrow_mut().add_diagnostic(
+            self.ctxt().diag().add_diagnostic(
                 format!("Expected a '{}' but got '{}'", ty_mutable, mutable),
                 loc.clone(),
             );
@@ -152,7 +133,7 @@ impl TypeCheck {
         if let Some(expected) = expected_ty
             && expected.as_reference_type().is_err()
         {
-            self.diag.borrow_mut().add_diagnostic(
+            self.ctxt().diag().add_diagnostic(
                 format!("Expected a reference but got '{}'", expected),
                 loc.clone(),
             );
@@ -167,7 +148,7 @@ impl TypeCheck {
             },
         }
     }
-    fn check_lambda(&mut self, loc: SrcLoc, lambda: Lambda, hint: Option<Type>) -> typed_ast::Expr {
+    fn check_lambda(&self, loc: SrcLoc, lambda: &Lambda, hint: Option<Type>) -> typed_ast::Expr {
         let id = lambda.id;
         let expected_sig = match hint.clone().map(|ty| self.simplify_type(ty)) {
             Some(Type::Function(ref function)) => Some(function.clone()),
@@ -176,9 +157,10 @@ impl TypeCheck {
         let (captures, (params, body)) = self.with_capture_scope(|this| {
             let params = lambda
                 .params
+                .iter()
                 .into_iter()
                 .enumerate()
-                .map(|(i, (name, var, ty))| {
+                .map(|(i, &(ref name, var, ref ty))| {
                     let ty = match ty {
                         Some(ty) => {
                             let ty = this.lower_type(ty);
@@ -196,11 +178,15 @@ impl TypeCheck {
                     };
 
                     this.declare_var(var, ty.clone(), name.content.clone());
-                    typed_ast::Param { name, var, ty }
+                    typed_ast::Param {
+                        name: name.clone(),
+                        var,
+                        ty,
+                    }
                 })
                 .collect::<Vec<_>>();
             let body = this.check_expr(
-                lambda.body,
+                &lambda.body,
                 expected_sig.as_ref().map(|sig| (*sig.return_type).clone()),
             );
             (params, body)
@@ -236,22 +222,22 @@ impl TypeCheck {
         }
     }
     fn check_call(
-        &mut self,
+        &self,
         loc: SrcLoc,
-        callee: Expr,
-        args: Vec<Expr>,
+        callee: &Expr,
+        args: &[Expr],
         expected_ty: Option<Type>,
     ) -> typed_ast::Expr {
         fn check_call_sig(
-            this: &mut TypeCheck,
+            this: &TypeCheck,
             callee_loc: SrcLoc,
-            args: Vec<Expr>,
+            args: &[Expr],
             params: Vec<Type>,
             return_type: Option<Type>,
             expected_ty: Option<Type>,
         ) -> (Type, Vec<typed_ast::Expr>) {
             if params.len() != args.len() {
-                this.diag.borrow_mut().add_diagnostic(
+                this.ctxt().diag().add_diagnostic(
                     format!(
                         "Expected '{}' arguments but got '{}'",
                         params.len(),
@@ -286,18 +272,17 @@ impl TypeCheck {
             };
             (ty, args)
         }
-        if let ExprKind::Builtin(id, generic_args) = callee.kind {
+        if let ExprKind::Builtin(id, generic_args) = &callee.kind {
             let (
-                FunctionType {
-                    resource: _,
+                FunctionSig {
                     params,
                     return_type,
                 },
                 generic_args,
-            ) = self.check_builtin(callee.loc.clone(), id, generic_args);
+            ) = self.check_builtin(callee.loc.clone(), *id, generic_args);
             let (ty, args) = check_call_sig(
                 self,
-                callee.loc,
+                callee.loc.clone(),
                 args,
                 params,
                 Some(*return_type),
@@ -306,7 +291,7 @@ impl TypeCheck {
             typed_ast::Expr {
                 ty,
                 loc,
-                kind: typed_ast::ExprKind::BuiltinCall(id, generic_args, args),
+                kind: typed_ast::ExprKind::BuiltinCall(*id, generic_args, args),
             }
         } else {
             let callee = self.check_expr(callee, None);
@@ -318,7 +303,7 @@ impl TypeCheck {
                     return_type,
                 }) => (params, Some(*return_type)),
                 ty => {
-                    self.diag.borrow_mut().add_diagnostic(
+                    self.ctxt().diag().add_diagnostic(
                         format!("Expected a function type but got '{ty}'"),
                         callee.loc.clone(),
                     );
@@ -341,18 +326,18 @@ impl TypeCheck {
         }
     }
     fn check_block(
-        &mut self,
+        &self,
         loc: SrcLoc,
-        body: BlockBody,
+        body: &BlockBody,
         region: Option<LocalRegionId>,
         expected_ty: Option<Type>,
     ) -> typed_ast::Expr {
         let stmts = body
             .stmts
-            .into_iter()
+            .iter()
             .map(|stmt| self.check_stmt(stmt))
             .collect();
-        let expr = self.check_expr(*body.expr, expected_ty);
+        let expr = self.check_expr(&body.expr, expected_ty);
         let ty = expr.ty.clone();
         let body = typed_ast::BlockBody {
             stmts,
@@ -365,16 +350,16 @@ impl TypeCheck {
         }
     }
     fn check_record(
-        &mut self,
+        &self,
         loc: SrcLoc,
-        field_inits: Vec<FieldInit>,
+        field_inits: &[FieldInit],
         expected_ty: Option<Type>,
     ) -> typed_ast::Expr {
         let expected_fields = match expected_ty.map(|ty| self.simplify_type(ty)) {
             Some(Type::Record(fields)) => Some(fields),
             _ => None,
         };
-        let mut fields = Vec::new();
+        let mut expr_fields = Vec::new();
         let mut seen_fields = HashSet::new();
         let field_names = expected_fields
             .iter()
@@ -392,27 +377,25 @@ impl TypeCheck {
                     .and_then(|fields| field_id.map(|field| fields[field].ty.clone())),
             );
             if expected_fields.is_some() && !seen_fields.insert(name.content.clone()) {
-                self.diag.borrow_mut().add_diagnostic(
+                self.ctxt().diag().add_diagnostic(
                     format!("Repeated field '{}'", name.content),
                     name.loc.clone(),
                 );
                 continue;
             }
-
             let field_id = if let Some(field_id) = field_id {
                 field_id
             } else if expected_fields.is_some() {
-                self.diag.borrow_mut().add_diagnostic(
+                self.ctxt().diag().add_diagnostic(
                     format!("'record' has no field '{}'", name.content),
-                    name.loc,
+                    name.loc.clone(),
                 );
                 continue;
             } else {
                 FieldId::new(i)
             };
-            fields.push(RecordFieldInit {
+            expr_fields.push(RecordFieldInit {
                 index: field_id,
-                name,
                 value,
             });
         }
@@ -420,17 +403,18 @@ impl TypeCheck {
             let mut field_names = field_names;
             for field in &fields {
                 if !seen_fields.contains(&field.name) && field_names.remove(&field.name).is_some() {
-                    self.diag
-                        .borrow_mut()
+                    self.ctxt()
+                        .diag()
                         .add_diagnostic(format!("Missing field '{}'", field.name), loc.clone());
                 }
             }
             fields
         } else {
-            fields
+            expr_fields
                 .iter()
-                .map(|field| RecordField {
-                    name: field.name.content.clone(),
+                .zip(field_inits.iter().map(|field| field.name.content.clone()))
+                .map(|(field, name)| RecordField {
+                    name: name,
                     ty: field.value.ty.clone(),
                 })
                 .collect()
@@ -438,34 +422,37 @@ impl TypeCheck {
         typed_ast::Expr {
             ty: Type::Record(record_fields),
             loc,
-            kind: typed_ast::ExprKind::Record(fields),
+            kind: typed_ast::ExprKind::Record(expr_fields),
         }
     }
-    pub(super) fn check_expr(&mut self, expr: Expr, expected_ty: Option<Type>) -> typed_ast::Expr {
+    pub(super) fn check_expr(&self, expr: &Expr, expected_ty: Option<Type>) -> typed_ast::Expr {
         let Expr { loc, kind } = expr;
+        let loc = loc.clone();
         let make_expr = |ty, kind, loc| typed_ast::Expr { ty, kind, loc };
         let mut expr = match kind {
             ExprKind::Record(fields) => self.check_record(loc, fields, expected_ty.clone()),
             ExprKind::Block(block, region) => {
-                return self.check_block(loc, block, region, expected_ty);
+                return self.check_block(loc, block, *region, expected_ty);
             }
-            ExprKind::Annotate(expr, ty) => self.check_expr(*expr, Some(self.lower_type(*ty))),
+            ExprKind::Annotate(expr, ty) => self.check_expr(expr, Some(self.lower_type(ty))),
             ExprKind::Err => typed_ast::Expr {
                 loc,
                 ty: Type::Unknown,
                 kind: typed_ast::ExprKind::Err,
             },
-            ExprKind::Bool(value) => typed_ast::Expr {
+            &ExprKind::Bool(value) => typed_ast::Expr {
                 loc,
                 ty: Type::Bool,
                 kind: typed_ast::ExprKind::Bool(value),
             },
-            ExprKind::Var(var, id) => {
+            &ExprKind::Var(ref var, id) => {
+                let var = var.clone();
                 let captured = self.capture(id);
+                let var_ty = self.var_type(id);
                 make_expr(
-                    self.var_type(id).clone(),
+                    var_ty.clone(),
                     typed_ast::ExprKind::Load(typed_ast::Place {
-                        ty: self.var_type(id).clone(),
+                        ty: var_ty,
                         loc: loc.clone(),
                         kind: if !captured {
                             typed_ast::PlaceKind::Var(Var(var, id))
@@ -477,70 +464,39 @@ impl TypeCheck {
                 )
             }
             ExprKind::Builtin(builtin, args) => {
-                let (ty, _) = self.check_builtin(loc.clone(), builtin, args);
-                self.diag.borrow_mut().add_diagnostic(
+                let (ty, _) = self.check_builtin(loc.clone(), *builtin, args);
+                self.ctxt().diag().add_diagnostic(
                     format!(
                         "Cannot use builtin '{}' in non-call position",
                         builtin.name()
                     ),
                     loc.clone(),
                 );
-                make_expr(Type::Function(ty), typed_ast::ExprKind::Err, loc)
-            }
-            ExprKind::Function(name, function, args) => {
-                let args = if let Some(args) = args {
-                    let arg_count = self.generic_arg_count_of_function(function);
-                    if arg_count != args.len() {
-                        self.diag.borrow_mut().add_diagnostic(
-                            format!(
-                                "Expected '{}' generic args but got '{}'",
-                                arg_count,
-                                args.len()
-                            ),
-                            loc.clone(),
-                        );
-                    }
-                    let remaining = args.len().abs_diff(arg_count);
-                    args.into_iter()
-                        .map(|arg| self.lower_type(arg))
-                        .chain(std::iter::repeat_n(Type::Unknown, remaining))
-                        .map(GenericArg::Type)
-                        .collect()
-                } else {
-                    self.instantiate_function_args(function, loc.clone())
-                };
                 make_expr(
-                    Type::Function(self.signature_of_function(function).bind(&args)),
-                    typed_ast::ExprKind::Function(name, function, args),
+                    Type::Function(ty.into_function_type()),
+                    typed_ast::ExprKind::Err,
+                    loc,
+                )
+            }
+            &ExprKind::Function(_, FunctionDefId(id), ref args) => {
+                let args = self.lower_generic_args_for(id, args, loc.clone());
+                make_expr(
+                    Type::Function(
+                        self.ctxt()
+                            .signature_of(id)
+                            .bind(&args)
+                            .into_function_type(),
+                    ),
+                    typed_ast::ExprKind::Function(id, args),
                     loc,
                 )
             }
             ExprKind::VariantCase(name, case, args) => {
-                let args = if let Some(args) = args {
-                    let arg_count = todo!("type def generic args");
-                    if arg_count != args.len() {
-                        self.diag.borrow_mut().add_diagnostic(
-                            format!(
-                                "Expected '{}' generic args but got '{}'",
-                                arg_count,
-                                args.len()
-                            ),
-                            loc.clone(),
-                        );
-                    };
-                    let remaining = args.len().abs_diff(arg_count);
-                    args.into_iter()
-                        .map(|arg| self.lower_type(arg))
-                        .chain(std::iter::repeat_n(Type::Unknown, remaining))
-                        .map(GenericArg::Type)
-                        .collect::<Vec<_>>()
-                } else {
-                    todo!("type def generic args")
-                };
+                let args = self.lower_generic_args_for(todo!("use correct id"), args, loc);
                 todo!()
             }
             ExprKind::None(ty) => {
-                let given = ty.map(|ty| self.lower_type(ty));
+                let given = ty.as_ref().map(|ty| self.lower_type(ty));
                 let ty = match (given, expected_ty.clone()) {
                     (None, None) => {
                         self.type_annotations_needed(loc.clone());
@@ -552,7 +508,7 @@ impl TypeCheck {
                         if let Type::Option(ty) = expected {
                             *ty
                         } else {
-                            self.diag.borrow_mut().add_diagnostic(
+                            self.ctxt().diag().add_diagnostic(
                                 format!("Expected option type but got '{}'", expected),
                                 loc.clone(),
                             );
@@ -576,7 +532,7 @@ impl TypeCheck {
                     Type::Option(ty) => Some((**ty).clone()),
                     _ => None,
                 });
-                let value = self.check_expr(*value, expected_inner);
+                let value = self.check_expr(value, expected_inner);
                 make_expr(
                     Type::Option(Box::new(value.ty.clone())),
                     typed_ast::ExprKind::Some(Box::new(value)),
@@ -584,19 +540,21 @@ impl TypeCheck {
                 )
             }
             ExprKind::Print(arg) => {
-                let arg = arg.map(|arg| Box::new(self.check_expr(*arg, None)));
+                let arg = arg.as_ref().map(|arg| Box::new(self.check_expr(arg, None)));
                 make_expr(Type::Unit, typed_ast::ExprKind::Print(arg), loc)
             }
             ExprKind::Unit => make_expr(Type::Unit, typed_ast::ExprKind::Unit, loc),
-            ExprKind::Int(value) => make_expr(Type::Int, typed_ast::ExprKind::Int(value), loc),
-            ExprKind::String(value) => {
-                make_expr(Type::String, typed_ast::ExprKind::String(value), loc)
-            }
+            ExprKind::Int(value) => make_expr(Type::Int, typed_ast::ExprKind::Int(*value), loc),
+            ExprKind::String(value) => make_expr(
+                Type::String,
+                typed_ast::ExprKind::String(value.clone()),
+                loc,
+            ),
             ExprKind::Call(callee, args) => {
-                return self.check_call(loc, *callee, args, expected_ty);
+                return self.check_call(loc, callee, args, expected_ty);
             }
             ExprKind::Panic(ty) => {
-                let ty = match (ty.map(|ty| self.lower_type(ty)), expected_ty) {
+                let ty = match (ty.as_ref().map(|ty| self.lower_type(ty)), expected_ty) {
                     (None, None) => {
                         self.type_annotations_needed(loc.clone());
                         Type::Unknown
@@ -611,12 +569,12 @@ impl TypeCheck {
                 };
             }
             ExprKind::Binary(binary_op, left, right) => {
-                let left = self.check_expr(*left, Some(Type::Int));
-                let right = self.check_expr(*right, Some(Type::Int));
+                let left = self.check_expr(left, Some(Type::Int));
+                let right = self.check_expr(right, Some(Type::Int));
                 typed_ast::Expr {
                     loc,
                     ty: Type::Int,
-                    kind: typed_ast::ExprKind::Binary(binary_op, Box::new(left), Box::new(right)),
+                    kind: typed_ast::ExprKind::Binary(*binary_op, Box::new(left), Box::new(right)),
                 }
             }
             ExprKind::List(elements) => {
@@ -643,7 +601,7 @@ impl TypeCheck {
                 }
             }
             ExprKind::Deref(reference) => {
-                let reference = self.check_expr(*reference, None);
+                let reference = self.check_expr(reference, None);
                 let pointee_ty = match reference.ty.clone().as_pointer_type() {
                     Ok((PointerType::Raw | PointerType::Reference(..), ty)) => ty.clone(),
                     Ok((p, ty)) => self.non_deref_error(Type::pointer_type(p, ty), loc.clone()),
@@ -659,19 +617,19 @@ impl TypeCheck {
                     }),
                 }
             }
-            ExprKind::Lambda(lambda) => self.check_lambda(loc, *lambda, expected_ty.clone()),
-            ExprKind::Borrow(borrow) => return self.check_borrow(loc, *borrow, expected_ty),
+            ExprKind::Lambda(lambda) => self.check_lambda(loc, lambda, expected_ty.clone()),
+            ExprKind::Borrow(borrow) => return self.check_borrow(loc, borrow, expected_ty),
             ExprKind::For(pattern, iterator, body) => {
-                self.check_for_loop(loc, pattern, *iterator, *body)
+                self.check_for_loop(loc, pattern, iterator, body)
             }
             ExprKind::Case(matched, case_arms) => {
-                let matched = self.check_expr(*matched, None);
+                let matched = self.check_expr(matched, None);
                 let mut prev_ty = None::<Type>;
                 let arms = case_arms
                     .into_iter()
                     .map(|arm| {
-                        let pattern = self.check_pattern(arm.pattern, matched.ty.clone(), None);
-                        let body = self.check_expr(arm.body, expected_ty.clone());
+                        let pattern = self.check_pattern(&arm.pattern, matched.ty.clone(), None);
+                        let body = self.check_expr(&arm.body, expected_ty.clone());
                         if expected_ty.is_none() {
                             if let Some(ref prev_ty) = prev_ty {
                                 self.unify(prev_ty.clone(), body.ty.clone(), body.loc.clone());
@@ -693,7 +651,7 @@ impl TypeCheck {
                 };
             }
             ExprKind::Assign(place, value) => {
-                let value = self.check_expr(*value, None);
+                let value = self.check_expr(value, None);
                 let place = self.check_place(place, Some(value.ty.clone()));
                 typed_ast::Expr {
                     loc,
