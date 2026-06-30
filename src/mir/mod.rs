@@ -146,10 +146,6 @@ pub enum AggregateKind {
         field_names: IndexVec<FieldId, FieldName>,
     },
     Closure(Vec<Type>, Box<Type>),
-    Option {
-        inner: Type,
-        is_some: bool,
-    },
     Variant(DefId, Symbol, GenericArgs),
     ArrayList(Type),
     Array(Type, u64),
@@ -407,7 +403,6 @@ impl Body {
                     params.clone(),
                     (**return_type).clone(),
                 ),
-                AggregateKind::Option { inner, .. } => Type::Option(Box::new(inner.clone())),
                 AggregateKind::ArrayList(ty) => Type::List(Box::new(ty.clone())),
                 &AggregateKind::Variant(id, _, ref args) => {
                     let id  = ctxt.parent_of(id).unwrap();

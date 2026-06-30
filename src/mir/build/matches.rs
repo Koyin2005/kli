@@ -1,10 +1,9 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    mir::{BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind, build::Builder},
+    mir::{BasicBlockId, Operand, Place,SwitchTarget, TerminatorKind, build::Builder},
     src_loc::SrcLoc,
-    typed_ast::{CaseArm, Expr, Pattern, PatternKind},
-    types::Type,
+    typed_ast::{CaseArm, Expr, Pattern, PatternKind}
 };
 
 struct MatchInfo<'a> {
@@ -15,7 +14,6 @@ struct MatchInfo<'a> {
 enum Test {
     IntSwitch,
     If,
-    OptionSwitch,
 }
 #[derive(Debug, Clone)]
 enum MatchBranch {
@@ -25,11 +23,6 @@ enum MatchBranch {
         true_tree: Box<MatchBranch>,
         false_tree: Box<MatchBranch>,
     },
-    OptionSwitch {
-        place: Place,
-        some_tree: Box<MatchBranch>,
-        none_tree: Box<MatchBranch>,
-    },
     Success(usize),
     Unreachable,
 }
@@ -38,8 +31,6 @@ enum TestCase {
     True,
     False,
     Equals(i64),
-    Some,
-    None,
 }
 type TestMatrix = Vec<(usize, Vec<MatchTest>)>;
 #[derive(Debug, Clone)]
@@ -59,7 +50,6 @@ impl Builder<'_> {
         let test = match head_test.case {
             TestCase::Equals(_) => Test::IntSwitch,
             TestCase::False | TestCase::True => Test::If,
-            TestCase::Some | TestCase::None => Test::OptionSwitch,
         };
         fn group_tests(
             place: &Place,
@@ -111,17 +101,6 @@ impl Builder<'_> {
                     })
                     .collect::<Vec<_>>();
                 MatchBranch::IntSwitch(head_test.place, cases, Box::new(self.build_tree(rest)))
-            }
-            Test::OptionSwitch => {
-                let otherwise = self.build_tree(rest);
-                let some_branch =
-                    build_tree(self, &TestCase::Some).unwrap_or_else(|| otherwise.clone());
-                let none_branch = build_tree(self, &TestCase::None).unwrap_or(otherwise);
-                MatchBranch::OptionSwitch {
-                    place: head_test.place,
-                    some_tree: Box::new(some_branch),
-                    none_tree: Box::new(none_branch),
-                }
             }
         }
     }
@@ -196,24 +175,6 @@ impl Builder<'_> {
 
                 self.switch_to_block(start_block);
                 self.finish_block_with_if(loc, Operand::Load(place), true_block, false_block);
-            }
-            MatchBranch::OptionSwitch {
-                place,
-                some_tree,
-                none_tree,
-            } => {
-                let discrim = self.assign_to_temp(loc, Type::Int, Rvalue::Discriminant(place));
-                let some_block = self.switch_to_new_block();
-                self.lower_tree(loc, *some_tree, info, end_blocks);
-                let none_block = self.switch_to_new_block();
-                self.lower_tree(loc, *none_tree, info, end_blocks);
-                self.switch_to_block(start_block);
-                self.finish_block_with_if(
-                    loc,
-                    Operand::Load(Place::local(discrim)),
-                    some_block,
-                    none_block,
-                );
             }
             MatchBranch::Success(i) => {
                 self.assign_place_to_pattern(&info.arms[i].pattern, info.pattern_place.clone());

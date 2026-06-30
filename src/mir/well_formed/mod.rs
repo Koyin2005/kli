@@ -131,34 +131,6 @@ impl Visit for WellFormed<'_> {
                         loc,
                     );
                 }
-                super::AggregateKind::Option { inner, is_some } => {
-                    if *is_some {
-                        let field = self.assert_with_some(
-                            fields.as_slice(),
-                            |fields| {
-                                if let [field] = fields {
-                                    Some(field)
-                                } else {
-                                    None
-                                }
-                            },
-                            || "Some value can only have one field".to_string(),
-                            loc,
-                        );
-                        let field_ty = self.body.type_of_operand(field);
-                        self.assert(
-                            field_ty == *inner,
-                            || "Some value should have same type as inner".to_string(),
-                            loc,
-                        );
-                    } else {
-                        self.assert(
-                            fields.as_slice().is_empty(),
-                            || "None value can not have fields".to_string(),
-                            loc,
-                        );
-                    }
-                }
                 super::AggregateKind::ArrayList(ty) => {
                     let [ptr, cap, len] = self.assert_with_some(
                         fields.as_slice(),

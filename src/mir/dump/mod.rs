@@ -122,16 +122,13 @@ impl<'ctxt> MirDump<'ctxt> {
                     }
                     AggregateKind::ArrayList(ty) => format!("array_list[{}]", ty),
                     AggregateKind::String => "string".to_string(),
-                    AggregateKind::Option { inner, is_some } => {
-                        format!("{}[{}]", if *is_some { "Some" } else { "None" }, inner)
-                    }
                     AggregateKind::Variant(_, name, args) => {
                         format!("{}{}", name, display_generic_args(args))
                     }
                 };
                 let (open_bracket, close_bracket) = match kind {
                     AggregateKind::Array(_, _) => ('[', ']'),
-                    AggregateKind::Option { .. } => ('(', ')'),
+                    AggregateKind::Variant(..) => ('(',')'),
                     _ => ('{', '}'),
                 };
                 let field_name = |i: FieldId| match kind {
@@ -145,7 +142,6 @@ impl<'ctxt> MirDump<'ctxt> {
                         .to_string(),
                     ),
                     AggregateKind::Array(..) => None,
-                    AggregateKind::Option { .. } => Some(i.into_usize().to_string()),
                     AggregateKind::Record { field_names } => Some(field_names[i].to_string()),
                     AggregateKind::Closure(..) => Some(match i {
                         i if i == FieldId::FIRST_FIELD => "env".to_string(),
