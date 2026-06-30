@@ -25,16 +25,6 @@ pub fn pattern_to_pat<'a>(pattern: &'a Pattern) -> Pat<'a> {
                 .map(|field| pattern_to_pat(&field.pattern).with_index(field.index.into_usize()))
                 .collect(),
         },
-        PatternKind::None => Pat {
-            constructor: Constructor::None,
-            fields: Vec::new(),
-            ty,
-        },
-        PatternKind::Some(inner) => Pat {
-            constructor: Constructor::Some,
-            fields: vec![pattern_to_pat(inner).with_index(0)],
-            ty,
-        },
         PatternKind::Bool(value) => Pat {
             constructor: Constructor::Bool(*value),
             fields: Vec::new(),

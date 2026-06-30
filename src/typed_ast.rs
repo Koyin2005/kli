@@ -24,8 +24,6 @@ pub struct Pattern {
 pub enum PatternKind {
     Int(i64),
     Bool(bool),
-    Some(Box<Pattern>),
-    None,
     Ref(Box<Pattern>),
     Binding(Option<(Mutable, Region)>, Mutable, Var, Box<Type>),
     Record(Vec<PatternField>),
@@ -101,9 +99,7 @@ pub enum ExprKind {
     Int(i64),
     Unit,
     Err,
-    None,
     Panic,
-    Some(Box<Expr>),
     BuiltinCall(Builtin, GenericArgs, Vec<Expr>),
     VariantInit(DefId, GenericArgs, Box<Expr>),
     Function(DefId, GenericArgs),

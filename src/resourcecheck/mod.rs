@@ -217,7 +217,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
     }
     fn check_pattern(&mut self, pattern: &Pattern, in_ref: bool) {
         match &pattern.kind {
-            PatternKind::None | PatternKind::Bool(_) | PatternKind::Int(_) => (),
+            PatternKind::Bool(_) | PatternKind::Int(_) => (),
             PatternKind::Record(fields) => {
                 for field in fields {
                     self.check_pattern(&field.pattern, in_ref);
@@ -225,9 +225,6 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             }
             PatternKind::Ref(sub_pattern) => {
                 self.check_pattern(sub_pattern, true);
-            }
-            PatternKind::Some(sub_pattern) => {
-                self.check_pattern(sub_pattern, in_ref);
             }
             PatternKind::Binding(borrow, mutable, var, ty) => {
                 if in_ref && ty.is_resource(self.ctxt) && borrow.is_none() {
@@ -389,14 +386,13 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             }
             ExprKind::Bool(_)
             | ExprKind::Err
-            | ExprKind::None
             | ExprKind::Panic
             | ExprKind::Unit
             | ExprKind::String(_)
             | ExprKind::Int(_)
             | ExprKind::Const(..) => {}
             ExprKind::Function(..) => {}
-            ExprKind::Some(value) | ExprKind::VariantInit(.., value) => {
+            ExprKind::VariantInit(.., value) => {
                 self.check_expr(value);
             }
             ExprKind::Print(value) => {

@@ -141,20 +141,6 @@ impl Builder<'_> {
                     TestCase::False
                 },
             }],
-            PatternKind::Some(pattern) => {
-                let mut cases = vec![MatchTest {
-                    place: place.clone(),
-                    case: TestCase::Some,
-                }];
-                cases.extend(Self::into_tests(place.with_downcast_some(), pattern));
-                cases
-            }
-            PatternKind::None => {
-                vec![MatchTest {
-                    place: place.clone(),
-                    case: TestCase::None,
-                }]
-            }
             PatternKind::Ref(pattern) => Self::into_tests(place.with_deref(), pattern),
             PatternKind::Binding(..) => Vec::new(),
             PatternKind::Record(pattern_fields) => pattern_fields

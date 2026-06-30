@@ -73,8 +73,8 @@ impl<'a> TypeSubst<'a> {
     }
     pub fn subst_pattern(&mut self, pattern: &mut Pattern) {
         match &mut pattern.kind {
-            PatternKind::None | PatternKind::Bool(_) | PatternKind::Int(_) => (),
-            PatternKind::Some(pattern) | PatternKind::Ref(pattern) => self.subst_pattern(pattern),
+            PatternKind::Bool(_) | PatternKind::Int(_) => (),
+            PatternKind::Ref(pattern) => self.subst_pattern(pattern),
             PatternKind::Binding(.., ty) => self.subst_type(ty),
             PatternKind::Record(fields) => {
                 for field in fields {
@@ -118,8 +118,7 @@ impl<'a> TypeSubst<'a> {
             | ExprKind::Unit
             | ExprKind::Int(_)
             | ExprKind::String(_)
-            | ExprKind::Panic
-            | ExprKind::None => (),
+            | ExprKind::Panic => (),
             ExprKind::Binary(_, first, second) => {
                 self.subst_expr(first);
                 self.subst_expr(second);
@@ -135,7 +134,6 @@ impl<'a> TypeSubst<'a> {
                 }
                 self.subst_expr(expr)
             }
-            ExprKind::Some(expr) => self.subst_expr(expr),
             ExprKind::List(exprs) => {
                 for expr in exprs {
                     self.subst_expr(expr);

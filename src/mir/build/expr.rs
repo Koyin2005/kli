@@ -154,11 +154,7 @@ impl Builder<'_> {
                 self.assign_place_to_pattern(pattern, place.with_deref());
             }
             typed_ast::PatternKind::Bool(_)
-            | typed_ast::PatternKind::Int(_)
-            | typed_ast::PatternKind::None => (),
-            typed_ast::PatternKind::Some(pattern) => {
-                self.assign_place_to_pattern(pattern, place.with_downcast_some());
-            }
+            | typed_ast::PatternKind::Int(_) => (),
             typed_ast::PatternKind::Record(fields) => {
                 for field in fields {
                     self.assign_place_to_pattern(
@@ -207,9 +203,7 @@ impl Builder<'_> {
             | ExprKind::For { .. }
             | ExprKind::Assign(..)
             | ExprKind::Borrow { .. }
-            | ExprKind::Some(_)
             | ExprKind::VariantInit(..)
-            | ExprKind::None
             | ExprKind::String(_)
             | ExprKind::Lambda(_)
             | ExprKind::BuiltinCall(..)
@@ -350,28 +344,6 @@ impl Builder<'_> {
                         Operand::Constant(Constant::int(value.len().try_into().unwrap())),
                     ]
                     .into(),
-                )
-            }
-            ExprKind::None => {
-                let Type::Option(ty) = expr.ty.clone() else {
-                    unreachable!("Should be an option")
-                };
-                Rvalue::Aggregate(
-                    AggregateKind::Option {
-                        inner: *ty,
-                        is_some: false,
-                    },
-                    IndexVec::new(),
-                )
-            }
-            ExprKind::Some(value) => {
-                let operand = self.operand(value);
-                Rvalue::Aggregate(
-                    AggregateKind::Option {
-                        inner: value.ty.clone(),
-                        is_some: true,
-                    },
-                    [operand].into(),
                 )
             }
             ExprKind::VariantInit(id, args, value) => {

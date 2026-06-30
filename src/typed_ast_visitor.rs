@@ -21,9 +21,8 @@ where
     match &pattern.kind {
         PatternKind::Binding(..)
         | PatternKind::Bool(_)
-        | PatternKind::None
         | PatternKind::Int(..) => (),
-        PatternKind::Some(pattern) | PatternKind::Ref(pattern) => v.visit_pattern(pattern),
+        PatternKind::Ref(pattern) => v.visit_pattern(pattern),
         PatternKind::Record(fields) => {
             for field in fields {
                 v.visit_pattern(&field.pattern);
@@ -77,8 +76,7 @@ where
         | ExprKind::String(_)
         | ExprKind::Function(..)
         | ExprKind::Unit
-        | ExprKind::Panic
-        | ExprKind::None => (),
+        | ExprKind::Panic => (),
         ExprKind::Print(value) => {
             if let Some(value) = value {
                 v.visit_expr(value);
@@ -89,7 +87,7 @@ where
                 v.visit_expr(expr);
             }
         }
-        ExprKind::Some(value) | ExprKind::VariantInit(.., value) => v.visit_expr(value),
+        ExprKind::VariantInit(.., value) => v.visit_expr(value),
         ExprKind::Call(callee, args) => {
             v.visit_expr(callee);
             args.iter().for_each(|expr| v.visit_expr(expr));

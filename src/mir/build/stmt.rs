@@ -56,8 +56,6 @@ impl Builder<'_> {
             | ExprKind::Call(..)
             | ExprKind::Binary(..)
             | ExprKind::Function(..)
-            | ExprKind::None
-            | ExprKind::Some(..)
             | ExprKind::List(..)
             | ExprKind::Lambda(..)
             | ExprKind::Const(..)
