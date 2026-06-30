@@ -1,0 +1,5 @@
+type Option[T] = 
+| Some(T)
+| None
+
+fun new_none[T]() -> Option[T] = Option.None
