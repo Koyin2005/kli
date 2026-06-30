@@ -64,7 +64,6 @@ impl<'ctxt> TypeCheck<'ctxt> {
             | Type::Unit
             | Type::List(_)
             | Type::String
-            | Type::Option(_)
             | Type::Function(_)
             | Type::Box(_)
             | Type::Record(_)

@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    mir::{BasicBlockId, Operand, Place,SwitchTarget, TerminatorKind, build::Builder},
+    mir::{BasicBlockId, Operand, Place, SwitchTarget, TerminatorKind, build::Builder},
     src_loc::SrcLoc,
-    typed_ast::{CaseArm, Expr, Pattern, PatternKind}
+    typed_ast::{CaseArm, Expr, Pattern, PatternKind},
 };
 
 struct MatchInfo<'a> {

@@ -174,7 +174,6 @@ pub enum Type {
     Param(Symbol, usize),
     Box(Box<Type>),
     List(Box<Type>),
-    Option(Box<Type>),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
     Function(FunctionType),
@@ -235,12 +234,6 @@ impl Type {
             params,
             return_type: Box::new(return_type),
         })
-    }
-    pub fn as_option(&self) -> Option<&Type> {
-        let Type::Option(ty) = self else {
-            return None;
-        };
-        Some(ty)
     }
     pub fn as_pointer(&self) -> Option<&Type> {
         let Type::RawPointer(ty) = self else {
@@ -321,7 +314,7 @@ impl Type {
                 resource: IsResource::Data,
                 ..
             }) => false,
-            Type::Option(ty) | Type::Array(ty, _) => ty.is_resource(ctxt),
+            Type::Array(ty, _) => ty.is_resource(ctxt),
             Type::Mut(..)
             | Type::Function(FunctionType {
                 resource: IsResource::Resource,
@@ -359,7 +352,7 @@ impl Type {
             | Type::Byte
             | Type::Param(..)
             | Type::Box(_) => ControlFlow::Continue(()),
-            Type::List(ty) | Type::Option(ty) | Type::RawPointer(ty) | Type::Array(ty, _) => {
+            Type::List(ty)  | Type::RawPointer(ty) | Type::Array(ty, _) => {
                 ty.visit(visit_ty, visit_region)
             }
             &(Type::Imm(region, ref ty) | Type::Mut(region, ref ty)) => {
@@ -431,11 +424,6 @@ impl Display for Type {
                 write!(f, "{}", ty)?;
                 f.pad("]")
             }
-            Type::Option(ty) => {
-                f.pad("option[")?;
-                write!(f, "{}", ty)?;
-                f.pad("]")
-            }
             Type::Imm(region, ty) => {
                 write!(f, "imm [{}] {}", region, ty)
             }
@@ -485,7 +473,6 @@ pub trait TypeMap {
             Type::RawPointer(ty) => Ok(Type::RawPointer(Box::new(self.map_type(*ty)?))),
             Type::Box(ty) => Ok(Type::Box(Box::new(self.map_type(*ty)?))),
             Type::List(ty) => Ok(Type::List(Box::new(self.map_type(*ty)?))),
-            Type::Option(ty) => Ok(Type::Option(Box::new(self.map_type(*ty)?))),
             Type::Imm(region, ty) => Ok(Type::Imm(
                 self.map_region(region)?,
                 Box::new(self.map_type(*ty)?),

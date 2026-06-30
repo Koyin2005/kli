@@ -25,7 +25,6 @@ impl<'a> TypeSubst<'a> {
             | Type::Byte => (),
             Type::Box(ty)
             | Type::Array(ty, _)
-            | Type::Option(ty)
             | Type::List(ty)
             | Type::RawPointer(ty) => self.subst_type(ty),
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
@@ -128,8 +127,8 @@ impl<'a> TypeSubst<'a> {
                     self.subst_expr(expr);
                 }
             }
-            ExprKind::VariantInit(..,args, expr) => {
-                for arg in args{
+            ExprKind::VariantInit(.., args, expr) => {
+                for arg in args {
                     self.subst_generic_arg(arg);
                 }
                 self.subst_expr(expr)

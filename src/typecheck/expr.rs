@@ -280,10 +280,11 @@ impl TypeCheck<'_> {
         {
             let generic_args = self.lower_generic_args_for(*id, generic_args, loc);
             let Type::Function(FunctionType {
-                resource:_,
+                resource: _,
                 params,
                 return_type,
-            }) = self.ctxt().type_of(*id).bind(&generic_args) else {
+            }) = self.ctxt().type_of(*id).bind(&generic_args)
+            else {
                 unreachable!()
             };
             let (ty, args) = check_call_sig(

@@ -1,7 +1,15 @@
 use std::{collections::HashMap, fmt::Display};
 
 use crate::{
-    Symbol, ast::Mutable, collect::CtxtRef, define_id, index_vec::IndexVec, resolved_ast::{DefId, LambdaId, Var, VarId}, src_loc::SrcLoc, typed_ast::FieldId, types::{FieldName, GenericArg, GenericArgs, PointerType, Region, Type},
+    Symbol,
+    ast::Mutable,
+    collect::CtxtRef,
+    define_id,
+    index_vec::IndexVec,
+    resolved_ast::{DefId, LambdaId, Var, VarId},
+    src_loc::SrcLoc,
+    typed_ast::FieldId,
+    types::{FieldName, GenericArg, GenericArgs, PointerType, Region, Type},
 };
 pub mod build;
 pub mod dump;
@@ -13,7 +21,6 @@ impl Local {
 }
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
 pub enum PlaceProjection {
-    DowncastSome,
     Field(FieldId),
     ConstantIndex(u32),
     Index(Local),
@@ -59,13 +66,6 @@ impl Place {
     }
     pub fn with_index(mut self, index: Local) -> Self {
         self.projections.push(PlaceProjection::Index(index));
-        Self {
-            base: self.base,
-            projections: self.projections,
-        }
-    }
-    pub fn with_downcast_some(mut self) -> Self {
-        self.projections.push(PlaceProjection::DowncastSome);
         Self {
             base: self.base,
             projections: self.projections,
@@ -337,9 +337,6 @@ impl Body {
                 };
                 *ty
             }
-            PlaceProjection::DowncastSome => {
-                ty.as_option().expect("should be an option type").clone()
-            }
         }
     }
     pub fn type_of_place(&self, place: &Place) -> Type {
@@ -405,9 +402,9 @@ impl Body {
                 ),
                 AggregateKind::ArrayList(ty) => Type::List(Box::new(ty.clone())),
                 &AggregateKind::Variant(id, _, ref args) => {
-                    let id  = ctxt.parent_of(id).unwrap();
+                    let id = ctxt.parent_of(id).unwrap();
                     Type::Named(id, ctxt.name(id).symbol, args.clone())
-                },
+                }
                 AggregateKind::String => Type::String,
             },
             Rvalue::PointerCast(cast, operand) => {

@@ -46,9 +46,6 @@ impl<'ctxt> MirDump<'ctxt> {
             let mut output = format!("{}", place.base);
             for projection in place.projections.iter() {
                 output = match projection {
-                    PlaceProjection::DowncastSome => {
-                        format!("({} as Some)", output)
-                    }
                     PlaceProjection::Field(field) => {
                         output.push_str(&format!(".{}", field.into_usize()));
                         output
@@ -128,7 +125,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 };
                 let (open_bracket, close_bracket) = match kind {
                     AggregateKind::Array(_, _) => ('[', ']'),
-                    AggregateKind::Variant(..) => ('(',')'),
+                    AggregateKind::Variant(..) => ('(', ')'),
                     _ => ('{', '}'),
                 };
                 let field_name = |i: FieldId| match kind {

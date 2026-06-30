@@ -148,11 +148,7 @@ impl CtxtRef<'_> {
                 let case = &self.expect_variant_def(parent).cases[index];
                 case.name
             }
-            NodePath::CaseField {
-                index,
-                case,
-                ..
-            } => Ident {
+            NodePath::CaseField { index, case, .. } => Ident {
                 symbol: Symbol::ZERO,
                 loc: self.expect_case(case).0.cases[index].name.loc,
             },

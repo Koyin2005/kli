@@ -197,7 +197,7 @@ fn find_std_lib() -> FileEntry {
             file_from("refs", ref_file),
             file_from("strings", string_file),
             file_from("arrays", array_file),
-            file_from("optional", optional_file)
+            file_from("optional", optional_file),
         ])),
     }
 }

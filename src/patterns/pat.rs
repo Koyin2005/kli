@@ -50,12 +50,6 @@ impl Display for Pat<'_> {
                 f.write_str("ref ")?;
                 write!(f, "{}", self.fields[0].pat)
             }
-            Constructor::None => f.write_str("None"),
-            Constructor::Some => {
-                f.write_str("Some(")?;
-                write!(f, "{}", self.fields[0].pat)?;
-                f.write_str(")")
-            }
             Constructor::Wildcard => f.write_str("_"),
             Constructor::NonExhaustive => f.write_str("_"),
             Constructor::Record => {

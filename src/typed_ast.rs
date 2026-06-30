@@ -6,7 +6,7 @@ use crate::{
     ident::Ident,
     resolved_ast::{Builtin, DefId, LambdaId, LocalRegionId, Var, VarId},
     src_loc::SrcLoc,
-    types::{ GenericArgs, GenericKind, Region, Type},
+    types::{GenericArgs, GenericKind, Region, Type},
 };
 
 #[derive(Debug)]

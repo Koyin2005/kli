@@ -745,16 +745,6 @@ impl Parser {
                     Ok(ty)
                 }
             }
-            TokenKind::Option => {
-                self.next_token();
-                let _ = self.expect(&TokenKind::LeftBracket);
-                let ty = self.parse_type()?;
-                let _ = self.expect(&TokenKind::RightBracket);
-                Ok(Type {
-                    loc,
-                    kind: TypeKind::Option(Box::new(ty)),
-                })
-            }
             TokenKind::Ident(_) => {
                 let name = self.match_ident().expect("Expected valid ident");
                 let args = self.parse_optional_generic_args()?;

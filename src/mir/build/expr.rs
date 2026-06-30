@@ -153,8 +153,7 @@ impl Builder<'_> {
             typed_ast::PatternKind::Ref(pattern) => {
                 self.assign_place_to_pattern(pattern, place.with_deref());
             }
-            typed_ast::PatternKind::Bool(_)
-            | typed_ast::PatternKind::Int(_) => (),
+            typed_ast::PatternKind::Bool(_) | typed_ast::PatternKind::Int(_) => (),
             typed_ast::PatternKind::Record(fields) => {
                 for field in fields {
                     self.assign_place_to_pattern(
@@ -348,7 +347,10 @@ impl Builder<'_> {
             }
             ExprKind::VariantInit(id, args, value) => {
                 let name = self.ctxt.name(*id).symbol;
-                Rvalue::Aggregate(AggregateKind::Variant(*id,name,args.clone()), [self.operand(value)].into())
+                Rvalue::Aggregate(
+                    AggregateKind::Variant(*id, name, args.clone()),
+                    [self.operand(value)].into(),
+                )
             }
             ExprKind::List(exprs) => {
                 let ty = if let Type::List(ty) = &expr.ty {

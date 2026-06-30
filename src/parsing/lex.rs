@@ -155,7 +155,6 @@ impl<'s> Lexer<'s> {
                 "let" => TokenKind::Let,
                 "case" => TokenKind::Case,
                 "print" => TokenKind::Print,
-                "option" => TokenKind::Option,
                 "static" => TokenKind::Static,
                 "ref" => TokenKind::Ref,
                 "char" => TokenKind::Char,

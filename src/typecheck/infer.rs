@@ -129,9 +129,6 @@ impl TypeInfer {
             (Type::Box(ty1), Type::Box(ty2)) => {
                 self.unify_ty(*ty1, *ty2).map(|ty| Type::Box(Box::new(ty)))
             }
-            (Type::Option(ty1), Type::Option(ty2)) => self
-                .unify_ty(*ty1, *ty2)
-                .map(|ty| Type::Option(Box::new(ty))),
             (Type::List(ty1), Type::List(ty2)) => {
                 self.unify_ty(*ty1, *ty2).map(|ty| Type::List(Box::new(ty)))
             }
@@ -218,7 +215,6 @@ impl TypeInfer {
                 | Type::Char
                 | Type::Box(_)
                 | Type::Param(..)
-                | Type::Option(_)
                 | Type::Array(..)
                 | Type::Function(..)
                 | Type::Byte

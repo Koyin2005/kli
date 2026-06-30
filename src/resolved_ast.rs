@@ -319,7 +319,6 @@ pub enum TypeKind {
     Ptr(Box<Type>),
     List(Box<Type>),
     Box(Box<Type>),
-    Option(Box<Type>),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
     Function(IsResource, Vec<Type>, Box<Type>),

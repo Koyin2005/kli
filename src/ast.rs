@@ -233,7 +233,6 @@ pub enum TypeKind {
     Record(RecordType),
     Named(Ident, Option<GenericArgs>),
     Function(FunctionType),
-    Option(Box<Type>),
     List(Box<Type>),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),

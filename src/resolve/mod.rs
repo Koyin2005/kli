@@ -271,7 +271,6 @@ impl Resolve {
             ast::TypeKind::Int => res::TypeKind::Int,
             ast::TypeKind::Unit => res::TypeKind::Unit,
             ast::TypeKind::String => res::TypeKind::String,
-            ast::TypeKind::Option(ty) => res::TypeKind::Option(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::List(ty) => res::TypeKind::List(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::Record(ast::RecordType { fields }) => {
                 let fields = fields

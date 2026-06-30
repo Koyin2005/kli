@@ -106,7 +106,6 @@ impl<'a> Lower<'a> {
             res::TypeKind::Unit => Type::Unit,
             res::TypeKind::String => Type::String,
             res::TypeKind::Byte => Type::Byte,
-            res::TypeKind::Option(ty) => Type::Option(Box::new(self.lower_type(ty))),
             res::TypeKind::Box(ty) => Type::Box(Box::new(self.lower_type(ty))),
             res::TypeKind::List(ty) => Type::List(Box::new(self.lower_type(ty))),
             res::TypeKind::Imm(region, ty) => {

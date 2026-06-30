@@ -3,6 +3,7 @@ use crate::{
     collect::CtxtRef,
     diagnostics::emit_fatal_diagnostic,
     mir::{BinaryOp, Body, Location, PointerCast, Stmt, StmtKind, visitor::Visit},
+    resolved_ast::TypeDefKind,
     src_loc::SrcLoc,
     types::{FunctionType, PointerType, Type},
 };
@@ -40,17 +41,6 @@ impl Visit for WellFormed<'_> {
         for proj in &place.projections {
             let loc = self.body.src_info(loc);
             match proj {
-                super::PlaceProjection::DowncastSome => {
-                    ty = self.assert_with_some(
-                        ty,
-                        |ty| match ty {
-                            Type::Option(ty) => Some(*ty),
-                            _ => None,
-                        },
-                        || "Cannot downcast a non-option".to_string(),
-                        loc,
-                    );
-                }
                 super::PlaceProjection::Field(field_id) => {
                     ty = self.assert_with_some(
                         &ty,
@@ -91,7 +81,13 @@ impl Visit for WellFormed<'_> {
         match rvalue {
             super::Rvalue::Discriminant(place) => {
                 self.assert(
-                    matches!(self.body.type_of_place(place), Type::Option(_)),
+                    if let Type::Named(id, _, _) = self.body.type_of_place(place)
+                        && let TypeDefKind::Variant(_) = self.ctxt.expect_type(id).kind
+                    {
+                        true
+                    } else {
+                        false
+                    },
                     || "type does not have a discriminant".to_string(),
                     loc,
                 );
@@ -194,23 +190,33 @@ impl Visit for WellFormed<'_> {
                     let len_ty = self.body.type_of_operand(len);
                     self.assert(len_ty == Type::Int, || "len should be int".to_string(), loc);
                 }
-                super::AggregateKind::Variant(id,_,args) => {
-                    let field = self.assert_with_some(fields.as_slice(), |fields|{
-                        if let [field] = fields {
-                            Some(field)
-                        }
-                        else {
-                            None
-                        }
-                    }, || format!("Variants can only have at most 1 inner field"), loc);
-                    let (variant_def,index) = self.ctxt.expect_case(*id);
+                super::AggregateKind::Variant(id, _, args) => {
+                    let field = self.assert_with_some(
+                        fields.as_slice(),
+                        |fields| {
+                            if let [field] = fields {
+                                Some(field)
+                            } else {
+                                None
+                            }
+                        },
+                        || format!("Variants can only have at most 1 inner field"),
+                        loc,
+                    );
+                    let (variant_def, index) = self.ctxt.expect_case(*id);
                     let case_ty = variant_def.cases[index].ty.as_ref();
                     let field_id = case_ty.map(|case| case.id);
-                    let field_id = field_id.unwrap_or_else(|| emit_fatal_diagnostic(loc, format!("should have a field")));
+                    let field_id = field_id.unwrap_or_else(|| {
+                        emit_fatal_diagnostic(loc, format!("should have a field"))
+                    });
                     let field_ty = self.ctxt.type_of(field_id).bind(args);
                     let operand_ty = self.body.type_of_operand(field);
-                    println!("{:?} {:?}",field_ty,operand_ty);
-                    self.assert(field_ty == operand_ty, || format!("field should be same types"), loc);
+                    println!("{:?} {:?}", field_ty, operand_ty);
+                    self.assert(
+                        field_ty == operand_ty,
+                        || format!("field should be same types"),
+                        loc,
+                    );
                 }
             },
             super::Rvalue::Use(_) => (),
@@ -336,7 +342,7 @@ impl Visit for WellFormed<'_> {
         match &stmt.kind {
             StmtKind::Assign(lhs, rhs) => {
                 let lhs_ty = self.body.type_of_place(lhs);
-                let rhs_ty = self.body.type_of_rvalue(rhs,self.ctxt);
+                let rhs_ty = self.body.type_of_rvalue(rhs, self.ctxt);
                 self.assert(
                     lhs_ty == rhs_ty,
                     || format!("Cannot assign non equal types {} and {}", lhs_ty, rhs_ty),
