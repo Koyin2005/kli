@@ -133,34 +133,6 @@ impl TypeCheck<'_> {
                     kind: typed_ast::PatternKind::Bool(value),
                 }
             }
-            PatternKind::None => {
-                let inner_ty = match expected_type {
-                    Type::Option(ty) => *ty,
-                    expected_type => {
-                        self.expect_ty_error("option", &expected_type, pattern.loc);
-                        Type::Unknown
-                    }
-                };
-                typed_ast::Pattern {
-                    ty: Type::Option(Box::new(inner_ty)),
-                    loc: pattern.loc,
-                    kind: typed_ast::PatternKind::None,
-                }
-            }
-            PatternKind::Some(ref inner) => {
-                let inner = match expected_type {
-                    Type::Option(ty) => self.check_pattern(inner, *ty, binding_mode),
-                    expected_type => {
-                        self.expect_ty_error("option", &expected_type, pattern.loc);
-                        self.check_pattern(inner, Type::Unknown, binding_mode)
-                    }
-                };
-                typed_ast::Pattern {
-                    ty: Type::Option(Box::new(inner.ty.clone())),
-                    loc: pattern.loc,
-                    kind: typed_ast::PatternKind::Some(Box::new(inner)),
-                }
-            }
             PatternKind::Binding(borrow, mutable, ref ident, var) => {
                 let name = ident.symbol;
 

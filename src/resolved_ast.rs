@@ -229,8 +229,6 @@ pub enum ExprKind {
     Function(FunctionDefId, GenericArgs),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Borrow(Box<BorrowExpr>),
-    Some(Box<Expr>),
-    None(Option<Type>),
     Panic(Option<Type>),
     Lambda(Box<Lambda>),
     Deref(Box<Expr>),
@@ -266,9 +264,7 @@ pub struct PatternField {
 pub enum PatternKind {
     Int(i64),
     Bool(bool),
-    Some(Box<Pattern>),
     Ref(Box<Pattern>),
-    None,
     Binding(Option<Mutable>, Mutable, Ident, VarId),
     Record(Vec<PatternField>),
 }

@@ -484,47 +484,6 @@ impl TypeCheck<'_> {
                     kind: typed_ast::ExprKind::Const(case_id, args),
                 }
             }
-            ExprKind::None(ty) => {
-                let given = ty.as_ref().map(|ty| self.lower_type(ty));
-                let ty = match (given, expected_ty.clone()) {
-                    (None, None) => {
-                        self.type_annotations_needed(loc);
-                        Type::Unknown
-                    }
-                    (Some(ty), None) => ty,
-                    (None, Some(expected)) => {
-                        let expected = self.simplify_type(expected);
-                        if let Type::Option(ty) = expected {
-                            *ty
-                        } else {
-                            self.expect_ty_error("option", &expected, loc);
-                            Type::Unknown
-                        }
-                    }
-                    (Some(ty), Some(expected)) => {
-                        if let Type::Option(ty) =
-                            self.unify(Type::Option(Box::new(ty)), expected.clone(), loc)
-                        {
-                            *ty
-                        } else {
-                            Type::Unknown
-                        }
-                    }
-                };
-                make_expr(Type::Option(Box::new(ty)), typed_ast::ExprKind::None, loc)
-            }
-            ExprKind::Some(value) => {
-                let expected_inner = expected_ty.as_ref().and_then(|ty| match ty {
-                    Type::Option(ty) => Some((**ty).clone()),
-                    _ => None,
-                });
-                let value = self.check_expr(value, expected_inner);
-                make_expr(
-                    Type::Option(Box::new(value.ty.clone())),
-                    typed_ast::ExprKind::Some(Box::new(value)),
-                    loc,
-                )
-            }
             ExprKind::Print(arg) => {
                 let arg = arg.as_ref().map(|arg| Box::new(self.check_expr(arg, None)));
                 make_expr(Type::Unit, typed_ast::ExprKind::Print(arg), loc)
