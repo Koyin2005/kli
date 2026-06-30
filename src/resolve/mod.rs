@@ -499,10 +499,6 @@ impl Resolve {
                 }
             }),
             ast::PatternKind::Bool(value) => res::PatternKind::Bool(value),
-            ast::PatternKind::None => res::PatternKind::None,
-            ast::PatternKind::Some(pattern) => {
-                res::PatternKind::Some(Box::new(self.resolve_pattern(*pattern)))
-            }
             ast::PatternKind::Binding(borrow, mutable, name) => {
                 let var = self.declare_var(name.symbol);
                 res::PatternKind::Binding(borrow, mutable, name, var)
@@ -709,8 +705,6 @@ impl Resolve {
             ast::ExprKind::String(value) => res::ExprKind::String(value.into()),
             ast::ExprKind::Number(value) => res::ExprKind::Int(value as i64),
             ast::ExprKind::Bool(value) => res::ExprKind::Bool(value),
-            ast::ExprKind::None(ty) => res::ExprKind::None(ty.map(|ty| self.resolve_type(ty))),
-            ast::ExprKind::Some(arg) => res::ExprKind::Some(Box::new(self.resolve_expr(*arg))),
             ast::ExprKind::Print(arg) => {
                 res::ExprKind::Print(arg.map(|arg| Box::new(self.resolve_expr(*arg))))
             }

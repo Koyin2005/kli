@@ -77,10 +77,8 @@ pub struct PatternField {
 pub enum PatternKind {
     Bool(bool),
     Binding(Option<Mutable>, Mutable, Ident),
-    Some(Box<Pattern>),
     Ref(Box<Pattern>),
     Int(u64),
-    None,
     Record(Vec<PatternField>),
 }
 #[derive(Debug)]
@@ -185,8 +183,6 @@ pub enum ExprKind {
     String(String),
     Print(Option<Box<Expr>>),
     Panic(Option<Type>),
-    Some(Box<Expr>),
-    None(Option<Type>),
     Call(Box<Expr>, Vec<Expr>),
     Borrow(Box<BorrowExpr>),
     Case(Box<Expr>, Vec<CaseArm>),
