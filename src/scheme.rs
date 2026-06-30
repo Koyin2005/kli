@@ -1,4 +1,4 @@
-use crate::types::{GenericArg, Region, Type, TypeMap, TypeMappable};
+use crate::types::{GenericArg, GenericArgsRef, Region, Type, TypeMap, TypeMappable};
 #[derive(Clone, Eq, PartialEq)]
 pub struct Scheme<T> {
     value: T,
@@ -7,8 +7,13 @@ impl<T: TypeMappable> Scheme<T> {
     pub fn new(value: T) -> Self {
         Self { value }
     }
-    pub fn bind(self, args: &[GenericArg]) -> T {
-        struct Binder<'a>(&'a [GenericArg]);
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Scheme<U> {
+        Scheme {
+            value: f(self.value),
+        }
+    }
+    pub fn bind(self, args: GenericArgsRef<'_>) -> T {
+        struct Binder<'a>(GenericArgsRef<'a>);
         impl TypeMap for Binder<'_> {
             type Error = std::convert::Infallible;
             fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {

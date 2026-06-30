@@ -32,6 +32,10 @@ pub fn constructors_of_ty(ty: &Type) -> Vec<Constructor> {
             vec![Constructor::Record]
         }
         Type::Infer(_) => unreachable!("Cannot have infer here"),
+        Type::Named(..) => {
+            //TODO : Allow matching the actual constructors
+            vec![Constructor::NonExhaustive]
+        }
     }
 }
 

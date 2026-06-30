@@ -1,17 +1,18 @@
 use crate::{
     ast::{IsResource, Mutable},
+    collect::CtxtRef,
     diagnostics::emit_fatal_diagnostic,
-    mir::{BinaryOp, Body, Context, Location, PointerCast, Stmt, StmtKind, visitor::Visit},
+    mir::{BinaryOp, Body, Location, PointerCast, Stmt, StmtKind, visitor::Visit},
     src_loc::SrcLoc,
     types::{FunctionType, PointerType, Type},
 };
 pub struct WellFormed<'ctxt> {
-    _ctxt: &'ctxt Context,
+    ctxt: CtxtRef<'ctxt>,
     body: &'ctxt Body,
 }
 impl<'ctxt> WellFormed<'ctxt> {
-    pub fn new(body: &'ctxt Body, _ctxt: &'ctxt Context) -> Self {
-        Self { _ctxt, body }
+    pub fn new(body: &'ctxt Body, ctxt: CtxtRef<'ctxt>) -> Self {
+        Self { ctxt, body }
     }
     #[track_caller]
     fn assert(&mut self, condition: bool, msg: impl FnOnce() -> String, loc: SrcLoc) {
@@ -109,13 +110,13 @@ impl Visit for WellFormed<'_> {
                             _ => None,
                         },
                         || "closure should have two fields".to_string(),
-                        loc.clone(),
+                        loc,
                     );
                     let env_ty = self.body.type_of_operand(env);
                     self.assert(
                         env_ty.as_pointer().is_some_and(|ty| *ty == Type::Byte),
                         || "env should be byte pointer".to_string(),
-                        loc.clone(),
+                        loc,
                     );
                     let code = self.body.type_of_operand(code);
                     self.assert(
@@ -142,7 +143,7 @@ impl Visit for WellFormed<'_> {
                                 }
                             },
                             || "Some value can only have one field".to_string(),
-                            loc.clone(),
+                            loc,
                         );
                         let field_ty = self.body.type_of_operand(field);
                         self.assert(
@@ -169,39 +170,31 @@ impl Visit for WellFormed<'_> {
                             }
                         },
                         || "ArrayList must have 3 fields".to_string(),
-                        loc.clone(),
+                        loc,
                     );
                     let ptr_ty = self.body.type_of_operand(ptr);
                     self.assert(
                         ptr_ty == Type::pointer(ty.clone()),
                         || "ptr should point to same type".to_string(),
-                        loc.clone(),
+                        loc,
                     );
                     let cap_ty = self.body.type_of_operand(cap);
-                    self.assert(
-                        cap_ty == Type::Int,
-                        || "cap should be int".to_string(),
-                        loc.clone(),
-                    );
+                    self.assert(cap_ty == Type::Int, || "cap should be int".to_string(), loc);
                     let len_ty = self.body.type_of_operand(len);
-                    self.assert(
-                        len_ty == Type::Int,
-                        || "len should be int".to_string(),
-                        loc.clone(),
-                    );
+                    self.assert(len_ty == Type::Int, || "len should be int".to_string(), loc);
                 }
                 super::AggregateKind::Array(ty, count) => {
                     self.assert(
                         fields.len() == (*count).try_into().unwrap(),
                         || format!("array requires '{}' fields", count),
-                        loc.clone(),
+                        loc,
                     );
                     for field in fields {
                         let field_ty = self.body.type_of_operand(field);
                         self.assert(
                             field_ty == *ty,
                             || "array field must have same type as array".to_string(),
-                            loc.clone(),
+                            loc,
                         );
                     }
                 }
@@ -216,26 +209,36 @@ impl Visit for WellFormed<'_> {
                             }
                         },
                         || "String must have 3 fields".to_string(),
-                        loc.clone(),
+                        loc,
                     );
                     let ptr_ty = self.body.type_of_operand(ptr);
                     self.assert(
                         ptr_ty == Type::pointer(Type::Byte),
                         || "ptr should be a byte pointer".to_string(),
-                        loc.clone(),
+                        loc,
                     );
                     let cap_ty = self.body.type_of_operand(cap);
-                    self.assert(
-                        cap_ty == Type::Int,
-                        || "cap should be int".to_string(),
-                        loc.clone(),
-                    );
+                    self.assert(cap_ty == Type::Int, || "cap should be int".to_string(), loc);
                     let len_ty = self.body.type_of_operand(len);
-                    self.assert(
-                        len_ty == Type::Int,
-                        || "len should be int".to_string(),
-                        loc.clone(),
-                    );
+                    self.assert(len_ty == Type::Int, || "len should be int".to_string(), loc);
+                }
+                super::AggregateKind::Variant(id,_,args) => {
+                    let field = self.assert_with_some(fields.as_slice(), |fields|{
+                        if let [field] = fields {
+                            Some(field)
+                        }
+                        else {
+                            None
+                        }
+                    }, || format!("Variants can only have at most 1 inner field"), loc);
+                    let (variant_def,index) = self.ctxt.expect_case(*id);
+                    let case_ty = variant_def.cases[index].ty.as_ref();
+                    let field_id = case_ty.map(|case| case.id);
+                    let field_id = field_id.unwrap_or_else(|| emit_fatal_diagnostic(loc, format!("should have a field")));
+                    let field_ty = self.ctxt.type_of(field_id).bind(args);
+                    let operand_ty = self.body.type_of_operand(field);
+                    println!("{:?} {:?}",field_ty,operand_ty);
+                    self.assert(field_ty == operand_ty, || format!("field should be same types"), loc);
                 }
             },
             super::Rvalue::Use(_) => (),
@@ -250,12 +253,12 @@ impl Visit for WellFormed<'_> {
                         _ => None,
                     },
                     || "Can only call function types".to_string(),
-                    loc.clone(),
+                    loc,
                 );
                 self.assert(
                     resource == IsResource::Data,
                     || "Can only call data functions".to_string(),
-                    loc.clone(),
+                    loc,
                 );
                 let operand_tys = operands
                     .iter()
@@ -304,7 +307,7 @@ impl Visit for WellFormed<'_> {
                     self.body.type_of_operand(operand),
                     |ty| ty.as_pointer_type().ok(),
                     || "Cannot take a non pointer type".to_string(),
-                    loc.clone(),
+                    loc,
                 );
                 match (pointer_cast, pointer_type) {
                     (PointerCast::BoxToRaw, PointerType::Box) => (),
@@ -338,7 +341,7 @@ impl Visit for WellFormed<'_> {
                 self.assert(
                     byte_ptr == Type::pointer(Type::Byte),
                     || "First operand for decode should be a byte pointer".to_string(),
-                    loc.clone(),
+                    loc,
                 );
                 self.assert(
                     index == Type::Int,
@@ -361,11 +364,11 @@ impl Visit for WellFormed<'_> {
         match &stmt.kind {
             StmtKind::Assign(lhs, rhs) => {
                 let lhs_ty = self.body.type_of_place(lhs);
-                let rhs_ty = self.body.type_of_rvalue(rhs);
+                let rhs_ty = self.body.type_of_rvalue(rhs,self.ctxt);
                 self.assert(
                     lhs_ty == rhs_ty,
                     || format!("Cannot assign non equal types {} and {}", lhs_ty, rhs_ty),
-                    stmt.loc.clone(),
+                    stmt.loc,
                 );
             }
             StmtKind::Noop => (),
@@ -374,16 +377,16 @@ impl Visit for WellFormed<'_> {
                 self.assert(
                     condition_ty == Type::Bool,
                     || format!("Can only assert on bools not {}", condition_ty),
-                    stmt.loc.clone(),
+                    stmt.loc,
                 );
             }
             StmtKind::Print(operand) => {
                 if let Some(operand) = operand {
                     let ty = self.body.type_of_operand(operand);
                     self.assert(
-                        !ty.is_resource(),
+                        !ty.is_resource(self.ctxt),
                         || format!("Cannot print resource {}", ty),
-                        stmt.loc.clone(),
+                        stmt.loc,
                     );
                 }
             }
@@ -392,7 +395,7 @@ impl Visit for WellFormed<'_> {
                 self.assert(
                     pointer.as_pointer().is_some(),
                     || format!("Cannot deallocate {}", pointer),
-                    stmt.loc.clone(),
+                    stmt.loc,
                 );
             }
         }

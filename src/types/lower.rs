@@ -1,33 +1,34 @@
+use std::cell::RefCell;
 use std::collections::HashSet;
 
 use crate::collect::CtxtRef;
 use crate::resolved_ast::{self as res, DefId};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
-use crate::types::{FunctionType, GenericArg, GenericKind, RecordField, Region, Type};
+use crate::types::{FieldName, FunctionType, GenericArg, GenericKind, RecordField, Region, Type};
 pub struct Lower<'a> {
     ctxt: CtxtRef<'a>,
     id: DefId,
+    infer: Option<&'a RefCell<TypeInfer>>,
 }
 impl<'a> Lower<'a> {
-    pub fn new(ctxt: CtxtRef<'a>, id: DefId) -> Self {
-        Self { ctxt, id }
+    pub fn new(ctxt: CtxtRef<'a>, id: DefId, infer: Option<&'a RefCell<TypeInfer>>) -> Self {
+        Self { ctxt, id, infer }
     }
 
     pub fn lower_region(&self, region: &res::Region) -> Region {
         match &region.kind {
-            res::RegionKind::Param(name, param) => {
-                if let GenericKind::Region = self.ctxt.generics(self.id).kind(*param) {
-                    Region::Param(name.clone(), *param)
+            &res::RegionKind::Param(name, param) => {
+                if let GenericKind::Region = self.ctxt.generics(self.id).kind(param) {
+                    Region::Param(name, param)
                 } else {
-                    self.ctxt.diag().add_diagnostic(
-                        format!("Cannot use '{}' as region", name),
-                        region.loc.clone(),
-                    );
+                    self.ctxt
+                        .diag()
+                        .add_diagnostic(format!("Cannot use '{}' as region", name), region.loc);
                     Region::Unknown
                 }
             }
-            res::RegionKind::Local(name, id) => Region::Local(name.clone(), *id),
+            &res::RegionKind::Local(name, id) => Region::Local(name, id),
             res::RegionKind::Static => Region::Static,
             res::RegionKind::Unknown => Region::Unknown,
         }
@@ -43,11 +44,10 @@ impl<'a> Lower<'a> {
         id: DefId,
         loc: SrcLoc,
         args: &res::GenericArgs,
-        infer: Option<&mut TypeInfer>,
     ) -> Vec<GenericArg> {
         let generics = self.ctxt.generics(id);
         let arg_count = generics.count();
-        let loc = args.loc.clone().unwrap_or(loc);
+        let loc = args.loc.unwrap_or(loc);
         if let Some(tys) = args.tys() {
             if arg_count != tys.len() {
                 self.ctxt.diag().add_diagnostic(
@@ -65,8 +65,8 @@ impl<'a> Lower<'a> {
                 .chain(std::iter::repeat_n(Type::Unknown, remaining))
                 .map(GenericArg::Type)
                 .collect()
-        } else if let Some(infer) = infer {
-            generics.instantiate(infer, loc)
+        } else if let Some(infer) = self.infer {
+            generics.instantiate(&mut infer.borrow_mut(), loc)
         } else if arg_count > 0 {
             self.ctxt.diag().add_diagnostic(
                 format!("Expected '{}' generic args but got none", arg_count,),
@@ -85,15 +85,15 @@ impl<'a> Lower<'a> {
                 fields
                     .iter()
                     .filter_map(|field| {
-                        if !seen_fields.insert(field.name.content.as_ref()) {
+                        if !seen_fields.insert(field.name.symbol) {
                             self.ctxt.diag().add_diagnostic(
-                                format!("Repeated field '{}'", field.name.content),
-                                field.name.loc.clone(),
+                                format!("Repeated field '{}'", field.name.symbol),
+                                field.name.loc,
                             );
                             return None;
                         }
                         Some(RecordField {
-                            name: field.name.content.clone(),
+                            name: FieldName::Named(field.name.symbol),
                             ty: self.lower_type(&field.ty),
                         })
                     })
@@ -128,15 +128,19 @@ impl<'a> Lower<'a> {
                     return_type: Box::new(return_type),
                 })
             }
-            &res::TypeKind::Param(ref name, param) => {
+            &res::TypeKind::Param(name, param) => {
                 if let GenericKind::Type = self.ctxt.generics(self.id).kind(param) {
-                    Type::Param(name.clone(), param)
+                    Type::Param(name, param)
                 } else {
                     self.ctxt
                         .diag()
-                        .add_diagnostic(format!("Cannot use '{}' as a type", name), ty.loc.clone());
+                        .add_diagnostic(format!("Cannot use '{}' as a type", name), ty.loc);
                     Type::Unknown
                 }
+            }
+            &res::TypeKind::Named(id, name, ref args) => {
+                let args = self.lower_generic_args(id, ty.loc, args);
+                Type::Named(id, name, args)
             }
         }
     }

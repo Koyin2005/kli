@@ -1,8 +1,8 @@
 fun allocate[T](count : int) -> ptr[T];
-fun deallocate[T](ptr : ptr[T]) -> (); 
+fun deallocate[T](p : ptr[T]) -> (); 
 fun freeze[r,T](r : mut[r] T) -> imm[r] T;
 fun box_from_raw[T](b : ptr[T]) -> box[T];
-fun box_into_raw[T](b : ptr[T]) -> box[T];
+fun box_into_raw[T](b : box[T]) -> ptr[T];
 fun ref_into_raw[r,T](r : imm[r] T) -> ptr[T];
 fun ref_into_raw_mut[r,T](r : mut[r] T) -> ptr[T];
 fun ref_from_raw[r,T](p : ptr[T]) -> imm[r] T;

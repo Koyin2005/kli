@@ -1,20 +1,21 @@
-use std::{iter::Peekable, num::IntErrorKind, rc::Rc, str::Chars};
+use std::{iter::Peekable, num::IntErrorKind, str::Chars};
 
 use crate::{
     diagnostics::DiagnosticReporter,
+    ident::Symbol,
     parsing::tokens::{Token, TokenKind},
     src_loc::SrcLoc,
 };
 
 pub struct Lexer<'src> {
     chars: Peekable<Chars<'src>>,
-    file: Rc<str>,
+    file: Symbol,
     line: usize,
     start_line: usize,
     diag: DiagnosticReporter,
 }
 impl<'s> Lexer<'s> {
-    pub fn new(file: Rc<str>, src: &'s str) -> Self {
+    pub fn new(file: Symbol, src: &'s str) -> Self {
         Self {
             file,
             chars: src.chars().peekable(),
@@ -57,7 +58,7 @@ impl<'s> Lexer<'s> {
     fn current_loc(&self) -> SrcLoc {
         SrcLoc {
             line: self.start_line,
-            file: self.file.clone(),
+            file: self.file,
         }
     }
     fn next_token_from_char(&mut self, kind: TokenKind) -> Token {
@@ -101,7 +102,7 @@ impl<'s> Lexer<'s> {
                 IntErrorKind::PosOverflow => {
                     let loc = self.current_loc();
                     self.diag
-                        .add_diagnostic("Integer too large".to_string(), loc.clone());
+                        .add_diagnostic("Integer too large".to_string(), loc);
                     Some(Token {
                         loc,
                         kind: TokenKind::Number(u64::MAX),

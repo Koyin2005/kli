@@ -1,7 +1,7 @@
 use crate::{
     index_vec::IndexVec,
     src_loc::SrcLoc,
-    types::{FunctionType, RecordField, Region, Type, TypeMap},
+    types::{FunctionType, GenericArg, GenericArgs, RecordField, Region, Type, TypeMap},
 };
 #[derive(Debug)]
 pub struct TypeVarInfo {
@@ -42,11 +42,11 @@ impl TypeInfer {
     pub fn unsolved_locs(&self) -> Vec<SrcLoc> {
         self.type_vars
             .iter()
-            .filter_map(|var| var.ty.is_none().then_some(var.loc.clone()))
+            .filter_map(|var| var.ty.is_none().then_some(var.loc))
             .chain(
                 self.region_vars
                     .iter()
-                    .filter_map(|var| var.region.is_none().then_some(var.loc.clone())),
+                    .filter_map(|var| var.region.is_none().then_some(var.loc)),
             )
             .collect()
     }
@@ -77,18 +77,41 @@ impl TypeInfer {
                     region: Some(entry),
                     ..
                 } => {
-                    let entry = entry.clone();
+                    let entry = *entry;
                     let r = self.unify_region(entry, r);
                     self.region_vars[var].region.clone_from(&r);
                     r
                 }
-                RegionVarInfo { region: entry, .. } => {
-                    *entry = Some(r.clone());
-                    Some(r)
-                }
+                RegionVarInfo { region: entry, .. } => Some(*entry.insert(r)),
             },
             _ => None,
         }
+    }
+    pub fn unify_generic_args(
+        &mut self,
+        args1: GenericArgs,
+        args2: GenericArgs,
+    ) -> Option<GenericArgs> {
+        if args1.len() != args2.len() {
+            return None;
+        }
+        Some(
+            args1
+                .into_iter()
+                .zip(args2)
+                .map(|(arg1, arg2)| {
+                    Some(match (arg1, arg2) {
+                        (GenericArg::Type(ty1), GenericArg::Type(ty2)) => {
+                            GenericArg::Type(self.unify_ty(ty1, ty2)?)
+                        }
+                        (GenericArg::Region(r1), GenericArg::Region(r2)) => {
+                            GenericArg::Region(self.unify_region(r1, r2)?)
+                        }
+                        (GenericArg::Type(_) | GenericArg::Region(_), _) => return None,
+                    })
+                })
+                .collect::<Option<GenericArgs>>()?,
+        )
     }
     pub fn unify_ty(&mut self, ty1: Type, ty2: Type) -> Option<Type> {
         match (ty1, ty2) {
@@ -167,6 +190,10 @@ impl TypeInfer {
                     return_type: Box::new(return_ty),
                 }))
             }
+            (Type::Named(id1, name, args1), Type::Named(id2, _, args2)) if id1 == id2 => {
+                let args = self.unify_generic_args(args1, args2)?;
+                Some(Type::Named(id1, name, args))
+            }
             (Type::Infer(var1), Type::Infer(var2)) if var1 == var2 => Some(Type::Infer(var1)),
             (Type::Infer(var), ty) | (ty, Type::Infer(var)) => match &mut self.type_vars[var] {
                 TypeVarInfo {
@@ -200,7 +227,8 @@ impl TypeInfer {
                 | Type::Mut(..)
                 | Type::Record(..)
                 | Type::Unit
-                | Type::RawPointer(_),
+                | Type::RawPointer(_)
+                | Type::Named(..),
                 _,
             ) => None,
         }
@@ -217,9 +245,9 @@ impl TypeMap for Simplify<'_> {
         if let RegionVarInfo {
             region: Some(region),
             loc: _,
-        } = &self.0.region_vars[var]
+        } = self.0.region_vars[var]
         {
-            self.map_region(region.clone())
+            self.map_region(region)
         } else {
             Ok(region)
         }

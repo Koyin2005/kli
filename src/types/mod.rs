@@ -1,9 +1,15 @@
-use std::{fmt::Display, rc::Rc};
+use std::{
+    fmt::{Debug, Display},
+    ops::ControlFlow,
+};
 
 use crate::{
+    Symbol,
     ast::{IsResource, Mutable},
+    collect::CtxtRef,
+    ident::Ident,
     index_vec::IndexVec,
-    resolved_ast::LocalRegionId,
+    resolved_ast::{DefId, LocalRegionId},
     typed_ast::FieldId,
 };
 pub mod lower;
@@ -18,9 +24,9 @@ pub enum GenericKind {
     Region,
     Type,
 }
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug)]
 pub struct GenericParam {
-    pub name: Rc<str>,
+    pub name: Ident,
     pub kind: GenericKind,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -44,43 +50,48 @@ impl TypeMappable for GenericArg {
         }
     }
 }
-pub struct DisplayGenericArgs<'a>(pub &'a [GenericArg]);
+pub fn display_generic_args<'a>(args: &'a [GenericArg]) -> DisplayGenericArgs<'a> {
+    DisplayGenericArgs(args)
+}
+pub struct DisplayGenericArgs<'a>(&'a [GenericArg]);
 impl Display for DisplayGenericArgs<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[")?;
-        let mut first = true;
-        for arg in self.0 {
-            if !first {
-                write!(f, ",")?;
+        if self.0.is_empty() {
+            Ok(())
+        } else {
+            write!(f, "[")?;
+            let mut first = true;
+            for arg in self.0 {
+                if !first {
+                    write!(f, ",")?;
+                }
+                match arg {
+                    GenericArg::Region(region) => write!(f, "{}", region),
+                    GenericArg::Type(ty) => write!(f, "{}", ty),
+                }?;
+                first = false;
             }
-            match arg {
-                GenericArg::Region(region) => write!(f, "{}", region),
-                GenericArg::Type(ty) => write!(f, "{}", ty),
-            }?;
-            first = false;
+            write!(f, "]")
         }
-        write!(f, "]")
     }
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct FunctionSig {
     pub params: Vec<Type>,
-    pub return_type: Box<Type>,
+    pub return_type: Type,
 }
 impl FunctionSig {
     pub fn new(params: Vec<Type>, return_type: Type) -> Self {
         Self {
             params,
-            return_type: Box::new(return_type),
+            return_type,
         }
     }
     pub fn into_function_type(self) -> FunctionType {
-        #[derive(Clone, Copy)]
-        struct A(i32);
         FunctionType {
             resource: IsResource::Data,
             params: self.params,
-            return_type: self.return_type,
+            return_type: Box::new(self.return_type),
         }
     }
 }
@@ -106,27 +117,48 @@ impl FunctionType {
         }
     }
 }
-#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+#[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
 pub enum Region {
     Unknown,
     Static,
-    Param(Rc<str>, usize),
-    Local(Rc<str>, LocalRegionId),
+    Param(Symbol, usize),
+    Local(Symbol, LocalRegionId),
     Infer(usize),
 }
 impl Display for Region {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Unknown => f.pad("{unknown}"),
-            Self::Static => f.pad("static"),
-            Self::Infer(_) => f.pad("_"),
-            Self::Param(name, _) | Self::Local(name, _) => f.pad(name),
+            Region::Unknown => f.pad("{unknown}"),
+            Region::Static => f.pad("static"),
+            Region::Infer(_) => f.pad("_"),
+            Region::Param(name, _) | Region::Local(name, _) => {
+                write!(f, "{}", name)
+            }
         }
     }
 }
+#[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
+pub enum FieldName {
+    Named(Symbol),
+    Index(FieldId),
+}
+
+impl Display for FieldName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FieldName::Index(index) => write!(f, "{}", index.into_usize()),
+            FieldName::Named(name) => {
+                write!(f, "{}", name)
+            }
+        }
+    }
+}
+pub type GenericArgs = Vec<GenericArg>;
+pub type GenericArgsRef<'a> = &'a [GenericArg];
+
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct RecordField {
-    pub name: Rc<str>,
+    pub name: FieldName,
     pub ty: Type,
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
@@ -139,7 +171,7 @@ pub enum Type {
     String,
     Char,
     Byte,
-    Param(Rc<str>, usize),
+    Param(Symbol, usize),
     Box(Box<Type>),
     List(Box<Type>),
     Option(Box<Type>),
@@ -149,8 +181,16 @@ pub enum Type {
     Record(IndexVec<FieldId, RecordField>),
     RawPointer(Box<Type>),
     Array(Box<Type>, u64),
+    Named(DefId, Symbol, GenericArgs),
 }
 impl Type {
+    pub fn new_function(params: Vec<Self>, return_ty: Self) -> Self {
+        Self::Function(FunctionType {
+            resource: IsResource::Data,
+            params,
+            return_type: Box::new(return_ty),
+        })
+    }
     pub fn field_type(&self, field_id: FieldId) -> Option<Type> {
         match self {
             Self::Record(fields) => fields
@@ -162,7 +202,7 @@ impl Type {
                 params,
                 return_type,
             }) => match field_id {
-                id if id == FieldId::zero() => Some(Type::pointer(Type::Byte)),
+                id if id == FieldId::FIRST_FIELD => Some(Type::pointer(Type::Byte)),
                 id if id == FieldId::new(1) => Some(Type::function_type(
                     IsResource::Data,
                     {
@@ -175,13 +215,13 @@ impl Type {
                 _ => None,
             },
             Self::List(ty) => match field_id {
-                id if id == FieldId::zero() => Some(Type::pointer((**ty).clone())),
+                id if id == FieldId::FIRST_FIELD => Some(Type::pointer((**ty).clone())),
                 id if id == FieldId::new(1) => Some(Type::Int),
                 id if id == FieldId::new(2) => Some(Type::Int),
                 _ => None,
             },
             Self::String => match field_id {
-                id if id == FieldId::zero() => Some(Type::pointer(Type::Byte)),
+                id if id == FieldId::FIRST_FIELD => Some(Type::pointer(Type::Byte)),
                 id if id == FieldId::new(1) => Some(Type::Int),
                 id if id == FieldId::new(2) => Some(Type::Int),
                 _ => None,
@@ -217,7 +257,7 @@ impl Type {
                 .into_iter()
                 .enumerate()
                 .map(|(i, field)| RecordField {
-                    name: Rc::from(i.to_string()),
+                    name: FieldName::Index(FieldId::new(i)),
                     ty: field,
                 })
                 .collect(),
@@ -248,10 +288,10 @@ impl Type {
             PointerType::Raw => Self::pointer(pointee),
         }
     }
-    pub fn as_reference_type(&self) -> Result<(Mutable, &Region, &Self), &Self> {
+    pub fn as_reference_type(&self) -> Result<(Mutable, Region, &Self), &Self> {
         let (region, mutable, ty) = match self {
-            Self::Imm(region, ty) => (region, Mutable::Immutable, ty),
-            Self::Mut(region, ty) => (region, Mutable::Mutable, ty),
+            Self::Imm(region, ty) => (*region, Mutable::Immutable, ty),
+            Self::Mut(region, ty) => (*region, Mutable::Mutable, ty),
             _ => return Err(self),
         };
         Ok((mutable, region, ty))
@@ -267,7 +307,7 @@ impl Type {
         let Ok(ty) = EraseRegions.map_type(self);
         ty
     }
-    pub fn is_resource(&self) -> bool {
+    pub fn is_resource(&self, ctxt: CtxtRef<'_>) -> bool {
         match self {
             Type::Bool
             | Type::Unit
@@ -281,7 +321,7 @@ impl Type {
                 resource: IsResource::Data,
                 ..
             }) => false,
-            Type::Option(ty) | Type::Array(ty, _) => ty.is_resource(),
+            Type::Option(ty) | Type::Array(ty, _) => ty.is_resource(ctxt),
             Type::Mut(..)
             | Type::Function(FunctionType {
                 resource: IsResource::Resource,
@@ -291,22 +331,77 @@ impl Type {
             | Type::Box(_)
             | Type::Param(..)
             | Type::List(_) => true,
-            Type::Record(fields) => fields.iter().any(|field| field.ty.is_resource()),
+            Type::Record(fields) => fields.iter().any(|field| field.ty.is_resource(ctxt)),
             Type::Infer(_) => unreachable!("Cannot 'infer' its a resource"),
+            &Type::Named(..) => {
+                // TODO : Add a way to mark a type as a non-resource
+                true
+            }
+        }
+    }
+    pub const fn no_op_visit<T>(&self) -> ControlFlow<T> {
+        ControlFlow::Continue(())
+    }
+    pub fn visit<T>(
+        &self,
+        visit_ty: &mut impl FnMut(&Self) -> ControlFlow<T>,
+        visit_region: &mut impl FnMut(Region) -> ControlFlow<T>,
+    ) -> ControlFlow<T> {
+        visit_ty(self)?;
+        match self {
+            Type::Int
+            | Type::Unit
+            | Type::Infer(_)
+            | Type::Unknown
+            | Type::Bool
+            | Type::String
+            | Type::Char
+            | Type::Byte
+            | Type::Param(..)
+            | Type::Box(_) => ControlFlow::Continue(()),
+            Type::List(ty) | Type::Option(ty) | Type::RawPointer(ty) | Type::Array(ty, _) => {
+                ty.visit(visit_ty, visit_region)
+            }
+            &(Type::Imm(region, ref ty) | Type::Mut(region, ref ty)) => {
+                visit_region(region)?;
+                ty.visit(visit_ty, visit_region)
+            }
+            Type::Function(function_type) => {
+                for param in function_type.params.iter() {
+                    param.visit(visit_ty, visit_region)?;
+                }
+                function_type.return_type.visit(visit_ty, visit_region)
+            }
+            Type::Record(fields) => {
+                for field in fields {
+                    visit_ty(&field.ty)?;
+                }
+                ControlFlow::Continue(())
+            }
+            Type::Named(.., generic_args) => {
+                for arg in generic_args {
+                    match arg {
+                        &GenericArg::Region(region) => visit_region(region)?,
+                        GenericArg::Type(ty) => ty.visit(visit_ty, visit_region)?,
+                    }
+                }
+                ControlFlow::Continue(())
+            }
         }
     }
 }
+
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Array(ty, count) => {
+            Type::Array(ty, count) => {
                 write!(f, "fixed_array[{},{}]", ty, count)
             }
-            Self::Byte => f.pad("byte"),
-            Self::RawPointer(ty) => {
+            Type::Byte => f.pad("byte"),
+            Type::RawPointer(ty) => {
                 write!(f, "ptr[{}]", ty)
             }
-            Self::Record(fields) => {
+            Type::Record(fields) => {
                 f.pad("{")?;
                 let mut first = true;
                 for field in fields {
@@ -318,42 +413,36 @@ impl Display for Type {
                 }
                 f.pad("}")
             }
-            Self::Char => f.pad("char"),
-            Self::Bool => f.pad("bool"),
-            Self::Int => f.pad("int"),
-            Self::Unit => f.pad("()"),
-            Self::Unknown => f.pad("{unknown}"),
-            Self::String => f.pad("string"),
-            Self::Infer(_) => f.pad("_"),
-            Self::Param(name, _) => f.pad(name),
-            Self::Box(ty) => {
+            Type::Char => f.pad("char"),
+            Type::Bool => f.pad("bool"),
+            Type::Int => f.pad("int"),
+            Type::Unit => f.pad("()"),
+            Type::Unknown => f.pad("{unknown}"),
+            Type::String => f.pad("string"),
+            Type::Infer(_) => f.pad("_"),
+            &Type::Param(name, _) => write!(f, "{}", name),
+            Type::Box(ty) => {
                 f.pad("box[")?;
-                write!(f, "{ty}")?;
+                write!(f, "{}", ty)?;
                 f.pad("]")
             }
-            Self::List(ty) => {
+            Type::List(ty) => {
                 f.pad("list[")?;
-                write!(f, "{ty}")?;
+                write!(f, "{}", ty)?;
                 f.pad("]")
             }
-            Self::Option(ty) => {
+            Type::Option(ty) => {
                 f.pad("option[")?;
-                write!(f, "{ty}")?;
+                write!(f, "{}", ty)?;
                 f.pad("]")
             }
-            Self::Imm(region, ty) => {
-                f.pad("imm [")?;
-                region.fmt(f)?;
-                f.pad("] ")?;
-                write!(f, "{ty}")
+            Type::Imm(region, ty) => {
+                write!(f, "imm [{}] {}", region, ty)
             }
-            Self::Mut(region, ty) => {
-                f.pad("mut [")?;
-                region.fmt(f)?;
-                f.pad("] ")?;
-                write!(f, "{ty}")
+            Type::Mut(region, ty) => {
+                write!(f, "mut [{}] {}", region, ty)
             }
-            Self::Function(FunctionType {
+            Type::Function(FunctionType {
                 resource,
                 params,
                 return_type,
@@ -364,19 +453,21 @@ impl Display for Type {
                     if !first {
                         f.pad(",")?;
                     }
-                    param.fmt(f)?;
+                    write!(f, "{}", param)?;
                     first = false;
                 }
                 f.pad(match *resource {
                     IsResource::Data => ") -> ",
                     IsResource::Resource => ") => ",
                 })?;
-                write!(f, "{return_type}")
+                write!(f, "{}", return_type)
+            }
+            Type::Named(_, name, args) => {
+                write!(f, "{}{}", name, display_generic_args(args))
             }
         }
     }
 }
-
 pub trait TypeMap {
     type Error;
     fn super_map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
@@ -411,6 +502,20 @@ pub trait TypeMap {
                     .into_iter()
                     .map(|field| self.map_field(field))
                     .collect::<Result<_, _>>()?,
+            )),
+            Type::Named(id, name, args) => Ok(Type::Named(
+                id,
+                name,
+                args.into_iter()
+                    .map(|arg| {
+                        Ok(match arg {
+                            GenericArg::Region(region) => {
+                                GenericArg::Region(self.map_region(region)?)
+                            }
+                            GenericArg::Type(ty) => GenericArg::Type(self.map_type(ty)?),
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
             )),
         }
     }
@@ -490,7 +595,7 @@ impl TypeMappable for FunctionSig {
                 .into_iter()
                 .map(|param| m.map_type(param))
                 .collect::<Result<_, _>>()?,
-            return_type: Box::new(m.map_type(*self.return_type)?),
+            return_type: m.map_type(self.return_type)?,
         })
     }
 }

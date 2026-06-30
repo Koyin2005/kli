@@ -1,19 +1,16 @@
-use std::{collections::HashMap, fmt::Display, rc::Rc};
+use std::{collections::HashMap, fmt::Display};
 
 use crate::{
-    ast::Mutable,
-    define_id,
-    index_vec::IndexVec,
-    resolved_ast::{Builtin, DefId, LambdaId, Var, VarId},
-    src_loc::SrcLoc,
-    typed_ast::FieldId,
-    types::{GenericArg, PointerType, Region, Type},
+    Symbol, ast::Mutable, collect::CtxtRef, define_id, index_vec::IndexVec, resolved_ast::{DefId, LambdaId, Var, VarId}, src_loc::SrcLoc, typed_ast::FieldId, types::{FieldName, GenericArg, GenericArgs, PointerType, Region, Type},
 };
 pub mod build;
 pub mod dump;
 pub mod visitor;
 pub mod well_formed;
 define_id!(Local);
+impl Local {
+    pub const FIRST_PARAM: Self = Self(0);
+}
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
 pub enum PlaceProjection {
     DowncastSome,
@@ -146,13 +143,14 @@ pub enum Operand {
 #[derive(Clone, Debug)]
 pub enum AggregateKind {
     Record {
-        field_names: IndexVec<FieldId, Rc<str>>,
+        field_names: IndexVec<FieldId, FieldName>,
     },
     Closure(Vec<Type>, Box<Type>),
     Option {
         inner: Type,
         is_some: bool,
     },
+    Variant(DefId, Symbol, GenericArgs),
     ArrayList(Type),
     Array(Type, u64),
     String,
@@ -246,6 +244,9 @@ pub enum StmtKind {
     Deallocate(Operand),
 }
 define_id!(BasicBlockId);
+impl BasicBlockId {
+    pub const ENTRY: Self = Self(0);
+}
 define_id!(StmtId);
 #[derive(Default, Clone)]
 pub struct BasicBlock {
@@ -358,13 +359,13 @@ impl Body {
             Operand::Load(place) => self.type_of_place(place),
         }
     }
-    pub fn type_of_rvalue(&self, rvalue: &Rvalue) -> Type {
+    pub fn type_of_rvalue(&self, rvalue: &Rvalue, ctxt: CtxtRef<'_>) -> Type {
         match rvalue {
             Rvalue::Use(operand) => self.type_of_operand(operand),
             Rvalue::Len(_) => Type::Int,
-            Rvalue::Ref(mutable, region, place) => self
-                .type_of_place(place)
-                .reference(*mutable, region.clone()),
+            &Rvalue::Ref(mutable, region, ref place) => {
+                self.type_of_place(place).reference(mutable, region)
+            }
             Rvalue::Call(operand, _) => {
                 let Type::Function(function) = self.type_of_operand(operand) else {
                     unreachable!("Should be a function type")
@@ -395,8 +396,8 @@ impl Body {
                     field_names
                         .iter()
                         .zip(operands)
-                        .map(|(name, operand)| crate::types::RecordField {
-                            name: name.clone(),
+                        .map(|(&name, operand)| crate::types::RecordField {
+                            name,
                             ty: self.type_of_operand(operand),
                         })
                         .collect(),
@@ -408,6 +409,10 @@ impl Body {
                 ),
                 AggregateKind::Option { inner, .. } => Type::Option(Box::new(inner.clone())),
                 AggregateKind::ArrayList(ty) => Type::List(Box::new(ty.clone())),
+                &AggregateKind::Variant(id, _, ref args) => {
+                    let id  = ctxt.parent_of(id).unwrap();
+                    Type::Named(id, ctxt.name(id).symbol, args.clone())
+                },
                 AggregateKind::String => Type::String,
             },
             Rvalue::PointerCast(cast, operand) => {
@@ -425,8 +430,8 @@ impl Body {
                     PointerCast::BoxToRaw | PointerCast::RefToRaw(_) => Type::pointer(pointee),
                     PointerCast::RawToRaw(ty) => Type::pointer(ty.clone()),
                     PointerCast::RawToBox => Type::Box(Box::new(pointee)),
-                    PointerCast::RawToRef(mutable, region) => {
-                        Type::reference(pointee, *mutable, region.clone())
+                    &PointerCast::RawToRef(mutable, region) => {
+                        Type::reference(pointee, mutable, region)
                     }
                 }
             }
@@ -435,8 +440,8 @@ impl Body {
     }
     pub fn src_info(&self, loc: Location) -> SrcLoc {
         match loc.stmt {
-            Some(stmt) => self.blocks[loc.block].stmts[stmt].loc.clone(),
-            None => self.blocks[loc.block].expect_terminator().src_info.clone(),
+            Some(stmt) => self.blocks[loc.block].stmts[stmt].loc,
+            None => self.blocks[loc.block].expect_terminator().src_info,
         }
     }
 }

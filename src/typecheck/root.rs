@@ -1,43 +1,24 @@
 use std::{
     cell::{Cell, RefCell},
-    collections::HashMap,
-    rc::Rc,
+    collections::{HashMap, HashSet},
 };
 
 use crate::{
+    Symbol,
     collect::CtxtRef,
     ident::Ident,
-    resolved_ast::{self as res, Builtin, DefId, VarId},
-    scheme::Scheme,
+    resolved_ast::{self as res, DefId, VarId},
     src_loc::SrcLoc,
     typecheck::{infer::TypeInfer, subst::TypeSubst},
     typed_ast::{self, Function, IteratorType, LetBinding},
-    types::{self, FunctionSig, GenericArg, GenericKind, Region, Type, lower::Lower},
+    types::{FieldName, FunctionSig, GenericArg, Region, Type, lower::Lower},
 };
 pub struct TypeError;
 #[derive(Debug)]
 struct VarInfo {
-    name: Rc<str>,
+    name: Symbol,
     ty: Type,
     function_scope: usize,
-}
-struct Generics {
-    generics: Vec<GenericKind>,
-}
-fn lower_generics(generics: Option<&res::Generics>) -> Generics {
-    Generics {
-        generics: match generics {
-            None => Vec::new(),
-            Some(ref generics) => generics
-                .kinds
-                .iter()
-                .map(|kind| match kind {
-                    res::GenericKind::Region => GenericKind::Region,
-                    res::GenericKind::Type => GenericKind::Type,
-                })
-                .collect::<Vec<_>>(),
-        },
-    }
 }
 pub struct TypeCheck<'ctxt> {
     ctxt: CtxtRef<'ctxt>,
@@ -64,13 +45,10 @@ impl<'ctxt> TypeCheck<'ctxt> {
                     ty.as_reference_type().expect("Should be a reference");
                 match self.simplify_type(pointee.clone()) {
                     Type::List(element) => Ok((
-                        IteratorType::ArrayListRef(region.clone(), mutable, (*element).clone()),
-                        Type::reference(*element, mutable, region.clone()),
+                        IteratorType::ArrayListRef(region, mutable, (*element).clone()),
+                        Type::reference(*element, mutable, region),
                     )),
-                    Type::String => Ok((
-                        IteratorType::StringIter(region.clone(), mutable),
-                        Type::Char,
-                    )),
+                    Type::String => Ok((IteratorType::StringIter(region, mutable), Type::Char)),
                     _ => Err(ty),
                 }
             }
@@ -92,74 +70,12 @@ impl<'ctxt> TypeCheck<'ctxt> {
             | Type::Record(_)
             | Type::RawPointer(_)
             | Type::Byte
-            | Type::Array(..) => Err(ty),
+            | Type::Array(..)
+            | Type::Named(..) => Err(ty),
         }
     }
-    fn generic_params_for_builtin(&self, builtin: Builtin) -> Vec<types::GenericParam> {
-        match builtin {
-            Builtin::Allocate
-            | Builtin::PtrRead
-            | Builtin::PtrWrite
-            | Builtin::Deallocate
-            | Builtin::BoxFromRaw
-            | Builtin::BoxIntoRaw => vec![types::GenericParam {
-                name: Rc::from("T"),
-                kind: GenericKind::Type,
-            }],
-            Builtin::Freeze | Builtin::RefFromRaw(_) | Builtin::RefIntoRaw(_) => vec![
-                types::GenericParam {
-                    name: Rc::from("r"),
-                    kind: GenericKind::Region,
-                },
-                types::GenericParam {
-                    name: Rc::from("T"),
-                    kind: GenericKind::Type,
-                },
-            ],
-        }
-    }
-    pub(super) fn ctxt(&self) -> CtxtRef {
+    pub(super) fn ctxt(&self) -> CtxtRef<'_> {
         self.ctxt
-    }
-    pub(super) fn signature_of_builtin(&self, builtin: Builtin) -> Scheme<FunctionSig> {
-        let generics = self.generic_params_for_builtin(builtin);
-        let ty_param = |index: usize| {
-            let param = &generics[index];
-            assert_eq!(param.kind, GenericKind::Type);
-            Type::Param(param.name.clone(), index)
-        };
-        let region_param = |index: usize| {
-            let param = &generics[index];
-            assert_eq!(param.kind, GenericKind::Region);
-            Region::Param(param.name.clone(), index)
-        };
-        let (params, return_type) = match builtin {
-            Builtin::PtrRead => (vec![Type::pointer(ty_param(0))], ty_param(0)),
-            Builtin::PtrWrite => (vec![Type::pointer(ty_param(0)), ty_param(0)], Type::Unit),
-            Builtin::RefFromRaw(mutable) => (
-                vec![Type::pointer(ty_param(1))],
-                ty_param(1).reference(mutable, region_param(0)),
-            ),
-            Builtin::RefIntoRaw(mutable) => (
-                vec![ty_param(1).reference(mutable, region_param(0))],
-                Type::pointer(ty_param(1)),
-            ),
-            Builtin::BoxFromRaw => (
-                vec![Type::pointer(ty_param(0))],
-                Type::Box(Box::new(ty_param(0))),
-            ),
-            Builtin::BoxIntoRaw => (
-                vec![Type::Box(Box::new(ty_param(0)))],
-                Type::pointer(ty_param(0)),
-            ),
-            Builtin::Allocate => (vec![Type::Int], (Type::pointer(ty_param(0)))),
-            Builtin::Deallocate => (vec![Type::pointer(ty_param(0))], (Type::Unit)),
-            Builtin::Freeze => (
-                vec![Type::Mut(region_param(0), Box::new(ty_param(1)))],
-                (Type::Imm(region_param(0), Box::new(ty_param(1)))),
-            ),
-        };
-        Scheme::new(FunctionSig::new(params, return_type))
     }
     pub(super) fn with_capture_scope<T>(&self, f: impl FnOnce(&Self) -> T) -> (Vec<VarId>, T) {
         self.captures.borrow_mut().push(Vec::new());
@@ -176,8 +92,8 @@ impl<'ctxt> TypeCheck<'ctxt> {
     pub(super) fn var_type(&self, var: VarId) -> Type {
         self.variables.borrow()[usize::from(var)].ty.clone()
     }
-    pub(super) fn var_name(&self, var: VarId) -> Rc<str> {
-        self.variables.borrow()[usize::from(var)].name.clone()
+    pub(super) fn var_name(&self, var: VarId) -> Symbol {
+        self.variables.borrow()[usize::from(var)].name
     }
     pub(super) fn capture(&self, var: VarId) -> bool {
         let function = self.variables.borrow()[usize::from(var)].function_scope;
@@ -197,13 +113,13 @@ impl<'ctxt> TypeCheck<'ctxt> {
             false
         }
     }
-    pub(super) fn non_deref_error(&self, ty: Type, loc: SrcLoc) -> Type {
+    pub(super) fn non_deref_error(&self, ty: &Type, loc: SrcLoc) -> Type {
         self.ctxt
             .diag()
-            .add_diagnostic(format!("Cannot deref '{ty}'"), loc);
+            .add_diagnostic(format!("Cannot deref '{}'", ty), loc);
         Type::Unknown
     }
-    pub(super) fn declare_var(&self, var_id: VarId, ty: Type, name: Rc<str>) {
+    pub(super) fn declare_var(&self, var_id: VarId, ty: Type, name: Symbol) {
         assert_eq!(
             usize::from(var_id),
             self.variables.borrow().len(),
@@ -226,23 +142,19 @@ impl<'ctxt> TypeCheck<'ctxt> {
             let ty2 = self.simplify_type(ty2);
             self.ctxt
                 .diag()
-                .add_diagnostic(format!("Expected '{ty1}' but got '{ty2}'"), loc);
+                .add_diagnostic(format!("Expected '{}' but got '{}'", ty1, ty2), loc);
             Type::Unknown
         }
     }
     pub(super) fn unify_region(&self, region1: Region, region2: Region, loc: SrcLoc) -> Region {
-        if let Some(region) = self
-            .infer
-            .borrow_mut()
-            .unify_region(region1.clone(), region2.clone())
-        {
+        if let Some(region) = self.infer.borrow_mut().unify_region(region1, region2) {
             region
         } else {
             let region1 = self.infer.borrow().simplify_region(region1);
             let region2 = self.infer.borrow().simplify_region(region2);
             self.ctxt
                 .diag()
-                .add_diagnostic(format!("Expected '{region1}' but got '{region2}'"), loc);
+                .add_diagnostic(format!("Expected '{}' but got '{}'", region1, region2), loc);
             Region::Unknown
         }
     }
@@ -253,38 +165,28 @@ impl<'ctxt> TypeCheck<'ctxt> {
             .add_diagnostic("type annotations needed".to_string(), loc);
     }
     fn validate_main(&self) -> Result<(), TypeError> {
-        let Some(main_id) = self.ctxt.main_id() else {
+        let Some((main_id, main)) = self.ctxt.main_function() else {
             let loc = SrcLoc::dummy();
             self.ctxt
                 .diag()
                 .add_diagnostic("Missing main".to_string(), loc);
             return Err(TypeError);
         };
-        let main = self.ctxt.function_def(main_id);
-        let main = main.unwrap();
         if !self.ctxt.generics(main_id).is_empty() {
-            self.ctxt().diag().add_diagnostic(
-                "'main' should not be generic".to_string(),
-                main.name.loc.clone(),
-            );
+            self.ctxt()
+                .diag()
+                .add_diagnostic("'main' should not be generic".to_string(), main.name.loc);
         }
         if !main.params.is_empty() {
             self.ctxt().diag().add_diagnostic(
                 "'main' should have no parameters".to_string(),
-                main.name.loc.clone(),
+                main.name.loc,
             );
         }
         if !matches!(main.return_type.kind, res::TypeKind::Unit) {
             self.ctxt().diag().add_diagnostic(
                 "'main' should have '()' as return type".to_string(),
-                main.name.loc.clone(),
-            );
-            return Err(TypeError);
-        }
-        if self.ctxt.parent_of(main_id).is_some() {
-            self.ctxt().diag().add_diagnostic(
-                "'main' should be at top level".to_string(),
-                main.name.loc.clone(),
+                main.name.loc,
             );
             return Err(TypeError);
         }
@@ -293,8 +195,8 @@ impl<'ctxt> TypeCheck<'ctxt> {
     pub(super) fn current_function(&self) -> DefId {
         self.current_function.get().unwrap()
     }
-    pub(super) fn lower(&self) -> Lower {
-        Lower::new(self.ctxt, self.current_function())
+    fn lower(&self) -> Lower<'_> {
+        Lower::new(self.ctxt, self.current_function(), Some(&self.infer))
     }
     pub(super) fn lower_region(&self, region: &res::Region) -> Region {
         self.lower().lower_region(region)
@@ -308,8 +210,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
         args: &res::GenericArgs,
         loc: SrcLoc,
     ) -> Vec<GenericArg> {
-        self.lower()
-            .lower_generic_args(id, loc, args, Some(&mut *self.infer.borrow_mut()))
+        self.lower().lower_generic_args(id, loc, args)
     }
     pub(super) fn check_binding(&self, binding: &res::LetBinding) -> LetBinding {
         let ty = binding.ty.as_ref().map(|ty| self.lower_type(ty));
@@ -328,11 +229,11 @@ impl<'ctxt> TypeCheck<'ctxt> {
             .iter()
             .zip(param_tys)
             .map(|(param, ty)| {
-                self.declare_var(param.var.1, ty.clone(), param.var.0.clone());
+                self.declare_var(param.var.1, ty.clone(), param.var.0);
                 typed_ast::Param {
                     name: Ident {
-                        content: param.var.0.clone(),
-                        loc: param.loc.clone(),
+                        symbol: param.var.0,
+                        loc: param.loc,
                     },
                     var: param.var.1,
                     ty,
@@ -340,7 +241,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
             })
             .collect::<Vec<_>>();
         let body = if let Some(body) = body {
-            let body = self.check_expr(body, Some((*return_type).clone()));
+            let body = self.check_expr(body, Some(return_type.clone()));
             let unsolved = self.infer.borrow().unsolved_locs();
             let body = if !unsolved.is_empty() {
                 for line in unsolved {
@@ -362,13 +263,45 @@ impl<'ctxt> TypeCheck<'ctxt> {
         self.infer.borrow_mut().clear();
         Some(Function {
             params,
-            return_type: *return_type,
+            return_type,
             body,
         })
     }
+    pub(super) fn check_missing_fields(
+        &self,
+        loc: SrcLoc,
+        seen_fields: HashSet<Symbol>,
+        expected_fields: impl IntoIterator<Item = FieldName>,
+    ) -> Result<(), TypeError> {
+        let mut had_missing = false;
+        for field_name in expected_fields {
+            let FieldName::Named(name) = field_name else {
+                self.ctxt()
+                    .diag()
+                    .add_diagnostic(format!("Missing field '{}'", field_name), loc);
+                had_missing = true;
+                continue;
+            };
+            if !seen_fields.contains(&name) {
+                self.ctxt()
+                    .diag()
+                    .add_diagnostic(format!("Missing field '{}'", field_name), loc);
+                had_missing = true;
+            }
+        }
+        if had_missing { Err(TypeError) } else { Ok(()) }
+    }
+    pub fn expect_ty_error(&self, kind: &str, ty: &Type, loc: SrcLoc) {
+        self.ctxt
+            .diag()
+            .add_diagnostic(format!("Expected {kind} type but got '{}'", ty), loc);
+    }
+
     pub fn check(self) -> Result<typed_ast::Program, TypeError> {
         let mut functions = HashMap::new();
-        for id in self.ctxt.root_ids() {
+        let _ = self.validate_main();
+        for item in self.ctxt.all_items() {
+            let id = item.id.0;
             let Some(function) = self.check_function(id) else {
                 continue;
             };

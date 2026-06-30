@@ -1,6 +1,6 @@
-use std::{fmt::Display, rc::Rc};
+use std::fmt::Display;
 
-use crate::{define_id, ident::Ident, src_loc::SrcLoc};
+use crate::{Symbol, define_id, ident::Ident, src_loc::SrcLoc};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Mutable {
@@ -144,22 +144,15 @@ impl Path {
     pub fn tail_iter(&self) -> impl IntoIterator<Item = &Ident> {
         self.segments[1..].iter()
     }
-    pub fn display(&self) -> impl Display {
-        struct DisplayPath<'a> {
-            path: &'a Path,
+}
+impl Display for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let head = self.head();
+        write!(f, "{}", head.symbol)?;
+        for segment in self.tail_iter() {
+            write!(f, ".{}", segment.symbol)?;
         }
-        impl Display for DisplayPath<'_> {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                let head = self.path.head();
-                f.write_str(&head.content)?;
-                for segment in self.path.tail_iter() {
-                    f.write_str(".")?;
-                    f.write_str(&segment.content)?;
-                }
-                Ok(())
-            }
-        }
-        DisplayPath { path: self }
+        Ok(())
     }
 }
 impl IntoIterator for Path {
@@ -298,9 +291,15 @@ pub enum Region {
     Named(Ident),
 }
 #[derive(Debug, Clone)]
+pub struct CaseType {
+    pub id: NodeId,
+    pub ty: Type,
+}
+#[derive(Debug, Clone)]
 pub struct CaseDef {
+    pub id: NodeId,
     pub name: Ident,
-    pub ty: Option<Type>,
+    pub ty: Option<CaseType>,
 }
 #[derive(Debug, Clone)]
 pub enum TypeDefKind {
@@ -327,12 +326,18 @@ pub struct TypeDef {
     pub kind: TypeDefKind,
 }
 define_id!(NodeId);
+impl NodeId {
+    pub const FIRST_ID: Self = Self(0);
+}
 define_id!(ModuleId);
+impl ModuleId {
+    pub const ROOT: Self = Self(0);
+}
 
 #[derive(Debug)]
 pub struct Module {
     pub id: ModuleId,
-    pub name: Rc<str>,
+    pub name: Symbol,
     pub items: Vec<Item>,
     pub child_modules: Vec<Module>,
 }

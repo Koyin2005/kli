@@ -51,7 +51,6 @@ impl<'ctxt> InstanceCollector<'ctxt> {
         while let Some(instance) = unvisited.pop_front() {
             struct Collector<'unv> {
                 v: &'unv mut VecDeque<Instance>,
-                args: &'unv Vec<GenericArg>,
             }
             impl Visit for Collector<'_> {
                 fn visit_constant(&mut self, _: Location, constant: &Constant) {
@@ -72,10 +71,7 @@ impl<'ctxt> InstanceCollector<'ctxt> {
             }
             self.instances.push(instance.clone());
             let body = self.ctxt.expect_body(instance.body_src());
-            let mut collector = Collector {
-                v: &mut unvisited,
-                args: &instance.args,
-            };
+            let mut collector = Collector { v: &mut unvisited };
             for (id, block) in body.blocks.iter_enumerated() {
                 collector.visit_block(id, block);
             }

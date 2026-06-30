@@ -4,7 +4,7 @@ use crate::{
     ast::Mutable,
     resolved_ast::{Pattern, PatternField, PatternKind, Var},
     typed_ast::{self, FieldId},
-    types::{RecordField, Region, Type},
+    types::{FieldName, RecordField, Region, Type},
 };
 
 use super::root::TypeCheck;
@@ -16,11 +16,11 @@ impl TypeCheck<'_> {
         expected_type: Type,
         binding_mode: Option<(Region, Mutable)>,
     ) -> typed_ast::Pattern {
-        let loc = pattern.loc.clone();
+        let loc = pattern.loc;
         let expected_type = self.simplify_type(expected_type);
         match pattern.kind {
             PatternKind::Int(value) => {
-                let _ = self.unify(expected_type, Type::Int, pattern.loc.clone());
+                let _ = self.unify(expected_type, Type::Int, pattern.loc);
                 typed_ast::Pattern {
                     ty: Type::Int,
                     loc,
@@ -30,15 +30,12 @@ impl TypeCheck<'_> {
             PatternKind::Ref(ref inner) => {
                 let (mutable, region, ty) =
                     if let Ok((mutable, region, ty)) = expected_type.as_reference_type() {
-                        (mutable, region.clone(), ty.clone())
+                        (mutable, region, ty.clone())
                     } else {
-                        self.ctxt().diag().add_diagnostic(
-                            format!("Expected a reference type but got '{}'", expected_type),
-                            pattern.loc.clone(),
-                        );
+                        self.expect_ty_error("reference", &expected_type, pattern.loc);
                         (Mutable::Mutable, Region::Unknown, Type::Unknown)
                     };
-                let inner = self.check_pattern(inner, ty.clone(), Some((region.clone(), mutable)));
+                let inner = self.check_pattern(inner, ty.clone(), Some((region, mutable)));
                 typed_ast::Pattern {
                     ty: Type::reference(inner.ty.clone(), mutable, region),
                     loc,
@@ -49,10 +46,7 @@ impl TypeCheck<'_> {
                 let expected_fields = match self.simplify_type(expected_type) {
                     Type::Record(fields) => Some(fields),
                     ref ty => {
-                        self.ctxt().diag().add_diagnostic(
-                            format!("Expected 'record' type but got '{}'", ty),
-                            pattern.loc.clone(),
-                        );
+                        self.expect_ty_error("record", ty, pattern.loc);
                         None
                     }
                 };
@@ -60,14 +54,17 @@ impl TypeCheck<'_> {
                     .iter()
                     .flatten()
                     .enumerate()
-                    .map(|(i, field)| (field.name.clone(), i))
+                    .map(|(i, field)| (field.name, i))
                     .collect::<HashMap<_, _>>();
                 let mut seen_fields = HashSet::new();
                 let fields = pat_fields
                     .iter()
                     .enumerate()
                     .filter_map(|(i, PatternField { name, pattern })| {
-                        let field_id = field_names.get(&name.content).copied().map(FieldId::new);
+                        let field_id = field_names
+                            .get(&FieldName::Named(name.symbol))
+                            .copied()
+                            .map(FieldId::new);
                         let pattern = self.check_pattern(
                             pattern,
                             field_id
@@ -77,12 +74,12 @@ impl TypeCheck<'_> {
                                         .map(|fields| fields[field].ty.clone())
                                 })
                                 .unwrap_or(Type::Unknown),
-                            binding_mode.clone(),
+                            binding_mode,
                         );
-                        if expected_fields.is_some() && !seen_fields.insert(name.content.clone()) {
+                        if expected_fields.is_some() && !seen_fields.insert(name.symbol) {
                             self.ctxt().diag().add_diagnostic(
-                                format!("Repeated field '{}'", name.content),
-                                name.loc.clone(),
+                                format!("Repeated field '{}'", name.symbol),
+                                name.loc,
                             );
                             return None;
                         }
@@ -91,8 +88,8 @@ impl TypeCheck<'_> {
                             field_id
                         } else if expected_fields.is_some() {
                             self.ctxt().diag().add_diagnostic(
-                                format!("'record' has no field '{}'", name.content),
-                                name.loc.clone(),
+                                format!("'record' has no field '{}'", name.symbol),
+                                name.loc,
                             );
                             return None;
                         } else {
@@ -105,24 +102,18 @@ impl TypeCheck<'_> {
                     })
                     .collect::<Vec<_>>();
                 let record_fields = if let Some(fields) = expected_fields {
-                    let mut field_names = field_names;
-                    for field in &fields {
-                        if !seen_fields.contains(&field.name)
-                            && field_names.remove(&field.name).is_some()
-                        {
-                            self.ctxt().diag().add_diagnostic(
-                                format!("Missing field '{}'", field.name),
-                                pattern.loc.clone(),
-                            );
-                        }
-                    }
+                    let _ = self.check_missing_fields(
+                        pattern.loc,
+                        seen_fields,
+                        fields.iter().map(|field| field.name),
+                    );
                     fields
                 } else {
                     fields
                         .iter()
                         .zip(pat_fields)
                         .map(|(field, pat_field)| RecordField {
-                            name: pat_field.name.content.clone(),
+                            name: FieldName::Named(pat_field.name.symbol),
                             ty: field.pattern.ty.clone(),
                         })
                         .collect()
@@ -135,7 +126,7 @@ impl TypeCheck<'_> {
                 }
             }
             PatternKind::Bool(value) => {
-                self.unify(expected_type, Type::Bool, pattern.loc.clone());
+                self.unify(expected_type, Type::Bool, pattern.loc);
                 typed_ast::Pattern {
                     loc,
                     ty: Type::Bool,
@@ -146,16 +137,13 @@ impl TypeCheck<'_> {
                 let inner_ty = match expected_type {
                     Type::Option(ty) => *ty,
                     expected_type => {
-                        self.ctxt().diag().add_diagnostic(
-                            format!("Expected an option type but got '{}'", expected_type),
-                            pattern.loc.clone(),
-                        );
+                        self.expect_ty_error("option", &expected_type, pattern.loc);
                         Type::Unknown
                     }
                 };
                 typed_ast::Pattern {
                     ty: Type::Option(Box::new(inner_ty)),
-                    loc: pattern.loc.clone(),
+                    loc: pattern.loc,
                     kind: typed_ast::PatternKind::None,
                 }
             }
@@ -163,45 +151,42 @@ impl TypeCheck<'_> {
                 let inner = match expected_type {
                     Type::Option(ty) => self.check_pattern(inner, *ty, binding_mode),
                     expected_type => {
-                        self.ctxt().diag().add_diagnostic(
-                            format!("Expected an option type but got '{}'", expected_type),
-                            pattern.loc.clone(),
-                        );
+                        self.expect_ty_error("option", &expected_type, pattern.loc);
                         self.check_pattern(inner, Type::Unknown, binding_mode)
                     }
                 };
                 typed_ast::Pattern {
                     ty: Type::Option(Box::new(inner.ty.clone())),
-                    loc: pattern.loc.clone(),
+                    loc: pattern.loc,
                     kind: typed_ast::PatternKind::Some(Box::new(inner)),
                 }
             }
             PatternKind::Binding(borrow, mutable, ref ident, var) => {
-                let name = ident.content.clone();
+                let name = ident.symbol;
 
                 let (borrow, var_ty) = match (borrow, binding_mode) {
                     (None, _) => (None, expected_type.clone()),
                     (Some(_), None) => {
                         self.ctxt().diag().add_diagnostic(
-                            format!("Cannot create borrow binding '{}'", ident.content.clone()),
-                            ident.loc.clone(),
+                            format!("Cannot create borrow binding '{}'", ident.symbol),
+                            ident.loc,
                         );
                         (None, expected_type.clone())
                     }
                     (Some(borrow), Some((region, mutable))) => {
                         if !mutable.usable_as(borrow) {
                             self.ctxt().diag().add_diagnostic(
-                                format!("Cannot create borrow binding '{}'", ident.content.clone()),
-                                ident.loc.clone(),
+                                format!("Cannot create borrow binding '{}'", ident.symbol),
+                                ident.loc,
                             );
                         }
                         (
-                            Some((mutable, region.clone())),
+                            Some((mutable, region)),
                             Type::reference(expected_type.clone(), borrow, region),
                         )
                     }
                 };
-                self.declare_var(var, var_ty.clone(), name.clone());
+                self.declare_var(var, var_ty.clone(), name);
                 typed_ast::Pattern {
                     ty: expected_type,
                     loc,

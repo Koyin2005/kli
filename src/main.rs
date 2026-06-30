@@ -2,12 +2,11 @@ use std::{
     collections::{BTreeMap, HashSet},
     env,
     path::Path,
-    rc::Rc,
 };
 
 use kli::{
+    Symbol,
     ast::{self, Module, ModuleId},
-    collect::build_global_context,
     mir,
     monomorph::collect::{Instance, InstanceCollector, InstanceKind},
     parsing::parse::Parser,
@@ -29,21 +28,21 @@ enum FileError {
 const EXTENSION: &str = "kli";
 #[derive(Debug)]
 struct FileEntry {
-    name: Rc<str>,
+    name: Symbol,
     kind: FileEntryKind,
 }
 #[derive(Debug)]
 enum FileEntryKind {
     Single { src: String },
-    Folder(BTreeMap<Rc<str>, FileEntry>),
+    Folder(BTreeMap<Symbol, FileEntry>),
 }
 struct Files {
-    files: BTreeMap<Rc<str>, FileEntry>,
+    files: BTreeMap<Symbol, FileEntry>,
 }
-fn parse_source_file(id: ModuleId, name: Rc<str>, src: &str) -> Option<ast::Module> {
-    Parser::new(name.clone(), src).parse_module(name, id).ok()
+fn parse_source_file(id: ModuleId, name: Symbol, src: &str) -> Option<ast::Module> {
+    Parser::new(name, src).parse_module(name, id).ok()
 }
-fn read_source_file(path: &Path, file_name: String) -> Result<(Rc<str>, String), ModuleError> {
+fn read_source_file(path: &Path, file_name: String) -> Result<(Symbol, String), ModuleError> {
     let mut name = file_name;
     if path
         .extension()
@@ -53,7 +52,7 @@ fn read_source_file(path: &Path, file_name: String) -> Result<(Rc<str>, String),
     }
     name.truncate(name.len() - EXTENSION.chars().count() - 1);
     let src = std::fs::read_to_string(path).map_err(ModuleError::Io)?;
-    Ok((name.into(), src))
+    Ok((Symbol::intern(&name), src))
 }
 
 fn find_src_files_at(path: &Path) -> Result<Vec<FileEntry>, FileError> {
@@ -81,15 +80,12 @@ fn find_src_files_at(path: &Path) -> Result<Vec<FileEntry>, FileError> {
             let Ok(name) = entry.file_name().into_string() else {
                 continue;
             };
-            let name: Rc<str> = name.into();
+            let name = Symbol::intern(&name);
             let files = find_src_files_at(&entry.path())?;
             file_entries.push(FileEntry {
-                name: name.clone(),
+                name,
                 kind: FileEntryKind::Folder(
-                    files
-                        .into_iter()
-                        .map(|file| (file.name.clone(), file))
-                        .collect(),
+                    files.into_iter().map(|file| (file.name, file)).collect(),
                 ),
             });
         }
@@ -98,14 +94,14 @@ fn find_src_files_at(path: &Path) -> Result<Vec<FileEntry>, FileError> {
 }
 
 struct FileTree {
-    files: BTreeMap<Rc<str>, FileEntry>,
+    files: BTreeMap<Symbol, FileEntry>,
 }
 
 fn find_all_src_files_in_dir(path: &Path) -> Result<FileTree, FileError> {
     let files = find_src_files_at(path)?;
     let files = files
         .into_iter()
-        .map(|file| (file.name.clone(), file))
+        .map(|file| (file.name, file))
         .collect::<BTreeMap<_, _>>();
     Ok(FileTree { files })
 }
@@ -129,7 +125,7 @@ fn find_all_src_files(path: &Path) -> Result<Files, FileError> {
         };
         FileTree {
             files: BTreeMap::from([(
-                name.clone(),
+                name,
                 FileEntry {
                     name,
                     kind: FileEntryKind::Single { src },
@@ -162,7 +158,7 @@ fn parse_modules(module_counter: &mut ModuleId, entry: FileEntry) -> Option<Modu
     })
 }
 fn parse_all_modules(file_tree: Files) -> Option<Vec<Module>> {
-    let module_counter = &mut ModuleId::zero();
+    let module_counter = &mut { ModuleId::ROOT };
     let modules = file_tree
         .files
         .into_values()
@@ -178,10 +174,10 @@ fn find_std_lib() -> FileEntry {
     let ref_file = include_str!("std/refs.kli");
     let string_file = include_str!("std/strings.kli");
     let array_file = include_str!("std/arrays.kli");
-    fn file_from(name: &str, src: &str) -> (Rc<str>, FileEntry) {
-        let name: Rc<str> = Rc::from(name);
+    fn file_from(name: &str, src: &str) -> (Symbol, FileEntry) {
+        let name = Symbol::intern(name);
         (
-            name.clone(),
+            name,
             FileEntry {
                 name,
                 kind: FileEntryKind::Single {
@@ -191,7 +187,7 @@ fn find_std_lib() -> FileEntry {
         )
     }
     FileEntry {
-        name: Rc::from("std"),
+        name: Symbol::STD,
         kind: FileEntryKind::Folder(BTreeMap::from([
             file_from("bools", bool_file),
             file_from("ints", int_file),
@@ -201,6 +197,15 @@ fn find_std_lib() -> FileEntry {
             file_from("strings", string_file),
             file_from("arrays", array_file),
         ])),
+    }
+}
+fn find_builtins() -> FileEntry {
+    let builtins = include_str!("builtins.kli");
+    FileEntry {
+        name: Symbol::BUILTINS,
+        kind: FileEntryKind::Single {
+            src: builtins.to_string(),
+        },
     }
 }
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -251,37 +256,41 @@ fn config() -> Result<Config, ConfigError> {
         flags: features,
     })
 }
+fn build_file_tree(config: &Config) -> Result<Files, FileError> {
+    let path = &config.path;
+    let include_std = !config.flags.contains(&Feature::NoStd);
+    let file_tree = {
+        let mut file_tree = find_all_src_files(Path::new(path))?;
+        file_tree.files.insert(Symbol::BUILTINS, find_builtins());
+        if include_std {
+            file_tree.files.insert(Symbol::STD, find_std_lib());
+        }
+        file_tree
+    };
+    Ok(file_tree)
+}
 fn main() {
     let Ok(config) = config() else {
         return;
     };
-    let path = config.path;
-    let include_std = !config.flags.contains(&Feature::NoStd);
-    let file_tree = match find_all_src_files(Path::new(&path)) {
-        Ok(mut file_tree) => {
-            if include_std {
-                file_tree.files.insert(Rc::from("std"), find_std_lib());
-            }
-            file_tree
+    let file_tree = match build_file_tree(&config) {
+        Ok(file_tree) => file_tree,
+        Err(FileError::InvalidName | FileError::NotAFile) => {
+            eprintln!("Invalid file or path");
+            return;
         }
-        Err(e) => match e {
-            FileError::InvalidName | FileError::NotAFile => {
-                eprintln!("Invalid file or path");
-                return;
-            }
-            FileError::Io(e) => {
-                eprintln!("Unknown error : {:?}", e);
-                return;
-            }
-        },
+        Err(FileError::Io(e)) => {
+            eprintln!("Unknown error : {:?}", e);
+            return;
+        }
     };
+
     let Some(modules) = parse_all_modules(file_tree) else {
         return;
     };
-    let Ok(program) = Resolve::new().resolve(modules) else {
+    let Ok(context) = Resolve::new().resolve(modules) else {
         return;
     };
-    let context = build_global_context(program);
     let Ok(program) = TypeCheck::new(context.as_ref()).check() else {
         return;
     };
@@ -292,7 +301,7 @@ fn main() {
         }
     }
     for function in program.functions.values() {
-        had_error |= ResourceCheck::new().check_function(function);
+        had_error |= ResourceCheck::new(context.as_ref()).check_function(function);
     }
     if had_error {
         return;
@@ -308,7 +317,9 @@ fn main() {
                 .unwrap();
         }
     }
-    if config.flags.contains(&Feature::OutputInstances) && let Some(main) = context.as_ref().main_id() {
+    if config.flags.contains(&Feature::OutputInstances)
+        && let Some((main, _)) = context.as_ref().main_function()
+    {
         let instances = InstanceCollector::new(&mir_context)
             .collect(Instance::non_generic(InstanceKind::Function(main)));
         for instance in &instances {

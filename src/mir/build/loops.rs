@@ -13,7 +13,7 @@ impl Builder<'_> {
         body: &Expr,
     ) {
         match iterator_type {
-            IteratorType::ArrayListRef(region, mutable, ty) => {
+            &IteratorType::ArrayListRef(region, mutable, ref ty) => {
                 /*
                    for i in &l{
                        stuff
@@ -34,20 +34,20 @@ impl Builder<'_> {
                 */
                 let place = self.place(iterator);
                 let current_index = self.assign_to_temp(
-                    iterator.loc.clone(),
+                    iterator.loc,
                     Type::Int,
                     Rvalue::Use(Operand::Constant(Constant::int(0))),
                 );
-                self.goto_to_new_block(iterator.loc.clone());
+                self.goto_to_new_block(iterator.loc);
 
                 //Condition
                 let len = self.len_operand(
-                    iterator.loc.clone(),
+                    iterator.loc,
                     iterator.ty.as_reference_type().unwrap().2,
                     place.clone().with_deref(),
                 );
                 let in_bounds = self.assign_to_temp(
-                    iterator.loc.clone(),
+                    iterator.loc,
                     Type::Bool,
                     Rvalue::Binary(
                         BinaryOp::Lesser,
@@ -62,7 +62,7 @@ impl Builder<'_> {
                 let current_element = {
                     let place = place.with_deref().with_field(types::LIST_PTR_FIELD);
                     let offset_ptr = self.assign_to_temp(
-                        iterator.loc.clone(),
+                        iterator.loc,
                         Type::pointer(ty.clone()),
                         Rvalue::Binary(
                             BinaryOp::Offset,
@@ -73,10 +73,10 @@ impl Builder<'_> {
                         ),
                     );
                     Place::local(self.assign_to_temp(
-                        iterator.loc.clone(),
-                        Type::reference(ty.clone(), *mutable, region.clone()),
+                        iterator.loc,
+                        Type::reference(ty.clone(), mutable, region),
                         Rvalue::PointerCast(
-                            mir::PointerCast::RawToRef(*mutable, region.clone()),
+                            mir::PointerCast::RawToRef(mutable, region),
                             Operand::Load(Place::local(offset_ptr)),
                         ),
                     ))
@@ -84,7 +84,7 @@ impl Builder<'_> {
                 self.assign_place_to_pattern(pattern, current_element);
                 self.expr_stmt(body);
                 self.assign(
-                    iterator.loc.clone(),
+                    iterator.loc,
                     Place::local(current_index),
                     Rvalue::Binary(
                         mir::BinaryOp::Unchecked(OverflowOp::Add),
@@ -94,12 +94,12 @@ impl Builder<'_> {
                         )),
                     ),
                 );
-                self.finish_block_with_goto(iterator.loc.clone(), cond_block);
+                self.finish_block_with_goto(iterator.loc, cond_block);
                 self.switch_to_new_block();
                 let end_block = self.current_block;
                 self.switch_to_block(cond_block);
                 self.finish_block_with_if(
-                    iterator.loc.clone(),
+                    iterator.loc,
                     Operand::Load(Place::local(in_bounds)),
                     loop_body_start_block,
                     end_block,
@@ -129,14 +129,14 @@ impl Builder<'_> {
                 let string_ref = self.place(iterator);
                 let byte_ptr = string_ref.clone().with_deref().with_field(LIST_PTR_FIELD);
                 let current_index = self.assign_to_temp(
-                    iterator.loc.clone(),
+                    iterator.loc,
                     Type::Int,
                     Rvalue::Use(Operand::Constant(Constant::int(0))),
                 );
-                self.goto_to_new_block(iterator.loc.clone());
+                self.goto_to_new_block(iterator.loc);
 
                 let in_bounds = self.assign_to_temp(
-                    iterator.loc.clone(),
+                    iterator.loc,
                     Type::Bool,
                     Rvalue::Binary(
                         BinaryOp::Lesser,
@@ -152,7 +152,7 @@ impl Builder<'_> {
 
                 let body_block = self.current_block;
                 let result = self.assign_to_temp(
-                    iterator.loc.clone(),
+                    iterator.loc,
                     Type::record([Type::Char, Type::Int].into()),
                     Rvalue::DecodeUtf8(
                         Operand::Load(byte_ptr),
@@ -161,22 +161,22 @@ impl Builder<'_> {
                 );
                 self.assign_place_to_pattern(
                     pattern,
-                    Place::local(result).with_field(FieldId::zero()),
+                    Place::local(result).with_field(FieldId::FIRST_FIELD),
                 );
                 self.expr_stmt(body);
                 self.assign(
-                    iterator.loc.clone(),
+                    iterator.loc,
                     Place::local(current_index),
                     Rvalue::Use(Operand::Load(
                         Place::local(result).with_field(FieldId::new(1)),
                     )),
                 );
-                self.finish_block_with_goto(iterator.loc.clone(), loop_block);
+                self.finish_block_with_goto(iterator.loc, loop_block);
 
                 let end_block = self.current_block;
                 self.switch_to_block(loop_block);
                 self.finish_block_with_if(
-                    iterator.loc.clone(),
+                    iterator.loc,
                     Operand::Load(Place::local(in_bounds)),
                     body_block,
                     end_block,

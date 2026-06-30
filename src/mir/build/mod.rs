@@ -38,7 +38,7 @@ impl<'ctxt> Builder<'ctxt> {
                 blocks: IndexVec::from_iter([BasicBlock::default()]),
                 return_type,
             },
-            current_block: BasicBlockId::zero(),
+            current_block: BasicBlockId::ENTRY,
             ctxt,
         }
     }

@@ -48,6 +48,11 @@ impl<'a> TypeSubst<'a> {
                 }
             }
             Type::Infer(var) => *ty = self.infer.simplify_type(Type::Infer(*var)),
+            Type::Named(_, _, args) => {
+                for arg in args {
+                    self.subst_generic_arg(arg);
+                }
+            }
         }
     }
     pub fn subst_region(&mut self, region: &mut Region) {
@@ -103,6 +108,11 @@ impl<'a> TypeSubst<'a> {
                 }
                 self.subst_expr(&mut block.expr);
             }
+            ExprKind::Const(_, args) => {
+                for arg in args {
+                    self.subst_generic_arg(arg);
+                }
+            }
             ExprKind::Bool(_)
             | ExprKind::Err
             | ExprKind::Unit
@@ -118,6 +128,12 @@ impl<'a> TypeSubst<'a> {
                 if let Some(expr) = expr {
                     self.subst_expr(expr);
                 }
+            }
+            ExprKind::VariantInit(..,args, expr) => {
+                for arg in args{
+                    self.subst_generic_arg(arg);
+                }
+                self.subst_expr(expr)
             }
             ExprKind::Some(expr) => self.subst_expr(expr),
             ExprKind::List(exprs) => {

@@ -72,6 +72,7 @@ where
         }
         ExprKind::Err
         | ExprKind::Int(_)
+        | ExprKind::Const(..)
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Function(..)
@@ -88,7 +89,7 @@ where
                 v.visit_expr(expr);
             }
         }
-        ExprKind::Some(value) => v.visit_expr(value),
+        ExprKind::Some(value) | ExprKind::VariantInit(.., value) => v.visit_expr(value),
         ExprKind::Call(callee, args) => {
             v.visit_expr(callee);
             args.iter().for_each(|expr| v.visit_expr(expr));

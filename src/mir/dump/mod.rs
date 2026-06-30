@@ -2,10 +2,10 @@ use crate::{
     collect::CtxtRef,
     mir::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstantValue,
-        Context, LocalKind, Operand, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
+        LocalKind, Operand, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
     },
     typed_ast::FieldId,
-    types::{self, DisplayGenericArgs},
+    types::{self, display_generic_args},
 };
 
 pub struct MirDump<'ctxt> {
@@ -125,6 +125,9 @@ impl<'ctxt> MirDump<'ctxt> {
                     AggregateKind::Option { inner, is_some } => {
                         format!("{}[{}]", if *is_some { "Some" } else { "None" }, inner)
                     }
+                    AggregateKind::Variant(_, name, args) => {
+                        format!("{}{}", name, display_generic_args(args))
+                    }
                 };
                 let (open_bracket, close_bracket) = match kind {
                     AggregateKind::Array(_, _) => ('[', ']'),
@@ -145,9 +148,13 @@ impl<'ctxt> MirDump<'ctxt> {
                     AggregateKind::Option { .. } => Some(i.into_usize().to_string()),
                     AggregateKind::Record { field_names } => Some(field_names[i].to_string()),
                     AggregateKind::Closure(..) => Some(match i {
-                        i if i == FieldId::zero() => "env".to_string(),
+                        i if i == FieldId::FIRST_FIELD => "env".to_string(),
                         i if i == FieldId::new(1) => "code".to_string(),
                         _ => unreachable!("Should only have 2 fields"),
+                    }),
+                    AggregateKind::Variant(_, _, _) => Some(match i {
+                        FieldId::FIRST_FIELD => "0".to_string(),
+                        _ => unreachable!("Should only have one field"),
                     }),
                 };
                 write!(self.output, "{name}{open_bracket}")?;
@@ -209,7 +216,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 ConstantValue::NamedConst(id, ref args) => {
                     write!(self.output, "{}", self.ctxt.display(id))?;
                     if !args.is_empty() {
-                        write!(self.output, "{}", DisplayGenericArgs(args))?;
+                        write!(self.output, "{}", display_generic_args(args))?;
                     }
                     Ok(())
                 }

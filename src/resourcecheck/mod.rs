@@ -1,17 +1,19 @@
 use std::{
     collections::{HashMap, HashSet, hash_map::Entry},
-    rc::Rc,
+    ops::ControlFlow,
 };
 
 use crate::{
+    Symbol,
     ast::{IsResource, Mutable},
+    collect::CtxtRef,
     diagnostics::DiagnosticReporter,
     resolved_ast::{LocalRegionId, VarId},
     src_loc::SrcLoc,
     typed_ast::{
         Expr, ExprKind, Function, Param, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind,
     },
-    types::{FunctionType, PointerType, Region, Type},
+    types::{PointerType, Region, Type},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -33,7 +35,7 @@ enum VarState {
 struct VarInfo {
     ty: Type,
     loc: SrcLoc,
-    name: Rc<str>,
+    name: Symbol,
     mutable: Mutable,
     function_level: usize,
     loop_count: usize,
@@ -45,12 +47,7 @@ fn unify_state(state1: VarState, state2: VarState) -> Option<VarState> {
         (VarState::Owned, VarState::Moved) | (VarState::Moved, VarState::Owned) => None,
     }
 }
-impl Default for ResourceCheck {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-pub struct ResourceCheck {
+pub struct ResourceCheck<'ctxt> {
     vars: HashMap<VarId, VarInfo>,
     var_states: HashMap<VarId, VarState>,
     err: DiagnosticReporter,
@@ -62,10 +59,12 @@ pub struct ResourceCheck {
     function_level: usize,
     capture_set: Option<HashMap<VarId, SrcLoc>>,
     loops: usize,
+    ctxt: CtxtRef<'ctxt>,
 }
-impl ResourceCheck {
-    pub fn new() -> Self {
+impl<'ctxt> ResourceCheck<'ctxt> {
+    pub fn new(ctxt: CtxtRef<'ctxt>) -> Self {
         Self {
+            ctxt,
             is_current_function_resource: IsResource::Data,
             vars: HashMap::new(),
             var_states: HashMap::new(),
@@ -81,61 +80,17 @@ impl ResourceCheck {
     fn is_strict_resource(&self, _: &Type) -> bool {
         false
     }
-    fn is_resource(&self, ty: &Type) -> bool {
-        match ty {
-            Type::Bool
-            | Type::Unit
-            | Type::Unknown
-            | Type::Int
-            | Type::Byte
-            | Type::Imm(..)
-            | Type::Char
-            | Type::RawPointer(_)
-            | Type::Function(FunctionType {
-                resource: IsResource::Data,
-                ..
-            }) => false,
-            Type::Option(ty) | Type::Array(ty, _) => self.is_resource(ty),
-            Type::Mut(..)
-            | Type::Function(FunctionType {
-                resource: IsResource::Resource,
-                ..
-            })
-            | Type::String
-            | Type::Box(_)
-            | Type::Param(..)
-            | Type::List(_) => true,
-            Type::Record(fields) => fields.iter().any(|field| self.is_resource(&field.ty)),
-            Type::Infer(_) => unreachable!("All infers should be removed"),
-        }
-    }
     fn ty_is_expired(&self, ty: &Type) -> bool {
-        match ty {
-            Type::Bool
-            | Type::Byte
-            | Type::Int
-            | Type::String
-            | Type::Unit
-            | Type::Unknown
-            | Type::Param(..)
-            | Type::Function(..)
-            | Type::Char => false,
-            Type::RawPointer(ty)
-            | Type::Array(ty, _)
-            | Type::List(ty)
-            | Type::Box(ty)
-            | Type::Option(ty) => self.ty_is_expired(ty),
-            Type::Imm(region, ty) | Type::Mut(region, ty) => {
-                if let Region::Local(_, local) = region
-                    && self.expired_regions.contains(local)
-                {
-                    return true;
-                }
-                self.ty_is_expired(ty)
+        ty.visit(&mut Type::no_op_visit, &mut |region| {
+            if let Region::Local(_, ref local) = region
+                && self.expired_regions.contains(local)
+            {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
             }
-            Type::Record(fields) => fields.iter().any(|field| self.ty_is_expired(&field.ty)),
-            Type::Infer(_) => unreachable!("All infers should be removed"),
-        }
+        })
+        .is_break()
     }
     fn in_drop_scope(&mut self, f: impl FnOnce(&mut Self)) -> Vec<VarId> {
         self.scopes.push(Default::default());
@@ -147,7 +102,7 @@ impl ResourceCheck {
             let var_info = &self.vars[&var];
             let state = self.var_states[&var];
             if state == VarState::Owned && self.is_strict_resource(&var_info.ty) {
-                let loc = var_info.loc.clone();
+                let loc = var_info.loc;
                 let msg = format!("'{}' cannot go out of scope", var_info.name);
                 self.err.add_diagnostic(msg, loc);
             }
@@ -160,7 +115,7 @@ impl ResourceCheck {
         mutable: Mutable,
         var: VarId,
         loc: SrcLoc,
-        name: Rc<str>,
+        name: Symbol,
         ty: Type,
         _is_param: bool,
     ) {
@@ -199,7 +154,7 @@ impl ResourceCheck {
     }
     fn move_from_var(&mut self, var: VarId, loc: SrcLoc) {
         let info = &self.vars[&var];
-        let is_resource = self.is_resource(&info.ty);
+        let is_resource = info.ty.is_resource(self.ctxt);
         let state = self.var_states.get_mut(&var).unwrap();
         match state {
             VarState::Owned => {
@@ -254,10 +209,9 @@ impl ResourceCheck {
     }
     fn check_place_mutable(&mut self, place: &Place) {
         match self.place_mutable(place) {
-            Mutable::Immutable => self.err.add_diagnostic(
-                "Cannot write to immutable place".to_string(),
-                place.loc.clone(),
-            ),
+            Mutable::Immutable => self
+                .err
+                .add_diagnostic("Cannot write to immutable place".to_string(), place.loc),
             Mutable::Mutable => (),
         }
     }
@@ -276,89 +230,34 @@ impl ResourceCheck {
                 self.check_pattern(sub_pattern, in_ref);
             }
             PatternKind::Binding(borrow, mutable, var, ty) => {
-                if in_ref && ty.is_resource() && borrow.is_none() {
-                    self.err.add_diagnostic(
-                        "Cannot move out of reference".to_string(),
-                        pattern.loc.clone(),
-                    )
+                if in_ref && ty.is_resource(self.ctxt) && borrow.is_none() {
+                    self.err
+                        .add_diagnostic("Cannot move out of reference".to_string(), pattern.loc)
                 }
-                self.init_var(
-                    *mutable,
-                    var.1,
-                    pattern.loc.clone(),
-                    var.0.clone(),
-                    (**ty).clone(),
-                    false,
-                );
+                self.init_var(*mutable, var.1, pattern.loc, var.0, (**ty).clone(), false);
             }
         }
     }
     fn regions_in(&self, ty: &Type) -> HashSet<Region> {
-        match ty {
-            Type::Bool
-            | Type::Char
-            | Type::Int
-            | Type::String
-            | Type::Unit
-            | Type::Param(..)
-            | Type::Byte
-            | Type::Unknown => HashSet::new(),
-            Type::RawPointer(ty) | Type::Array(ty, _) => self.regions_in(ty),
-            Type::Infer(_) => unreachable!("Cannot infer here"),
-            Type::Box(ty) | Type::List(ty) | Type::Option(ty) => self.regions_in(ty),
-            Type::Function(function) => {
-                function.params.iter().fold(HashSet::new(), |old, param| {
-                    let mut old = old;
-                    old.extend(self.regions_in(param));
-                    old
-                })
-            }
-            Type::Record(fields) => fields.iter().fold(HashSet::new(), |old, field| {
-                let mut old = old;
-                old.extend(self.regions_in(&field.ty));
-                old
-            }),
-            Type::Imm(region, ty) | Type::Mut(region, ty) => {
-                let mut regions = HashSet::new();
-                regions.insert(region.clone());
-                regions.extend(self.regions_in(ty));
-                regions
-            }
-        }
+        let mut regions = HashSet::new();
+        let ControlFlow::Continue(()) = ty.visit(
+            &mut Type::no_op_visit::<std::convert::Infallible>,
+            &mut |region| {
+                regions.insert(region);
+                ControlFlow::Continue(())
+            },
+        );
+        regions
     }
     fn outlives_generic_regions(&self, ty: &Type) -> bool {
-        match ty {
-            Type::Bool
-            | Type::Char
-            | Type::Int
-            | Type::String
-            | Type::Unit
-            | Type::Param(..)
-            | Type::Unknown
-            | Type::Byte => true,
-            Type::Box(ty)
-            | Type::Array(ty, _)
-            | Type::List(ty)
-            | Type::RawPointer(ty)
-            | Type::Option(ty) => self.outlives_generic_regions(ty),
-            Type::Function(function) => {
-                function
-                    .params
-                    .iter()
-                    .all(|param| self.outlives_generic_regions(param))
-                    && self.outlives_generic_regions(&function.return_type)
+        ty.visit(&mut Type::no_op_visit, &mut |region| {
+            if matches!(region, Region::Unknown | Region::Static | Region::Param(..)) {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
             }
-            Type::Imm(region, ty) | Type::Mut(region, ty) => {
-                if !matches!(region, Region::Unknown | Region::Static | Region::Param(..)) {
-                    return false;
-                }
-                self.outlives_generic_regions(ty)
-            }
-            Type::Record(fields) => fields
-                .iter()
-                .all(|field| self.outlives_generic_regions(&field.ty)),
-            Type::Infer(_) => unreachable!("Cannot infer here"),
-        }
+        })
+        .is_continue()
     }
     fn var_of(&self, place: &Place) -> Option<VarId> {
         match place.kind {
@@ -406,13 +305,13 @@ impl ResourceCheck {
         match &place.kind {
             PlaceKind::Var(var) | PlaceKind::Upvar(var) => {
                 let var = var.1;
-                self.capture_if_upvar(var, place.loc.clone());
+                self.capture_if_upvar(var, place.loc);
                 match place_use {
                     PlaceUse::Write => {
-                        self.write_to_var(var, place.loc.clone());
+                        self.write_to_var(var, place.loc);
                     }
                     PlaceUse::Read => {
-                        self.move_from_var(var, place.loc.clone());
+                        self.move_from_var(var, place.loc);
                     }
                 }
             }
@@ -424,13 +323,13 @@ impl ResourceCheck {
                     let Some(var) = self.var_of(place) else {
                         return self.check_place_use(place, place_use);
                     };
-                    self.capture_if_upvar(var, place.loc.clone());
+                    self.capture_if_upvar(var, place.loc);
                     match place_use {
                         PlaceUse::Read => {
-                            if self.is_resource(ty) {
+                            if ty.is_resource(self.ctxt) {
                                 self.err.add_diagnostic(
                                     "Cannot move out of reference".to_string(),
-                                    place.loc.clone(),
+                                    place.loc,
                                 )
                             }
                         }
@@ -438,7 +337,7 @@ impl ResourceCheck {
                             if self.is_strict_resource(ty) {
                                 self.err.add_diagnostic(
                                     "Cannot re-assign to reference".to_string(),
-                                    place.loc.clone(),
+                                    place.loc,
                                 )
                             }
                         }
@@ -453,10 +352,8 @@ impl ResourceCheck {
             StmtKind::Expr(expr) => {
                 self.check_expr(expr);
                 if self.is_strict_resource(&expr.ty) {
-                    self.err.add_diagnostic(
-                        format!("Cannot let '{}' out of scope", expr.ty),
-                        expr.loc.clone(),
-                    );
+                    self.err
+                        .add_diagnostic(format!("Cannot let '{}' out of scope", expr.ty), expr.loc);
                 }
             }
             StmtKind::Let(let_binding) => {
@@ -478,7 +375,7 @@ impl ResourceCheck {
                         if this.ty_is_expired(&body.expr.ty) {
                             this.err.add_diagnostic(
                                 format!("Cannot let '{}' escape", body.expr.ty),
-                                expr.loc.clone(),
+                                expr.loc,
                             );
                         }
                         this.borrowed.retain(|_, (_, region)| {
@@ -496,18 +393,19 @@ impl ResourceCheck {
             | ExprKind::Panic
             | ExprKind::Unit
             | ExprKind::String(_)
-            | ExprKind::Int(_) => {}
+            | ExprKind::Int(_)
+            | ExprKind::Const(..) => {}
             ExprKind::Function(..) => {}
-            ExprKind::Some(value) => {
+            ExprKind::Some(value) | ExprKind::VariantInit(.., value) => {
                 self.check_expr(value);
             }
             ExprKind::Print(value) => {
                 if let Some(value) = value {
                     self.check_expr(value);
-                    if self.is_resource(&value.ty) {
+                    if value.ty.is_resource(self.ctxt) {
                         self.err.add_diagnostic(
                             format!("Cannot print resource '{}'", value.ty),
-                            value.loc.clone(),
+                            value.loc,
                         );
                     }
                 }
@@ -555,8 +453,8 @@ impl ResourceCheck {
                         this.init_var(
                             Mutable::Immutable,
                             *var,
-                            name.loc.clone(),
-                            name.content.clone(),
+                            name.loc,
+                            name.symbol,
                             ty.clone(),
                             true,
                         );
@@ -564,19 +462,19 @@ impl ResourceCheck {
                     this.check_expr(&lambda.body);
                     if let Some(captures) = this.capture_set.as_ref() {
                         let mut errors = Vec::new();
-                        for (var, loc) in captures {
-                            let var_info = &this.vars[var];
+                        for (&var, &loc) in captures {
+                            let var_info = &this.vars[&var];
                             if this.regions_in(&var_info.ty).iter().any(|region| {
                                 *region != Region::Static || *region != Region::Unknown
                             }) {
-                                errors.push((var_info.name.clone(), loc));
+                                errors.push((var_info.name, loc));
                             }
                         }
                         errors.sort_by_key(|(_, loc)| loc.line);
                         for (name, loc) in errors {
                             this.err.add_diagnostic(
                                 format!("Cannot capture '{}' that contains borrows", name),
-                                loc.clone(),
+                                loc,
                             );
                         }
                     }
@@ -585,9 +483,9 @@ impl ResourceCheck {
                     this.capture_set = capture_info;
                 });
             }
-            ExprKind::Borrow {
+            &ExprKind::Borrow {
                 mutable,
-                place,
+                ref place,
                 region,
             } => {
                 let old_var_mutable = self.place_mutable(place);
@@ -595,7 +493,7 @@ impl ResourceCheck {
                     (Mutable::Mutable, _) | (Mutable::Immutable, Mutable::Immutable) => (),
                     (Mutable::Immutable, Mutable::Mutable) => {
                         self.err
-                            .add_diagnostic("Cannot borrow  as mut".to_string(), place.loc.clone());
+                            .add_diagnostic("Cannot borrow  as mut".to_string(), place.loc);
                     }
                 }
 
@@ -603,10 +501,8 @@ impl ResourceCheck {
                     PlaceKind::Upvar(var) => var,
                     PlaceKind::Var(var) => var,
                     PlaceKind::Deref(_) => {
-                        self.err.add_diagnostic(
-                            "Cannot borrow this place".to_string(),
-                            place.loc.clone(),
-                        );
+                        self.err
+                            .add_diagnostic("Cannot borrow this place".to_string(), place.loc);
                         return;
                     }
                 };
@@ -617,7 +513,7 @@ impl ResourceCheck {
                 {
                     self.err.add_diagnostic(
                         format!("Cannot borrow '{}' while moved", var.0),
-                        place.loc.clone(),
+                        place.loc,
                     );
                     return;
                 }
@@ -625,26 +521,22 @@ impl ResourceCheck {
                 if !matches!(region, Region::Local(..)) {
                     self.err.add_diagnostic(
                         format!("Cannot borrow '{}' with region '{}'", var.0, region),
-                        place.loc.clone(),
+                        place.loc,
                     );
                 }
                 match self.borrowed.entry(var.1) {
                     Entry::Vacant(entry) => {
-                        entry.insert_entry((*mutable, region.clone()));
+                        entry.insert_entry((mutable, region));
                     }
-                    Entry::Occupied(entry) => match (entry.get().0, *mutable) {
+                    Entry::Occupied(entry) => match (entry.get().0, mutable) {
                         (Mutable::Immutable, Mutable::Immutable) => (),
                         (_, Mutable::Mutable) => {
-                            self.err.add_diagnostic(
-                                "Cannot borrow as mut".to_string(),
-                                place.loc.clone(),
-                            );
+                            self.err
+                                .add_diagnostic("Cannot borrow as mut".to_string(), place.loc);
                         }
                         (Mutable::Mutable, Mutable::Immutable) => {
-                            self.err.add_diagnostic(
-                                "Cannot borrow as imm".to_string(),
-                                place.loc.clone(),
-                            );
+                            self.err
+                                .add_diagnostic("Cannot borrow as imm".to_string(), place.loc);
                         }
                     },
                 }
@@ -702,8 +594,8 @@ impl ResourceCheck {
                 this.init_var(
                     Mutable::Immutable,
                     param.var,
-                    param.name.loc.clone(),
-                    param.name.content.clone(),
+                    param.name.loc,
+                    param.name.symbol,
                     param.ty.clone(),
                     true,
                 );

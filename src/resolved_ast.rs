@@ -1,10 +1,10 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
+    Symbol,
     ast::{BinaryOp, IsResource, Mutable},
     define_id,
     ident::Ident,
-    index_vec::{Id, IndexVec},
     src_loc::SrcLoc,
 };
 #[derive(Debug, PartialEq, Eq)]
@@ -34,8 +34,8 @@ impl From<LocalRegionId> for usize {
         value.0
     }
 }
-#[derive(Debug, Clone)]
-pub struct Var(pub Rc<str>, pub VarId);
+#[derive(Debug, Clone, Copy)]
+pub struct Var(pub Symbol, pub VarId);
 #[derive(Debug)]
 pub struct BorrowExpr {
     pub mutable: Mutable,
@@ -130,7 +130,7 @@ impl Builtin {
         Builtin::PtrRead,
         Builtin::PtrWrite,
     ];
-    pub const fn name(&self) -> &'static str {
+    pub const fn name(self) -> &'static str {
         match self {
             Builtin::Allocate => "allocate",
             Builtin::Deallocate => "deallocate",
@@ -148,6 +148,23 @@ impl Builtin {
             Builtin::PtrRead => "ptr_read",
             Builtin::PtrWrite => "ptr_write",
         }
+    }
+    pub fn find(name: Symbol) -> Option<Builtin> {
+        Self::ALL_BUILTINS
+            .into_iter()
+            .find(|builtin| Symbol::intern(builtin.name()) == name)
+    }
+    pub const fn index_of(self) -> Option<usize> {
+        let mut i = 0;
+        let builtins = Self::ALL_BUILTINS;
+        let name = self.name();
+        while i < builtins.len() {
+            if name.eq_ignore_ascii_case(builtins[i].name()) {
+                return Some(i);
+            }
+            i += 1;
+        }
+        None
     }
 }
 #[derive(Debug)]
@@ -208,8 +225,8 @@ pub enum ExprKind {
     Int(i64),
     Bool(bool),
     String(Rc<str>),
-    Var(Rc<str>, VarId),
-    Function(Rc<str>, FunctionDefId, GenericArgs),
+    Var(Symbol, VarId),
+    Function(FunctionDefId, GenericArgs),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Borrow(Box<BorrowExpr>),
     Some(Box<Expr>),
@@ -219,18 +236,17 @@ pub enum ExprKind {
     Deref(Box<Expr>),
     Assign(Place, Box<Expr>),
     For(Pattern, Box<Expr>, Box<Expr>),
-    Builtin(Builtin, GenericArgs),
     Case(Box<Expr>, Vec<CaseArm>),
     Print(Option<Box<Expr>>),
     List(Vec<Expr>),
     Call(Box<Expr>, Vec<Expr>),
     Record(Vec<FieldInit>),
-    VariantCase(Rc<str>, VariantCaseId, GenericArgs),
+    VariantCase(DefId, GenericArgs),
 }
 #[derive(Debug, Clone)]
 pub enum RegionKind {
-    Param(Rc<str>, usize),
-    Local(Rc<str>, LocalRegionId),
+    Param(Symbol, usize),
+    Local(Symbol, LocalRegionId),
     Static,
     Unknown,
 }
@@ -311,7 +327,8 @@ pub enum TypeKind {
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
     Function(IsResource, Vec<Type>, Box<Type>),
-    Param(Rc<str>, usize),
+    Named(DefId, Symbol, GenericArgs),
+    Param(Symbol, usize),
     Unknown,
     Record(Vec<RecordFieldType>),
 }
@@ -320,24 +337,28 @@ pub struct Type {
     pub loc: SrcLoc,
     pub kind: TypeKind,
 }
-define_id!(TypeDefId);
-#[derive(PartialEq, Eq, Clone, Copy, Hash, Debug)]
-pub struct VariantCaseId {
-    pub ty: TypeDefId,
-    pub index: u32,
+#[derive(Debug)]
+pub struct CaseType {
+    pub id: DefId,
+    pub ty: Type,
 }
 #[derive(Debug)]
-pub struct VariantDef {
+pub struct CaseDef {
+    pub id: DefId,
     pub name: Ident,
-    pub ty: Option<Type>,
+    pub ty: Option<CaseType>,
 }
 #[derive(Debug)]
 pub struct RecordDef {
     pub fields: Vec<RecordFieldType>,
 }
 #[derive(Debug)]
+pub struct VariantDef {
+    pub cases: Vec<CaseDef>,
+}
+#[derive(Debug)]
 pub enum TypeDefKind {
-    Variant(Vec<VariantDef>),
+    Variant(VariantDef),
     Record(RecordDef),
 }
 #[derive(Debug)]
@@ -346,23 +367,55 @@ pub struct TypeDef {
     pub generics: Option<Generics>,
     pub kind: TypeDefKind,
 }
+impl TypeDef {
+    #[track_caller]
+    pub fn expect_variant(&self) -> &VariantDef {
+        let TypeDefKind::Variant(ref variant) = self.kind else {
+            unreachable!("expected a variant def")
+        };
+        variant
+    }
+}
+#[derive(Debug)]
 pub struct Module {
     pub name: Ident,
     pub items: Vec<DefId>,
 }
+#[derive(Debug)]
 pub enum ItemKind {
     TypeDef(TypeDef),
     Function(Function),
     Module(Module),
 }
+#[derive(Debug)]
 pub struct Item {
     pub id: ItemId,
     pub loc: SrcLoc,
     pub kind: ItemKind,
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct ItemId(pub DefId);
+impl ItemId {
+    pub fn into_def_id(self) -> DefId {
+        self.0
+    }
+}
 define_id!(DefId);
-pub struct Program {
-    pub items: Vec<Item>,
+impl DefId {
+    pub const ROOT: Self = Self(0);
+}
+#[derive(Default, Clone)]
+pub struct Builtins([Option<DefId>; Builtin::COUNT], HashMap<DefId, Builtin>);
+impl Builtins {
+    pub fn insert(&mut self, builtin: Builtin, id: DefId) {
+        let _ = self.0[builtin.index_of().unwrap()].insert(id);
+        self.1.insert(id, builtin);
+    }
+    pub fn expect_id(&self, builtin: Builtin) -> DefId {
+        self.0[builtin.index_of().unwrap()]
+            .unwrap_or_else(|| panic!("expected builtin '{}' to be defined", builtin.name()))
+    }
+    pub fn builtin_for(&self, id: DefId) -> Option<Builtin> {
+        self.1.get(&id).copied()
+    }
 }

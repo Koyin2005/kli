@@ -4,10 +4,9 @@ use crate::{
     ast::{BinaryOp, IsResource, Mutable},
     define_id,
     ident::Ident,
-    index_vec::IndexVec,
     resolved_ast::{Builtin, DefId, LambdaId, LocalRegionId, Var, VarId},
     src_loc::SrcLoc,
-    types::{GenericArg, GenericKind, Region, Type},
+    types::{ GenericArgs, GenericKind, Region, Type},
 };
 
 #[derive(Debug)]
@@ -79,6 +78,9 @@ pub struct Expr {
     pub kind: ExprKind,
 }
 define_id!(FieldId);
+impl FieldId {
+    pub const FIRST_FIELD: Self = Self(0);
+}
 
 #[derive(Debug)]
 pub struct RecordFieldInit {
@@ -102,8 +104,10 @@ pub enum ExprKind {
     None,
     Panic,
     Some(Box<Expr>),
-    BuiltinCall(Builtin, Vec<GenericArg>, Vec<Expr>),
-    Function(DefId, Vec<GenericArg>),
+    BuiltinCall(Builtin, GenericArgs, Vec<Expr>),
+    VariantInit(DefId, GenericArgs, Box<Expr>),
+    Function(DefId, GenericArgs),
+    Const(DefId, GenericArgs),
     Print(Option<Box<Expr>>),
     List(Vec<Expr>),
     Call(Box<Expr>, Vec<Expr>),
@@ -141,7 +145,7 @@ pub struct Param {
 }
 impl Param {
     pub fn var(&self) -> Var {
-        Var(self.name.content.clone(), self.var)
+        Var(self.name.symbol, self.var)
     }
 }
 pub struct Function {

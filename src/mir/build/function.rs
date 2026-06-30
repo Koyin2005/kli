@@ -2,9 +2,8 @@ use crate::{
     ast::IsResource,
     collect::CtxtRef,
     mir::{
-        BodySource, Captures, Constant, ConstantValue, Context, Local, LocalKind, Operand, Place,
-        PointerCast, Rvalue, TerminatorKind, build::Builder, visitor::Visit,
-        well_formed::WellFormed,
+        BodySource, Captures, Constant, Context, Local, LocalKind, Operand, Place, PointerCast,
+        Rvalue, TerminatorKind, build::Builder, visitor::Visit, well_formed::WellFormed,
     },
     resolved_ast::DefId,
     src_loc::SrcLoc,
@@ -18,7 +17,7 @@ impl Builder<'_> {
         let context = self.mir_context;
         context.body_sources.push(body.src);
         if context.check_well_formed {
-            let mut wf = WellFormed::new(&body, context);
+            let mut wf = WellFormed::new(&body, self.ctxt);
             wf.visit_body(&body);
         }
         assert!(
@@ -52,7 +51,7 @@ impl Builder<'_> {
         );
         if let Some(body) = function.body.as_ref() {
             builder.expr_into_dest(Place::return_place(), body);
-            builder.finish_block(body.loc.clone(), TerminatorKind::Return);
+            builder.finish_block(body.loc, TerminatorKind::Return);
         } else {
             builder.finish_block(SrcLoc::dummy(), TerminatorKind::Unreachable);
         }
@@ -108,17 +107,17 @@ impl Builder<'_> {
         if !lambda.captures.is_empty() {
             let env_ty = builder.body.capture_info.as_ref().unwrap().env_type();
             let casted = builder.assign_to_temp(
-                lambda.body.loc.clone(),
+                lambda.body.loc,
                 Type::pointer(env_ty),
                 Rvalue::PointerCast(
                     PointerCast::RawToRaw(Type::Byte),
-                    Operand::Load(Place::local(Local::zero())),
+                    Operand::Load(Place::local(Local::FIRST_PARAM)),
                 ),
             );
             builder.body.capture_info.as_mut().unwrap().env_ptr = Some(casted);
         }
         builder.expr_into_dest(Place::return_place(), &lambda.body);
-        builder.finish_block(lambda.body.loc.clone(), TerminatorKind::Return);
+        builder.finish_block(lambda.body.loc, TerminatorKind::Return);
         builder.add_finished_body();
         Constant {
             ty: Box::new(ty),

@@ -1,15 +1,15 @@
-use std::{iter::Peekable, rc::Rc, vec::IntoIter};
+use std::{iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, CaseDef, Expr,
-        ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, Generics, IsResource,
-        Item, ItemKind, Lambda, LetBinding, Module, ModuleId, Mutable, NodeId, Param, Path,
-        Pattern, PatternField, PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt,
-        StmtKind, Type, TypeDef, TypeDefKind, TypeKind,
+        Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, CaseDef, CaseType,
+        Expr, ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, Generics,
+        IsResource, Item, ItemKind, Lambda, LetBinding, Module, ModuleId, Mutable, NodeId, Param,
+        Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField, RecordType, Region,
+        Stmt, StmtKind, Type, TypeDef, TypeDefKind, TypeKind,
     },
     diagnostics::DiagnosticReporter,
-    ident::Ident,
+    ident::{Ident, Symbol},
     parsing::{
         lex::Lexer,
         tokens::{Token, TokenKind},
@@ -30,13 +30,13 @@ pub struct Parser {
     node_id: NodeId,
 }
 impl Parser {
-    pub fn new(file: Rc<str>, src: &str) -> Self {
+    pub fn new(file: Symbol, src: &str) -> Self {
         let (tokens, eof_token) = Lexer::new(file, src).lex();
         Self {
             diag: DiagnosticReporter::new(),
             tokens: tokens.into_iter().peekable(),
             eof_token,
-            node_id: NodeId::zero(),
+            node_id: NodeId::FIRST_ID,
         }
     }
     fn next_node_id(&mut self) -> NodeId {
@@ -44,7 +44,7 @@ impl Parser {
         std::mem::replace(&mut self.node_id, next_id)
     }
     fn current_loc(&mut self) -> SrcLoc {
-        self.peek_token().loc.clone()
+        self.peek_token().loc
     }
     fn peek_token(&mut self) -> &Token {
         self.tokens.peek().unwrap_or(&self.eof_token)
@@ -92,10 +92,8 @@ impl Parser {
             else {
                 unreachable!("Has to be an ident")
             };
-            Some(Ident {
-                content: name.into(),
-                loc,
-            })
+            let symbol = Symbol::intern(&name);
+            Some(Ident { symbol, loc })
         } else {
             None
         }
@@ -117,7 +115,7 @@ impl Parser {
             self.next_token();
             Ok(())
         } else {
-            let loc = token.loc.clone();
+            let loc = token.loc;
             let kind = &token.kind;
             let msg = format!("Expected '{}' but got '{}'", kind, token.kind);
             self.diag.add_diagnostic(msg, loc);
@@ -162,9 +160,8 @@ impl Parser {
                     loc,
                     kind: TokenKind::Static,
                 }) => {
-                    let loc = loc.clone();
                     self.next_token();
-                    Ok(Region::Static(loc.clone()))
+                    Ok(Region::Static(loc))
                 }
                 _ => Err({
                     let loc = self.current_loc();
@@ -282,7 +279,7 @@ impl Parser {
                     });
                 }
                 Stmt {
-                    loc: expr.loc.clone(),
+                    loc: expr.loc,
                     kind: StmtKind::Expr(expr),
                 }
             };
@@ -321,7 +318,7 @@ impl Parser {
         let token = self.peek_token();
         match token.kind {
             TokenKind::Let => {
-                let loc = token.loc.clone();
+                let loc = token.loc;
                 self.parse_let_stmt(loc).map(Some)
             }
             _ => Ok(None),
@@ -561,32 +558,30 @@ impl Parser {
     fn parse_expr_postfix(&mut self) -> Result<Expr, ParseError> {
         let mut expr = self.parse_expr_prefix()?;
         loop {
-            expr = match self.peek_token() {
-                token => match token.kind {
-                    TokenKind::LeftParen => {
-                        self.next_token();
-                        let mut args = Vec::new();
-                        while self.check_is_not_token(&TokenKind::RightParen) {
-                            args.push(self.parse_expr()?);
-                            if !self.match_coma() {
-                                break;
-                            }
-                        }
-                        let _ = self.expect(&TokenKind::RightParen);
-                        Expr {
-                            loc: expr.loc.clone(),
-                            kind: ExprKind::Call(Box::new(expr), args),
+            expr = match self.peek_token().kind {
+                TokenKind::LeftParen => {
+                    self.next_token();
+                    let mut args = Vec::new();
+                    while self.check_is_not_token(&TokenKind::RightParen) {
+                        args.push(self.parse_expr()?);
+                        if !self.match_coma() {
+                            break;
                         }
                     }
-                    TokenKind::Caret => {
-                        self.next_token();
-                        Expr {
-                            loc: expr.loc.clone(),
-                            kind: ExprKind::Deref(Box::new(expr)),
-                        }
+                    let _ = self.expect(&TokenKind::RightParen);
+                    Expr {
+                        loc: expr.loc,
+                        kind: ExprKind::Call(Box::new(expr), args),
                     }
-                    _ => break Ok(expr),
-                },
+                }
+                TokenKind::Caret => {
+                    self.next_token();
+                    Expr {
+                        loc: expr.loc,
+                        kind: ExprKind::Deref(Box::new(expr)),
+                    }
+                }
+                _ => break Ok(expr),
             }
         }
     }
@@ -598,7 +593,7 @@ impl Parser {
             self.next_token();
             let rhs = self.parse_expr_precedence(prec)?;
             expr = Expr {
-                loc: expr.loc.clone(),
+                loc: expr.loc,
                 kind: ExprKind::Binary(op, Box::new(expr), Box::new(rhs)),
             }
         }
@@ -607,7 +602,7 @@ impl Parser {
     fn parse_assign(&mut self) -> Result<Expr, ParseError> {
         let mut lhs = self.parse_expr_precedence(Precedence::None)?;
         while self.matches_token(&TokenKind::Equal) {
-            let loc = lhs.loc.clone();
+            let loc = lhs.loc;
             lhs = Expr {
                 loc,
                 kind: ExprKind::Assign(
@@ -865,11 +860,18 @@ impl Parser {
         let ty = if self.matches_token(&TokenKind::LeftParen) {
             let ty = self.parse_type()?;
             self.expect(&TokenKind::RightParen)?;
-            Some(ty)
+            Some(CaseType {
+                id: self.next_node_id(),
+                ty,
+            })
         } else {
             None
         };
-        Ok(CaseDef { name, ty })
+        Ok(CaseDef {
+            name,
+            ty,
+            id: self.next_node_id(),
+        })
     }
     fn parse_type_def(&mut self) -> Result<TypeDef, ParseError> {
         self.next_token();
@@ -916,7 +918,7 @@ impl Parser {
             _ => return Ok(None),
         }))
     }
-    pub fn parse_module(mut self, name: Rc<str>, id: ModuleId) -> Result<Module, ParseError> {
+    pub fn parse_module(mut self, name: Symbol, id: ModuleId) -> Result<Module, ParseError> {
         let mut items = Vec::new();
         let mut recovery = false;
 

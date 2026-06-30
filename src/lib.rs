@@ -1,5 +1,5 @@
 pub mod ast;
-pub mod collect;
+mod collect;
 pub mod diagnostics;
 mod ident;
 mod index_vec;
@@ -16,3 +16,4 @@ pub mod typecheck;
 pub mod typed_ast;
 mod typed_ast_visitor;
 pub mod types;
+pub use ident::Symbol;

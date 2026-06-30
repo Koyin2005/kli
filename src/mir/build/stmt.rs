@@ -13,10 +13,10 @@ impl Builder<'_> {
             ExprKind::Assign(place, value) => {
                 let place = self.lower_place(place);
                 let value = self.build_rvalue(value);
-                self.assign(expr.loc.clone(), place, value);
+                self.assign(expr.loc, place, value);
             }
             ExprKind::Panic => {
-                self.panic(expr.loc.clone());
+                self.panic(expr.loc);
             }
             ExprKind::Block(block_body, ..) => {
                 for stmt in block_body.stmts.iter() {
@@ -26,7 +26,7 @@ impl Builder<'_> {
             }
             ExprKind::Print(value) => {
                 let stmt = StmtKind::Print(value.as_ref().map(|expr| self.operand(expr)));
-                self.push_stmt(expr.loc.clone(), stmt);
+                self.push_stmt(expr.loc, stmt);
             }
             ExprKind::For {
                 pattern,
@@ -37,9 +37,9 @@ impl Builder<'_> {
                 self.for_loop(pattern, iterator, iterator_type, body);
             }
             ExprKind::BuiltinCall(builtin, _, args) => {
-                match self.builtin_call(expr.loc.clone(), &expr.ty, *builtin, args) {
+                match self.builtin_call(expr.loc, &expr.ty, *builtin, args) {
                     BuiltinResult::Rvalue(value) => {
-                        self.assign_to_temp(expr.loc.clone(), expr.ty.clone(), value);
+                        self.assign_to_temp(expr.loc, expr.ty.clone(), value);
                     }
                     BuiltinResult::Unit => (),
                 }
@@ -59,7 +59,9 @@ impl Builder<'_> {
             | ExprKind::None
             | ExprKind::Some(..)
             | ExprKind::List(..)
-            | ExprKind::Lambda(..) => {
+            | ExprKind::Lambda(..)
+            | ExprKind::Const(..)
+            | ExprKind::VariantInit(..) => {
                 self.expr_into_temp(expr);
             }
         }

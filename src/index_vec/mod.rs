@@ -16,7 +16,7 @@ impl<I, V> Default for IndexVec<I, V> {
 macro_rules! define_id {
     ($(#[$meta:meta])*$name:ident) => {
         $(#[$meta])*
-        #[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
+        #[derive(Debug, PartialEq, Eq, Clone, Hash, Copy,PartialOrd,Ord)]
         pub struct $name(u32);
         impl $name {
             pub const fn new(id: usize) -> Self {
@@ -25,9 +25,6 @@ macro_rules! define_id {
                 } else {
                     panic!("too many ids")
                 }
-            }
-            pub fn zero() -> Self {
-                Self(0)
             }
             pub const fn into_usize(self) -> usize {
                 self.0 as usize

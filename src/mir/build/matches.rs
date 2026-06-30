@@ -179,7 +179,7 @@ impl Builder<'_> {
                     .into_iter()
                     .map(|(value, arm)| {
                         let block = self.switch_to_new_block();
-                        self.lower_tree(loc.clone(), arm, info, end_blocks);
+                        self.lower_tree(loc, arm, info, end_blocks);
                         SwitchTarget {
                             value: value.into(),
                             target: block,
@@ -187,7 +187,7 @@ impl Builder<'_> {
                     })
                     .collect();
                 let otherwise = self.switch_to_new_block();
-                self.lower_tree(loc.clone(), *otherwise_branch, info, end_blocks);
+                self.lower_tree(loc, *otherwise_branch, info, end_blocks);
 
                 self.switch_to_block(start_block);
                 self.finish_block_with_switch_targets(
@@ -203,10 +203,10 @@ impl Builder<'_> {
                 false_tree,
             } => {
                 let true_block = self.switch_to_new_block();
-                self.lower_tree(loc.clone(), *true_tree, info, end_blocks);
+                self.lower_tree(loc, *true_tree, info, end_blocks);
 
                 let false_block = self.switch_to_new_block();
-                self.lower_tree(loc.clone(), *false_tree, info, end_blocks);
+                self.lower_tree(loc, *false_tree, info, end_blocks);
 
                 self.switch_to_block(start_block);
                 self.finish_block_with_if(loc, Operand::Load(place), true_block, false_block);
@@ -216,12 +216,11 @@ impl Builder<'_> {
                 some_tree,
                 none_tree,
             } => {
-                let discrim =
-                    self.assign_to_temp(loc.clone(), Type::Int, Rvalue::Discriminant(place));
+                let discrim = self.assign_to_temp(loc, Type::Int, Rvalue::Discriminant(place));
                 let some_block = self.switch_to_new_block();
-                self.lower_tree(loc.clone(), *some_tree, info, end_blocks);
+                self.lower_tree(loc, *some_tree, info, end_blocks);
                 let none_block = self.switch_to_new_block();
-                self.lower_tree(loc.clone(), *none_tree, info, end_blocks);
+                self.lower_tree(loc, *none_tree, info, end_blocks);
                 self.switch_to_block(start_block);
                 self.finish_block_with_if(
                     loc,
@@ -233,7 +232,7 @@ impl Builder<'_> {
             MatchBranch::Success(i) => {
                 self.assign_place_to_pattern(&info.arms[i].pattern, info.pattern_place.clone());
                 self.expr_into_dest(info.dest.clone(), &info.arms[i].body);
-                end_blocks.push((info.arms[i].body.loc.clone(), self.current_block));
+                end_blocks.push((info.arms[i].body.loc, self.current_block));
             }
             MatchBranch::Unreachable => {
                 self.finish_block(loc, TerminatorKind::Unreachable);
@@ -250,7 +249,7 @@ impl Builder<'_> {
         let tree = self.build_tree(tests);
         let mut end_blocks = Vec::new();
         self.lower_tree(
-            expr.loc.clone(),
+            expr.loc,
             tree,
             &MatchInfo {
                 dest: &dest,

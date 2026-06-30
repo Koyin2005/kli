@@ -28,7 +28,7 @@ impl Visitor for PatternCheck {
                 self.visit_expr(matchee);
                 check_patterns(
                     &mut self.diag,
-                    matchee.loc.clone(),
+                    matchee.loc,
                     &matchee.ty,
                     &arms.iter().map(|arm| &arm.pattern).collect::<Vec<_>>(),
                 );
@@ -40,7 +40,7 @@ impl Visitor for PatternCheck {
         }
     }
     fn visit_pattern(&mut self, pattern: &crate::typed_ast::Pattern) {
-        check_patterns(&mut self.diag, pattern.loc.clone(), &pattern.ty, &[pattern]);
+        check_patterns(&mut self.diag, pattern.loc, &pattern.ty, &[pattern]);
     }
 }
 
@@ -53,6 +53,6 @@ fn check_patterns(diag: &mut DiagnosticReporter, loc: SrcLoc, ty: &Type, pattern
             .map(|pattern| convert::pattern_to_pat(pattern)),
     );
     for pat in missing {
-        diag.add_diagnostic(format!("Missing pattern: {}", pat), loc.clone());
+        diag.add_diagnostic(format!("Missing pattern: {}", pat), loc);
     }
 }

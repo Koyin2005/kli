@@ -1,118 +1,289 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
 use crate::{
+    Symbol,
     diagnostics::DiagnosticReporter,
     ident::Ident,
-    resolved_ast::{self, DefId, Item, ItemId, ItemKind},
+    resolved_ast::{
+        self, Builtins, DefId, Item, ItemId, ItemKind, TypeDef, TypeDefKind, VariantDef,
+    },
     scheme::Scheme,
     src_loc::SrcLoc,
     typecheck::infer::TypeInfer,
-    types::{FunctionSig, GenericArg, GenericKind, Region, Type, lower::Lower},
+    types::{FunctionSig, GenericArg, GenericKind, GenericParam, Region, Type, lower::Lower},
 };
-
+#[derive(Debug, Clone, Default)]
 pub struct Generics {
-    kinds: Vec<GenericKind>,
+    params: Vec<GenericParam>,
 }
 impl Generics {
     const fn new() -> Self {
-        Self { kinds: Vec::new() }
+        Self { params: Vec::new() }
     }
-    pub fn is_empty(&self) -> bool {
-        self.kinds.is_empty()
+    pub const fn is_empty(&self) -> bool {
+        self.params.is_empty()
     }
-    pub fn kind(&self, index: usize) -> GenericKind {
-        self.kinds[index]
+    #[track_caller]
+    pub const fn kind(&self, index: usize) -> GenericKind {
+        self.params.as_slice()[index].kind
     }
-    pub fn count(&self) -> usize {
-        self.kinds.len()
+    pub const fn count(&self) -> usize {
+        self.params.len()
+    }
+    pub fn kinds(&self) -> impl Iterator<Item = GenericKind> {
+        self.params.iter().map(|param| param.kind)
     }
     pub fn instantiate(&self, infer: &mut TypeInfer, loc: SrcLoc) -> Vec<GenericArg> {
-        self.kinds
-            .iter()
-            .copied()
+        self.kinds()
             .map(|kind| match kind {
-                GenericKind::Region => {
-                    GenericArg::Region(Region::Infer(infer.fresh_region(loc.clone())))
-                }
-                GenericKind::Type => GenericArg::Type(Type::Infer(infer.fresh_ty(loc.clone()))),
+                GenericKind::Region => GenericArg::Region(Region::Infer(infer.fresh_region(loc))),
+                GenericKind::Type => GenericArg::Type(Type::Infer(infer.fresh_ty(loc))),
             })
             .collect()
     }
     pub fn instantiate_unknown(&self) -> Vec<GenericArg> {
-        self.kinds
-            .iter()
+        self.kinds()
             .map(|kind| match kind {
                 GenericKind::Region => GenericArg::Region(Region::Unknown),
                 GenericKind::Type => GenericArg::Type(Type::Unknown),
             })
             .collect()
     }
+    pub fn instantiate_identity(&self) -> Vec<GenericArg> {
+        self.params
+            .iter()
+            .enumerate()
+            .map(|(i, param)| match param.kind {
+                GenericKind::Region => {
+                    GenericArg::Region(Region::Param(param.name.symbol, i.try_into().unwrap()))
+                }
+                GenericKind::Type => {
+                    GenericArg::Type(Type::Param(param.name.symbol, i.try_into().unwrap()))
+                }
+            })
+            .collect()
+    }
 }
-
+#[derive(Clone, Copy, Debug)]
+enum NodePath {
+    Item(ItemId),
+    Case {
+        parent: ItemId,
+        index: usize,
+    },
+    CaseField {
+        parent: ItemId,
+        case: DefId,
+        index: usize,
+    },
+}
 pub struct GlobalContext {
-    names: HashMap<DefId, Ident>,
-    generics: HashMap<DefId, Generics>,
     diag: DiagnosticReporter,
-    item_indexes: HashMap<DefId, usize>,
-    items: Vec<Item>,
+    idents: RefCell<HashMap<DefId, Ident>>,
+    generics: RefCell<HashMap<DefId, Generics>>,
     parents: HashMap<DefId, DefId>,
+    item_indexes: HashMap<ItemId, usize>,
+    items: Vec<Item>,
+    nodes: HashMap<DefId, NodePath>,
+    builtins: Builtins,
 }
 impl GlobalContext {
     pub fn as_ref(&self) -> CtxtRef<'_> {
-        CtxtRef(&self)
+        CtxtRef(self)
     }
 }
 #[derive(Copy, Clone)]
 pub struct CtxtRef<'a>(&'a GlobalContext);
 
 impl CtxtRef<'_> {
-    pub fn name(&self, id: DefId) -> &Ident {
-        &self.0.names[&id]
+    fn node_path_for(self, id: DefId) -> NodePath {
+        self.0.nodes[&id]
     }
-    pub fn generics(&self, id: DefId) -> &Generics {
-        static GENERICS_DEFAULT: Generics = Generics::new();
-        self.0.generics.get(&id).unwrap_or(&GENERICS_DEFAULT)
+    #[track_caller]
+    fn expect_item_id(self, id: DefId) -> ItemId {
+        let NodePath::Item(item) = self.node_path_for(id) else {
+            unreachable!("not an item")
+        };
+        item
     }
-    pub fn item(&self, id: DefId) -> &Item {
+    #[track_caller]
+    pub fn expect_case(&self, case_id: DefId) -> (&VariantDef, usize) {
+        let NodePath::Case { parent, index } = self.node_path_for(case_id) else {
+            unreachable!("expected a variant def")
+        };
+        let variant_def = self.expect_variant_def(parent);
+        (variant_def, index)
+    }
+    #[track_caller]
+    pub fn expect_type(&self, id: DefId) -> &TypeDef {
+        let item = self.expect_item_id(id);
+        self.expect_type_def(item)
+    }
+    #[track_caller]
+    fn expect_type_def(&self, id: ItemId) -> &TypeDef {
+        let ItemKind::TypeDef(type_def) = &self.item(id).kind else {
+            unreachable!("expected a type def")
+        };
+        type_def
+    }
+    #[track_caller]
+    fn expect_variant_def(&self, id: ItemId) -> &VariantDef {
+        self.expect_type_def(id).expect_variant()
+    }
+    pub fn span(self, id: DefId) -> SrcLoc {
+        self.name(id).loc
+    }
+    #[track_caller]
+    pub fn name(self, id: DefId) -> Ident {
+        if let Some(&ident) = self.0.idents.borrow().get(&id) {
+            return ident;
+        }
+        let ident = match self.node_path_for(id) {
+            NodePath::Item(item) => match &self.item(item).kind {
+                ItemKind::Function(function) => function.name,
+                ItemKind::Module(module) => module.name,
+                ItemKind::TypeDef(type_def) => type_def.name,
+            },
+            NodePath::Case { parent, index } => {
+                let case = &self.expect_variant_def(parent).cases[index];
+                case.name
+            }
+            NodePath::CaseField {
+                index,
+                case,
+                ..
+            } => Ident {
+                symbol: Symbol::ZERO,
+                loc: self.expect_case(case).0.cases[index].name.loc,
+            },
+        };
+        self.0.idents.borrow_mut().insert(id, ident);
+        ident
+    }
+    pub fn type_of(self, id: DefId) -> Scheme<Type> {
+        let ty = match self.node_path_for(id) {
+            NodePath::Case { parent, index } => {
+                let parent_id = parent.into_def_id();
+                let type_def = self.expect_type_def(parent);
+                let variant_def = type_def.expect_variant();
+                let case = &variant_def.cases[index];
+                let name = type_def.name;
+                let variant_ty = Type::Named(
+                    parent_id,
+                    name.symbol,
+                    self.generics(parent_id).instantiate_identity(),
+                );
+                if let Some(inner_ty) = case
+                    .ty
+                    .as_ref()
+                    .map(|case| Lower::new(self, parent_id, None).lower_type(&case.ty))
+                {
+                    Type::new_function(vec![inner_ty], variant_ty)
+                } else {
+                    variant_ty
+                }
+            }
+            NodePath::Item(item) => match &self.item(item).kind {
+                ItemKind::TypeDef(type_def) => Type::Named(
+                    id,
+                    type_def.name.symbol,
+                    self.generics(id).instantiate_identity(),
+                ),
+                ItemKind::Function(_) => {
+                    return self.signature_of(id).map(|signature| {
+                        Type::new_function(signature.params, signature.return_type)
+                    });
+                }
+                ItemKind::Module(module) => {
+                    unreachable!("cannot get type of module {}", module.name.symbol)
+                }
+            },
+            NodePath::CaseField {
+                parent,
+                case,
+                index,
+            } => {
+                let case = &self.expect_case(case).0.cases[index];
+                let ty = Lower::new(self, parent.into_def_id(), None)
+                    .lower_type(&case.ty.as_ref().expect("should have a type").ty);
+                ty
+            }
+        };
+        Scheme::new(ty)
+    }
+    pub fn generics(self, id: DefId) -> Generics {
+        if let Some(generics) = self.0.generics.borrow().get(&id) {
+            return generics.clone();
+        }
+        let generics = match self.node_path_for(id) {
+            NodePath::Item(item) => match &self.item(item).kind {
+                ItemKind::Function(function_def) => function_def
+                    .generics
+                    .as_ref()
+                    .map_or_else(Generics::new, lower_generics),
+                ItemKind::Module(_) => Generics::new(),
+                ItemKind::TypeDef(type_def) => type_def
+                    .generics
+                    .as_ref()
+                    .map_or_else(Generics::new, lower_generics),
+            },
+            NodePath::Case { parent, .. } | NodePath::CaseField { parent, .. } => {
+                let generics = self.generics(parent.into_def_id());
+                generics
+            }
+        };
+        self.0.generics.borrow_mut().insert(id, generics.clone());
+        generics
+    }
+    fn item(&self, id: ItemId) -> &Item {
         &self.0.items[self.0.item_indexes[&id]]
+    }
+    fn get_item(&self, id: DefId) -> Option<&Item> {
+        let NodePath::Item(item) = self.node_path_for(id) else {
+            return None;
+        };
+        Some(self.item(item))
     }
     pub fn parent_of(self, id: DefId) -> Option<DefId> {
         self.0.parents.get(&id).copied()
     }
-    pub fn root_ids(&self) -> impl Iterator<Item = DefId> {
-        self.0
-            .items
-            .iter()
-            .map(|&Item { id: ItemId(id), .. }| id)
-            .filter(|&id| self.parent_of(id).is_none())
+    pub fn all_items(&self) -> impl Iterator<Item = &Item> {
+        self.0.items.iter()
     }
-    pub fn main_id(self) -> Option<DefId> {
-        self.root_ids()
-            .find(|&id| self.name(id).content.as_ref() == "main")
+    pub fn top_level_items(&self) -> impl Iterator<Item = &Item> {
+        self.all_items()
+            .filter(|item| self.parent_of(item.id.0).is_none())
     }
-    pub fn all_ids(self) -> Vec<DefId> {
-        self.0
-            .items
-            .iter()
-            .map(|&Item { id: ItemId(id), .. }| id)
-            .collect()
+    pub fn main_function(&self) -> Option<(DefId, &resolved_ast::Function)> {
+        self.top_level_items()
+            .filter_map(|item| {
+                let ItemKind::Module(module) = &item.kind else {
+                    return None;
+                };
+                if module.name.symbol != Symbol::MAIN {
+                    return None;
+                }
+                Some(module.items.iter())
+            })
+            .flatten()
+            .find_map(|&item_id| {
+                let function = self.function_def(item_id)?;
+                if function.name.symbol != Symbol::MAIN {
+                    return None;
+                }
+                Some((item_id, function))
+            })
     }
     pub fn function_def(&self, id: DefId) -> Option<&resolved_ast::Function> {
-        match self.item(id).kind {
+        match self.get_item(id)?.kind {
             ItemKind::Function(ref function) => Some(function),
             _ => None,
         }
     }
+    #[track_caller]
     pub fn signature_of(self, id: DefId) -> Scheme<FunctionSig> {
-        let Item {
-            id: _,
-            loc: _,
-            kind: ItemKind::Function(function),
-        } = self.item(id)
-        else {
-            unreachable!("expected a function item")
-        };
-        let lower = Lower::new(self, id);
+        let function = self.function_def(id).expect("should be a function def");
+        let lower = Lower::new(self, id, None);
         Scheme::new(FunctionSig::new(
             lower
                 .lower_types(&mut function.params.iter().map(|param| &param.ty))
@@ -121,71 +292,82 @@ impl CtxtRef<'_> {
         ))
     }
     pub fn display(&self, id: DefId) -> impl std::fmt::Display {
-        &self.name(id).content
+        self.name(id).symbol
     }
     pub fn diag(&self) -> &DiagnosticReporter {
         &self.0.diag
     }
+    pub fn builtins(&self) -> &Builtins {
+        &self.0.builtins
+    }
 }
 fn lower_generics(generics: &resolved_ast::Generics) -> Generics {
     Generics {
-        kinds: generics
+        params: generics
             .kinds
             .iter()
-            .map(|kind| match kind {
-                resolved_ast::GenericKind::Region => GenericKind::Region,
-                resolved_ast::GenericKind::Type => GenericKind::Type,
+            .zip(generics.names.iter().copied())
+            .map(|(kind, name)| GenericParam {
+                name,
+                kind: match kind {
+                    resolved_ast::GenericKind::Region => GenericKind::Region,
+                    resolved_ast::GenericKind::Type => GenericKind::Type,
+                },
             })
             .collect(),
     }
 }
-pub fn build_global_context(program: resolved_ast::Program) -> GlobalContext {
-    let mut names = HashMap::new();
-    let mut generics = HashMap::new();
+pub fn build_global_context(
+    items: Vec<Item>,
+    builtins: Builtins,
+    parents: HashMap<DefId, DefId>,
+) -> GlobalContext {
     let mut item_indexes = HashMap::new();
-    let mut parents = HashMap::new();
-    let items = program.items;
+    let mut nodes = HashMap::new();
     for (i, item) in items.iter().enumerate() {
-        let ItemId(id) = item.id;
+        let id = item.id.into_def_id();
+        nodes.insert(id, NodePath::Item(item.id));
         match &item.kind {
-            ItemKind::Function(function) => {
-                names.insert(id, function.name.clone());
-                generics.insert(
-                    id,
-                    function
-                        .generics
-                        .as_ref()
-                        .map(|generics| lower_generics(generics))
-                        .unwrap_or(Generics::new()),
-                );
-            }
-            ItemKind::TypeDef(type_def) => {
-                names.insert(id, type_def.name.clone());
-                generics.insert(
-                    id,
-                    type_def
-                        .generics
-                        .as_ref()
-                        .map(|generics| lower_generics(generics))
-                        .unwrap_or(Generics::new()),
-                );
-            }
-            ItemKind::Module(module) => {
-                names.insert(id, module.name.clone());
-                for &item_id in module.items.iter() {
-                    parents.insert(item_id, id);
+            ItemKind::Function(_) => {}
+            ItemKind::TypeDef(type_def) => match &type_def.kind {
+                TypeDefKind::Variant(variant_def) => {
+                    nodes.extend(variant_def.cases.iter().enumerate().flat_map(|(i, case)| {
+                        std::iter::once({
+                            (
+                                case.id,
+                                NodePath::Case {
+                                    parent: item.id,
+                                    index: i,
+                                },
+                            )
+                        })
+                        .chain(case.ty.as_ref().map(|ty| {
+                            (
+                                ty.id,
+                                NodePath::CaseField {
+                                    case: case.id,
+                                    parent: item.id,
+                                    index: i,
+                                },
+                            )
+                        }))
+                    }));
                 }
-            }
+                TypeDefKind::Record(_) => (),
+            },
+            ItemKind::Module(_) => {}
         }
-        item_indexes.insert(id, i);
+        item_indexes.insert(item.id, i);
     }
     let diag = DiagnosticReporter::new();
     GlobalContext {
         parents,
-        names,
-        generics,
+        generics: Default::default(),
+        idents: Default::default(),
+        nodes,
         diag,
         items,
         item_indexes,
+        builtins,
     }
 }

@@ -6,7 +6,7 @@ use crate::{
 
 impl TypeCheck<'_> {
     pub(super) fn check_stmt(&self, stmt: &Stmt) -> typed_ast::Stmt {
-        let loc = stmt.loc.clone();
+        let loc = stmt.loc;
         match &stmt.kind {
             StmtKind::Expr(expr) => {
                 let expr = self.check_expr(expr, None);
