@@ -54,12 +54,8 @@ impl Generics {
             .iter()
             .enumerate()
             .map(|(i, param)| match param.kind {
-                GenericKind::Region => {
-                    GenericArg::Region(Region::Param(param.name.symbol, i.try_into().unwrap()))
-                }
-                GenericKind::Type => {
-                    GenericArg::Type(Type::Param(param.name.symbol, i.try_into().unwrap()))
-                }
+                GenericKind::Region => GenericArg::Region(Region::Param(param.name.symbol, i)),
+                GenericKind::Type => GenericArg::Type(Type::Param(param.name.symbol, i)),
             })
             .collect()
     }
@@ -200,9 +196,8 @@ impl CtxtRef<'_> {
                 index,
             } => {
                 let case = &self.expect_case(case).0.cases[index];
-                let ty = Lower::new(self, parent.into_def_id(), None)
-                    .lower_type(&case.ty.as_ref().expect("should have a type").ty);
-                ty
+                Lower::new(self, parent.into_def_id(), None)
+                    .lower_type(&case.ty.as_ref().expect("should have a type").ty)
             }
         };
         Scheme::new(ty)
@@ -224,8 +219,7 @@ impl CtxtRef<'_> {
                     .map_or_else(Generics::new, lower_generics),
             },
             NodePath::Case { parent, .. } | NodePath::CaseField { parent, .. } => {
-                let generics = self.generics(parent.into_def_id());
-                generics
+                self.generics(parent.into_def_id())
             }
         };
         self.0.generics.borrow_mut().insert(id, generics.clone());

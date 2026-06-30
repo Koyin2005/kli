@@ -777,7 +777,7 @@ impl Resolve {
                 let region = self.resolve_region(region);
                 let Some(place) = place else {
                     return res::Expr {
-                        loc: loc,
+                        loc,
                         kind: res::ExprKind::Err,
                     };
                 };
@@ -950,7 +950,7 @@ impl Resolve {
         value
     }
     fn declare_type_def(&mut self, id: ModuleNodeId, type_def: &ast::TypeDef) {
-        let name = type_def.name.clone();
+        let name = type_def.name;
         let info = self.with_parent_def_id(self.def_id_for(id), |this| match type_def.kind {
             ast::TypeDefKind::Record(_) => todo!("Handle rec"),
             ast::TypeDefKind::Variant(ref cases) => {
@@ -964,7 +964,7 @@ impl Resolve {
                             })
                         }
                         CaseInfo {
-                            name: case.name.clone(),
+                            name: case.name,
                             id: case.id,
                         }
                     })

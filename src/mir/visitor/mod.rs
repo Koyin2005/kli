@@ -87,8 +87,7 @@ pub trait Visit {
     }
     fn super_visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
         match projection {
-            PlaceProjection::ConstantIndex(_)
-            | PlaceProjection::Field(_) => (),
+            PlaceProjection::ConstantIndex(_) | PlaceProjection::Field(_) => (),
             PlaceProjection::Index(local) => self.visit_local(loc, local),
             PlaceProjection::Deref => (),
         }

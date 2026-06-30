@@ -58,7 +58,7 @@ impl Builder<'_> {
         builder.add_finished_body();
     }
     pub(super) fn lambda_code(&mut self, lambda: &Lambda) -> Constant {
-        let ty = Type::Function(FunctionType {
+        let _ty = Type::Function(FunctionType {
             resource: IsResource::Data,
             params: lambda.params.iter().map(|param| param.ty.clone()).collect(),
             return_type: Box::new(lambda.return_type.clone()),
@@ -68,10 +68,7 @@ impl Builder<'_> {
             .bodies
             .contains_key(&BodySource::Lambda(lambda.id))
         {
-            return Constant {
-                ty: Box::new(ty),
-                value: todo!("Handle lambdas"),
-            };
+            todo!("Handle lambdas")
         }
         let is_resource = lambda.is_resource == IsResource::Resource;
         let context = &mut *self.mir_context;
@@ -119,9 +116,6 @@ impl Builder<'_> {
         builder.expr_into_dest(Place::return_place(), &lambda.body);
         builder.finish_block(lambda.body.loc, TerminatorKind::Return);
         builder.add_finished_body();
-        Constant {
-            ty: Box::new(ty),
-            value: todo!("Handle lambda ids"),
-        }
+        todo!("Handle lambda ids")
     }
 }

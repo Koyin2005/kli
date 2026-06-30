@@ -200,21 +200,26 @@ impl Visit for WellFormed<'_> {
                                 None
                             }
                         },
-                        || format!("Variants can only have at most 1 inner field"),
+                        || {
+                            format!(
+                                "Variants can only have at most 1 inner field not {}",
+                                fields.len()
+                            )
+                        },
                         loc,
                     );
                     let (variant_def, index) = self.ctxt.expect_case(*id);
                     let case_ty = variant_def.cases[index].ty.as_ref();
                     let field_id = case_ty.map(|case| case.id);
                     let field_id = field_id.unwrap_or_else(|| {
-                        emit_fatal_diagnostic(loc, format!("should have a field"))
+                        emit_fatal_diagnostic(loc, "should have a field if init".to_string())
                     });
                     let field_ty = self.ctxt.type_of(field_id).bind(args);
                     let operand_ty = self.body.type_of_operand(field);
                     println!("{:?} {:?}", field_ty, operand_ty);
                     self.assert(
                         field_ty == operand_ty,
-                        || format!("field should be same types"),
+                        || format!("{field_ty} and {operand_ty} should be same types"),
                         loc,
                     );
                 }

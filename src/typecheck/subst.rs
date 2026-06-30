@@ -23,10 +23,9 @@ impl<'a> TypeSubst<'a> {
             | Type::Char
             | Type::Param(..)
             | Type::Byte => (),
-            Type::Box(ty)
-            | Type::Array(ty, _)
-            | Type::List(ty)
-            | Type::RawPointer(ty) => self.subst_type(ty),
+            Type::Box(ty) | Type::Array(ty, _) | Type::List(ty) | Type::RawPointer(ty) => {
+                self.subst_type(ty)
+            }
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
                 self.subst_region(region);
                 self.subst_type(ty);

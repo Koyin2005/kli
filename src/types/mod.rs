@@ -328,6 +328,7 @@ impl Type {
             Type::Infer(_) => unreachable!("Cannot 'infer' its a resource"),
             &Type::Named(..) => {
                 // TODO : Add a way to mark a type as a non-resource
+                _ = ctxt;
                 true
             }
         }
@@ -352,7 +353,7 @@ impl Type {
             | Type::Byte
             | Type::Param(..)
             | Type::Box(_) => ControlFlow::Continue(()),
-            Type::List(ty)  | Type::RawPointer(ty) | Type::Array(ty, _) => {
+            Type::List(ty) | Type::RawPointer(ty) | Type::Array(ty, _) => {
                 ty.visit(visit_ty, visit_region)
             }
             &(Type::Imm(region, ref ty) | Type::Mut(region, ref ty)) => {
