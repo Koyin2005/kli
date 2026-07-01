@@ -1,4 +1,5 @@
 fun allocate[T](count : int) -> ptr[T];
+
 @unsafe
 fun deallocate[T](p : ptr[T]) -> (); 
 

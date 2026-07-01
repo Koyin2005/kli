@@ -14,6 +14,7 @@ use kli::{
     resolve::Resolve,
     resourcecheck::ResourceCheck,
     typecheck::root::TypeCheck,
+    unsafety::SafetyCheck,
 };
 enum ModuleError {
     Io(std::io::Error),
@@ -298,10 +299,11 @@ fn main() {
         return;
     };
     let mut had_error = false;
-    for function in program.functions.values() {
+    for (&id, function) in program.functions.iter() {
         if let Some(ref body) = function.body {
             had_error |= PatternCheck::new(ctxt).check(body);
         }
+        had_error |= SafetyCheck::check(ctxt, id, function).is_err();
     }
     for function in program.functions.values() {
         had_error |= ResourceCheck::new(ctxt).check_function(function);

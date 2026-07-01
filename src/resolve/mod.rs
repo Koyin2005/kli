@@ -1078,7 +1078,7 @@ impl Resolve {
                                     annotation.loc,
                                 );
                             }
-                            res::AnnotationKind::Copy
+                            res::AnnotationKind::Unsafe
                         }
                         _ => {
                             self.diag.add_diagnostic(

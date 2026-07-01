@@ -450,8 +450,3 @@ impl Builtins {
         self.1.get(&id).copied()
     }
 }
-#[derive(Clone, Copy,PartialEq, Eq)]
-pub enum Safety {
-    Safe,
-    Unsafe
-}
