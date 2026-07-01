@@ -202,42 +202,6 @@ impl CtxtRef<'_> {
                 }
             }
         }
-        /*
-            ty.visit(&mut |ty|{
-                let (id,args) = match ty {
-                    &Type::Named(id,_,ref args) => {
-                        (id,args)
-                    },
-                    Type::Box(_) | Type::RawPointer(_) | Type::List(_) => return std::ops::ControlFlow::Break(false),
-                    _ => return std::ops::ControlFlow::Continue(())
-                };
-                if !seen_ids.insert(id){
-                    return std::ops::ControlFlow::Break(true);
-                }
-                match &ctxt.expect_type(id).kind {
-                    resolved_ast::TypeDefKind::Record(record) => {
-                        for field in record.fields.iter(){
-                            if is_ty_recursive(ctxt, &ctxt.type_of(field.id).bind(args),&mut seen_ids){
-                                return std::ops::ControlFlow::Break(true);
-                            }
-                        }
-                    },
-                    resolved_ast::TypeDefKind::Variant(variant) => {
-                        for case in variant.cases.iter(){
-                            let Some(id) = case.ty.as_ref().map(|ty| ty.id) else {
-                                continue;
-                            };
-                            if is_ty_recursive(ctxt, &ctxt.type_of(id).bind(args), &mut seen_ids){
-                                return std::ops::ControlFlow::Break(());
-                            }
-
-                        }
-                    }
-                }
-                std::ops::ControlFlow::Break(false)
-
-            }, &mut Region::no_op_visit).is_break()
-        }*/
         is_ty_recursive(
             self,
             &Type::Named(

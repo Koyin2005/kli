@@ -625,12 +625,6 @@ impl Parser {
                     Box::new(self.parse_expr_precedence(Precedence::None)?),
                 ),
             };
-            /*Err(non_place) => {
-                lhs = non_place;
-                self.diag
-                    .add_diagnostic("Invalid assignment target".to_string(), loc);
-                break;
-            }*/
         }
         Ok(lhs)
     }
