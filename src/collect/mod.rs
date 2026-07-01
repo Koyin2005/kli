@@ -91,6 +91,7 @@ pub struct GlobalContext {
     items: Vec<Item>,
     nodes: HashMap<DefId, NodePath>,
     builtins: Builtins,
+    std_lib: std::cell::Cell<Option<DefId>>,
 }
 impl GlobalContext {
     pub fn as_ref(&self) -> CtxtRef<'_> {
@@ -401,7 +402,10 @@ impl CtxtRef<'_> {
         &self.0.builtins
     }
     pub fn std_lib_module(self) -> Option<DefId> {
-        self.top_level_items().find_map(|item| {
+        if let Some(std_lib) = self.0.std_lib.get() {
+            return Some(std_lib);
+        }
+        let std_lib = self.top_level_items().find_map(|item| {
             let ItemKind::Module(ref module) = item.kind else {
                 return None;
             };
@@ -409,7 +413,9 @@ impl CtxtRef<'_> {
                 return None;
             }
             Some(item.id.into_def_id())
-        })
+        });
+        self.0.std_lib.set(std_lib);
+        std_lib
     }
 }
 fn lower_generics(generics: &resolved_ast::Generics) -> Generics {
@@ -490,5 +496,6 @@ pub fn build_global_context(
         items,
         item_indexes,
         builtins,
+        std_lib: Default::default(),
     }
 }
