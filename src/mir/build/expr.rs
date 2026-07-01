@@ -163,7 +163,7 @@ impl Builder<'_> {
                 }
             }
             typed_ast::PatternKind::Err => unreachable!(),
-            typed_ast::PatternKind::Case(id, args, index, inner) => {
+            typed_ast::PatternKind::Case(id, _, index, inner) => {
                 if let Some(inner) = inner {
                     self.assign_place_to_pattern(
                         inner,
