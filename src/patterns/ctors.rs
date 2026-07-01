@@ -30,15 +30,15 @@ pub fn constructors_of_ty(ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Constructor> {
             vec![Constructor::Record]
         }
         Type::Infer(_) => unreachable!("Cannot have infer here"),
-        Type::Named(id, ..) => {
-            let variant_def = ctxt.expect_type(*id).expect_variant();
-            variant_def
+        Type::Named(id, ..) => match ctxt.expect_type(*id).kind {
+            crate::resolved_ast::TypeDefKind::Record(_) => vec![Constructor::Record],
+            crate::resolved_ast::TypeDefKind::Variant(ref variant_def) => variant_def
                 .cases
                 .iter()
                 .map(|case| case.name.symbol)
                 .map(Constructor::Case)
-                .collect()
-        }
+                .collect(),
+        },
     }
 }
 
@@ -54,27 +54,40 @@ pub fn fields_of(ty: &Type, constructor: Constructor, ctxt: CtxtRef<'_>) -> Vec<
             };
             vec![(**ty).clone()]
         }
-        Constructor::Record => {
-            let Type::Record(fields) = ty else {
-                unreachable!("Should be a record")
-            };
-            fields.iter().map(|field| field.ty.clone()).collect()
-        }
+        Constructor::Record => match ty {
+            Type::Record(fields) => fields.iter().map(|field| field.ty.clone()).collect(),
+            Type::Named(id, _, args) => ctxt
+                .expect_type(*id)
+                .expect_record()
+                .fields
+                .iter()
+                .map(|field_def| ctxt.type_of(field_def.id).bind(args))
+                .collect(),
+            _ => unreachable!("should be a record type"),
+        },
         Constructor::Case(name) => {
             let Type::Named(ty_id, .., args) = ty else {
                 unreachable!("should be named")
             };
-            let variant = ctxt.expect_type(*ty_id).expect_variant();
-            let case = variant
-                .cases
-                .iter()
-                .find(|case| case.name.symbol == name)
-                .expect("should have this case");
-            case.ty
-                .as_ref()
-                .map(|ty| ctxt.type_of(ty.id).bind(args))
-                .into_iter()
-                .collect()
+            match ctxt.expect_type(*ty_id).kind {
+                crate::resolved_ast::TypeDefKind::Record(ref record) => record
+                    .fields
+                    .iter()
+                    .map(|field| ctxt.type_of(field.id).bind(args))
+                    .collect(),
+                crate::resolved_ast::TypeDefKind::Variant(ref variant) => {
+                    let case = variant
+                        .cases
+                        .iter()
+                        .find(|case| case.name.symbol == name)
+                        .expect("should have this case");
+                    case.ty
+                        .as_ref()
+                        .map(|ty| ctxt.type_of(ty.id).bind(args))
+                        .into_iter()
+                        .collect()
+                }
+            }
         }
     }
 }

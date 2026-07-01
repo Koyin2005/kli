@@ -1,5 +1,3 @@
-use std::fmt::{Debug, Display};
-
 use crate::{
     collect::CtxtRef,
     patterns::ctors::{Constructor, constructors_of_ty, fields_of},
@@ -27,15 +25,7 @@ impl Pat {
     pub fn with_index(self, index: usize) -> PatWithIndex {
         PatWithIndex { pat: self, index }
     }
-}
-
-impl Debug for Pat {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-impl Display for Pat {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn format(&self, ctxt: CtxtRef<'_>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.constructor {
             Constructor::Bool(value) => {
                 if value {
@@ -49,12 +39,12 @@ impl Display for Pat {
             }
             Constructor::Ref => {
                 f.write_str("ref ")?;
-                write!(f, "{}", self.fields[0].pat)
+                self.fields[0].pat.format(ctxt, f)
             }
             Constructor::Case(name) => {
                 write!(f, "{}", name)?;
                 if let Some(field) = self.fields.first() {
-                    write!(f, "({})", field.pat)
+                    field.pat.format(ctxt, f)
                 } else {
                     Ok(())
                 }
@@ -62,17 +52,25 @@ impl Display for Pat {
             Constructor::Wildcard => f.write_str("_"),
             Constructor::NonExhaustive => f.write_str("_"),
             Constructor::Record => {
-                let Type::Record(fields) = &self.ty else {
-                    unreachable!("Should be a record")
+                use crate::typed_ast::FieldId;
+                let fields: &mut dyn Fn(FieldId) -> crate::types::FieldName = match &self.ty {
+                    Type::Record(fields) => &mut |i| fields[i].name,
+                    &Type::Named(id, ..) => {
+                        let fields = &ctxt.expect_type(id).expect_record().fields;
+                        &mut |i| crate::types::FieldName::Named(fields[i].name.symbol)
+                    }
+                    _ => unreachable!("should be a record"),
                 };
                 f.write_str("{")?;
                 let mut first = true;
 
-                for (field, pat) in fields.iter().zip(&self.fields) {
+                for pat in self.fields.iter() {
                     if !first {
                         f.write_str(", ")?;
                     }
-                    write!(f, "{} = {}", field.name, pat.pat)?;
+
+                    write!(f, "{} = ", fields(FieldId::new(pat.index)))?;
+                    pat.pat.format(ctxt, f)?;
                     first = false;
                 }
                 f.write_str("}")

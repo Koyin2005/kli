@@ -69,6 +69,12 @@ fn check_patterns(
             .map(|pattern| convert::pattern_to_pat(ctxt, pattern)),
     );
     for pat in missing {
-        diag.add_diagnostic(format!("Missing pattern: {}", pat), loc);
+        diag.add_diagnostic(
+            format!(
+                "Missing pattern: {}",
+                std::fmt::from_fn(|f| pat.format(ctxt, f))
+            ),
+            loc,
+        );
     }
 }
