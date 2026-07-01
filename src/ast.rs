@@ -78,6 +78,7 @@ pub enum PatternKind {
     Bool(bool),
     Binding(Option<Mutable>, Mutable, Ident),
     Ref(Box<Pattern>),
+    Case(Ident, Option<Box<Pattern>>),
     Int(u64),
     Record(Vec<PatternField>),
 }

@@ -243,6 +243,21 @@ impl Parser {
                     kind: PatternKind::Record(fields),
                 })
             }
+            TokenKind::Dot => {
+                self.next_token();
+                let name = self.expect_ident("variant name")?;
+                let pattern = if self.matches_token(&TokenKind::LeftParen) {
+                    let pattern = self.parse_pattern()?;
+                    self.expect(&TokenKind::RightParen)?;
+                    Some(pattern)
+                } else {
+                    None
+                };
+                Ok(Pattern {
+                    loc,
+                    kind: PatternKind::Case(name, pattern.map(Box::new)),
+                })
+            }
             _ => {
                 self.diag
                     .add_diagnostic("Expected a valid pattern".to_string(), loc);

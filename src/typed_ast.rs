@@ -22,9 +22,11 @@ pub struct Pattern {
 }
 #[derive(Debug)]
 pub enum PatternKind {
+    Err,
     Int(i64),
     Bool(bool),
     Ref(Box<Pattern>),
+    Case(DefId, GenericArgs, Option<Box<Pattern>>),
     Binding(Option<(Mutable, Region)>, Mutable, Var, Box<Type>),
     Record(Vec<PatternField>),
 }

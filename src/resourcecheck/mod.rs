@@ -217,7 +217,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
     }
     fn check_pattern(&mut self, pattern: &Pattern, in_ref: bool) {
         match &pattern.kind {
-            PatternKind::Bool(_) | PatternKind::Int(_) => (),
+            PatternKind::Bool(_) | PatternKind::Int(_) | PatternKind::Err => (),
             PatternKind::Record(fields) => {
                 for field in fields {
                     self.check_pattern(&field.pattern, in_ref);
@@ -225,6 +225,11 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             }
             PatternKind::Ref(sub_pattern) => {
                 self.check_pattern(sub_pattern, true);
+            }
+            PatternKind::Case(.., inner) => {
+                if let Some(inner) = inner {
+                    self.check_pattern(inner, in_ref);
+                }
             }
             PatternKind::Binding(borrow, mutable, var, ty) => {
                 if in_ref && ty.is_resource(self.ctxt) && borrow.is_none() {

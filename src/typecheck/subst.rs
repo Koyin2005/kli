@@ -71,9 +71,17 @@ impl<'a> TypeSubst<'a> {
     }
     pub fn subst_pattern(&mut self, pattern: &mut Pattern) {
         match &mut pattern.kind {
-            PatternKind::Bool(_) | PatternKind::Int(_) => (),
+            PatternKind::Bool(_) | PatternKind::Int(_) | PatternKind::Err => (),
             PatternKind::Ref(pattern) => self.subst_pattern(pattern),
             PatternKind::Binding(.., ty) => self.subst_type(ty),
+            PatternKind::Case(.., args, inner) => {
+                for arg in args {
+                    self.subst_generic_arg(arg);
+                }
+                if let Some(inner) = inner {
+                    self.subst_pattern(inner);
+                }
+            }
             PatternKind::Record(fields) => {
                 for field in fields {
                     self.subst_pattern(&mut field.pattern);

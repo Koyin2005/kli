@@ -1,39 +1,40 @@
 use std::fmt::{Debug, Display};
 
 use crate::{
+    collect::CtxtRef,
     patterns::ctors::{Constructor, constructors_of_ty, fields_of},
     types::Type,
 };
 #[derive(Clone)]
-pub struct PatWithIndex<'a> {
-    pub pat: Pat<'a>,
+pub struct PatWithIndex {
+    pub pat: Pat,
     pub index: usize,
 }
 #[derive(Clone)]
-pub struct Pat<'a> {
-    pub ty: &'a Type,
+pub struct Pat {
+    pub ty: Type,
     pub constructor: Constructor,
-    pub fields: Vec<PatWithIndex<'a>>,
+    pub fields: Vec<PatWithIndex>,
 }
-impl<'a> Pat<'a> {
-    pub const fn wildcard(ty: &'a Type) -> Self {
+impl Pat {
+    pub fn wildcard(ty: &Type) -> Self {
         Self {
-            ty,
+            ty: ty.clone(),
             constructor: Constructor::Wildcard,
             fields: Vec::new(),
         }
     }
-    pub fn with_index(self, index: usize) -> PatWithIndex<'a> {
+    pub fn with_index(self, index: usize) -> PatWithIndex {
         PatWithIndex { pat: self, index }
     }
 }
 
-impl Debug for Pat<'_> {
+impl Debug for Pat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self)
     }
 }
-impl Display for Pat<'_> {
+impl Display for Pat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.constructor {
             Constructor::Bool(value) => {
@@ -50,10 +51,18 @@ impl Display for Pat<'_> {
                 f.write_str("ref ")?;
                 write!(f, "{}", self.fields[0].pat)
             }
+            Constructor::Case(name) => {
+                write!(f, "{}", name)?;
+                if let Some(field) = self.fields.first() {
+                    write!(f, "({})", field.pat)
+                } else {
+                    Ok(())
+                }
+            }
             Constructor::Wildcard => f.write_str("_"),
             Constructor::NonExhaustive => f.write_str("_"),
             Constructor::Record => {
-                let Type::Record(fields) = self.ty else {
+                let Type::Record(fields) = &self.ty else {
                     unreachable!("Should be a record")
                 };
                 f.write_str("{")?;
@@ -73,10 +82,11 @@ impl Display for Pat<'_> {
 }
 
 pub fn missing_patterns<'a>(
-    ty: &'a [&'a Type; 1],
-    patterns: &mut dyn Iterator<Item = Pat<'a>>,
-) -> Vec<Pat<'a>> {
-    let missing = missing_patterns_inner(ty, patterns.map(|pat| vec![pat]).collect());
+    ctxt: CtxtRef<'_>,
+    ty: &'a [Type; 1],
+    patterns: &mut dyn Iterator<Item = Pat>,
+) -> Vec<Pat> {
+    let missing = missing_patterns_inner(ctxt, ty, patterns.map(|pat| vec![pat]).collect());
     missing
         .into_iter()
         .map(|mut row| row.swap_remove(0))
@@ -85,9 +95,9 @@ pub fn missing_patterns<'a>(
 
 fn specialize<'a>(
     constructor: Constructor,
-    fields: &'a [&'a Type],
-    matrix: Vec<Vec<Pat<'a>>>,
-) -> Vec<Vec<Pat<'a>>> {
+    fields: &'a [Type],
+    matrix: Vec<Vec<Pat>>,
+) -> Vec<Vec<Pat>> {
     matrix
         .into_iter()
         .filter_map(|mut row| {
@@ -97,22 +107,14 @@ fn specialize<'a>(
                 Some(row.remove(0))
             })?;
             if first.constructor == constructor {
-                let mut new_row = fields
-                    .iter()
-                    .copied()
-                    .map(Pat::wildcard)
-                    .collect::<Vec<_>>();
+                let mut new_row = fields.iter().map(Pat::wildcard).collect::<Vec<_>>();
                 for indexed_pat in first.fields {
                     new_row[indexed_pat.index] = indexed_pat.pat;
                 }
                 new_row.extend(row);
                 Some(new_row)
             } else if first.constructor == Constructor::Wildcard {
-                let mut new_row = fields
-                    .iter()
-                    .copied()
-                    .map(Pat::wildcard)
-                    .collect::<Vec<_>>();
+                let mut new_row = fields.iter().map(Pat::wildcard).collect::<Vec<_>>();
                 new_row.extend(row);
                 Some(new_row)
             } else {
@@ -121,8 +123,12 @@ fn specialize<'a>(
         })
         .collect()
 }
-fn missing_patterns_inner<'b>(tys: &[&'b Type], matrix: Vec<Vec<Pat>>) -> Vec<Vec<Pat<'b>>> {
-    let Some(&head) = tys.first() else {
+fn missing_patterns_inner<'b>(
+    ctxt: CtxtRef<'_>,
+    tys: &'b [Type],
+    matrix: Vec<Vec<Pat>>,
+) -> Vec<Vec<Pat>> {
+    let Some(head) = tys.first() else {
         return if matrix.is_empty() {
             vec![Vec::new()]
         } else {
@@ -132,17 +138,18 @@ fn missing_patterns_inner<'b>(tys: &[&'b Type], matrix: Vec<Vec<Pat>>) -> Vec<Ve
     let constructors = constructors_of_ty(head);
     let mut all_missing = Vec::new();
     for c in constructors {
-        let fields = fields_of(head, c);
+        let fields = fields_of(head, c, ctxt);
         let field_count = fields.len();
         let specialized = specialize(c, &fields, matrix.clone());
         let missing = missing_patterns_inner(
-            &fields.iter().chain(&tys[1..]).copied().collect::<Vec<_>>(),
+            ctxt,
+            &fields.iter().chain(&tys[1..]).cloned().collect::<Vec<_>>(),
             specialized,
         );
         for row in missing {
             let mut row = row.into_iter();
             let head_pat = Pat {
-                ty: head,
+                ty: head.clone(),
                 constructor: c,
                 fields: row
                     .by_ref()

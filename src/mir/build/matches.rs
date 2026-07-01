@@ -106,6 +106,7 @@ impl Builder<'_> {
     }
     fn into_tests(place: Place, pattern: &Pattern) -> Vec<MatchTest> {
         match &pattern.kind {
+            PatternKind::Case(..) => todo!(),
             PatternKind::Int(value) => {
                 vec![MatchTest {
                     place,
@@ -121,7 +122,7 @@ impl Builder<'_> {
                 },
             }],
             PatternKind::Ref(pattern) => Self::into_tests(place.with_deref(), pattern),
-            PatternKind::Binding(..) => Vec::new(),
+            PatternKind::Binding(..) | PatternKind::Err => Vec::new(),
             PatternKind::Record(pattern_fields) => pattern_fields
                 .iter()
                 .flat_map(|field| {

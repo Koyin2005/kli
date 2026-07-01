@@ -1,4 +1,5 @@
 use crate::{
+    collect::CtxtRef,
     diagnostics::DiagnosticReporter,
     patterns::{convert, pat::missing_patterns},
     src_loc::SrcLoc,
@@ -6,14 +7,15 @@ use crate::{
     typed_ast_visitor::{Visitor, walk_expr},
     types::Type,
 };
-#[derive(Default)]
-pub struct PatternCheck {
+pub struct PatternCheck<'ctxt> {
     diag: DiagnosticReporter,
+    ctxt: CtxtRef<'ctxt>,
 }
-impl PatternCheck {
-    pub fn new() -> Self {
+impl<'ctxt> PatternCheck<'ctxt> {
+    pub fn new(ctxt: CtxtRef<'ctxt>) -> Self {
         Self {
             diag: DiagnosticReporter::new(),
+            ctxt,
         }
     }
     pub fn check(mut self, body: &Expr) -> bool {
@@ -21,12 +23,13 @@ impl PatternCheck {
         self.diag.report_all()
     }
 }
-impl Visitor for PatternCheck {
+impl Visitor for PatternCheck<'_> {
     fn visit_expr(&mut self, expr: &crate::typed_ast::Expr) {
         match &expr.kind {
             ExprKind::Case(matchee, arms) => {
                 self.visit_expr(matchee);
                 check_patterns(
+                    self.ctxt,
                     &mut self.diag,
                     matchee.loc,
                     &matchee.ty,
@@ -40,17 +43,30 @@ impl Visitor for PatternCheck {
         }
     }
     fn visit_pattern(&mut self, pattern: &crate::typed_ast::Pattern) {
-        check_patterns(&mut self.diag, pattern.loc, &pattern.ty, &[pattern]);
+        check_patterns(
+            self.ctxt,
+            &mut self.diag,
+            pattern.loc,
+            &pattern.ty,
+            &[pattern],
+        );
     }
 }
 
-fn check_patterns(diag: &mut DiagnosticReporter, loc: SrcLoc, ty: &Type, patterns: &[&Pattern]) {
-    let tys = [ty];
+fn check_patterns(
+    ctxt: CtxtRef<'_>,
+    diag: &mut DiagnosticReporter,
+    loc: SrcLoc,
+    ty: &Type,
+    patterns: &[&Pattern],
+) {
+    let tys = [ty.clone()];
     let missing = missing_patterns(
+        ctxt,
         &tys,
         &mut patterns
             .iter()
-            .map(|pattern| convert::pattern_to_pat(pattern)),
+            .map(|pattern| convert::pattern_to_pat(ctxt, pattern)),
     );
     for pat in missing {
         diag.add_diagnostic(format!("Missing pattern: {}", pat), loc);

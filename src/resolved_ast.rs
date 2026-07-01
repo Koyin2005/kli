@@ -265,6 +265,7 @@ pub enum PatternKind {
     Int(i64),
     Bool(bool),
     Ref(Box<Pattern>),
+    Case(Ident, Option<Box<Pattern>>),
     Binding(Option<Mutable>, Mutable, Ident, VarId),
     Record(Vec<PatternField>),
 }

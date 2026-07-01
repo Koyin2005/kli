@@ -162,6 +162,8 @@ impl Builder<'_> {
                     );
                 }
             }
+            typed_ast::PatternKind::Err => unreachable!(),
+            typed_ast::PatternKind::Case(..) => todo!("case lowering"),
         }
     }
     pub fn stmt(&mut self, stmt: &typed_ast::Stmt) {

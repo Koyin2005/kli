@@ -1,4 +1,4 @@
-use crate::types::Type;
+use crate::{Symbol, collect::CtxtRef, types::Type};
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Constructor {
     Bool(bool),
@@ -6,6 +6,7 @@ pub enum Constructor {
     Wildcard,
     Record,
     Ref,
+    Case(Symbol),
     NonExhaustive,
 }
 
@@ -36,7 +37,7 @@ pub fn constructors_of_ty(ty: &Type) -> Vec<Constructor> {
     }
 }
 
-pub fn fields_of(ty: &Type, constructor: Constructor) -> Vec<&Type> {
+pub fn fields_of(ty: &Type, constructor: Constructor, ctxt: CtxtRef<'_>) -> Vec<Type> {
     match constructor {
         Constructor::Int(_)
         | Constructor::Bool(_)
@@ -46,13 +47,29 @@ pub fn fields_of(ty: &Type, constructor: Constructor) -> Vec<&Type> {
             let (Type::Imm(_, ty) | Type::Mut(_, ty)) = ty else {
                 unreachable!("Should be a view")
             };
-            vec![ty]
+            vec![(**ty).clone()]
         }
         Constructor::Record => {
             let Type::Record(fields) = ty else {
                 unreachable!("Should be a record")
             };
-            fields.iter().map(|field| &field.ty).collect()
+            fields.iter().map(|field| field.ty.clone()).collect()
+        }
+        Constructor::Case(name) => {
+            let Type::Named(ty_id, .., args) = ty else {
+                unreachable!("should be named")
+            };
+            let variant = ctxt.expect_type(*ty_id).expect_variant();
+            let case = variant
+                .cases
+                .iter()
+                .find(|case| case.name.symbol == name)
+                .expect("should have this case");
+            case.ty
+                .as_ref()
+                .map(|ty| ctxt.type_of(ty.id).bind(args))
+                .into_iter()
+                .collect()
         }
     }
 }

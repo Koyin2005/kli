@@ -299,7 +299,7 @@ fn main() {
     let mut had_error = false;
     for function in program.functions.values() {
         if let Some(ref body) = function.body {
-            had_error |= PatternCheck::new().check(body);
+            had_error |= PatternCheck::new(context.as_ref()).check(body);
         }
     }
     for function in program.functions.values() {

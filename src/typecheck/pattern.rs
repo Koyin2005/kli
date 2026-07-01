@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::Mutable,
-    resolved_ast::{Pattern, PatternField, PatternKind, Var},
+    resolved_ast::{self, Pattern, PatternField, PatternKind, Var},
     typed_ast::{self, FieldId},
     types::{FieldName, RecordField, Region, Type},
 };
@@ -25,6 +25,98 @@ impl TypeCheck<'_> {
                     ty: Type::Int,
                     loc,
                     kind: typed_ast::PatternKind::Int(value),
+                }
+            }
+            PatternKind::Case(name, ref inner) => {
+                let (id, ty_name, args) = match expected_type {
+                    Type::Named(id, ty_name, args) => (id, ty_name, args),
+                    ty => {
+                        self.expect_ty_error("variant type", &ty, loc);
+                        if let Some(inner) = inner {
+                            let _ = self.check_pattern(&inner, Type::Unknown, binding_mode);
+                        }
+                        return typed_ast::Pattern {
+                            ty,
+                            loc,
+                            kind: typed_ast::PatternKind::Err,
+                        };
+                    }
+                };
+                let ctxt = self.ctxt();
+                let type_def = ctxt.expect_type(id);
+                let variant_def = match type_def.kind {
+                    resolved_ast::TypeDefKind::Variant(ref variant_def) => variant_def,
+                    _ => {
+                        self.ctxt().diag().add_diagnostic(
+                            format!("expected 'variant' type but got 'record'"),
+                            loc,
+                        );
+                        if let Some(inner) = inner {
+                            let _ = self.check_pattern(inner, Type::Unknown, binding_mode);
+                        }
+                        return typed_ast::Pattern {
+                            ty: Type::Named(id, ty_name, args),
+                            loc,
+                            kind: typed_ast::PatternKind::Err,
+                        };
+                    }
+                };
+                let Some(case_def) = variant_def
+                    .cases
+                    .iter()
+                    .find(|case_def| case_def.name.symbol == name.symbol)
+                else {
+                    self.ctxt().diag().add_diagnostic(
+                        format!("'{}' has no case '{}'", ty_name, name.symbol),
+                        name.loc,
+                    );
+                    if let Some(inner) = inner {
+                        let _ = self.check_pattern(inner, Type::Unknown, binding_mode);
+                    }
+                    return typed_ast::Pattern {
+                        ty: Type::Named(id, ty_name, args),
+                        loc,
+                        kind: typed_ast::PatternKind::Err,
+                    };
+                };
+                let case_id = case_def.id;
+                let inner = match (&case_def.ty, inner) {
+                    (None, None) => None,
+                    (Some(inner_ty), Some(inner)) => {
+                        let ty = self.ctxt().type_of(inner_ty.id);
+                        let ty = ty.bind(&args);
+                        Some(Box::new(self.check_pattern(inner, ty, binding_mode)))
+                    }
+                    (None, Some(inner)) => {
+                        self.ctxt().diag().add_diagnostic(
+                            format!("'{}' has no inner fields", name.symbol),
+                            name.loc,
+                        );
+                        Some(Box::new(self.check_pattern(
+                            inner,
+                            Type::Unknown,
+                            binding_mode,
+                        )))
+                    }
+                    (Some(ty), None) => {
+                        self.ctxt().diag().add_diagnostic(
+                            format!("'{}' has inner fields", name.symbol),
+                            name.loc,
+                        );
+                        Some(Box::new(typed_ast::Pattern {
+                            ty: {
+                                let ty = self.ctxt().type_of(ty.id);
+                                ty.bind(&args)
+                            },
+                            loc,
+                            kind: typed_ast::PatternKind::Err,
+                        }))
+                    }
+                };
+                typed_ast::Pattern {
+                    ty: Type::Named(id, ty_name, args.clone()),
+                    loc,
+                    kind: typed_ast::PatternKind::Case(case_id, args, inner),
                 }
             }
             PatternKind::Ref(ref inner) => {

@@ -1,10 +1,11 @@
 use crate::{
+    collect::CtxtRef,
     patterns::{ctors::Constructor, pat::Pat},
     typed_ast::{Pattern, PatternKind},
 };
 
-pub fn pattern_to_pat<'a>(pattern: &'a Pattern) -> Pat<'a> {
-    let ty = &pattern.ty;
+pub fn pattern_to_pat<'a>(ctxt: CtxtRef<'_>, pattern: &'a Pattern) -> Pat {
+    let ty = pattern.ty.clone();
 
     match &pattern.kind {
         PatternKind::Int(value) => Pat {
@@ -15,14 +16,16 @@ pub fn pattern_to_pat<'a>(pattern: &'a Pattern) -> Pat<'a> {
         PatternKind::Ref(inner) => Pat {
             ty,
             constructor: Constructor::Ref,
-            fields: vec![pattern_to_pat(inner).with_index(0)],
+            fields: vec![pattern_to_pat(ctxt, inner).with_index(0)],
         },
         PatternKind::Record(fields) => Pat {
             ty,
             constructor: Constructor::Record,
             fields: fields
                 .iter()
-                .map(|field| pattern_to_pat(&field.pattern).with_index(field.index.into_usize()))
+                .map(|field| {
+                    pattern_to_pat(ctxt, &field.pattern).with_index(field.index.into_usize())
+                })
                 .collect(),
         },
         PatternKind::Bool(value) => Pat {
@@ -30,7 +33,16 @@ pub fn pattern_to_pat<'a>(pattern: &'a Pattern) -> Pat<'a> {
             fields: Vec::new(),
             ty,
         },
-        PatternKind::Binding(..) => Pat {
+        PatternKind::Case(id, _, inner) => Pat {
+            ty,
+            constructor: Constructor::Case(ctxt.name(*id).symbol),
+            fields: inner
+                .as_ref()
+                .map(|inner| pattern_to_pat(ctxt, inner).with_index(0))
+                .into_iter()
+                .collect(),
+        },
+        PatternKind::Binding(..) | PatternKind::Err => Pat {
             constructor: Constructor::Wildcard,
             fields: Vec::new(),
             ty,
