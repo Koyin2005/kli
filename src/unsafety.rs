@@ -1,17 +1,27 @@
 use crate::{
     CtxtRef,
     resolved_ast::{AnnotationKind, Builtin, DefId},
-    typed_ast::{ExprKind, Function},
+    typed_ast::{ExprKind, Function, PlaceKind},
     typed_ast_visitor::{Visitor, walk_expr},
-    types::Type,
+    types::{PointerType, Type},
 };
 
 pub fn transmutable(from: &Type, to: &Type) -> bool {
-    from.pointer_kind().is_some() && to.pointer_kind().is_some()
+    match (from, to) {
+        (Type::Byte, Type::Bool) | (Type::Bool, Type::Byte) => true,
+        (Type::List(_), Type::String) | (Type::String, Type::List(_)) => true,
+        _ => from.pointer_kind().is_some() && to.pointer_kind().is_some(),
+    }
 }
 
 #[non_exhaustive]
 pub struct SafetyCheckError;
+pub fn is_unsafe(ctxt: CtxtRef, id: DefId) -> bool {
+    ctxt.expect_item(id)
+        .annotations
+        .iter()
+        .any(|annotation| annotation.kind == AnnotationKind::Unsafe)
+}
 pub struct SafetyCheck<'ctxt> {
     ctxt: CtxtRef<'ctxt>,
 }
@@ -40,7 +50,7 @@ impl<'ctxt> SafetyCheck<'ctxt> {
 }
 impl Visitor for SafetyCheck<'_> {
     fn visit_expr(&mut self, expr: &crate::typed_ast::Expr) {
-        let id = match expr.kind {
+        let cause = match expr.kind {
             ExprKind::BuiltinCall(builtin, ref args, _) => {
                 if let Builtin::Transmute = builtin
                     && let Some(
@@ -56,26 +66,45 @@ impl Visitor for SafetyCheck<'_> {
                         expr.loc,
                     );
                 }
-                self.ctxt.builtins().expect_id(builtin)
+                let id = self.ctxt.builtins().expect_id(builtin);
+                if is_unsafe(self.ctxt, id) {
+                    UnsafeCause::Function(id)
+                } else {
+                    return walk_expr(self, expr);
+                }
             }
-            ExprKind::Function(id, _) => id,
+            ExprKind::Function(id, _) => {
+                if is_unsafe(self.ctxt, id) {
+                    UnsafeCause::Function(id)
+                } else {
+                    return walk_expr(self, expr);
+                }
+            }
+            ExprKind::Load(ref place)
+                if let PlaceKind::Deref(ref value) = place.kind
+                    && let Some(PointerType::Raw) = value.ty.pointer_kind() =>
+            {
+                UnsafeCause::RawDeref
+            }
             _ => return walk_expr(self, expr),
         };
-        let is_unsafe = self
-            .ctxt
-            .expect_item(id)
-            .annotations
-            .iter()
-            .any(|annotation| annotation.kind == AnnotationKind::Unsafe);
-        if is_unsafe {
-            self.ctxt.diag().add_diagnostic(
-                format!(
-                    "use of unsafe function '{}' outside unsafe context",
-                    self.ctxt.name(id).symbol
-                ),
-                expr.loc,
-            );
-        }
+        self.ctxt.diag().add_diagnostic(
+            match cause {
+                UnsafeCause::Function(id) => {
+                    format!(
+                        "use of unsafe function '{}' outside unsafe context",
+                        self.ctxt.name(id).symbol
+                    )
+                }
+                UnsafeCause::RawDeref => "raw pointer deref outside unsafe context".to_string(),
+            },
+            expr.loc,
+        );
         walk_expr(self, expr)
     }
+}
+
+enum UnsafeCause {
+    RawDeref,
+    Function(DefId),
 }
