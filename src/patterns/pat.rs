@@ -42,11 +42,12 @@ impl Pat {
                 self.fields[0].pat.format(ctxt, f)
             }
             Constructor::Case(name) => {
-                write!(f, "{}", name)?;
                 if let Some(field) = self.fields.first() {
-                    field.pat.format(ctxt, f)
+                    write!(f,"{}(",name)?;
+                    field.pat.format(ctxt, f)?;
+                    write!(f,")")
                 } else {
-                    Ok(())
+                    write!(f, "{}", name)
                 }
             }
             Constructor::Wildcard => f.write_str("_"),
