@@ -1,6 +1,6 @@
 type Option[T] = 
-| Some(T)
 | None
+| Some(T)
 
 fun none[T]() -> Option[T] = Option.None
 
