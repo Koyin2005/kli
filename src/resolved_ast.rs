@@ -401,6 +401,7 @@ pub enum ItemKind {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum AnnotationKind {
     Copy,
+    Unsafe,
 }
 #[derive(Debug)]
 pub struct Annotation {
@@ -448,4 +449,9 @@ impl Builtins {
     pub fn builtin_for(&self, id: DefId) -> Option<Builtin> {
         self.1.get(&id).copied()
     }
+}
+#[derive(Clone, Copy,PartialEq, Eq)]
+pub enum Safety {
+    Safe,
+    Unsafe
 }

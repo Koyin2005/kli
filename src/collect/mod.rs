@@ -345,6 +345,9 @@ impl CtxtRef<'_> {
             current: id,
         }
     }
+    pub fn root_of(self, id: DefId) -> DefId {
+        self.ancestors(id).last().unwrap_or(id)
+    }
     pub fn parent_of(self, id: DefId) -> Option<DefId> {
         self.0.parents.get(&id).copied()
     }

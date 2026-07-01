@@ -934,15 +934,16 @@ impl Resolve {
     }
     fn next_def_id(&mut self) -> DefId {
         let def_id = self.next_def_id.next();
-        std::mem::replace(&mut self.next_def_id, def_id)
+        let def_id = std::mem::replace(&mut self.next_def_id, def_id);
+        if let Some(current_parent) = self.current_item {
+            self.parents.insert(def_id, current_parent);
+        }
+        def_id
     }
     fn declare_def_id_for(&mut self, module: ModuleId, id: NodeId) -> DefId {
         let def_id = self.next_def_id();
         self.item_id_to_def_id
             .insert(ModuleNodeId(module, id), def_id);
-        if let Some(current_parent) = self.current_item {
-            self.parents.insert(def_id, current_parent);
-        }
         def_id
     }
     #[track_caller]
@@ -1016,32 +1017,32 @@ impl Resolve {
     }
     fn declare_module_items(&mut self, module: &ast::Module) {
         let id = self.declare_module(module.id, module.name);
-        let parent = self.current_item.replace(id);
-        let scope = self.take_new_scope(|this| {
-            for item in module.items.iter() {
-                let &ast::Item {
-                    id,
-                    ref kind,
-                    loc: _,
-                    annotations: _,
-                } = item;
-                let full_id = ModuleNodeId(module.id, id);
-                let def_id = this.declare_def_id_for(module.id, item.id);
-                match kind {
-                    ast::ItemKind::TypeDef(type_def) => {
-                        this.declare_type_def(full_id, def_id, type_def);
-                    }
-                    ast::ItemKind::Function(function) => {
-                        this.declare_function(function.name, full_id);
+        self.with_parent_def_id(id, |this| {
+            let scope = this.take_new_scope(|this| {
+                for item in module.items.iter() {
+                    let &ast::Item {
+                        id,
+                        ref kind,
+                        loc: _,
+                        annotations: _,
+                    } = item;
+                    let full_id = ModuleNodeId(module.id, id);
+                    let def_id = this.declare_def_id_for(module.id, item.id);
+                    match kind {
+                        ast::ItemKind::TypeDef(type_def) => {
+                            this.declare_type_def(full_id, def_id, type_def);
+                        }
+                        ast::ItemKind::Function(function) => {
+                            this.declare_function(function.name, full_id);
+                        }
                     }
                 }
-            }
-            for module in &module.child_modules {
-                this.declare_module_items(module);
-            }
-        });
-        self.modules.get_mut(&module.id).unwrap().env.extend(scope);
-        self.current_item = parent;
+                for module in &module.child_modules {
+                    this.declare_module_items(module);
+                }
+            });
+            this.modules.get_mut(&module.id).unwrap().env.extend(scope);
+        })
     }
     fn declare(&mut self, modules: &[ast::Module]) {
         for module in modules.iter() {
@@ -1062,6 +1063,15 @@ impl Resolve {
                     loc: annotation.loc,
                     kind: match annotation.name.symbol {
                         Symbol::COPY => {
+                            if !annotation.fields.is_empty() {
+                                self.diag.add_diagnostic(
+                                    format!("too many fields for '{}'", annotation.name.symbol),
+                                    annotation.loc,
+                                );
+                            }
+                            res::AnnotationKind::Copy
+                        }
+                        Symbol::UNSAFE => {
                             if !annotation.fields.is_empty() {
                                 self.diag.add_diagnostic(
                                     format!("too many fields for '{}'", annotation.name.symbol),
@@ -1110,12 +1120,12 @@ impl Resolve {
             }
             items.push(res::Item {
                 id: res::ItemId(this.def_id_for_module(module.id)),
-                loc: SrcLoc::dummy(),
+                loc: SrcLoc::dummy().with_file(module.name),
                 annotations: Vec::new(),
                 kind: res::ItemKind::Module(res::Module {
                     name: Ident {
                         symbol: module.name,
-                        loc: SrcLoc::dummy(),
+                        loc: SrcLoc::dummy().with_file(module.name),
                     },
                     items: mod_items,
                 }),

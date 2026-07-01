@@ -5,10 +5,13 @@ pub struct SrcLoc {
     pub file: Symbol,
 }
 impl SrcLoc {
-    pub fn dummy() -> SrcLoc {
+    pub const fn dummy() -> SrcLoc {
         SrcLoc {
             line: 0,
             file: Symbol::EMPTY_STRING,
         }
+    }
+    pub const fn with_file(self, file: Symbol) -> Self {
+        Self { file, ..self }
     }
 }

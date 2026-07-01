@@ -20,6 +20,7 @@ enum NamedSymbol {
     Builtins,
     NumberZero,
     Copy,
+    Unsafe,
 }
 impl NamedSymbol {
     pub const fn content(self) -> &'static str {
@@ -30,6 +31,7 @@ impl NamedSymbol {
             Self::Builtins => "builtins",
             Self::NumberZero => "0",
             Self::Copy => "copy",
+            Self::Unsafe => "unsafe",
         }
     }
 }
@@ -49,15 +51,17 @@ const fn byte_eq(b1: &[u8], b2: &[u8]) -> bool {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol(SymbolId);
 impl Symbol {
-    const NAMED_SYMBOLS: [NamedSymbol; 6] = [
+    const NAMED_SYMBOLS: [NamedSymbol; 7] = [
         NamedSymbol::Empty,
         NamedSymbol::Main,
         NamedSymbol::Std,
         NamedSymbol::Builtins,
         NamedSymbol::NumberZero,
         NamedSymbol::Copy,
+        NamedSymbol::Unsafe,
     ];
-    const fn expect_symbol(content: &str) -> SymbolId {
+    const fn expect_symbol(name: NamedSymbol) -> Symbol {
+        let content = name.content();
         let mut i = 0;
         while i < Self::NAMED_SYMBOLS.len() {
             if byte_eq(
@@ -67,19 +71,20 @@ impl Symbol {
                 return if i > u32::MAX as usize {
                     panic!("too many symbols")
                 } else {
-                    hidden::make_symbol(i as u32)
+                    Symbol(hidden::make_symbol(i as u32))
                 };
             }
             i += 1;
         }
         panic!("not found")
     }
-    pub const EMPTY_STRING: Self = Self(Self::expect_symbol(""));
-    pub const MAIN: Self = Self(Self::expect_symbol("main"));
-    pub const STD: Self = Self(Self::expect_symbol("std"));
-    pub const BUILTINS: Self = Self(Self::expect_symbol("builtins"));
-    pub const ZERO: Self = Self(Self::expect_symbol("0"));
-    pub const COPY: Self = Self(Self::expect_symbol("copy"));
+    pub const EMPTY_STRING: Self = Self::expect_symbol(NamedSymbol::Empty);
+    pub const MAIN: Self = Self::expect_symbol(NamedSymbol::Main);
+    pub const STD: Self = Self::expect_symbol(NamedSymbol::Std);
+    pub const BUILTINS: Self = Self::expect_symbol(NamedSymbol::Builtins);
+    pub const ZERO: Self = Self::expect_symbol(NamedSymbol::NumberZero);
+    pub const COPY: Self = Self::expect_symbol(NamedSymbol::Copy);
+    pub const UNSAFE: Self = Self::expect_symbol(NamedSymbol::Unsafe);
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }
