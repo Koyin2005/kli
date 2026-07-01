@@ -183,6 +183,7 @@ pub enum Rvalue {
     Call(Operand, Vec<Operand>),
     Binary(BinaryOp, Box<(Operand, Operand)>),
     Ref(Mutable, Region, Place),
+    RawPtrTo(Place),
     Allocate { ty: Type, count: Operand },
     Cast(CastKind, Operand),
     DecodeUtf8(Operand, Operand),
@@ -450,6 +451,7 @@ impl Body {
                 CastKind::Transmute(ty) => ty.clone(),
             },
             Rvalue::Discriminant(_) => Type::Int,
+            Rvalue::RawPtrTo(place) => Type::pointer(self.type_of_place(place, ctxt)),
         }
     }
     pub fn src_info(&self, loc: Location) -> SrcLoc {

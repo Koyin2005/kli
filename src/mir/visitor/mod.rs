@@ -70,7 +70,7 @@ pub trait Visit {
                 self.visit_operand(loc, left);
                 self.visit_operand(loc, right);
             }
-            Rvalue::Ref(_, _, place) => {
+            Rvalue::Ref(_, _, place) | Rvalue::RawPtrTo(place) => {
                 self.visit_place(loc, place);
             }
             Rvalue::Allocate { ty: _, count } => {

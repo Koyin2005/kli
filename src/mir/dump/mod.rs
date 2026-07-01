@@ -196,6 +196,11 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(index)?;
                 write!(self.output, ")")?;
             }
+            Rvalue::RawPtrTo(place) => {
+                write!(self.output, "raw_ptr_to(")?;
+                self.write_place(place)?;
+                write!(self.output, ")")?;
+            }
         }
         Ok(())
     }

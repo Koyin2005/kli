@@ -197,6 +197,7 @@ pub enum ExprKind {
     Bool(bool),
     Number(u64),
     Record(RecordExpr),
+    AddressOf(Box<Expr>),
 }
 #[derive(Debug, Clone)]
 pub struct Generics {

@@ -221,6 +221,7 @@ pub enum ExprKind {
     Call(Box<Expr>, Vec<Expr>),
     Record(Vec<FieldInit>),
     VariantCase(DefId, GenericArgs),
+    AddressOf(Box<Place>),
 }
 #[derive(Debug, Clone)]
 pub enum RegionKind {

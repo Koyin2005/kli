@@ -233,6 +233,7 @@ impl Visit for WellFormed<'_> {
                 }
             },
             super::Rvalue::Use(_) => (),
+            super::Rvalue::RawPtrTo(_) => {}
             super::Rvalue::Call(operand, operands) => {
                 let callee = self.body.type_of_operand(operand, self.ctxt);
                 let FunctionType {

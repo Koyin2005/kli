@@ -457,6 +457,14 @@ impl Parser {
                     })),
                 })
             }
+            TokenKind::AddrOf => {
+                self.next_token();
+                let expr = self.parse_paren_expr(loc)?;
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::AddressOf(Box::new(expr)),
+                })
+            }
             TokenKind::Ident(_) => {
                 let Some(name) = self.match_ident() else {
                     unreachable!("Should be an ident here")

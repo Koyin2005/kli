@@ -125,6 +125,7 @@ pub enum ExprKind {
     Case(Box<Expr>, Vec<CaseArm>),
     Assign(Place, Box<Expr>),
     Lambda(Box<Lambda>),
+    AddressOf(Box<Place>),
 }
 #[derive(Debug)]
 pub struct CaseArm {

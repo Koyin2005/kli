@@ -73,13 +73,7 @@ impl Visitor for SafetyCheck<'_> {
                     return walk_expr(self, expr);
                 }
             }
-            ExprKind::Function(id, _) => {
-                if is_unsafe(self.ctxt, id) {
-                    UnsafeCause::Function(id)
-                } else {
-                    return walk_expr(self, expr);
-                }
-            }
+            ExprKind::Function(id, _) if is_unsafe(self.ctxt, id) => UnsafeCause::Function(id),
             ExprKind::Load(ref place)
                 if let PlaceKind::Deref(ref value) = place.kind
                     && let Some(PointerType::Raw) = value.ty.pointer_kind() =>

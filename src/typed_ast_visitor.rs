@@ -75,6 +75,9 @@ where
                 v.visit_expr(&field.value);
             }
         }
+        ExprKind::AddressOf(place) => {
+            v.visit_place(place);
+        }
         ExprKind::Err
         | ExprKind::Int(_)
         | ExprKind::Const(..)

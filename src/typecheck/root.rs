@@ -196,7 +196,6 @@ impl<'ctxt> TypeCheck<'ctxt> {
                 "'main' should have '()' as return type".to_string(),
                 main.name.loc,
             );
-            return;
         }
     }
     pub(super) fn current_function(&self) -> DefId {
@@ -303,7 +302,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
             .diag()
             .add_diagnostic(format!("Expected {kind} type but got '{}'", ty), loc);
     }
-    fn validate_types_non_recursive(&self) -> () {
+    fn validate_types_non_recursive(&self) {
         for item in self.ctxt.all_items() {
             if let res::ItemKind::TypeDef(ref type_def) = item.kind {
                 let def_id = item.id.into_def_id();
@@ -321,7 +320,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
     }
     pub fn check(self) -> Result<typed_ast::Program, TypeError> {
         let mut functions = HashMap::new();
-        let _ = self.validate_main();
+        self.validate_main();
         self.validate_types_non_recursive();
         for item in self.ctxt.all_items() {
             let id = item.id.0;

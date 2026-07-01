@@ -125,6 +125,9 @@ impl<'a> TypeSubst<'a> {
             | ExprKind::Int(_)
             | ExprKind::String(_)
             | ExprKind::Panic => (),
+            ExprKind::AddressOf(place) => {
+                self.subst_place(place);
+            }
             ExprKind::Binary(_, first, second) => {
                 self.subst_expr(first);
                 self.subst_expr(second);

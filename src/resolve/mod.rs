@@ -720,7 +720,17 @@ impl Resolve {
                     region,
                 )
             }),
-
+            ast::ExprKind::AddressOf(expr) => {
+                let Some(place) = self.resolve_place(*expr) else {
+                    self.diag
+                        .add_diagnostic("cannot take address of non place".to_string(), loc);
+                    return res::Expr {
+                        loc,
+                        kind: res::ExprKind::Err,
+                    };
+                };
+                res::ExprKind::AddressOf(Box::new(place))
+            }
             ast::ExprKind::Unit => res::ExprKind::Unit,
             ast::ExprKind::String(value) => res::ExprKind::String(value.into()),
             ast::ExprKind::Number(value) => res::ExprKind::Int(value as i64),

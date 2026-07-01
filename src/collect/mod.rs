@@ -142,11 +142,7 @@ impl CtxtRef<'_> {
         self.expect_type_def(id).expect_variant()
     }
     pub fn is_type_recursive(self, id: DefId) -> bool {
-        fn is_ty_recursive(
-            ctxt: CtxtRef<'_>,
-            ty: &Type,
-            mut seen_ids: &mut HashSet<DefId>,
-        ) -> bool {
+        fn is_ty_recursive(ctxt: CtxtRef<'_>, ty: &Type, seen_ids: &mut HashSet<DefId>) -> bool {
             match ty {
                 Type::Array(ty, _) => is_ty_recursive(ctxt, ty, seen_ids),
                 Type::Bool
@@ -178,7 +174,7 @@ impl CtxtRef<'_> {
                                 if is_ty_recursive(
                                     ctxt,
                                     &ctxt.type_of(field.id).bind(args),
-                                    &mut seen_ids,
+                                    seen_ids,
                                 ) {
                                     return true;
                                 }
@@ -189,11 +185,7 @@ impl CtxtRef<'_> {
                                 let Some(id) = case.ty.as_ref().map(|ty| ty.id) else {
                                     continue;
                                 };
-                                if is_ty_recursive(
-                                    ctxt,
-                                    &ctxt.type_of(id).bind(args),
-                                    &mut seen_ids,
-                                ) {
+                                if is_ty_recursive(ctxt, &ctxt.type_of(id).bind(args), seen_ids) {
                                     return true;
                                 }
                             }

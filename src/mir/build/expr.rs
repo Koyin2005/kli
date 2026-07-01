@@ -215,7 +215,8 @@ impl Builder<'_> {
             | ExprKind::String(_)
             | ExprKind::Lambda(_)
             | ExprKind::BuiltinCall(..)
-            | ExprKind::Const(..) => {
+            | ExprKind::Const(..)
+            | ExprKind::AddressOf(..) => {
                 let rvalue = self.build_rvalue(expr);
                 self.assign(expr.loc, dest, rvalue);
             }
@@ -507,6 +508,7 @@ impl Builder<'_> {
                 ref place,
                 region,
             } => Rvalue::Ref(mutable, region, self.lower_place(place)),
+            ExprKind::AddressOf(place) => Rvalue::RawPtrTo(self.lower_place(place)),
             ExprKind::Lambda(lambda) => {
                 let is_resource = lambda.is_resource == IsResource::Resource;
                 let function = Operand::Constant(self.lambda_code(lambda));

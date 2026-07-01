@@ -59,7 +59,8 @@ impl Builder<'_> {
             | ExprKind::List(..)
             | ExprKind::Lambda(..)
             | ExprKind::Const(..)
-            | ExprKind::VariantInit(..) => {
+            | ExprKind::VariantInit(..)
+            | ExprKind::AddressOf(..) => {
                 self.expr_into_temp(expr);
             }
         }

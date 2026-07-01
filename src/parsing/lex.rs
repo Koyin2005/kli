@@ -142,6 +142,7 @@ impl<'s> Lexer<'s> {
         Some(Token {
             loc: self.current_loc(),
             kind: match src.as_str() {
+                "addr_of" => TokenKind::AddrOf,
                 "fun" => TokenKind::Fun,
                 "imm" => TokenKind::Imm,
                 "mut" => TokenKind::Mut,

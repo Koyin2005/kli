@@ -514,6 +514,23 @@ impl TypeCheck<'_> {
                     kind: typed_ast::ExprKind::Panic,
                 };
             }
+            ExprKind::AddressOf(place) => {
+                let place = self.check_place(
+                    place,
+                    if let Some(ref ty) = expected_ty
+                        && let Type::RawPointer(ty) = ty
+                    {
+                        Some((**ty).clone())
+                    } else {
+                        None
+                    },
+                );
+                typed_ast::Expr {
+                    ty: Type::pointer(place.ty.clone()),
+                    loc,
+                    kind: typed_ast::ExprKind::AddressOf(Box::new(place)),
+                }
+            }
             ExprKind::Binary(binary_op, left, right) => {
                 let left = self.check_expr(left, Some(Type::Int));
                 let right = self.check_expr(right, Some(Type::Int));

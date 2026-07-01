@@ -57,6 +57,7 @@ pub enum TokenKind {
     ArrayList,
     At,
     Type,
+    AddrOf,
     Eof,
 }
 
@@ -81,6 +82,7 @@ impl Display for TokenKind {
             Self::Of => "of",
             Self::Do => "do",
             Self::Dot => ".",
+            Self::AddrOf => "addr_of",
             Self::StringLiteral(literal) => {
                 f.write_str("\"")?;
                 f.write_str(literal)?;

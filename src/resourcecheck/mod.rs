@@ -586,6 +586,9 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                 }
                 self.var_states = combined_state;
             }
+            ExprKind::AddressOf(place) => {
+                self.check_place_use(place, PlaceUse::Write);
+            }
         }
     }
     pub fn check_function(mut self, function: &Function) -> bool {
