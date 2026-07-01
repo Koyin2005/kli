@@ -224,7 +224,6 @@ impl Visit for WellFormed<'_> {
                     });
                     let field_ty = self.ctxt.type_of(field_id).bind(args);
                     let operand_ty = self.body.type_of_operand(field, self.ctxt);
-                    println!("{:?} {:?}", field_ty, operand_ty);
                     self.assert(
                         field_ty == operand_ty,
                         || format!("{field_ty} and {operand_ty} should be same types"),
