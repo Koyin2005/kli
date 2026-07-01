@@ -293,37 +293,38 @@ fn main() {
     let Ok(context) = Resolve::new().resolve(modules) else {
         return;
     };
-    let Ok(program) = TypeCheck::new(context.as_ref()).check() else {
+    let ctxt = context.as_ref();
+    let Ok(program) = TypeCheck::new(ctxt).check() else {
         return;
     };
     let mut had_error = false;
     for function in program.functions.values() {
         if let Some(ref body) = function.body {
-            had_error |= PatternCheck::new(context.as_ref()).check(body);
+            had_error |= PatternCheck::new(ctxt).check(body);
         }
     }
     for function in program.functions.values() {
-        had_error |= ResourceCheck::new(context.as_ref()).check_function(function);
+        had_error |= ResourceCheck::new(ctxt).check_function(function);
     }
     if had_error {
         return;
     }
     let mut mir_context = mir::Context::new(true);
     for (&id, function) in program.functions.iter() {
-        if context.as_ref().builtins().builtin_for(id).is_some() {
+        if ctxt.builtins().builtin_for(id).is_some() {
             continue;
         }
-        mir::build::Builder::build_from_function(context.as_ref(), &mut mir_context, id, function);
+        mir::build::Builder::build_from_function(ctxt, &mut mir_context, id, function);
     }
     if config.flags.contains(&Feature::OutputMir) {
         for body in mir_context.body_iter() {
-            mir::dump::MirDump::new(std::io::stdout(), context.as_ref())
+            mir::dump::MirDump::new(std::io::stdout(), ctxt)
                 .write_body(body)
                 .unwrap();
         }
     }
     if config.flags.contains(&Feature::OutputInstances)
-        && let Some((main, _)) = context.as_ref().main_function()
+        && let Some((main, _)) = ctxt.main_function()
     {
         let instances = InstanceCollector::new(&mir_context)
             .collect(Instance::non_generic(InstanceKind::Function(main)));

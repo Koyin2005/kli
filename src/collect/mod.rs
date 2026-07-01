@@ -418,6 +418,17 @@ impl CtxtRef<'_> {
     pub fn builtins(&self) -> &Builtins {
         &self.0.builtins
     }
+    pub fn std_lib_module(self) -> Option<DefId>{
+        self.top_level_items().find_map(|item|{
+            let ItemKind::Module(ref module) = item.kind else {
+                return None;
+            };
+            if module.name.symbol != Symbol::STD {
+                return None;
+            }
+            Some(item.id.into_def_id())
+        })
+    }
 }
 fn lower_generics(generics: &resolved_ast::Generics) -> Generics {
     Generics {
