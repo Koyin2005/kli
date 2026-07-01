@@ -154,17 +154,17 @@ impl Builtin {
             .into_iter()
             .find(|builtin| Symbol::intern(builtin.name()) == name)
     }
-    pub const fn index_of(self) -> Option<usize> {
+    const fn index_of(self) -> usize {
         let mut i = 0;
         let builtins = Self::ALL_BUILTINS;
         let name = self.name();
         while i < builtins.len() {
             if name.eq_ignore_ascii_case(builtins[i].name()) {
-                return Some(i);
+                return i;
             }
             i += 1;
         }
-        None
+        panic!("missing builtin")
     }
 }
 #[derive(Debug)]
@@ -404,11 +404,11 @@ impl DefId {
 pub struct Builtins([Option<DefId>; Builtin::COUNT], HashMap<DefId, Builtin>);
 impl Builtins {
     pub fn insert(&mut self, builtin: Builtin, id: DefId) {
-        let _ = self.0[builtin.index_of().unwrap()].insert(id);
+        let _ = self.0[builtin.index_of()].insert(id);
         self.1.insert(id, builtin);
     }
     pub fn expect_id(&self, builtin: Builtin) -> DefId {
-        self.0[builtin.index_of().unwrap()]
+        self.0[builtin.index_of()]
             .unwrap_or_else(|| panic!("expected builtin '{}' to be defined", builtin.name()))
     }
     pub fn builtin_for(&self, id: DefId) -> Option<Builtin> {

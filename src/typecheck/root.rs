@@ -39,18 +39,27 @@ impl<'ctxt> TypeCheck<'ctxt> {
         }
     }
     pub(super) fn iterator_element(&self, ty: Type) -> Result<(IteratorType, Type), Type> {
+        fn by_ref_iter(
+            this: &TypeCheck<'_>,
+            region: Region,
+            mutable: crate::ast::Mutable,
+            pointee: Type,
+        ) -> Result<(IteratorType, Type), Type> {
+            match this.simplify_type(pointee) {
+                Type::List(element) => Ok((
+                    IteratorType::ArrayListRef(region, mutable, (*element).clone()),
+                    Type::reference(*element, mutable, region),
+                )),
+                Type::String => Ok((IteratorType::StringIter(region, mutable), Type::Char)),
+                pointee => Err(Type::reference(pointee, mutable, region)),
+            }
+        }
         match ty {
-            Type::Imm(_, _) | Type::Mut(_, _) => {
-                let (mutable, region, pointee) =
-                    ty.as_reference_type().expect("Should be a reference");
-                match self.simplify_type(pointee.clone()) {
-                    Type::List(element) => Ok((
-                        IteratorType::ArrayListRef(region, mutable, (*element).clone()),
-                        Type::reference(*element, mutable, region),
-                    )),
-                    Type::String => Ok((IteratorType::StringIter(region, mutable), Type::Char)),
-                    _ => Err(ty),
-                }
+            Type::Imm(region, pointee) => {
+                by_ref_iter(self, region, crate::ast::Mutable::Immutable, *pointee)
+            }
+            Type::Mut(region, pointee) => {
+                by_ref_iter(self, region, crate::ast::Mutable::Mutable, *pointee)
             }
             Type::Infer(var) => match self.simplify_type(Type::Infer(var)) {
                 Type::Infer(_) => Err(ty),

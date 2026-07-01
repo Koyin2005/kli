@@ -167,7 +167,6 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                 }
                 if is_resource {
                     *state = VarState::Moved;
-                    let info = &self.vars[&var];
                     if self.loops > 0 && info.loop_count != self.loops {
                         self.err.add_diagnostic(
                             format!("Cannot move from '{}' in a loop", info.name),
