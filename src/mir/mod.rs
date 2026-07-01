@@ -24,6 +24,7 @@ pub enum PlaceProjection {
     Field(FieldId),
     ConstantIndex(u32),
     Index(Local),
+    CaseDowncast(usize, Symbol),
     Deref,
 }
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
@@ -59,31 +60,24 @@ impl Place {
     }
     pub fn with_field(mut self, field: FieldId) -> Self {
         self.projections.push(PlaceProjection::Field(field));
-        Self {
-            base: self.base,
-            projections: self.projections,
-        }
+        self
     }
     pub fn with_index(mut self, index: Local) -> Self {
         self.projections.push(PlaceProjection::Index(index));
-        Self {
-            base: self.base,
-            projections: self.projections,
-        }
+        self
     }
     pub fn with_constant_index(mut self, index: u32) -> Self {
         self.projections.push(PlaceProjection::ConstantIndex(index));
-        Self {
-            base: self.base,
-            projections: self.projections,
-        }
+        self
     }
     pub fn with_deref(mut self) -> Self {
         self.projections.push(PlaceProjection::Deref);
-        Self {
-            base: self.base,
-            projections: self.projections,
-        }
+        self
+    }
+    pub fn with_case_downcast(mut self, index: usize, name: Symbol) -> Self {
+        self.projections
+            .push(PlaceProjection::CaseDowncast(index, name));
+        self
     }
 }
 #[derive(Clone, Debug)]
@@ -318,7 +312,12 @@ impl Body {
             PlaceBase::ReturnPlace => self.return_type.clone(),
         }
     }
-    pub fn apply_projection_to_type(&self, ty: Type, projection: &PlaceProjection) -> Type {
+    pub fn apply_projection_to_type(
+        &self,
+        ty: Type,
+        projection: &PlaceProjection,
+        ctxt: CtxtRef<'_>,
+    ) -> Type {
         match projection {
             PlaceProjection::Deref => ty
                 .as_pointer_type()
@@ -337,30 +336,38 @@ impl Body {
                 };
                 *ty
             }
+            PlaceProjection::CaseDowncast(index, _) => {
+                let Type::Named(id, _, args) = ty else {
+                    unreachable!("Should be named")
+                };
+                let variant = ctxt.expect_type(id).expect_variant();
+                let ty = variant.cases[*index].ty.as_ref().unwrap();
+                ctxt.type_of(ty.id).bind(&args)
+            }
         }
     }
-    pub fn type_of_place(&self, place: &Place) -> Type {
+    pub fn type_of_place(&self, place: &Place, ctxt: CtxtRef<'_>) -> Type {
         let mut ty = self.type_of_base(&place.base);
         for projection in place.projections.iter() {
-            ty = self.apply_projection_to_type(ty, projection);
+            ty = self.apply_projection_to_type(ty, projection, ctxt);
         }
         ty
     }
-    pub fn type_of_operand(&self, operand: &Operand) -> Type {
+    pub fn type_of_operand(&self, operand: &Operand, ctxt: CtxtRef<'_>) -> Type {
         match operand {
             Operand::Constant(constant) => (*constant.ty).clone(),
-            Operand::Load(place) => self.type_of_place(place),
+            Operand::Load(place) => self.type_of_place(place, ctxt),
         }
     }
     pub fn type_of_rvalue(&self, rvalue: &Rvalue, ctxt: CtxtRef<'_>) -> Type {
         match rvalue {
-            Rvalue::Use(operand) => self.type_of_operand(operand),
+            Rvalue::Use(operand) => self.type_of_operand(operand, ctxt),
             Rvalue::Len(_) => Type::Int,
             &Rvalue::Ref(mutable, region, ref place) => {
-                self.type_of_place(place).reference(mutable, region)
+                self.type_of_place(place, ctxt).reference(mutable, region)
             }
             Rvalue::Call(operand, _) => {
-                let Type::Function(function) = self.type_of_operand(operand) else {
+                let Type::Function(function) = self.type_of_operand(operand, ctxt) else {
                     unreachable!("Should be a function type")
                 };
                 *function.return_type
@@ -371,7 +378,7 @@ impl Body {
                 BinaryOp::Offset => {
                     let (left, _) = left_and_right.as_ref();
                     let (PointerType::Raw, ty) =
-                        self.type_of_operand(left).as_pointer_type().unwrap()
+                        self.type_of_operand(left, ctxt).as_pointer_type().unwrap()
                     else {
                         unreachable!("should be a raw pointer")
                     };
@@ -391,7 +398,7 @@ impl Body {
                         .zip(operands)
                         .map(|(&name, operand)| crate::types::RecordField {
                             name,
-                            ty: self.type_of_operand(operand),
+                            ty: self.type_of_operand(operand, ctxt),
                         })
                         .collect(),
                 ),
@@ -409,7 +416,7 @@ impl Body {
             },
             Rvalue::PointerCast(cast, operand) => {
                 let (pointer_type, pointee) = self
-                    .type_of_operand(operand)
+                    .type_of_operand(operand, ctxt)
                     .as_pointer_type()
                     .expect("should be a pointer type");
                 match cast {

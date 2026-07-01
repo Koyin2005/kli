@@ -4,7 +4,7 @@ use crate::{
     typed_ast::{Pattern, PatternKind},
 };
 
-pub fn pattern_to_pat<'a>(ctxt: CtxtRef<'_>, pattern: &'a Pattern) -> Pat {
+pub fn pattern_to_pat(ctxt: CtxtRef<'_>, pattern: &Pattern) -> Pat {
     let ty = pattern.ty.clone();
 
     match &pattern.kind {
@@ -33,7 +33,7 @@ pub fn pattern_to_pat<'a>(ctxt: CtxtRef<'_>, pattern: &'a Pattern) -> Pat {
             fields: Vec::new(),
             ty,
         },
-        PatternKind::Case(id, _, inner) => Pat {
+        PatternKind::Case(id, _, _, inner) => Pat {
             ty,
             constructor: Constructor::Case(ctxt.name(*id).symbol),
             fields: inner

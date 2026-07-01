@@ -4,8 +4,8 @@ type Option[T] =
 
 fun none[T]() -> Option[T] = Option.None
 
-fun value_or[T](option: Option[T], default : T) -> T = 
-    case option of 
-    | Option.Some(x) -> x
-    | Opton.None -> default
+fun value_or[T](o: Option[T], default : T) -> T = 
+    case o of 
+    | .Some(x) -> x
+    | .None -> default
     end

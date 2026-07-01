@@ -33,7 +33,7 @@ impl TypeCheck<'_> {
                     ty => {
                         self.expect_ty_error("variant type", &ty, loc);
                         if let Some(inner) = inner {
-                            let _ = self.check_pattern(&inner, Type::Unknown, binding_mode);
+                            let _ = self.check_pattern(inner, Type::Unknown, binding_mode);
                         }
                         return typed_ast::Pattern {
                             ty,
@@ -48,7 +48,7 @@ impl TypeCheck<'_> {
                     resolved_ast::TypeDefKind::Variant(ref variant_def) => variant_def,
                     _ => {
                         self.ctxt().diag().add_diagnostic(
-                            format!("expected 'variant' type but got 'record'"),
+                            "expected 'variant' type but got 'record'".to_string(),
                             loc,
                         );
                         if let Some(inner) = inner {
@@ -61,10 +61,11 @@ impl TypeCheck<'_> {
                         };
                     }
                 };
-                let Some(case_def) = variant_def
+                let Some((i, case_def)) = variant_def
                     .cases
                     .iter()
-                    .find(|case_def| case_def.name.symbol == name.symbol)
+                    .enumerate()
+                    .find(|(_, case_def)| case_def.name.symbol == name.symbol)
                 else {
                     self.ctxt().diag().add_diagnostic(
                         format!("'{}' has no case '{}'", ty_name, name.symbol),
@@ -116,7 +117,7 @@ impl TypeCheck<'_> {
                 typed_ast::Pattern {
                     ty: Type::Named(id, ty_name, args.clone()),
                     loc,
-                    kind: typed_ast::PatternKind::Case(case_id, args, inner),
+                    kind: typed_ast::PatternKind::Case(case_id, args, i, inner),
                 }
             }
             PatternKind::Ref(ref inner) => {

@@ -66,6 +66,9 @@ impl<'ctxt> MirDump<'ctxt> {
                         output.push(']');
                         output
                     }
+                    PlaceProjection::CaseDowncast(_, name) => {
+                        format!("({} as {})", output, name)
+                    }
                 };
             }
             write!(self.output, "{}", output)?;

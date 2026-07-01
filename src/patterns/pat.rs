@@ -81,9 +81,9 @@ impl Display for Pat {
     }
 }
 
-pub fn missing_patterns<'a>(
+pub fn missing_patterns(
     ctxt: CtxtRef<'_>,
-    ty: &'a [Type; 1],
+    ty: &[Type; 1],
     patterns: &mut dyn Iterator<Item = Pat>,
 ) -> Vec<Pat> {
     let missing = missing_patterns_inner(ctxt, ty, patterns.map(|pat| vec![pat]).collect());
@@ -93,11 +93,7 @@ pub fn missing_patterns<'a>(
         .collect()
 }
 
-fn specialize<'a>(
-    constructor: Constructor,
-    fields: &'a [Type],
-    matrix: Vec<Vec<Pat>>,
-) -> Vec<Vec<Pat>> {
+fn specialize(constructor: Constructor, fields: &[Type], matrix: Vec<Vec<Pat>>) -> Vec<Vec<Pat>> {
     matrix
         .into_iter()
         .filter_map(|mut row| {
@@ -123,9 +119,9 @@ fn specialize<'a>(
         })
         .collect()
 }
-fn missing_patterns_inner<'b>(
+fn missing_patterns_inner(
     ctxt: CtxtRef<'_>,
-    tys: &'b [Type],
+    tys: &'_ [Type],
     matrix: Vec<Vec<Pat>>,
 ) -> Vec<Vec<Pat>> {
     let Some(head) = tys.first() else {
@@ -135,7 +131,7 @@ fn missing_patterns_inner<'b>(
             Vec::new()
         };
     };
-    let constructors = constructors_of_ty(head);
+    let constructors = constructors_of_ty(ctxt, head);
     let mut all_missing = Vec::new();
     for c in constructors {
         let fields = fields_of(head, c, ctxt);

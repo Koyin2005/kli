@@ -74,7 +74,7 @@ impl<'a> TypeSubst<'a> {
             PatternKind::Bool(_) | PatternKind::Int(_) | PatternKind::Err => (),
             PatternKind::Ref(pattern) => self.subst_pattern(pattern),
             PatternKind::Binding(.., ty) => self.subst_type(ty),
-            PatternKind::Case(.., args, inner) => {
+            PatternKind::Case(.., args, _, inner) => {
                 for arg in args {
                     self.subst_generic_arg(arg);
                 }

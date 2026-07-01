@@ -10,7 +10,7 @@ pub enum Constructor {
     NonExhaustive,
 }
 
-pub fn constructors_of_ty(ty: &Type) -> Vec<Constructor> {
+pub fn constructors_of_ty(ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Constructor> {
     match ty {
         Type::Bool => vec![Constructor::Bool(true), Constructor::Bool(false)],
         Type::Imm(..) | Type::Mut(..) => vec![Constructor::Ref],
@@ -30,9 +30,14 @@ pub fn constructors_of_ty(ty: &Type) -> Vec<Constructor> {
             vec![Constructor::Record]
         }
         Type::Infer(_) => unreachable!("Cannot have infer here"),
-        Type::Named(..) => {
-            //TODO : Allow matching the actual constructors
-            vec![Constructor::NonExhaustive]
+        Type::Named(id, ..) => {
+            let variant_def = ctxt.expect_type(*id).expect_variant();
+            variant_def
+                .cases
+                .iter()
+                .map(|case| case.name.symbol)
+                .map(Constructor::Case)
+                .collect()
         }
     }
 }
