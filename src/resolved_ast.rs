@@ -383,7 +383,7 @@ pub enum ItemKind {
     Function(Function),
     Module(Module),
 }
-#[derive(Debug)]
+#[derive(Debug,PartialEq, Eq,Hash)]
 pub enum AnnotationKind {
     Copy,
 }

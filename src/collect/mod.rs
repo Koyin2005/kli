@@ -111,6 +111,11 @@ impl CtxtRef<'_> {
         (variant_def, index)
     }
     #[track_caller]
+    pub fn expect_item(&self, id: DefId) -> &Item {
+        let item = self.expect_item_id(id);
+        self.item(item)
+    }
+    #[track_caller]
     pub fn expect_type(&self, id: DefId) -> &TypeDef {
         let item = self.expect_item_id(id);
         self.expect_type_def(item)
@@ -125,6 +130,11 @@ impl CtxtRef<'_> {
     #[track_caller]
     fn expect_variant_def(&self, id: ItemId) -> &VariantDef {
         self.expect_type_def(id).expect_variant()
+    }
+    pub fn is_type_recursive(self, id: DefId) -> bool{
+        //TODO : actually implement this
+        _ = id;
+        false
     }
     pub fn span(self, id: DefId) -> SrcLoc {
         self.name(id).loc

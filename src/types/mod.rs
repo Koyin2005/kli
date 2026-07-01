@@ -326,10 +326,27 @@ impl Type {
             | Type::List(_) => true,
             Type::Record(fields) => fields.iter().any(|field| field.ty.is_resource(ctxt)),
             Type::Infer(_) => unreachable!("Cannot 'infer' its a resource"),
-            &Type::Named(..) => {
-                // TODO : Add a way to mark a type as a non-resource
-                _ = ctxt;
-                true
+            &Type::Named(id,_,ref args) => {
+                    let is_copy = ctxt.expect_item(id).annotations.iter().any(|annotation| annotation.kind == crate::resolved_ast::AnnotationKind::Copy);
+                    if !is_copy{
+                        return true;
+                    }
+                    match ctxt.expect_type(id).kind{
+                        crate::resolved_ast::TypeDefKind::Record(_) => {
+                            todo!("handle fields")
+                        },
+                        crate::resolved_ast::TypeDefKind::Variant(ref variant) => {
+                            for case in variant.cases.iter(){
+                                let Some(id) = case.ty.as_ref().map(|case| case.id) else {
+                                    continue;
+                                };
+                                if ctxt.type_of(id).bind(args).is_resource(ctxt){
+                                    return true;
+                                }
+                            }
+                            false
+                        }
+                    }
             }
         }
     }
