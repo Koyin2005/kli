@@ -163,7 +163,14 @@ impl Builder<'_> {
                 }
             }
             typed_ast::PatternKind::Err => unreachable!(),
-            typed_ast::PatternKind::Case(..) => todo!("case lowering"),
+            typed_ast::PatternKind::Case(id, args, index, inner) => {
+                if let Some(inner) = inner {
+                    self.assign_place_to_pattern(
+                        inner,
+                        place.with_case_downcast(*index, self.ctxt.name(*id).symbol),
+                    );
+                }
+            }
         }
     }
     pub fn stmt(&mut self, stmt: &typed_ast::Stmt) {
