@@ -2,4 +2,10 @@ type Option[T] =
 | Some(T)
 | None
 
-fun new_none[T]() -> Option[T] = Option.None
+fun none[T]() -> Option[T] = Option.None
+
+fun value_or[T](option: Option[T], default : T) -> T = 
+    case option of 
+    | .Option.Some(x) -> x
+    | .Option.None -> default
+    end
