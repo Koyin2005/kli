@@ -384,8 +384,18 @@ pub enum ItemKind {
     Module(Module),
 }
 #[derive(Debug)]
+pub enum AnnotationKind {
+    Copy,
+}
+#[derive(Debug)]
+pub struct Annotation {
+    pub loc: SrcLoc,
+    pub kind: AnnotationKind,
+}
+#[derive(Debug)]
 pub struct Item {
     pub id: ItemId,
+    pub annotations: Vec<Annotation>,
     pub loc: SrcLoc,
     pub kind: ItemKind,
 }

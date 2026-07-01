@@ -1026,6 +1026,34 @@ impl Resolve {
     fn def_id_for_module(&self, module: ModuleId) -> DefId {
         self.modules[&module].id
     }
+    fn resolve_annotations(&mut self, annotations: Vec<ast::Annotation>) -> Vec<res::Annotation> {
+        annotations
+            .into_iter()
+            .filter_map(|annotation| {
+                Some(res::Annotation {
+                    loc: annotation.loc,
+                    kind: match annotation.name.symbol {
+                        Symbol::COPY => {
+                            if !annotation.fields.is_empty() {
+                                self.diag.add_diagnostic(
+                                    format!("too many fields for '{}'", annotation.name.symbol),
+                                    annotation.loc,
+                                );
+                            }
+                            res::AnnotationKind::Copy
+                        }
+                        _ => {
+                            self.diag.add_diagnostic(
+                                format!("unknown annotation {}", annotation.name.symbol),
+                                annotation.loc,
+                            );
+                            return None;
+                        }
+                    },
+                })
+            })
+            .collect()
+    }
     fn resolve_module(&mut self, items: &mut Vec<res::Item>, module: ast::Module) {
         self.in_module_scope(module.id, |this| {
             let mut mod_items = Vec::new();
@@ -1035,6 +1063,7 @@ impl Resolve {
                 items.push(res::Item {
                     id,
                     loc: item.loc,
+                    annotations: this.resolve_annotations(item.annotations),
                     kind: match item.kind {
                         ast::ItemKind::Function(function) => {
                             res::ItemKind::Function(this.resolve_function(function))
@@ -1054,6 +1083,7 @@ impl Resolve {
             items.push(res::Item {
                 id: res::ItemId(this.def_id_for_module(module.id)),
                 loc: SrcLoc::dummy(),
+                annotations: Vec::new(),
                 kind: res::ItemKind::Module(res::Module {
                     name: Ident {
                         symbol: module.name,

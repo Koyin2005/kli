@@ -19,6 +19,7 @@ enum NamedSymbol {
     Std,
     Builtins,
     NumberZero,
+    Copy,
 }
 impl NamedSymbol {
     pub const fn content(self) -> &'static str {
@@ -28,6 +29,7 @@ impl NamedSymbol {
             Self::Std => "std",
             Self::Builtins => "builtins",
             Self::NumberZero => "0",
+            Self::Copy => "copy",
         }
     }
 }
@@ -47,12 +49,13 @@ const fn byte_eq(b1: &[u8], b2: &[u8]) -> bool {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol(SymbolId);
 impl Symbol {
-    const NAMED_SYMBOLS: [NamedSymbol; 5] = [
+    const NAMED_SYMBOLS: [NamedSymbol; 6] = [
         NamedSymbol::Empty,
         NamedSymbol::Main,
         NamedSymbol::Std,
         NamedSymbol::Builtins,
         NamedSymbol::NumberZero,
+        NamedSymbol::Copy,
     ];
     const fn expect_symbol(content: &str) -> SymbolId {
         let mut i = 0;
@@ -76,6 +79,7 @@ impl Symbol {
     pub const STD: Self = Self(Self::expect_symbol("std"));
     pub const BUILTINS: Self = Self(Self::expect_symbol("builtins"));
     pub const ZERO: Self = Self(Self::expect_symbol("0"));
+    pub const COPY: Self = Self(Self::expect_symbol("copy"));
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }

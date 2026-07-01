@@ -310,7 +310,7 @@ fn main() {
     }
     let mut mir_context = mir::Context::new(true);
     for (&id, function) in program.functions.iter() {
-        if context.as_ref().builtins().builtin_for(id).is_some(){
+        if context.as_ref().builtins().builtin_for(id).is_some() {
             continue;
         }
         mir::build::Builder::build_from_function(context.as_ref(), &mut mir_context, id, function);
