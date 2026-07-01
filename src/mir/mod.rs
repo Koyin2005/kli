@@ -172,6 +172,11 @@ pub enum PointerCast {
     Freeze,
 }
 #[derive(Clone, Debug)]
+pub enum CastKind {
+    Transmute(Type),
+    PointerCast(PointerCast),
+}
+#[derive(Clone, Debug)]
 pub enum Rvalue {
     Aggregate(AggregateKind, IndexVec<FieldId, Operand>),
     Use(Operand),
@@ -179,10 +184,15 @@ pub enum Rvalue {
     Binary(BinaryOp, Box<(Operand, Operand)>),
     Ref(Mutable, Region, Place),
     Allocate { ty: Type, count: Operand },
-    PointerCast(PointerCast, Operand),
+    Cast(CastKind, Operand),
     DecodeUtf8(Operand, Operand),
     Len(Place),
     Discriminant(Place),
+}
+impl Rvalue {
+    pub fn pointer_cast(cast: PointerCast, operand: Operand) -> Self {
+        Self::Cast(CastKind::PointerCast(cast), operand)
+    }
 }
 #[derive(Clone)]
 pub struct SwitchTarget {
@@ -414,26 +424,31 @@ impl Body {
                 }
                 AggregateKind::String => Type::String,
             },
-            Rvalue::PointerCast(cast, operand) => {
-                let (pointer_type, pointee) = self
-                    .type_of_operand(operand, ctxt)
-                    .as_pointer_type()
-                    .expect("should be a pointer type");
-                match cast {
-                    PointerCast::Freeze => {
-                        let PointerType::Reference(region, Mutable::Mutable) = pointer_type else {
-                            unreachable!("should be a reference")
-                        };
-                        Type::Imm(region, Box::new(pointee))
-                    }
-                    PointerCast::BoxToRaw | PointerCast::RefToRaw(_) => Type::pointer(pointee),
-                    PointerCast::RawToRaw(ty) => Type::pointer(ty.clone()),
-                    PointerCast::RawToBox => Type::Box(Box::new(pointee)),
-                    &PointerCast::RawToRef(mutable, region) => {
-                        Type::reference(pointee, mutable, region)
+            Rvalue::Cast(cast, operand) => match cast {
+                CastKind::PointerCast(cast) => {
+                    let (pointer_type, pointee) = self
+                        .type_of_operand(operand, ctxt)
+                        .as_pointer_type()
+                        .expect("should be a pointer type");
+
+                    match cast {
+                        PointerCast::Freeze => {
+                            let PointerType::Reference(region, Mutable::Mutable) = pointer_type
+                            else {
+                                unreachable!("should be a reference")
+                            };
+                            Type::Imm(region, Box::new(pointee))
+                        }
+                        PointerCast::BoxToRaw | PointerCast::RefToRaw(_) => Type::pointer(pointee),
+                        PointerCast::RawToRaw(ty) => Type::pointer(ty.clone()),
+                        PointerCast::RawToBox => Type::Box(Box::new(pointee)),
+                        &PointerCast::RawToRef(mutable, region) => {
+                            Type::reference(pointee, mutable, region)
+                        }
                     }
                 }
-            }
+                CastKind::Transmute(ty) => ty.clone(),
+            },
             Rvalue::Discriminant(_) => Type::Int,
         }
     }

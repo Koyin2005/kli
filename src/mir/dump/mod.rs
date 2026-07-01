@@ -184,8 +184,8 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, "ref {} [{}]", mutable, region)?;
                 self.write_place(place)?;
             }
-            Rvalue::PointerCast(cast, pointer) => {
-                write!(self.output, "ptr_cast({:?})(", cast)?;
+            Rvalue::Cast(cast, pointer) => {
+                write!(self.output, "cast({:?})(", cast)?;
                 self.write_operand(pointer)?;
                 write!(self.output, ")")?;
             }

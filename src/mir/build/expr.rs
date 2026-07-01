@@ -236,6 +236,10 @@ impl Builder<'_> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::Transmute => BuiltinResult::Rvalue(Rvalue::Cast(
+                mir::CastKind::Transmute(ty.clone()),
+                { operands }.swap_remove(0),
+            )),
             Builtin::Allocate => BuiltinResult::Rvalue(Rvalue::Allocate {
                 ty: ty.as_pointer().cloned().expect("should be a pointer"),
                 count: { operands }.swap_remove(0),
@@ -244,26 +248,26 @@ impl Builder<'_> {
                 self.push_stmt(loc, mir::StmtKind::Deallocate({ operands }.swap_remove(0)));
                 BuiltinResult::Unit
             }
-            Builtin::Freeze => BuiltinResult::Rvalue(Rvalue::PointerCast(
+            Builtin::Freeze => BuiltinResult::Rvalue(Rvalue::pointer_cast(
                 PointerCast::Freeze,
                 { operands }.swap_remove(0),
             )),
-            Builtin::BoxFromRaw => BuiltinResult::Rvalue(Rvalue::PointerCast(
+            Builtin::BoxFromRaw => BuiltinResult::Rvalue(Rvalue::pointer_cast(
                 PointerCast::RawToBox,
                 { operands }.swap_remove(0),
             )),
-            Builtin::BoxIntoRaw => BuiltinResult::Rvalue(Rvalue::PointerCast(
+            Builtin::BoxIntoRaw => BuiltinResult::Rvalue(Rvalue::pointer_cast(
                 PointerCast::BoxToRaw,
                 { operands }.swap_remove(0),
             )),
             Builtin::RefFromRaw(mutable) => {
                 let (_, region, _) = ty.as_reference_type().expect("should be a reference type");
-                BuiltinResult::Rvalue(Rvalue::PointerCast(
+                BuiltinResult::Rvalue(Rvalue::pointer_cast(
                     PointerCast::RawToRef(mutable, region),
                     { operands }.swap_remove(0),
                 ))
             }
-            Builtin::RefIntoRaw(mutable) => BuiltinResult::Rvalue(Rvalue::PointerCast(
+            Builtin::RefIntoRaw(mutable) => BuiltinResult::Rvalue(Rvalue::pointer_cast(
                 PointerCast::RefToRaw(mutable),
                 { operands }.swap_remove(0),
             )),
@@ -339,7 +343,7 @@ impl Builder<'_> {
                 let ptr = self.assign_to_temp(
                     expr.loc,
                     Type::pointer(Type::Byte),
-                    Rvalue::PointerCast(
+                    Rvalue::pointer_cast(
                         PointerCast::RawToRaw(Type::Byte),
                         Operand::Load(Place::local(bytes)),
                     ),
@@ -390,7 +394,7 @@ impl Builder<'_> {
                 let ptr = self.assign_to_temp(
                     expr.loc,
                     Type::pointer(ty.clone()),
-                    Rvalue::PointerCast(
+                    Rvalue::pointer_cast(
                         PointerCast::RawToRaw(ty.clone()),
                         Operand::Load(Place::local(ptr_to_buf)),
                     ),
@@ -547,7 +551,7 @@ impl Builder<'_> {
                     let erased_env = self.assign_to_temp(
                         expr.loc,
                         Type::pointer(Type::Byte),
-                        Rvalue::PointerCast(
+                        Rvalue::pointer_cast(
                             PointerCast::RawToRaw(Type::Byte),
                             Operand::Load(Place::local(env)),
                         ),

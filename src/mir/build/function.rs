@@ -106,7 +106,7 @@ impl Builder<'_> {
             let casted = builder.assign_to_temp(
                 lambda.body.loc,
                 Type::pointer(env_ty),
-                Rvalue::PointerCast(
+                Rvalue::pointer_cast(
                     PointerCast::RawToRaw(Type::Byte),
                     Operand::Load(Place::local(Local::FIRST_PARAM)),
                 ),

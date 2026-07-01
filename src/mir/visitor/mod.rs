@@ -76,7 +76,7 @@ pub trait Visit {
             Rvalue::Allocate { ty: _, count } => {
                 self.visit_operand(loc, count);
             }
-            Rvalue::PointerCast(_, operand) => {
+            Rvalue::Cast(_, operand) => {
                 self.visit_operand(loc, operand);
             }
             Rvalue::DecodeUtf8(operand1, operand2) => {

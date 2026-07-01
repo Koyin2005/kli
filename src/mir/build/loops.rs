@@ -75,7 +75,7 @@ impl Builder<'_> {
                     Place::local(self.assign_to_temp(
                         iterator.loc,
                         Type::reference(ty.clone(), mutable, region),
-                        Rvalue::PointerCast(
+                        Rvalue::pointer_cast(
                             mir::PointerCast::RawToRef(mutable, region),
                             Operand::Load(Place::local(offset_ptr)),
                         ),

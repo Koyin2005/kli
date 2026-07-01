@@ -279,6 +279,15 @@ impl Type {
             _ => Err(self),
         }
     }
+    pub fn pointer_kind(&self) -> Option<PointerType> {
+        match self {
+            Self::RawPointer(_) => Some(PointerType::Raw),
+            Self::Box(_) => Some(PointerType::Box),
+            &Self::Imm(region, _) => Some(PointerType::Reference(region, Mutable::Immutable)),
+            &Self::Mut(region, _) => Some(PointerType::Reference(region, Mutable::Mutable)),
+            _ => None,
+        }
+    }
     pub fn pointer_type(pointer: PointerType, pointee: Self) -> Self {
         match pointer {
             PointerType::Box => Self::Box(Box::new(pointee)),

@@ -6,6 +6,10 @@ fun deallocate[T](p : ptr[T]) -> ();
 fun freeze[r,T](r : mut[r] T) -> imm[r] T;
 
 fun box_into_raw[T](b : box[T]) -> ptr[T];
+
+@unsafe
+fun transmute[T,U](x : T) -> U;
+
 fun ref_into_raw[r,T](r : imm[r] T) -> ptr[T];
 fun ref_into_raw_mut[r,T](r : mut[r] T) -> ptr[T];
 

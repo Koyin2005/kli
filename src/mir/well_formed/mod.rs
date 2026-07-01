@@ -2,10 +2,11 @@ use crate::{
     ast::{IsResource, Mutable},
     collect::CtxtRef,
     diagnostics::emit_fatal_diagnostic,
-    mir::{BinaryOp, Body, Location, PointerCast, Stmt, StmtKind, visitor::Visit},
+    mir::{BinaryOp, Body, CastKind, Location, PointerCast, Stmt, StmtKind, visitor::Visit},
     resolved_ast::TypeDefKind,
     src_loc::SrcLoc,
     types::{FunctionType, PointerType, Type},
+    unsafety,
 };
 pub struct WellFormed<'ctxt> {
     ctxt: CtxtRef<'ctxt>,
@@ -292,39 +293,49 @@ impl Visit for WellFormed<'_> {
             }
             super::Rvalue::Ref(..) => (),
             super::Rvalue::Allocate { .. } => (),
-            super::Rvalue::PointerCast(pointer_cast, operand) => {
-                let (pointer_type, _) = self.assert_with_some(
-                    self.body.type_of_operand(operand, self.ctxt),
-                    |ty| ty.as_pointer_type().ok(),
-                    || "Cannot take a non pointer type".to_string(),
-                    loc,
-                );
-                match (pointer_cast, pointer_type) {
-                    (PointerCast::BoxToRaw, PointerType::Box) => (),
-                    (PointerCast::Freeze, PointerType::Reference(_, Mutable::Mutable)) => (),
-                    (
-                        PointerCast::RawToRaw(_)
-                        | PointerCast::RawToBox
-                        | PointerCast::RawToRef(..),
-                        PointerType::Raw,
-                    ) => (),
-                    (
-                        PointerCast::RefToRaw(Mutable::Immutable),
-                        PointerType::Reference(_, Mutable::Immutable),
-                    ) => (),
-                    (
-                        PointerCast::RefToRaw(Mutable::Mutable),
-                        PointerType::Reference(_, Mutable::Mutable),
-                    ) => (),
-                    (cast, pointer_type) => {
-                        self.assert(
-                            false,
-                            || format!("Invalid pointer cast {cast:?} for {pointer_type:?}"),
-                            loc,
-                        );
+            super::Rvalue::Cast(cast_kind, operand) => match cast_kind {
+                CastKind::PointerCast(pointer_cast) => {
+                    let (pointer_type, _) = self.assert_with_some(
+                        self.body.type_of_operand(operand, self.ctxt),
+                        |ty| ty.as_pointer_type().ok(),
+                        || "Cannot take a non pointer type".to_string(),
+                        loc,
+                    );
+                    match (pointer_cast, pointer_type) {
+                        (PointerCast::BoxToRaw, PointerType::Box) => (),
+                        (PointerCast::Freeze, PointerType::Reference(_, Mutable::Mutable)) => (),
+                        (
+                            PointerCast::RawToRaw(_)
+                            | PointerCast::RawToBox
+                            | PointerCast::RawToRef(..),
+                            PointerType::Raw,
+                        ) => (),
+                        (
+                            PointerCast::RefToRaw(Mutable::Immutable),
+                            PointerType::Reference(_, Mutable::Immutable),
+                        ) => (),
+                        (
+                            PointerCast::RefToRaw(Mutable::Mutable),
+                            PointerType::Reference(_, Mutable::Mutable),
+                        ) => (),
+                        (cast, pointer_type) => {
+                            self.assert(
+                                false,
+                                || format!("Invalid pointer cast {cast:?} for {pointer_type:?}"),
+                                loc,
+                            );
+                        }
                     }
                 }
-            }
+                CastKind::Transmute(to) => {
+                    let from = self.body.type_of_operand(operand, self.ctxt);
+                    self.assert(
+                        unsafety::transmutable(&from, to),
+                        || format!("Cannot transmute {} into {}", from, to),
+                        loc,
+                    );
+                }
+            },
             super::Rvalue::DecodeUtf8(ptr, index) => {
                 let byte_ptr = self.body.type_of_operand(ptr, self.ctxt);
                 let index = self.body.type_of_operand(index, self.ctxt);

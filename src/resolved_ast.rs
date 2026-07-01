@@ -73,35 +73,9 @@ pub enum Builtin {
     RefIntoRaw(Mutable),
     PtrRead,
     PtrWrite,
+    Transmute,
 }
 impl Builtin {
-    const fn _equal(b1: Builtin, b2: Builtin) -> bool {
-        match (b1, b2) {
-            (Builtin::Allocate, Builtin::Allocate)
-            | (Builtin::Deallocate, Builtin::Deallocate)
-            | (Builtin::Freeze, Builtin::Freeze)
-            | (Builtin::BoxFromRaw, Builtin::BoxFromRaw)
-            | (Builtin::BoxIntoRaw, Builtin::BoxIntoRaw)
-            | (Builtin::PtrRead, Builtin::PtrRead)
-            | (Builtin::PtrWrite, Builtin::PtrWrite) => true,
-            (Builtin::RefFromRaw(mutable1), Builtin::RefFromRaw(mutable2))
-            | (Builtin::RefIntoRaw(mutable1), Builtin::RefIntoRaw(mutable2)) => {
-                Mutable::eq(mutable1, mutable2)
-            }
-            (
-                Builtin::Allocate
-                | Builtin::BoxFromRaw
-                | Builtin::Deallocate
-                | Builtin::Freeze
-                | Builtin::BoxIntoRaw
-                | Builtin::RefFromRaw(_)
-                | Builtin::RefIntoRaw(_)
-                | Builtin::PtrRead
-                | Builtin::PtrWrite,
-                _,
-            ) => false,
-        }
-    }
     const _NO_REPEATS: () = {
         let mut i = 0;
         while i < Self::ALL_BUILTINS.len() {
@@ -110,7 +84,10 @@ impl Builtin {
                 if i == j {
                     continue;
                 }
-                if Self::_equal(Self::ALL_BUILTINS[i], Self::ALL_BUILTINS[j]) {
+                if Self::ALL_BUILTINS[i]
+                    .name()
+                    .eq_ignore_ascii_case(Self::ALL_BUILTINS[j].name())
+                {
                     panic!("repeated const")
                 }
                 j += 1;
@@ -118,7 +95,7 @@ impl Builtin {
             i += 1;
         }
     };
-    pub const COUNT: usize = 11;
+    pub const COUNT: usize = 12;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
         Builtin::Freeze,
         Builtin::Allocate,
@@ -131,6 +108,7 @@ impl Builtin {
         Builtin::RefIntoRaw(Mutable::Mutable),
         Builtin::PtrRead,
         Builtin::PtrWrite,
+        Builtin::Transmute,
     ];
     pub const fn name(self) -> &'static str {
         match self {
@@ -149,6 +127,7 @@ impl Builtin {
             },
             Builtin::PtrRead => "ptr_read",
             Builtin::PtrWrite => "ptr_write",
+            Builtin::Transmute => "transmute",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
