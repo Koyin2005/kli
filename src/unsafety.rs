@@ -37,6 +37,9 @@ impl<'ctxt> SafetyCheck<'ctxt> {
         {
             return Ok(());
         }
+        if is_unsafe(ctxt, id){
+            return Ok(());
+        }
         let mut this = Self { ctxt };
         if let Some(body) = function.body.as_ref() {
             this.visit_expr(body);
