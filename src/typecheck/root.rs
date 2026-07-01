@@ -309,7 +309,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
                 let def_id = item.id.into_def_id();
                 if self.ctxt.is_type_recursive(def_id) {
                     self.ctxt.diag().add_diagnostic(
-                        format!("recursive type '{}'", type_def.name.symbol),
+                        format!("recursive type '{}' without indirection", type_def.name.symbol),
                         type_def.name.loc,
                     );
                 }
