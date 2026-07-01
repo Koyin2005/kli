@@ -326,6 +326,24 @@ impl CtxtRef<'_> {
         };
         Some(self.item(item))
     }
+    pub fn ancestors(self, id: DefId) -> impl Iterator<Item = DefId> {
+        struct Ancestors<'ctxt> {
+            ctxt: CtxtRef<'ctxt>,
+            current: DefId,
+        }
+        impl Iterator for Ancestors<'_> {
+            type Item = DefId;
+            fn next(&mut self) -> Option<Self::Item> {
+                let parent = self.ctxt.parent_of(self.current)?;
+                self.current = parent;
+                Some(parent)
+            }
+        }
+        Ancestors {
+            ctxt: self,
+            current: id,
+        }
+    }
     pub fn parent_of(self, id: DefId) -> Option<DefId> {
         self.0.parents.get(&id).copied()
     }
@@ -382,8 +400,8 @@ impl CtxtRef<'_> {
     pub fn builtins(&self) -> &Builtins {
         &self.0.builtins
     }
-    pub fn std_lib_module(self) -> Option<DefId>{
-        self.top_level_items().find_map(|item|{
+    pub fn std_lib_module(self) -> Option<DefId> {
+        self.top_level_items().find_map(|item| {
             let ItemKind::Module(ref module) = item.kind else {
                 return None;
             };

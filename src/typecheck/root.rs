@@ -172,7 +172,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
             .diag()
             .add_diagnostic("type annotations needed".to_string(), loc);
     }
-    fn validate_main(&self)  {
+    fn validate_main(&self) {
         let Some((main_id, main)) = self.ctxt.main_function() else {
             let loc = SrcLoc::dummy();
             self.ctxt
@@ -309,7 +309,10 @@ impl<'ctxt> TypeCheck<'ctxt> {
                 let def_id = item.id.into_def_id();
                 if self.ctxt.is_type_recursive(def_id) {
                     self.ctxt.diag().add_diagnostic(
-                        format!("recursive type '{}' without indirection", type_def.name.symbol),
+                        format!(
+                            "recursive type '{}' without indirection",
+                            type_def.name.symbol
+                        ),
                         type_def.name.loc,
                     );
                 }

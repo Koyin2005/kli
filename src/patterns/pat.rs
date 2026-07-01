@@ -43,9 +43,9 @@ impl Pat {
             }
             Constructor::Case(name) => {
                 if let Some(field) = self.fields.first() {
-                    write!(f,"{}(",name)?;
+                    write!(f, "{}(", name)?;
                     field.pat.format(ctxt, f)?;
-                    write!(f,")")
+                    write!(f, ")")
                 } else {
                     write!(f, "{}", name)
                 }
