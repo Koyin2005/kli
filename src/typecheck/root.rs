@@ -172,13 +172,13 @@ impl<'ctxt> TypeCheck<'ctxt> {
             .diag()
             .add_diagnostic("type annotations needed".to_string(), loc);
     }
-    fn validate_main(&self) -> Result<(), TypeError> {
+    fn validate_main(&self)  {
         let Some((main_id, main)) = self.ctxt.main_function() else {
             let loc = SrcLoc::dummy();
             self.ctxt
                 .diag()
                 .add_diagnostic("Missing main".to_string(), loc);
-            return Err(TypeError);
+            return;
         };
         if !self.ctxt.generics(main_id).is_empty() {
             self.ctxt()
@@ -196,9 +196,8 @@ impl<'ctxt> TypeCheck<'ctxt> {
                 "'main' should have '()' as return type".to_string(),
                 main.name.loc,
             );
-            return Err(TypeError);
+            return;
         }
-        Ok(())
     }
     pub(super) fn current_function(&self) -> DefId {
         self.current_function.get().unwrap()
@@ -304,10 +303,23 @@ impl<'ctxt> TypeCheck<'ctxt> {
             .diag()
             .add_diagnostic(format!("Expected {kind} type but got '{}'", ty), loc);
     }
-
+    fn validate_types_non_recursive(&self) -> () {
+        for item in self.ctxt.all_items() {
+            if let res::ItemKind::TypeDef(ref type_def) = item.kind {
+                let def_id = item.id.into_def_id();
+                if self.ctxt.is_type_recursive(def_id) {
+                    self.ctxt.diag().add_diagnostic(
+                        format!("recursive type '{}'", type_def.name.symbol),
+                        type_def.name.loc,
+                    );
+                }
+            }
+        }
+    }
     pub fn check(self) -> Result<typed_ast::Program, TypeError> {
         let mut functions = HashMap::new();
         let _ = self.validate_main();
+        self.validate_types_non_recursive();
         for item in self.ctxt.all_items() {
             let id = item.id.0;
             let Some(function) = self.check_function(id) else {

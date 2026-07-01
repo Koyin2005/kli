@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Debug};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+};
 
 use crate::{
     Symbol,
@@ -137,10 +141,114 @@ impl CtxtRef<'_> {
         self.expect_type_def(id).expect_variant()
     }
     pub fn is_type_recursive(self, id: DefId) -> bool {
-        //TODO : actually implement this
-        _ = id;
-        false
+        fn is_ty_recursive(
+            ctxt: CtxtRef<'_>,
+            ty: &Type,
+            mut seen_ids: &mut HashSet<DefId>,
+        ) -> bool {
+            match ty {
+                Type::Array(ty, _) => is_ty_recursive(ctxt, ty, seen_ids),
+                Type::Bool
+                | Type::Byte
+                | Type::Char
+                | Type::String
+                | Type::Unit
+                | Type::Unknown
+                | Type::Infer(_)
+                | Type::Param(..)
+                | Type::Box(_)
+                | Type::List(_)
+                | Type::RawPointer(_)
+                | Type::Int
+                | Type::Imm(..)
+                | Type::Mut(..)
+                | Type::Function(..) => false,
+                Type::Record(fields) => fields
+                    .iter()
+                    .any(|field| is_ty_recursive(ctxt, &field.ty, seen_ids)),
+                Type::Named(id, _, args) => {
+                    if !seen_ids.insert(*id) {
+                        return true;
+                    }
+
+                    match &ctxt.expect_type(*id).kind {
+                        resolved_ast::TypeDefKind::Record(record) => {
+                            for field in record.fields.iter() {
+                                if is_ty_recursive(
+                                    ctxt,
+                                    &ctxt.type_of(field.id).bind(args),
+                                    &mut seen_ids,
+                                ) {
+                                    return true;
+                                }
+                            }
+                        }
+                        resolved_ast::TypeDefKind::Variant(variant) => {
+                            for case in variant.cases.iter() {
+                                let Some(id) = case.ty.as_ref().map(|ty| ty.id) else {
+                                    continue;
+                                };
+                                if is_ty_recursive(
+                                    ctxt,
+                                    &ctxt.type_of(id).bind(args),
+                                    &mut seen_ids,
+                                ) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    false
+                }
+            }
+        }
+        /*
+            ty.visit(&mut |ty|{
+                let (id,args) = match ty {
+                    &Type::Named(id,_,ref args) => {
+                        (id,args)
+                    },
+                    Type::Box(_) | Type::RawPointer(_) | Type::List(_) => return std::ops::ControlFlow::Break(false),
+                    _ => return std::ops::ControlFlow::Continue(())
+                };
+                if !seen_ids.insert(id){
+                    return std::ops::ControlFlow::Break(true);
+                }
+                match &ctxt.expect_type(id).kind {
+                    resolved_ast::TypeDefKind::Record(record) => {
+                        for field in record.fields.iter(){
+                            if is_ty_recursive(ctxt, &ctxt.type_of(field.id).bind(args),&mut seen_ids){
+                                return std::ops::ControlFlow::Break(true);
+                            }
+                        }
+                    },
+                    resolved_ast::TypeDefKind::Variant(variant) => {
+                        for case in variant.cases.iter(){
+                            let Some(id) = case.ty.as_ref().map(|ty| ty.id) else {
+                                continue;
+                            };
+                            if is_ty_recursive(ctxt, &ctxt.type_of(id).bind(args), &mut seen_ids){
+                                return std::ops::ControlFlow::Break(());
+                            }
+
+                        }
+                    }
+                }
+                std::ops::ControlFlow::Break(false)
+
+            }, &mut Region::no_op_visit).is_break()
+        }*/
+        is_ty_recursive(
+            self,
+            &Type::Named(
+                id,
+                self.name(id).symbol,
+                self.generics(id).instantiate_identity(),
+            ),
+            &mut HashSet::new(),
+        )
     }
+
     pub fn span(self, id: DefId) -> SrcLoc {
         self.name(id).loc
     }
