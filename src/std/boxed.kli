@@ -1,3 +1,7 @@
+type Box[T] = {
+    inner : ptr[T]
+}
+
 fun alloc[T](value : T) -> box[T] = do
     let ptr = allocate[T](1);
     ptr_write(ptr,value);
