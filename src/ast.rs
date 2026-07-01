@@ -217,6 +217,7 @@ pub struct FunctionType {
 }
 #[derive(Debug, Clone)]
 pub struct RecordField {
+    pub id: NodeId,
     pub name: Ident,
     pub ty: Type,
 }

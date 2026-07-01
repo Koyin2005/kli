@@ -326,27 +326,36 @@ impl Type {
             | Type::List(_) => true,
             Type::Record(fields) => fields.iter().any(|field| field.ty.is_resource(ctxt)),
             Type::Infer(_) => unreachable!("Cannot 'infer' its a resource"),
-            &Type::Named(id,_,ref args) => {
-                    let is_copy = ctxt.expect_item(id).annotations.iter().any(|annotation| annotation.kind == crate::resolved_ast::AnnotationKind::Copy);
-                    if !is_copy{
-                        return true;
-                    }
-                    match ctxt.expect_type(id).kind{
-                        crate::resolved_ast::TypeDefKind::Record(_) => {
-                            todo!("handle fields")
-                        },
-                        crate::resolved_ast::TypeDefKind::Variant(ref variant) => {
-                            for case in variant.cases.iter(){
-                                let Some(id) = case.ty.as_ref().map(|case| case.id) else {
-                                    continue;
-                                };
-                                if ctxt.type_of(id).bind(args).is_resource(ctxt){
-                                    return true;
-                                }
+            &Type::Named(id, _, ref args) => {
+                let item = ctxt.expect_item(id);
+                let is_copy = item
+                    .annotations
+                    .iter()
+                    .any(|annotation| annotation.kind == crate::resolved_ast::AnnotationKind::Copy);
+                if !is_copy {
+                    return true;
+                }
+                match item.expect_type_def().kind {
+                    crate::resolved_ast::TypeDefKind::Record(ref record) => {
+                        for field in record.fields.iter() {
+                            if ctxt.type_of(field.id).bind(args).is_resource(ctxt) {
+                                return true;
                             }
-                            false
                         }
+                        false
                     }
+                    crate::resolved_ast::TypeDefKind::Variant(ref variant) => {
+                        for case in variant.cases.iter() {
+                            let Some(id) = case.ty.as_ref().map(|case| case.id) else {
+                                continue;
+                            };
+                            if ctxt.type_of(id).bind(args).is_resource(ctxt) {
+                                return true;
+                            }
+                        }
+                        false
+                    }
+                }
             }
         }
     }

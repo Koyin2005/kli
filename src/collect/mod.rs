@@ -10,6 +10,7 @@ use crate::{
     scheme::Scheme,
     src_loc::SrcLoc,
     typecheck::infer::TypeInfer,
+    typed_ast::FieldId,
     types::{FunctionSig, GenericArg, GenericKind, GenericParam, Region, Type, lower::Lower},
 };
 #[derive(Debug, Clone, Default)]
@@ -72,6 +73,10 @@ enum NodePath {
         case: DefId,
         index: usize,
     },
+    Field {
+        parent: ItemId,
+        index: FieldId,
+    },
 }
 pub struct GlobalContext {
     diag: DiagnosticReporter,
@@ -131,7 +136,7 @@ impl CtxtRef<'_> {
     fn expect_variant_def(&self, id: ItemId) -> &VariantDef {
         self.expect_type_def(id).expect_variant()
     }
-    pub fn is_type_recursive(self, id: DefId) -> bool{
+    pub fn is_type_recursive(self, id: DefId) -> bool {
         //TODO : actually implement this
         _ = id;
         false
@@ -158,6 +163,9 @@ impl CtxtRef<'_> {
                 symbol: Symbol::ZERO,
                 loc: self.expect_case(case).0.cases[index].name.loc,
             },
+            NodePath::Field { parent, index } => {
+                self.expect_type_def(parent).expect_record().fields[index].name
+            }
         };
         self.0.idents.borrow_mut().insert(id, ident);
         ident
@@ -209,6 +217,8 @@ impl CtxtRef<'_> {
                 Lower::new(self, parent.into_def_id(), None)
                     .lower_type(&case.ty.as_ref().expect("should have a type").ty)
             }
+            NodePath::Field { parent, index } => Lower::new(self, parent.into_def_id(), None)
+                .lower_type(&self.expect_type_def(parent).expect_record().fields[index].ty),
         };
         Scheme::new(ty)
     }
@@ -228,9 +238,9 @@ impl CtxtRef<'_> {
                     .as_ref()
                     .map_or_else(Generics::new, lower_generics),
             },
-            NodePath::Case { parent, .. } | NodePath::CaseField { parent, .. } => {
-                self.generics(parent.into_def_id())
-            }
+            NodePath::Case { parent, .. }
+            | NodePath::CaseField { parent, .. }
+            | NodePath::Field { parent, .. } => self.generics(parent.into_def_id()),
         };
         self.0.generics.borrow_mut().insert(id, generics.clone());
         generics
@@ -353,7 +363,17 @@ pub fn build_global_context(
                         }))
                     }));
                 }
-                TypeDefKind::Record(_) => (),
+                TypeDefKind::Record(record) => {
+                    nodes.extend(record.fields.iter_enumerated().map(|(i, field)| {
+                        (
+                            field.id,
+                            NodePath::Field {
+                                parent: item.id,
+                                index: i,
+                            },
+                        )
+                    }));
+                }
             },
             ItemKind::Module(_) => {}
         }

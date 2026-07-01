@@ -61,9 +61,18 @@ struct CaseInfo {
     pub name: Ident,
     pub id: NodeId,
 }
-struct TypeDefInfo {
-    cases: Vec<CaseInfo>,
-    case_map: HashMap<Symbol, usize>,
+struct FieldInfo {
+    _name: Ident,
+    _id: NodeId,
+}
+enum TypeDefInfo {
+    Variant {
+        cases: Vec<CaseInfo>,
+        case_map: HashMap<Symbol, usize>,
+    },
+    Record {
+        _fields: Vec<FieldInfo>,
+    },
 }
 
 pub struct Resolve {
@@ -275,10 +284,12 @@ impl Resolve {
             ast::TypeKind::Record(ast::RecordType { fields }) => {
                 let fields = fields
                     .into_iter()
-                    .map(|ast::RecordField { name, ty }| res::RecordFieldType {
-                        name,
-                        ty: self.resolve_type(ty),
-                    })
+                    .map(
+                        |ast::RecordField { id: _, name, ty }| res::RecordFieldType {
+                            name,
+                            ty: self.resolve_type(ty),
+                        },
+                    )
                     .collect();
                 res::TypeKind::Record(fields)
             }
@@ -618,10 +629,16 @@ impl Resolve {
                 }
                 Res::TypeDef(id) => {
                     let type_def = &self.type_defs[&id];
-                    let Some(&case) = type_def.case_map.get(&segment.symbol) else {
+                    let (cases, case_map) = match type_def {
+                        TypeDefInfo::Record { .. } => {
+                            return Err(NameResolutionError::NotInScope);
+                        }
+                        TypeDefInfo::Variant { cases, case_map } => (cases, case_map),
+                    };
+                    let Some(&case) = case_map.get(&segment.symbol) else {
                         return Err(NameResolutionError::NotInScope);
                     };
-                    Res::VariantCase(ModuleNodeId(id.0, type_def.cases[case].id))
+                    Res::VariantCase(ModuleNodeId(id.0, cases[case].id))
                 }
                 Res::Builtin(_)
                 | Res::Function(_)
@@ -870,9 +887,10 @@ impl Resolve {
                 fields: record
                     .fields
                     .into_iter()
-                    .map(|field| res::RecordFieldType {
+                    .map(|field| res::FieldDef {
                         name: field.name,
                         ty: self.resolve_type(field.ty),
+                        id: self.def_id_for(ModuleNodeId(type_id.0, field.id)),
                     })
                     .collect(),
             }),
@@ -953,10 +971,20 @@ impl Resolve {
         self.current_item = parent;
         value
     }
-    fn declare_type_def(&mut self, id: ModuleNodeId, type_def: &ast::TypeDef) {
+    fn declare_type_def(&mut self, id: ModuleNodeId, def_id: DefId, type_def: &ast::TypeDef) {
         let name = type_def.name;
         let info = self.with_parent_def_id(self.def_id_for(id), |this| match type_def.kind {
-            ast::TypeDefKind::Record(_) => todo!("Handle rec"),
+            ast::TypeDefKind::Record(ref record) => this.with_parent_def_id(def_id, |this| {
+                let mut fields = Vec::new();
+                for field in &record.fields {
+                    this.declare_def_id_for(id.0, field.id);
+                    fields.push(FieldInfo {
+                        _name: field.name,
+                        _id: field.id,
+                    });
+                }
+                TypeDefInfo::Record { _fields: fields }
+            }),
             ast::TypeDefKind::Variant(ref cases) => {
                 let cases = cases
                     .iter()
@@ -973,7 +1001,7 @@ impl Resolve {
                         }
                     })
                     .collect::<Vec<_>>();
-                TypeDefInfo {
+                TypeDefInfo::Variant {
                     case_map: cases
                         .iter()
                         .enumerate()
@@ -998,10 +1026,10 @@ impl Resolve {
                     annotations: _,
                 } = item;
                 let full_id = ModuleNodeId(module.id, id);
-                this.declare_def_id_for(module.id, item.id);
+                let def_id = this.declare_def_id_for(module.id, item.id);
                 match kind {
                     ast::ItemKind::TypeDef(type_def) => {
-                        this.declare_type_def(full_id, type_def);
+                        this.declare_type_def(full_id, def_id, type_def);
                     }
                     ast::ItemKind::Function(function) => {
                         this.declare_function(function.name, full_id);

@@ -671,7 +671,11 @@ impl Parser {
         let name = self.expect_ident("record field")?;
         let _ = self.expect(&TokenKind::Colon);
         let ty = self.parse_type()?;
-        Ok(RecordField { name, ty })
+        Ok(RecordField {
+            id: self.next_node_id(),
+            name,
+            ty,
+        })
     }
     fn parse_record_type(&mut self) -> Result<RecordType, ParseError> {
         let _ = self.expect(&TokenKind::LeftBrace);

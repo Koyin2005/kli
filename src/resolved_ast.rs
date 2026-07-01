@@ -5,7 +5,9 @@ use crate::{
     ast::{BinaryOp, IsResource, Mutable},
     define_id,
     ident::Ident,
+    index_vec::IndexVec,
     src_loc::SrcLoc,
+    typed_ast::FieldId,
 };
 #[derive(Debug, PartialEq, Eq)]
 pub struct FunctionDefId(pub DefId);
@@ -345,8 +347,14 @@ pub struct CaseDef {
     pub ty: Option<CaseType>,
 }
 #[derive(Debug)]
+pub struct FieldDef {
+    pub id: DefId,
+    pub name: Ident,
+    pub ty: Type,
+}
+#[derive(Debug)]
 pub struct RecordDef {
-    pub fields: Vec<RecordFieldType>,
+    pub fields: IndexVec<FieldId, FieldDef>,
 }
 #[derive(Debug)]
 pub struct VariantDef {
@@ -371,6 +379,13 @@ impl TypeDef {
         };
         variant
     }
+    #[track_caller]
+    pub fn expect_record(&self) -> &RecordDef {
+        let TypeDefKind::Record(ref record) = self.kind else {
+            unreachable!("expected a record def")
+        };
+        record
+    }
 }
 #[derive(Debug)]
 pub struct Module {
@@ -383,7 +398,7 @@ pub enum ItemKind {
     Function(Function),
     Module(Module),
 }
-#[derive(Debug,PartialEq, Eq,Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum AnnotationKind {
     Copy,
 }
@@ -398,6 +413,15 @@ pub struct Item {
     pub annotations: Vec<Annotation>,
     pub loc: SrcLoc,
     pub kind: ItemKind,
+}
+impl Item {
+    #[track_caller]
+    pub fn expect_type_def(&self) -> &TypeDef {
+        match self.kind {
+            ItemKind::TypeDef(ref type_def) => type_def,
+            _ => panic!("expected a type def but got {:?}", self),
+        }
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct ItemId(pub DefId);
