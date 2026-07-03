@@ -113,7 +113,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     AggregateKind::Array(..) | AggregateKind::Record { .. } => "".to_string(),
                     AggregateKind::Closure(params, return_type) => {
                         let mut first = true;
-                        let mut output = "Closure(".to_string();
+                        let mut output = "Closure((".to_string();
                         for param in params {
                             if !first {
                                 output.push(',');
@@ -121,7 +121,9 @@ impl<'ctxt> MirDump<'ctxt> {
                             output.push_str(&param.to_string());
                             first = false;
                         }
+                        output.push_str(") -> ");
                         output.push_str(&return_type.to_string());
+                        output.push(')');
                         output
                     }
                     AggregateKind::ArrayList(ty) => format!("array_list[{}]", ty),
@@ -162,7 +164,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 let mut first = true;
                 for (i, operand) in fields.iter_enumerated() {
                     if !first {
-                        write!(self.output, ",")?;
+                        write!(self.output, ", ")?;
                     }
                     if let Some(name) = field_name(i) {
                         write!(self.output, "{} = ", name)?;
