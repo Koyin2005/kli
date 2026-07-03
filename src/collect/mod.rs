@@ -8,15 +8,83 @@ use crate::{
     Symbol,
     diagnostics::DiagnosticReporter,
     ident::Ident,
-    resolved_ast::{
-        self, Builtins, DefId, Item, ItemId, ItemKind, TypeDef, TypeDefKind, VariantDef,
-    },
+    index_vec::IndexVec,
+    resolved_ast::{self, Builtins, DefId, Item, ItemKind, Node, TypeDef},
     scheme::Scheme,
     src_loc::SrcLoc,
     typecheck::infer::TypeInfer,
     typed_ast::FieldId,
-    types::{FunctionSig, GenericArg, GenericKind, GenericParam, Region, Type, lower::Lower},
+    types::{
+        CaseId, FunctionSig, GenericArg, GenericArgsRef, GenericKind, GenericParam, Region, Type,
+        lower::Lower,
+    },
 };
+#[derive(Clone, Copy)]
+pub struct Field {
+    pub id: DefId,
+    pub name: Symbol,
+}
+impl Field {
+    pub fn type_of(self, args: GenericArgsRef, ctxt: CtxtRef<'_>) -> Type {
+        ctxt.type_of(self.id).bind(args)
+    }
+}
+#[derive(Clone, Copy)]
+pub struct Case {
+    pub id: DefId,
+    pub name: Symbol,
+    pub field: Option<Field>,
+}
+impl Case {
+    #[track_caller]
+    pub fn expect_field(self) -> Field {
+        self.field.expect("should have a field")
+    }
+}
+pub enum TypeDefKind {
+    Record(IndexVec<FieldId, Field>),
+    Variant(IndexVec<CaseId, Case>),
+}
+pub struct TypeDefInfo {
+    pub name: Symbol,
+    pub kind: TypeDefKind,
+}
+impl TypeDefInfo {
+    #[track_caller]
+    pub fn case_with_id(&self, id: DefId) -> &Case {
+        self.cases()
+            .iter()
+            .find(|&&case| case.id == id)
+            .expect("unknown case")
+    }
+    #[track_caller]
+    pub fn case(&self, index: CaseId) -> &Case {
+        &self.cases()[index]
+    }
+    #[track_caller]
+    pub fn cases(&self) -> &IndexVec<CaseId, Case> {
+        let TypeDefKind::Variant(cases) = &self.kind else {
+            panic!("Expected a variant type")
+        };
+        cases
+    }
+    pub fn fields(&self) -> &IndexVec<FieldId, Field> {
+        let TypeDefKind::Record(fields) = &self.kind else {
+            panic!("Expected a record type")
+        };
+        fields
+    }
+    pub fn all_fields(&self) -> impl Iterator<Item = Field> {
+        let (rec_iter, case_iter) = match &self.kind {
+            TypeDefKind::Record(fields) => (Some(fields.iter().copied()), None),
+            TypeDefKind::Variant(cases) => (None, Some(cases.iter().flat_map(|case| case.field))),
+        };
+        rec_iter
+            .into_iter()
+            .flatten()
+            .chain(case_iter.into_iter().flatten())
+    }
+}
 #[derive(Debug, Clone, Default)]
 pub struct Generics {
     params: Vec<GenericParam>,
@@ -65,31 +133,12 @@ impl Generics {
             .collect()
     }
 }
-#[derive(Clone, Copy, Debug)]
-enum NodePath {
-    Item(ItemId),
-    Case {
-        parent: ItemId,
-        index: usize,
-    },
-    CaseField {
-        parent: ItemId,
-        case: DefId,
-        index: usize,
-    },
-    Field {
-        parent: ItemId,
-        index: FieldId,
-    },
-}
 pub struct GlobalContext {
     diag: DiagnosticReporter,
-    idents: RefCell<HashMap<DefId, Ident>>,
+    idents: RefCell<HashMap<DefId, Option<Ident>>>,
     generics: RefCell<HashMap<DefId, Generics>>,
     parents: HashMap<DefId, DefId>,
-    item_indexes: HashMap<ItemId, usize>,
-    items: Vec<Item>,
-    nodes: HashMap<DefId, NodePath>,
+    nodes: IndexVec<DefId, Node>,
     builtins: Builtins,
     std_lib: std::cell::Cell<Option<DefId>>,
 }
@@ -102,44 +151,26 @@ impl GlobalContext {
 pub struct CtxtRef<'a>(&'a GlobalContext);
 
 impl CtxtRef<'_> {
-    fn node_path_for(self, id: DefId) -> NodePath {
-        self.0.nodes[&id]
+    pub fn node(&self, id: DefId) -> &Node {
+        &self.0.nodes[id]
+    }
+    pub fn expect_annotations(&self, id: DefId) -> &[resolved_ast::Annotation] {
+        &self.expect_item(id).annotations
     }
     #[track_caller]
-    fn expect_item_id(self, id: DefId) -> ItemId {
-        let NodePath::Item(item) = self.node_path_for(id) else {
+    fn expect_item(&self, id: DefId) -> &Item {
+        let Node::Item(item) = self.node(id) else {
             unreachable!("not an item")
         };
         item
     }
-    #[track_caller]
-    pub fn expect_case(&self, case_id: DefId) -> (&VariantDef, usize) {
-        let NodePath::Case { parent, index } = self.node_path_for(case_id) else {
-            unreachable!("expected a variant def")
-        };
-        let variant_def = self.expect_variant_def(parent);
-        (variant_def, index)
+    pub fn type_def(self, id: DefId) -> TypeDefInfo {
+        let type_def = self.expect_type(id);
+        lower_type_def(self, type_def)
     }
     #[track_caller]
-    pub fn expect_item(&self, id: DefId) -> &Item {
-        let item = self.expect_item_id(id);
-        self.item(item)
-    }
-    #[track_caller]
-    pub fn expect_type(&self, id: DefId) -> &TypeDef {
-        let item = self.expect_item_id(id);
-        self.expect_type_def(item)
-    }
-    #[track_caller]
-    fn expect_type_def(&self, id: ItemId) -> &TypeDef {
-        let ItemKind::TypeDef(type_def) = &self.item(id).kind else {
-            unreachable!("expected a type def")
-        };
-        type_def
-    }
-    #[track_caller]
-    fn expect_variant_def(&self, id: ItemId) -> &VariantDef {
-        self.expect_type_def(id).expect_variant()
+    fn expect_type(&self, id: DefId) -> &TypeDef {
+        self.expect_item(id).expect_type_def()
     }
     pub fn is_type_recursive(self, id: DefId) -> bool {
         fn is_ty_recursive(ctxt: CtxtRef<'_>, ty: &Type, seen_ids: &mut HashSet<DefId>) -> bool {
@@ -170,22 +201,20 @@ impl CtxtRef<'_> {
 
                     match &ctxt.expect_type(*id).kind {
                         resolved_ast::TypeDefKind::Record(record) => {
-                            for field in record.fields.iter() {
-                                if is_ty_recursive(
-                                    ctxt,
-                                    &ctxt.type_of(field.id).bind(args),
-                                    seen_ids,
-                                ) {
+                            for &field in record.fields.iter() {
+                                if is_ty_recursive(ctxt, &ctxt.type_of(field).bind(args), seen_ids)
+                                {
                                     return true;
                                 }
                             }
                         }
                         resolved_ast::TypeDefKind::Variant(variant) => {
-                            for case in variant.cases.iter() {
-                                let Some(id) = case.ty.as_ref().map(|ty| ty.id) else {
+                            for &case in variant.cases.iter() {
+                                let Some(field) = case.field else {
                                     continue;
                                 };
-                                if is_ty_recursive(ctxt, &ctxt.type_of(id).bind(args), seen_ids) {
+                                if is_ty_recursive(ctxt, &ctxt.type_of(field).bind(args), seen_ids)
+                                {
                                     return true;
                                 }
                             }
@@ -199,7 +228,7 @@ impl CtxtRef<'_> {
             self,
             &Type::Named(
                 id,
-                self.name(id).symbol,
+                self.expect_type(id).name.symbol,
                 self.generics(id).instantiate_identity(),
             ),
             &mut HashSet::new(),
@@ -207,58 +236,66 @@ impl CtxtRef<'_> {
     }
 
     pub fn span(self, id: DefId) -> SrcLoc {
-        self.name(id).loc
+        match self.node(id) {
+            Node::Item(item) => match &item.kind {
+                ItemKind::Function(function) => function.name.loc,
+                ItemKind::TypeDef(type_def) => type_def.name.loc,
+                ItemKind::Module(module) => module.name.loc,
+            },
+            Node::Lambda(lambda) => lambda.loc,
+            Node::Field(field_def) => field_def.name.loc,
+            Node::Case(case_def) => case_def.name.loc,
+            Node::CaseField(case_field) => case_field.ty.loc,
+        }
     }
     #[track_caller]
-    pub fn name(self, id: DefId) -> Ident {
+    pub fn expect_ident(self, id: DefId) -> Ident {
+        self.ident(id).expect("expected an ident")
+    }
+    pub fn ident(self, id: DefId) -> Option<Ident> {
         if let Some(&ident) = self.0.idents.borrow().get(&id) {
             return ident;
         }
-        let ident = match self.node_path_for(id) {
-            NodePath::Item(item) => match &self.item(item).kind {
-                ItemKind::Function(function) => function.name,
-                ItemKind::Module(module) => module.name,
-                ItemKind::TypeDef(type_def) => type_def.name,
-            },
-            NodePath::Case { parent, index } => {
-                let case = &self.expect_variant_def(parent).cases[index];
-                case.name
-            }
-            NodePath::CaseField { index, case, .. } => Ident {
-                symbol: Symbol::ZERO,
-                loc: self.expect_case(case).0.cases[index].name.loc,
-            },
-            NodePath::Field { parent, index } => {
-                self.expect_type_def(parent).expect_record().fields[index].name
-            }
+        let ident = 'a: {
+            Some(match self.node(id) {
+                Node::Item(item) => match &item.kind {
+                    ItemKind::Function(function) => function.name,
+                    ItemKind::Module(module) => module.name,
+                    ItemKind::TypeDef(type_def) => type_def.name,
+                },
+                Node::Case(case_def) => case_def.name,
+                Node::CaseField(field) => Ident {
+                    symbol: Symbol::ZERO,
+                    loc: field.ty.loc,
+                },
+                Node::Field(field_def) => field_def.name,
+                Node::Lambda(_) => break 'a None,
+            })
         };
         self.0.idents.borrow_mut().insert(id, ident);
         ident
     }
     pub fn type_of(self, id: DefId) -> Scheme<Type> {
-        let ty = match self.node_path_for(id) {
-            NodePath::Case { parent, index } => {
-                let parent_id = parent.into_def_id();
-                let type_def = self.expect_type_def(parent);
-                let variant_def = type_def.expect_variant();
-                let case = &variant_def.cases[index];
+        let ty = match self.node(id) {
+            Node::Case(case_def) => {
+                let parent_id = self.expect_parent(id);
+                let type_def = self.expect_type(parent_id);
                 let name = type_def.name;
                 let variant_ty = Type::Named(
                     parent_id,
                     name.symbol,
                     self.generics(parent_id).instantiate_identity(),
                 );
-                if let Some(inner_ty) = case
-                    .ty
-                    .as_ref()
-                    .map(|case| Lower::new(self, parent_id, None).lower_type(&case.ty))
-                {
-                    Type::new_function(vec![inner_ty], variant_ty)
+                if let Some(ty) = case_def.field.map(|inner| {
+                    self.type_of(inner)
+                        .bind(&self.generics(parent_id).instantiate_identity())
+                }) {
+                    Type::new_function(vec![ty], variant_ty)
                 } else {
                     variant_ty
                 }
             }
-            NodePath::Item(item) => match &self.item(item).kind {
+            Node::Item(item) => match &item.kind {
                 ItemKind::TypeDef(type_def) => Type::Named(
                     id,
                     type_def.name.symbol,
@@ -273,17 +310,9 @@ impl CtxtRef<'_> {
                     unreachable!("cannot get type of module {}", module.name.symbol)
                 }
             },
-            NodePath::CaseField {
-                parent,
-                case,
-                index,
-            } => {
-                let case = &self.expect_case(case).0.cases[index];
-                Lower::new(self, parent.into_def_id(), None)
-                    .lower_type(&case.ty.as_ref().expect("should have a type").ty)
-            }
-            NodePath::Field { parent, index } => Lower::new(self, parent.into_def_id(), None)
-                .lower_type(&self.expect_type_def(parent).expect_record().fields[index].ty),
+            Node::CaseField(field) => Lower::new(self, id, None).lower_type(&field.ty),
+            Node::Field(field) => Lower::new(self, id, None).lower_type(&field.ty),
+            Node::Lambda(_) => todo!("Idk handle lowering these"),
         };
         Scheme::new(ty)
     }
@@ -291,8 +320,8 @@ impl CtxtRef<'_> {
         if let Some(generics) = self.0.generics.borrow().get(&id) {
             return generics.clone();
         }
-        let generics = match self.node_path_for(id) {
-            NodePath::Item(item) => match &self.item(item).kind {
+        let generics = match self.node(id) {
+            Node::Item(item) => match &item.kind {
                 ItemKind::Function(function_def) => function_def
                     .generics
                     .as_ref()
@@ -300,24 +329,16 @@ impl CtxtRef<'_> {
                 ItemKind::Module(_) => Generics::new(),
                 ItemKind::TypeDef(type_def) => type_def
                     .generics
-                    .as_ref()
+                    .as_deref()
                     .map_or_else(Generics::new, lower_generics),
             },
-            NodePath::Case { parent, .. }
-            | NodePath::CaseField { parent, .. }
-            | NodePath::Field { parent, .. } => self.generics(parent.into_def_id()),
+            Node::Case(_) | Node::CaseField(_) | Node::Field(_) => {
+                self.generics(self.expect_parent(id))
+            }
+            Node::Lambda(_) => todo!("Handle lambda"),
         };
         self.0.generics.borrow_mut().insert(id, generics.clone());
         generics
-    }
-    fn item(&self, id: ItemId) -> &Item {
-        &self.0.items[self.0.item_indexes[&id]]
-    }
-    fn get_item(&self, id: DefId) -> Option<&Item> {
-        let NodePath::Item(item) = self.node_path_for(id) else {
-            return None;
-        };
-        Some(self.item(item))
     }
     pub fn ancestors(self, id: DefId) -> impl Iterator<Item = DefId> {
         struct Ancestors<'ctxt> {
@@ -343,12 +364,20 @@ impl CtxtRef<'_> {
     pub fn parent_of(self, id: DefId) -> Option<DefId> {
         self.0.parents.get(&id).copied()
     }
+    #[track_caller]
+    pub fn expect_parent(self, id: DefId) -> DefId {
+        self.0
+            .parents
+            .get(&id)
+            .copied()
+            .expect("should have a parent")
+    }
     pub fn all_items(&self) -> impl Iterator<Item = &Item> {
-        self.0.items.iter()
+        self.0.nodes.iter().filter_map(Node::item)
     }
     pub fn top_level_items(&self) -> impl Iterator<Item = &Item> {
         self.all_items()
-            .filter(|item| self.parent_of(item.id.0).is_none())
+            .filter(|item| self.parent_of(item.id).is_none())
     }
     pub fn main_function(&self) -> Option<(DefId, &resolved_ast::Function)> {
         self.top_level_items()
@@ -363,22 +392,16 @@ impl CtxtRef<'_> {
             })
             .flatten()
             .find_map(|&item_id| {
-                let function = self.function_def(item_id)?;
+                let function = self.expect_item(item_id).function_def()?;
                 if function.name.symbol != Symbol::MAIN {
                     return None;
                 }
                 Some((item_id, function))
             })
     }
-    pub fn function_def(&self, id: DefId) -> Option<&resolved_ast::Function> {
-        match self.get_item(id)?.kind {
-            ItemKind::Function(ref function) => Some(function),
-            _ => None,
-        }
-    }
     #[track_caller]
     pub fn signature_of(self, id: DefId) -> Scheme<FunctionSig> {
-        let function = self.function_def(id).expect("should be a function def");
+        let function = self.expect_item(id).expect_function_def();
         let lower = Lower::new(self, id, None);
         Scheme::new(FunctionSig::new(
             lower
@@ -388,7 +411,26 @@ impl CtxtRef<'_> {
         ))
     }
     pub fn display(&self, id: DefId) -> impl std::fmt::Display {
-        self.name(id).symbol
+        struct DisplayNode<'n> {
+            node: &'n Node,
+        }
+        fn fmt(node: &DisplayNode<'_>, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            match node.node {
+                Node::Item(item) => write!(f, "{}", item.ident().symbol),
+                Node::Case(case_def) => write!(f, "{}", case_def.name.symbol),
+                Node::CaseField(_) => write!(f, "{}", Symbol::ZERO),
+                Node::Lambda(lambda) => write!(f, "(lambda at {:?})", lambda.loc),
+                Node::Field(field) => write!(f, "{}", field.name.symbol),
+            }
+        }
+        impl std::fmt::Display for DisplayNode<'_> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                fmt(self, f)
+            }
+        }
+        DisplayNode {
+            node: self.node(id),
+        }
     }
     pub fn diag(&self) -> &DiagnosticReporter {
         &self.0.diag
@@ -407,7 +449,7 @@ impl CtxtRef<'_> {
             if module.name.symbol != Symbol::STD {
                 return None;
             }
-            Some(item.id.into_def_id())
+            Some(item.id)
         });
         self.0.std_lib.set(std_lib);
         std_lib
@@ -429,58 +471,48 @@ fn lower_generics(generics: &resolved_ast::Generics) -> Generics {
             .collect(),
     }
 }
+fn lower_type_def(ctxt: CtxtRef<'_>, type_def: &TypeDef) -> TypeDefInfo {
+    TypeDefInfo {
+        name: type_def.name.symbol,
+        kind: match &type_def.kind {
+            resolved_ast::TypeDefKind::Record(record) => TypeDefKind::Record(
+                record
+                    .fields
+                    .iter()
+                    .map(|&field_id| {
+                        let field = ctxt.node(field_id).expect_field();
+                        Field {
+                            id: field_id,
+                            name: field.name.symbol,
+                        }
+                    })
+                    .collect(),
+            ),
+            resolved_ast::TypeDefKind::Variant(variant) => TypeDefKind::Variant(
+                variant
+                    .cases
+                    .iter()
+                    .map(|case_def| Case {
+                        id: case_def.id,
+                        name: case_def.name.symbol,
+                        field: case_def
+                            .field
+                            .map(|field| ctxt.node(field).expect_case_field())
+                            .map(|field| Field {
+                                id: field.id,
+                                name: Symbol::ZERO,
+                            }),
+                    })
+                    .collect(),
+            ),
+        },
+    }
+}
 pub fn build_global_context(
-    items: Vec<Item>,
+    nodes: IndexVec<DefId, Node>,
     builtins: Builtins,
     parents: HashMap<DefId, DefId>,
 ) -> GlobalContext {
-    let mut item_indexes = HashMap::new();
-    let mut nodes = HashMap::new();
-    for (i, item) in items.iter().enumerate() {
-        let id = item.id.into_def_id();
-        nodes.insert(id, NodePath::Item(item.id));
-        match &item.kind {
-            ItemKind::Function(_) => {}
-            ItemKind::TypeDef(type_def) => match &type_def.kind {
-                TypeDefKind::Variant(variant_def) => {
-                    nodes.extend(variant_def.cases.iter().enumerate().flat_map(|(i, case)| {
-                        std::iter::once({
-                            (
-                                case.id,
-                                NodePath::Case {
-                                    parent: item.id,
-                                    index: i,
-                                },
-                            )
-                        })
-                        .chain(case.ty.as_ref().map(|ty| {
-                            (
-                                ty.id,
-                                NodePath::CaseField {
-                                    case: case.id,
-                                    parent: item.id,
-                                    index: i,
-                                },
-                            )
-                        }))
-                    }));
-                }
-                TypeDefKind::Record(record) => {
-                    nodes.extend(record.fields.iter_enumerated().map(|(i, field)| {
-                        (
-                            field.id,
-                            NodePath::Field {
-                                parent: item.id,
-                                index: i,
-                            },
-                        )
-                    }));
-                }
-            },
-            ItemKind::Module(_) => {}
-        }
-        item_indexes.insert(item.id, i);
-    }
     let diag = DiagnosticReporter::new();
     GlobalContext {
         parents,
@@ -488,8 +520,6 @@ pub fn build_global_context(
         idents: Default::default(),
         nodes,
         diag,
-        items,
-        item_indexes,
         builtins,
         std_lib: Default::default(),
     }

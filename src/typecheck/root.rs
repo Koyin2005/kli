@@ -98,13 +98,13 @@ impl<'ctxt> TypeCheck<'ctxt> {
         Type::Infer(self.infer.borrow_mut().fresh_ty(loc))
     }
     pub(super) fn var_type(&self, var: VarId) -> Type {
-        self.variables.borrow()[usize::from(var)].ty.clone()
+        self.variables.borrow()[var.into_usize()].ty.clone()
     }
     pub(super) fn var_name(&self, var: VarId) -> Symbol {
-        self.variables.borrow()[usize::from(var)].name
+        self.variables.borrow()[var.into_usize()].name
     }
     pub(super) fn capture(&self, var: VarId) -> bool {
-        let function = self.variables.borrow()[usize::from(var)].function_scope;
+        let function = self.variables.borrow()[var.into_usize()].function_scope;
         let current = self.captures.borrow().len();
         if function < current {
             for capture in self
@@ -129,7 +129,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
     }
     pub(super) fn declare_var(&self, var_id: VarId, ty: Type, name: Symbol) {
         assert_eq!(
-            usize::from(var_id),
+            var_id.into_usize(),
             self.variables.borrow().len(),
             "variable declarations not in order"
         );
@@ -224,8 +224,8 @@ impl<'ctxt> TypeCheck<'ctxt> {
         let pattern = self.check_pattern(&binding.pattern, value.ty.clone(), None);
         LetBinding { pattern, value }
     }
-    pub(super) fn check_function(&self, id: DefId) -> Option<Function> {
-        let res::Function { params, body, .. } = self.ctxt.function_def(id)?;
+    pub(super) fn check_function(&self, id: DefId, function: &res::Function) -> Option<Function> {
+        let res::Function { params, body, .. } = function;
         self.current_function.set(Some(id));
         let FunctionSig {
             params: param_tys,
@@ -304,17 +304,16 @@ impl<'ctxt> TypeCheck<'ctxt> {
     }
     fn validate_types_non_recursive(&self) {
         for item in self.ctxt.all_items() {
-            if let res::ItemKind::TypeDef(ref type_def) = item.kind {
-                let def_id = item.id.into_def_id();
-                if self.ctxt.is_type_recursive(def_id) {
-                    self.ctxt.diag().add_diagnostic(
-                        format!(
-                            "recursive type '{}' without indirection",
-                            type_def.name.symbol
-                        ),
-                        type_def.name.loc,
-                    );
-                }
+            if let res::ItemKind::TypeDef(ref type_def) = item.kind
+                && self.ctxt.is_type_recursive(item.id)
+            {
+                self.ctxt.diag().add_diagnostic(
+                    format!(
+                        "recursive type '{}' without indirection",
+                        type_def.name.symbol
+                    ),
+                    type_def.name.loc,
+                );
             }
         }
     }
@@ -323,11 +322,13 @@ impl<'ctxt> TypeCheck<'ctxt> {
         self.validate_main();
         self.validate_types_non_recursive();
         for item in self.ctxt.all_items() {
-            let id = item.id.0;
-            let Some(function) = self.check_function(id) else {
+            let Some(function) = item.function_def() else {
                 continue;
             };
-            functions.insert(id, function);
+            let Some(function) = self.check_function(item.id, function) else {
+                continue;
+            };
+            functions.insert(item.id, function);
         }
         if !self.ctxt.diag().report_all() {
             Ok(typed_ast::Program { functions })

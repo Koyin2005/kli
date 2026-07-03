@@ -252,6 +252,7 @@ pub struct Param {
 }
 #[derive(Debug)]
 pub struct Lambda {
+    pub id: NodeId,
     pub params: Vec<(Ident, Option<Type>)>,
     pub resource: IsResource,
     pub body: Box<Expr>,

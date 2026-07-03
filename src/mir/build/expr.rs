@@ -167,7 +167,7 @@ impl Builder<'_> {
                 if let Some(inner) = inner {
                     self.assign_place_to_pattern(
                         inner,
-                        place.with_case_downcast(*index, self.ctxt.name(*id).symbol),
+                        place.with_case_downcast(*index, self.ctxt.expect_ident(*id).symbol),
                     );
                 }
             }
@@ -359,13 +359,10 @@ impl Builder<'_> {
                     .into(),
                 )
             }
-            ExprKind::VariantInit(id, args, value) => {
-                let name = self.ctxt.name(*id).symbol;
-                Rvalue::Aggregate(
-                    AggregateKind::Variant(*id, name, args.clone()),
-                    [self.operand(value)].into(),
-                )
-            }
+            &ExprKind::VariantInit(id, index, ref args, ref value) => Rvalue::Aggregate(
+                AggregateKind::Variant(id, index, args.clone()),
+                [self.operand(value)].into(),
+            ),
             ExprKind::List(exprs) => {
                 let ty = if let Type::List(ty) = &expr.ty {
                     (**ty).clone()

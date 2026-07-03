@@ -17,8 +17,7 @@ pub fn transmutable(from: &Type, to: &Type) -> bool {
 #[non_exhaustive]
 pub struct SafetyCheckError;
 pub fn is_unsafe(ctxt: CtxtRef, id: DefId) -> bool {
-    ctxt.expect_item(id)
-        .annotations
+    ctxt.expect_annotations(id)
         .iter()
         .any(|annotation| annotation.kind == AnnotationKind::Unsafe)
 }
@@ -37,7 +36,7 @@ impl<'ctxt> SafetyCheck<'ctxt> {
         {
             return Ok(());
         }
-        if is_unsafe(ctxt, id){
+        if is_unsafe(ctxt, id) {
             return Ok(());
         }
         let mut this = Self { ctxt };
@@ -90,7 +89,7 @@ impl Visitor for SafetyCheck<'_> {
                 UnsafeCause::Function(id) => {
                     format!(
                         "use of unsafe function '{}' outside unsafe context",
-                        self.ctxt.name(id).symbol
+                        self.ctxt.expect_ident(id).symbol
                     )
                 }
                 UnsafeCause::RawDeref => "raw pointer deref outside unsafe context".to_string(),

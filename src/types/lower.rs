@@ -118,11 +118,16 @@ impl<'a> Lower<'a> {
                 let ty = self.lower_type(ty);
                 Type::Mut(region, Box::new(ty))
             }
-            res::TypeKind::Function(resource, params, return_ty) => {
+            res::TypeKind::Function(function_type) => {
+                let res::FunctionType {
+                    is_resource,
+                    params,
+                    return_type,
+                } = function_type.as_ref();
                 let params = self.lower_types(&mut params.iter()).collect();
-                let return_type = self.lower_type(return_ty);
+                let return_type = self.lower_type(return_type);
                 Type::Function(FunctionType {
-                    resource: *resource,
+                    resource: *is_resource,
                     params,
                     return_type: Box::new(return_type),
                 })
@@ -137,9 +142,9 @@ impl<'a> Lower<'a> {
                     Type::Unknown
                 }
             }
-            &res::TypeKind::Named(id, name, ref args) => {
+            &res::TypeKind::Named(id, ref args) => {
                 let args = self.lower_generic_args(id, ty.loc, args);
-                Type::Named(id, name, args)
+                Type::Named(id, self.ctxt.expect_ident(id).symbol, args)
             }
         }
     }

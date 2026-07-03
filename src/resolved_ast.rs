@@ -11,31 +11,8 @@ use crate::{
 };
 #[derive(Debug, PartialEq, Eq)]
 pub struct FunctionDefId(pub DefId);
-define_id!(LambdaId);
-#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Copy)]
-pub struct VarId(usize);
-impl VarId {
-    pub fn new(index: usize) -> Self {
-        Self(index)
-    }
-}
-impl From<VarId> for usize {
-    fn from(value: VarId) -> Self {
-        value.0
-    }
-}
-#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Copy)]
-pub struct LocalRegionId(usize);
-impl LocalRegionId {
-    pub fn new(index: usize) -> Self {
-        Self(index)
-    }
-}
-impl From<LocalRegionId> for usize {
-    fn from(value: LocalRegionId) -> Self {
-        value.0
-    }
-}
+define_id!(VarId);
+define_id!(LocalRegionId);
 #[derive(Debug, Clone, Copy)]
 pub struct Var(pub Symbol, pub VarId);
 #[derive(Debug)]
@@ -46,8 +23,8 @@ pub struct BorrowExpr {
 }
 #[derive(Debug)]
 pub struct Lambda {
-    pub id: LambdaId,
-    pub params: Vec<(Ident, VarId, Option<Type>)>,
+    pub loc: SrcLoc,
+    pub params: Box<[(Ident, VarId, Option<Type>)]>,
     pub resource: IsResource,
     pub body: Expr,
 }
@@ -171,7 +148,7 @@ pub struct Stmt {
 }
 #[derive(Debug)]
 pub struct BlockBody {
-    pub stmts: Vec<Stmt>,
+    pub stmts: Box<[Stmt]>,
     pub expr: Box<Expr>,
 }
 #[derive(Debug)]
@@ -198,8 +175,14 @@ impl GenericArgs {
     }
 }
 #[derive(Debug)]
+pub struct ForExpr {
+    pub pattern: Pattern,
+    pub iterator: Expr,
+    pub body: Expr,
+}
+#[derive(Debug)]
 pub enum ExprKind {
-    Block(BlockBody, Option<LocalRegionId>),
+    Block(Box<BlockBody>, Option<LocalRegionId>),
     Unit,
     Err,
     Annotate(Box<Expr>, Box<Type>),
@@ -207,20 +190,20 @@ pub enum ExprKind {
     Bool(bool),
     String(Rc<str>),
     Var(Symbol, VarId),
-    Function(FunctionDefId, GenericArgs),
+    Function(FunctionDefId, Box<GenericArgs>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Borrow(Box<BorrowExpr>),
-    Panic(Option<Type>),
-    Lambda(Box<Lambda>),
+    Panic(Option<Box<Type>>),
+    Lambda(DefId),
     Deref(Box<Expr>),
     Assign(Place, Box<Expr>),
-    For(Pattern, Box<Expr>, Box<Expr>),
-    Case(Box<Expr>, Vec<CaseArm>),
+    For(Box<ForExpr>),
+    Case(Box<Expr>, Box<[CaseArm]>),
     Print(Option<Box<Expr>>),
-    List(Vec<Expr>),
-    Call(Box<Expr>, Vec<Expr>),
+    List(Box<[Expr]>),
+    Call(Box<Expr>, Box<[Expr]>),
     Record(Vec<FieldInit>),
-    VariantCase(DefId, GenericArgs),
+    VariantCase(DefId, Box<GenericArgs>),
     AddressOf(Box<Place>),
 }
 #[derive(Debug, Clone)]
@@ -249,7 +232,7 @@ pub enum PatternKind {
     Ref(Box<Pattern>),
     Case(Ident, Option<Box<Pattern>>),
     Binding(Option<Mutable>, Mutable, Ident, VarId),
-    Record(Vec<PatternField>),
+    Record(Box<[PatternField]>),
 }
 #[derive(Debug)]
 pub struct Pattern {
@@ -291,6 +274,13 @@ pub struct RecordFieldType {
     pub name: Ident,
     pub ty: Type,
 }
+
+#[derive(Debug)]
+pub struct FunctionType {
+    pub is_resource: IsResource,
+    pub params: Vec<Type>,
+    pub return_type: Box<Type>,
+}
 #[derive(Debug)]
 pub enum TypeKind {
     Unit,
@@ -302,13 +292,13 @@ pub enum TypeKind {
     Ptr(Box<Type>),
     List(Box<Type>),
     Box(Box<Type>),
-    Imm(Region, Box<Type>),
-    Mut(Region, Box<Type>),
-    Function(IsResource, Vec<Type>, Box<Type>),
-    Named(DefId, Symbol, GenericArgs),
+    Imm(Box<Region>, Box<Type>),
+    Mut(Box<Region>, Box<Type>),
+    Function(Box<FunctionType>),
+    Named(DefId, Box<GenericArgs>),
     Param(Symbol, usize),
     Unknown,
-    Record(Vec<RecordFieldType>),
+    Record(Box<[RecordFieldType]>),
 }
 #[derive(Debug)]
 pub struct Type {
@@ -316,25 +306,24 @@ pub struct Type {
     pub kind: TypeKind,
 }
 #[derive(Debug)]
-pub struct CaseType {
+pub struct CaseField {
     pub id: DefId,
     pub ty: Type,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct CaseDef {
     pub id: DefId,
     pub name: Ident,
-    pub ty: Option<CaseType>,
+    pub field: Option<DefId>,
 }
 #[derive(Debug)]
 pub struct FieldDef {
-    pub id: DefId,
     pub name: Ident,
     pub ty: Type,
 }
 #[derive(Debug)]
 pub struct RecordDef {
-    pub fields: IndexVec<FieldId, FieldDef>,
+    pub fields: IndexVec<FieldId, DefId>,
 }
 #[derive(Debug)]
 pub struct VariantDef {
@@ -348,7 +337,7 @@ pub enum TypeDefKind {
 #[derive(Debug)]
 pub struct TypeDef {
     pub name: Ident,
-    pub generics: Option<Generics>,
+    pub generics: Option<Box<Generics>>,
     pub kind: TypeDefKind,
 }
 impl TypeDef {
@@ -370,13 +359,13 @@ impl TypeDef {
 #[derive(Debug)]
 pub struct Module {
     pub name: Ident,
-    pub items: Vec<DefId>,
+    pub items: Box<[DefId]>,
 }
 #[derive(Debug)]
 pub enum ItemKind {
-    TypeDef(TypeDef),
-    Function(Function),
-    Module(Module),
+    TypeDef(Box<TypeDef>),
+    Function(Box<Function>),
+    Module(Box<Module>),
 }
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum AnnotationKind {
@@ -390,12 +379,19 @@ pub struct Annotation {
 }
 #[derive(Debug)]
 pub struct Item {
-    pub id: ItemId,
-    pub annotations: Vec<Annotation>,
+    pub id: DefId,
+    pub annotations: Box<[Annotation]>,
     pub loc: SrcLoc,
     pub kind: ItemKind,
 }
 impl Item {
+    pub fn ident(&self) -> Ident {
+        match &self.kind {
+            ItemKind::Function(function) => function.name,
+            ItemKind::Module(module) => module.name,
+            ItemKind::TypeDef(type_def) => type_def.name,
+        }
+    }
     #[track_caller]
     pub fn expect_type_def(&self) -> &TypeDef {
         match self.kind {
@@ -403,12 +399,15 @@ impl Item {
             _ => panic!("expected a type def but got {:?}", self),
         }
     }
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct ItemId(pub DefId);
-impl ItemId {
-    pub fn into_def_id(self) -> DefId {
-        self.0
+    pub fn function_def(&self) -> Option<&Function> {
+        match &self.kind {
+            ItemKind::Function(function) => Some(function),
+            _ => None,
+        }
+    }
+    #[track_caller]
+    pub fn expect_function_def(&self) -> &Function {
+        self.function_def().expect("should be a function")
     }
 }
 define_id!(DefId);
@@ -428,5 +427,50 @@ impl Builtins {
     }
     pub fn builtin_for(&self, id: DefId) -> Option<Builtin> {
         self.1.get(&id).copied()
+    }
+}
+#[derive(Debug)]
+pub enum Node {
+    Item(Box<Item>),
+    Lambda(Box<Lambda>),
+    Field(Box<FieldDef>),
+    Case(Box<CaseDef>),
+    CaseField(Box<CaseField>),
+}
+
+impl Node {
+    pub fn item(&self) -> Option<&Item> {
+        match self {
+            Self::Item(item) => Some(item),
+            _ => None,
+        }
+    }
+    #[track_caller]
+    pub fn expect_item(&self) -> &Item {
+        self.item().expect("should be a valid item")
+    }
+    pub fn lambda(&self) -> Option<&Lambda> {
+        match self {
+            Self::Lambda(lambda) => Some(lambda),
+            _ => None,
+        }
+    }
+    #[track_caller]
+    pub fn expect_lambda(&self) -> &Lambda {
+        self.lambda().expect("should be a valid lambda")
+    }
+    #[track_caller]
+    pub fn expect_field(&self) -> &FieldDef {
+        match self {
+            Self::Field(field) => field,
+            _ => panic!("expected a valid field"),
+        }
+    }
+    #[track_caller]
+    pub fn expect_case_field(&self) -> &CaseField {
+        match self {
+            Self::CaseField(field) => field,
+            _ => panic!("expected a valid field"),
+        }
     }
 }

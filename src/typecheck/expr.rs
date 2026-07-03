@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     resolved_ast::{
-        BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, FunctionDefId, Lambda, LocalRegionId,
-        Pattern, Place, PlaceKind, Var,
+        BlockBody, BorrowExpr, DefId, Expr, ExprKind, FieldInit, FunctionDefId, Lambda,
+        LocalRegionId, Pattern, Place, PlaceKind, Var,
     },
     src_loc::SrcLoc,
     typecheck::root::TypeCheck,
@@ -77,7 +77,7 @@ impl TypeCheck<'_> {
             ty: Type::Unit,
             loc,
             kind: typed_ast::ExprKind::For {
-                pattern,
+                pattern: Box::new(pattern),
                 iterator: Box::new(iterator),
                 iterator_type,
                 body: Box::new(body),
@@ -133,8 +133,13 @@ impl TypeCheck<'_> {
             },
         }
     }
-    fn check_lambda(&self, loc: SrcLoc, lambda: &Lambda, hint: Option<Type>) -> typed_ast::Expr {
-        let id = lambda.id;
+    fn check_lambda(
+        &self,
+        loc: SrcLoc,
+        id: DefId,
+        lambda: &Lambda,
+        hint: Option<Type>,
+    ) -> typed_ast::Expr {
         let expected_sig = match hint.clone().map(|ty| self.simplify_type(ty)) {
             Some(Type::Function(ref function)) => Some(function.clone()),
             _ => None,
@@ -271,11 +276,19 @@ impl TypeCheck<'_> {
             typed_ast::Expr {
                 ty,
                 loc,
-                kind: typed_ast::ExprKind::BuiltinCall(builtin, generic_args, args),
+                kind: typed_ast::ExprKind::BuiltinCall(
+                    builtin,
+                    generic_args,
+                    args.into_boxed_slice(),
+                ),
             }
         } else if let ExprKind::VariantCase(id, generic_args) = &callee.kind
-            && let (def, index) = self.ctxt().expect_case(*id)
-            && def.cases[index].ty.is_some()
+            && let cases = self.ctxt().type_def(self.ctxt().expect_parent(*id)).cases()
+            && let (index, case_def) = cases
+                .iter_enumerated()
+                .find_map(|(index, case)| (case.id == *id).then_some((index, case)))
+                .unwrap()
+            && case_def.field.is_some()
             && args.len() == 1
         {
             let generic_args = self.lower_generic_args_for(*id, generic_args, loc);
@@ -285,7 +298,7 @@ impl TypeCheck<'_> {
                 return_type,
             }) = self.ctxt().type_of(*id).bind(&generic_args)
             else {
-                unreachable!()
+                unreachable!("Should be a function")
             };
             let (ty, args) = check_call_sig(
                 self,
@@ -299,7 +312,7 @@ impl TypeCheck<'_> {
             typed_ast::Expr {
                 ty,
                 loc,
-                kind: typed_ast::ExprKind::VariantInit(*id, generic_args, Box::new(arg)),
+                kind: typed_ast::ExprKind::VariantInit(*id, index, generic_args, Box::new(arg)),
             }
         } else {
             let callee = self.check_expr(callee, None);
@@ -358,7 +371,6 @@ impl TypeCheck<'_> {
             Some(Type::Record(fields)) => Some(fields),
             _ => None,
         };
-        let mut expr_fields = Vec::new();
         let mut seen_fields = HashSet::new();
         let field_names = expected_fields
             .iter()
@@ -367,38 +379,43 @@ impl TypeCheck<'_> {
             .map(|(i, field)| (field.name, i))
             .collect::<HashMap<_, _>>();
 
-        for (i, &FieldInit { name, ref value }) in field_inits.iter().enumerate() {
-            let field_id = field_names
-                .get(&FieldName::Named(name.symbol))
-                .copied()
-                .map(FieldId::new);
-            let value = self.check_expr(
-                value,
-                expected_fields
-                    .as_ref()
-                    .and_then(|fields| field_id.map(|field| fields[field].ty.clone())),
-            );
-            if expected_fields.is_some() && !seen_fields.insert(name.symbol) {
-                self.ctxt()
-                    .diag()
-                    .add_diagnostic(format!("Repeated field '{}'", name.symbol), name.loc);
-                continue;
-            }
-            let field_id = if let Some(field_id) = field_id {
-                field_id
-            } else if expected_fields.is_some() {
-                self.ctxt()
-                    .diag()
-                    .add_diagnostic(format!("'record' has no field '{}'", name.symbol), name.loc);
-                continue;
-            } else {
-                FieldId::new(i)
-            };
-            expr_fields.push(RecordFieldInit {
-                index: field_id,
-                value,
-            });
-        }
+        let expr_fields = field_inits
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &FieldInit { name, ref value })| {
+                let field_id = field_names
+                    .get(&FieldName::Named(name.symbol))
+                    .copied()
+                    .map(FieldId::new);
+                let value = self.check_expr(
+                    value,
+                    expected_fields
+                        .as_ref()
+                        .and_then(|fields| field_id.map(|field| fields[field].ty.clone())),
+                );
+                if expected_fields.is_some() && !seen_fields.insert(name.symbol) {
+                    self.ctxt()
+                        .diag()
+                        .add_diagnostic(format!("Repeated field '{}'", name.symbol), name.loc);
+                    return None;
+                }
+                let field_id = if let Some(field_id) = field_id {
+                    field_id
+                } else if expected_fields.is_some() {
+                    self.ctxt().diag().add_diagnostic(
+                        format!("'record' has no field '{}'", name.symbol),
+                        name.loc,
+                    );
+                    return None;
+                } else {
+                    FieldId::new(i)
+                };
+                Some(RecordFieldInit {
+                    index: field_id,
+                    value,
+                })
+            })
+            .collect::<Box<[_]>>();
         let record_fields = if let Some(fields) = expected_fields {
             let _ =
                 self.check_missing_fields(loc, seen_fields, fields.iter().map(|field| field.name));
@@ -580,10 +597,15 @@ impl TypeCheck<'_> {
                     }),
                 }
             }
-            ExprKind::Lambda(lambda) => self.check_lambda(loc, lambda, expected_ty.clone()),
+            &ExprKind::Lambda(lambda) => self.check_lambda(
+                loc,
+                lambda,
+                self.ctxt().node(lambda).expect_lambda(),
+                expected_ty.clone(),
+            ),
             ExprKind::Borrow(borrow) => return self.check_borrow(loc, borrow, expected_ty),
-            ExprKind::For(pattern, iterator, body) => {
-                self.check_for_loop(loc, pattern, iterator, body)
+            ExprKind::For(for_expr) => {
+                self.check_for_loop(loc, &for_expr.pattern, &for_expr.iterator, &for_expr.body)
             }
             ExprKind::Case(matched, case_arms) => {
                 let matched = self.check_expr(matched, None);
@@ -619,7 +641,7 @@ impl TypeCheck<'_> {
                 typed_ast::Expr {
                     loc,
                     ty: Type::Unit,
-                    kind: typed_ast::ExprKind::Assign(place, Box::new(value)),
+                    kind: typed_ast::ExprKind::Assign(Box::new(place), Box::new(value)),
                 }
             }
         };

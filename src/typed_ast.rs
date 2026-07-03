@@ -4,9 +4,9 @@ use crate::{
     ast::{BinaryOp, IsResource, Mutable},
     define_id,
     ident::Ident,
-    resolved_ast::{Builtin, DefId, LambdaId, LocalRegionId, Var, VarId},
+    resolved_ast::{Builtin, DefId, LocalRegionId, Var, VarId},
     src_loc::SrcLoc,
-    types::{GenericArgs, GenericKind, Region, Type},
+    types::{CaseId, GenericArgs, GenericKind, Region, Type},
 };
 
 #[derive(Debug)]
@@ -26,7 +26,7 @@ pub enum PatternKind {
     Int(i64),
     Bool(bool),
     Ref(Box<Pattern>),
-    Case(DefId, GenericArgs, usize, Option<Box<Pattern>>),
+    Case(DefId, GenericArgs, CaseId, Option<Box<Pattern>>),
     Binding(Option<(Mutable, Region)>, Mutable, Var, Box<Type>),
     Record(Vec<PatternField>),
 }
@@ -44,7 +44,7 @@ pub enum PlaceKind {
 }
 #[derive(Debug)]
 pub struct Lambda {
-    pub id: LambdaId,
+    pub id: DefId,
     pub is_resource: IsResource,
     pub captures: Vec<(Var, Type)>,
     pub params: Vec<Param>,
@@ -94,7 +94,7 @@ pub enum IteratorType {
 }
 #[derive(Debug)]
 pub enum ExprKind {
-    Record(Vec<RecordFieldInit>),
+    Record(Box<[RecordFieldInit]>),
     Block(BlockBody, Option<LocalRegionId>),
     String(Rc<str>),
     Bool(bool),
@@ -102,8 +102,8 @@ pub enum ExprKind {
     Unit,
     Err,
     Panic,
-    BuiltinCall(Builtin, GenericArgs, Vec<Expr>),
-    VariantInit(DefId, GenericArgs, Box<Expr>),
+    BuiltinCall(Builtin, GenericArgs, Box<[Expr]>),
+    VariantInit(DefId, CaseId, GenericArgs, Box<Expr>),
     Function(DefId, GenericArgs),
     Const(DefId, GenericArgs),
     Print(Option<Box<Expr>>),
@@ -112,7 +112,7 @@ pub enum ExprKind {
     Load(Place),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     For {
-        pattern: Pattern,
+        pattern: Box<Pattern>,
         iterator: Box<Expr>,
         iterator_type: IteratorType,
         body: Box<Expr>,
@@ -123,7 +123,7 @@ pub enum ExprKind {
         region: Region,
     },
     Case(Box<Expr>, Vec<CaseArm>),
-    Assign(Place, Box<Expr>),
+    Assign(Box<Place>, Box<Expr>),
     Lambda(Box<Lambda>),
     AddressOf(Box<Place>),
 }

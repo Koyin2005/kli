@@ -6,10 +6,10 @@ use crate::{
     collect::CtxtRef,
     define_id,
     index_vec::IndexVec,
-    resolved_ast::{DefId, LambdaId, Var, VarId},
+    resolved_ast::{DefId, Var, VarId},
     src_loc::SrcLoc,
     typed_ast::FieldId,
-    types::{FieldName, GenericArg, GenericArgs, PointerType, Region, Type},
+    types::{CaseId, FieldName, GenericArg, GenericArgs, PointerType, Region, Type},
 };
 pub mod build;
 pub mod dump;
@@ -24,7 +24,7 @@ pub enum PlaceProjection {
     Field(FieldId),
     ConstantIndex(u32),
     Index(Local),
-    CaseDowncast(usize, Symbol),
+    CaseDowncast(CaseId, Symbol),
     Deref,
 }
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
@@ -74,7 +74,7 @@ impl Place {
         self.projections.push(PlaceProjection::Deref);
         self
     }
-    pub fn with_case_downcast(mut self, index: usize, name: Symbol) -> Self {
+    pub fn with_case_downcast(mut self, index: CaseId, name: Symbol) -> Self {
         self.projections
             .push(PlaceProjection::CaseDowncast(index, name));
         self
@@ -140,7 +140,7 @@ pub enum AggregateKind {
         field_names: IndexVec<FieldId, FieldName>,
     },
     Closure(Vec<Type>, Box<Type>),
-    Variant(DefId, Symbol, GenericArgs),
+    Variant(DefId, CaseId, GenericArgs),
     ArrayList(Type),
     Array(Type, u64),
     String,
@@ -271,7 +271,7 @@ impl BasicBlock {
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum BodySource {
     Function(DefId),
-    Lambda(LambdaId),
+    Lambda(DefId),
 }
 #[derive(Clone)]
 pub enum LocalKind {
@@ -351,9 +351,10 @@ impl Body {
                 let Type::Named(id, _, args) = ty else {
                     unreachable!("Should be named")
                 };
-                let variant = ctxt.expect_type(id).expect_variant();
-                let ty = variant.cases[*index].ty.as_ref().unwrap();
-                ctxt.type_of(ty.id).bind(&args)
+                ctxt.type_def(id)
+                    .case(*index)
+                    .expect_field()
+                    .type_of(&args, ctxt)
             }
         }
     }
@@ -420,8 +421,8 @@ impl Body {
                 ),
                 AggregateKind::ArrayList(ty) => Type::List(Box::new(ty.clone())),
                 &AggregateKind::Variant(id, _, ref args) => {
-                    let id = ctxt.parent_of(id).unwrap();
-                    Type::Named(id, ctxt.name(id).symbol, args.clone())
+                    let name = ctxt.type_def(id).name;
+                    Type::Named(id, name, args.clone())
                 }
                 AggregateKind::String => Type::String,
             },

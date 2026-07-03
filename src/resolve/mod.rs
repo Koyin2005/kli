@@ -4,8 +4,9 @@ use crate::ast::{BorrowExpr, GenericArgs, ModuleId, NodeId, Path, StmtKind};
 use crate::collect::{GlobalContext, build_global_context};
 use crate::diagnostics::DiagnosticReporter;
 use crate::ident::Ident;
+use crate::index_vec::IndexVec;
 use crate::resolved_ast::{
-    Builtin, Builtins, DefId, GenericKind, LambdaId, LocalRegionId, VarId, VariantDef,
+    Builtin, Builtins, DefId, GenericKind, LocalRegionId, VarId, VariantDef,
 };
 use crate::src_loc::SrcLoc;
 use crate::{Symbol, ast, resolved_ast as res};
@@ -86,12 +87,12 @@ pub struct Resolve {
     generics: usize,
     prev_kinds: Vec<HashMap<Symbol, GenericKind>>,
     generic_kinds: HashMap<Symbol, GenericKind>,
-    lambdas: usize,
-    next_def_id: DefId,
     item_id_to_def_id: HashMap<ModuleNodeId, DefId>,
     current_item: Option<DefId>,
+    current_module: Option<ModuleId>,
     builtin_module: Option<ModuleId>,
     diag: DiagnosticReporter,
+    nodes: IndexVec<DefId, Option<res::Node>>,
 }
 impl Default for Resolve {
     fn default() -> Self {
@@ -119,11 +120,11 @@ impl Resolve {
             diag: DiagnosticReporter::new(),
             generic_kinds: HashMap::new(),
             prev_kinds: Vec::new(),
-            lambdas: 0,
             type_defs: HashMap::new(),
-            next_def_id: DefId::ROOT,
             current_item: None,
             builtin_module: None,
+            nodes: IndexVec::new(),
+            current_module: None,
         }
     }
     fn resolve_name(&self, name: Symbol) -> Option<Res> {
@@ -159,8 +160,82 @@ impl Resolve {
         self.diag
             .add_diagnostic(format!("Cannot use '{}' as {}", name, expected), loc);
     }
-    fn declare_function(&mut self, name: Ident, id: ModuleNodeId) {
-        self.declare_item(name, "function", Res::Function(id));
+    fn add_node(&mut self, id: DefId, node: res::Node) -> DefId {
+        assert!(
+            self.nodes[id].replace(node).is_none(),
+            "can only have 1 node"
+        );
+        id
+    }
+    fn add_item(&mut self, id: DefId, item: res::Item) {
+        self.add_node(id, res::Node::Item(Box::new(item)));
+    }
+    fn declare_in_exprs(&mut self, expr: &ast::Expr) {
+        match &expr.kind {
+            ast::ExprKind::Unit
+            | ast::ExprKind::String(_)
+            | ast::ExprKind::Bool(_)
+            | ast::ExprKind::Number(_)
+            | ast::ExprKind::Panic(_)
+            | ast::ExprKind::Path(..) => (),
+            ast::ExprKind::Annotate(expr, _)
+            | ast::ExprKind::Deref(expr)
+            | ast::ExprKind::AddressOf(expr) => self.declare_in_exprs(expr),
+            ast::ExprKind::List(exprs) => {
+                for expr in exprs {
+                    self.declare_in_exprs(expr);
+                }
+            }
+            ast::ExprKind::Print(expr) => {
+                if let Some(expr) = expr {
+                    self.declare_in_exprs(expr);
+                }
+            }
+            ast::ExprKind::Call(callee, args) => {
+                self.declare_in_exprs(callee);
+                for arg in args {
+                    self.declare_in_exprs(arg);
+                }
+            }
+            ast::ExprKind::Borrow(borrow_expr) => self.declare_in_exprs(&borrow_expr.expr),
+            ast::ExprKind::Case(expr, case_arms) => {
+                self.declare_in_exprs(expr);
+                for arm in case_arms.iter() {
+                    self.declare_in_exprs(&arm.body);
+                }
+            }
+            ast::ExprKind::Assign(expr1, expr2)
+            | ast::ExprKind::Binary(_, expr1, expr2)
+            | ast::ExprKind::For(_, expr1, expr2) => {
+                self.declare_in_exprs(expr1);
+                self.declare_in_exprs(expr2);
+            }
+            ast::ExprKind::Lambda(lambda) => {
+                self.declare_def_id_for(self.current_module.unwrap(), lambda.id);
+            }
+            ast::ExprKind::Block(block_body, _) => {
+                for stmt in block_body.stmts.iter() {
+                    match &stmt.kind {
+                        StmtKind::Expr(expr) => self.declare_in_exprs(expr),
+                        StmtKind::Let(let_binding) => self.declare_in_exprs(&let_binding.value),
+                    }
+                }
+                self.declare_in_exprs(&block_body.expr);
+            }
+            ast::ExprKind::Record(record_expr) => {
+                for field in record_expr.fields.iter() {
+                    self.declare_in_exprs(&field.value);
+                }
+            }
+        }
+    }
+    fn declare_function(&mut self, id: ModuleNodeId, function: &ast::Function) {
+        self.declare_item(function.name, "function", Res::Function(id));
+        if let Some(body) = function.body.as_ref() {
+            let old_module = self.current_module.replace(id.0);
+            self.declare_in_exprs(body);
+            self.current_module = old_module;
+        }
     }
     fn resolve_region(&mut self, region: ast::Region) -> res::Region {
         match region {
@@ -297,17 +372,17 @@ impl Resolve {
                 resource,
                 params,
                 return_type,
-            }) => res::TypeKind::Function(
-                resource,
-                params.into_iter().map(|ty| self.resolve_type(ty)).collect(),
-                Box::new(self.resolve_type(*return_type)),
-            ),
+            }) => res::TypeKind::Function(Box::new(res::FunctionType {
+                is_resource: resource,
+                params: params.into_iter().map(|ty| self.resolve_type(ty)).collect(),
+                return_type: Box::new(self.resolve_type(*return_type)),
+            })),
             ast::TypeKind::Imm(region, ty) => res::TypeKind::Imm(
-                self.resolve_region(region),
+                Box::new(self.resolve_region(region)),
                 Box::new(self.resolve_type(*ty)),
             ),
             ast::TypeKind::Mut(region, ty) => res::TypeKind::Mut(
-                self.resolve_region(region),
+                Box::new(self.resolve_region(region)),
                 Box::new(self.resolve_type(*ty)),
             ),
             ast::TypeKind::Named(name, args) => match self.resolve_name(name.symbol) {
@@ -397,7 +472,7 @@ impl Resolve {
                 Some(Res::TypeDef(id)) => {
                     let args = self.resolve_generic_args(args);
                     let id = self.def_id_for(id);
-                    res::TypeKind::Named(id, name.symbol, args)
+                    res::TypeKind::Named(id, Box::new(args))
                 }
                 Some(Res::VariantCase(..)) => {
                     self.resolve_generic_args(args);
@@ -426,11 +501,6 @@ impl Resolve {
         self.regions += 1;
         self.env.insert(region, Res::LocalRegion(region_id));
         region_id
-    }
-    fn next_lambda_id(&mut self) -> LambdaId {
-        let id = LambdaId::new(self.lambdas);
-        self.lambdas += 1;
-        id
     }
     fn declare_var(&mut self, var: Symbol) -> VarId {
         let var_id = VarId::new(self.vars);
@@ -465,17 +535,23 @@ impl Resolve {
             .expect("There should be a pushed scope");
         value
     }
-    fn in_module_scope<T>(&mut self, module: ModuleId, f: impl FnOnce(&mut Self) -> T) -> T {
+    fn resolve_in_module_scope<T>(
+        &mut self,
+        module: ModuleId,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
         self.prev_envs.push({
             let old_env = std::mem::take(&mut self.env);
             self.env.clone_from(&self.modules[&module].env);
             old_env
         });
+        let old_module = self.current_module.replace(module);
         let value = f(self);
         self.env = self
             .prev_envs
             .pop()
             .expect("There should be a pushed scope");
+        self.current_module = old_module;
         value
     }
     fn take_new_scope(&mut self, f: impl FnOnce(&mut Self)) -> Scope {
@@ -672,7 +748,9 @@ impl Resolve {
             }
             Ok(res) => match res {
                 Res::Builtin(builtin) => match self.resolve_builtin(builtin) {
-                    Some(id) => res::ExprKind::Function(id, self.resolve_generic_args(args)),
+                    Some(id) => {
+                        res::ExprKind::Function(id, Box::new(self.resolve_generic_args(args)))
+                    }
                     None => {
                         self.builtin_not_found_error(builtin, loc);
                         res::ExprKind::Err
@@ -685,7 +763,7 @@ impl Resolve {
                 }
                 Res::Function(function) => res::ExprKind::Function(
                     res::FunctionDefId(self.def_id_for(function)),
-                    self.resolve_generic_args(args),
+                    Box::new(self.resolve_generic_args(args)),
                 ),
                 Res::Param(_)
                 | Res::LocalRegion(_)
@@ -697,9 +775,10 @@ impl Resolve {
                         .add_diagnostic(format!("Can't use '{}' as a value", path), loc);
                     res::ExprKind::Err
                 }
-                Res::VariantCase(id) => {
-                    res::ExprKind::VariantCase(self.def_id_for(id), self.resolve_generic_args(args))
-                }
+                Res::VariantCase(id) => res::ExprKind::VariantCase(
+                    self.def_id_for(id),
+                    Box::new(self.resolve_generic_args(args)),
+                ),
             },
         }
     }
@@ -709,14 +788,14 @@ impl Resolve {
             ast::ExprKind::Block(block, region) => self.in_scope(|this| {
                 let region = region.map(|region| this.declare_region(region.symbol));
                 res::ExprKind::Block(
-                    res::BlockBody {
+                    Box::new(res::BlockBody {
                         stmts: block
                             .stmts
                             .into_iter()
                             .map(|stmt| this.resolve_stmt(stmt))
                             .collect(),
                         expr: Box::new(this.resolve_expr(*block.expr)),
-                    },
+                    }),
                     region,
                 )
             }),
@@ -742,7 +821,9 @@ impl Resolve {
                 Box::new(self.resolve_expr(*expr)),
                 Box::new(self.resolve_type(*ty)),
             ),
-            ast::ExprKind::Panic(ty) => res::ExprKind::Panic(ty.map(|ty| self.resolve_type(ty))),
+            ast::ExprKind::Panic(ty) => {
+                res::ExprKind::Panic(ty.map(|ty| Box::new(self.resolve_type(ty))))
+            }
             ast::ExprKind::Call(callee, args) => res::ExprKind::Call(
                 Box::new(self.resolve_expr(*callee)),
                 args.into_iter().map(|arg| self.resolve_expr(arg)).collect(),
@@ -772,8 +853,9 @@ impl Resolve {
             ),
             ast::ExprKind::Path(path, args) => self.resolve_path_as_expr(loc, path, args),
             ast::ExprKind::Lambda(lambda) => self.in_scope(|this| {
-                res::ExprKind::Lambda(Box::new(res::Lambda {
-                    id: this.next_lambda_id(),
+                let id = this.def_id_for(ModuleNodeId(this.current_module.unwrap(), lambda.id));
+                let lambda = res::Lambda {
+                    loc,
                     params: lambda
                         .params
                         .into_iter()
@@ -785,7 +867,9 @@ impl Resolve {
                         .collect(),
                     resource: lambda.resource,
                     body: this.resolve_expr(*lambda.body),
-                }))
+                };
+                this.add_node(id, res::Node::Lambda(Box::new(lambda)));
+                res::ExprKind::Lambda(id)
             }),
             ast::ExprKind::Assign(place, value) => {
                 let place = self.resolve_place(*place);
@@ -835,7 +919,11 @@ impl Resolve {
                 self.in_scope(|this| {
                     let pattern = this.resolve_pattern(*pattern);
                     let body = this.resolve_expr(*body);
-                    res::ExprKind::For(pattern, Box::new(iterator), Box::new(body))
+                    res::ExprKind::For(Box::new(res::ForExpr {
+                        pattern,
+                        iterator,
+                        body,
+                    }))
                 })
             }
         };
@@ -897,23 +985,35 @@ impl Resolve {
                 fields: record
                     .fields
                     .into_iter()
-                    .map(|field| res::FieldDef {
-                        name: field.name,
-                        ty: self.resolve_type(field.ty),
-                        id: self.def_id_for(ModuleNodeId(type_id.0, field.id)),
+                    .map(|field| {
+                        let node = res::Node::Field(Box::new(res::FieldDef {
+                            name: field.name,
+                            ty: self.resolve_type(field.ty),
+                        }));
+                        self.add_node(self.def_id_for(ModuleNodeId(type_id.0, field.id)), node)
                     })
                     .collect(),
             }),
             ast::TypeDefKind::Variant(cases) => res::TypeDefKind::Variant(VariantDef {
                 cases: cases
                     .into_iter()
-                    .map(|case| res::CaseDef {
-                        id: self.def_id_for(ModuleNodeId(type_id.0, case.id)),
-                        name: case.name,
-                        ty: case.ty.map(|ty| res::CaseType {
-                            id: self.def_id_for(ModuleNodeId(type_id.0, ty.id)),
-                            ty: self.resolve_type(ty.ty),
-                        }),
+                    .map(|case| {
+                        let id = self.def_id_for(ModuleNodeId(type_id.0, case.id));
+                        let case = res::CaseDef {
+                            id,
+                            name: case.name,
+                            field: case.ty.map(|ty| {
+                                let id = self.def_id_for(ModuleNodeId(type_id.0, ty.id));
+                                let ty = self.resolve_type(ty.ty);
+                                self.add_node(
+                                    id,
+                                    res::Node::CaseField(Box::new(res::CaseField { id, ty })),
+                                )
+                            }),
+                        };
+                        let node = res::Node::Case(Box::new(case));
+                        self.add_node(id, node);
+                        case
                     })
                     .collect(),
             }),
@@ -931,7 +1031,7 @@ impl Resolve {
             };
             res::TypeDef {
                 name: type_def.name,
-                generics,
+                generics: generics.map(Box::new),
                 kind,
             }
         })
@@ -943,8 +1043,7 @@ impl Resolve {
         value
     }
     fn next_def_id(&mut self) -> DefId {
-        let def_id = self.next_def_id.next();
-        let def_id = std::mem::replace(&mut self.next_def_id, def_id);
+        let def_id = self.nodes.push(None);
         if let Some(current_parent) = self.current_item {
             self.parents.insert(def_id, current_parent);
         }
@@ -1043,7 +1142,7 @@ impl Resolve {
                             this.declare_type_def(full_id, def_id, type_def);
                         }
                         ast::ItemKind::Function(function) => {
-                            this.declare_function(function.name, full_id);
+                            this.declare_function(full_id, function);
                         }
                     }
                 }
@@ -1065,7 +1164,7 @@ impl Resolve {
     fn def_id_for_module(&self, module: ModuleId) -> DefId {
         self.modules[&module].id
     }
-    fn resolve_annotations(&mut self, annotations: Vec<ast::Annotation>) -> Vec<res::Annotation> {
+    fn resolve_annotations(&self, annotations: Vec<ast::Annotation>) -> Vec<res::Annotation> {
         annotations
             .into_iter()
             .filter_map(|annotation| {
@@ -1102,56 +1201,62 @@ impl Resolve {
             })
             .collect()
     }
-    fn resolve_module(&mut self, items: &mut Vec<res::Item>, module: ast::Module) {
-        self.in_module_scope(module.id, |this| {
-            let mut mod_items = Vec::new();
+    fn resolve_module(&mut self, module: ast::Module) {
+        self.resolve_in_module_scope(module.id, |this| {
+            let mut mod_items = Vec::with_capacity(module.items.len() + module.child_modules.len());
             for item in module.items.into_iter() {
                 let node_id = ModuleNodeId(module.id, item.id);
-                let id = res::ItemId(this.item_id_to_def_id[&node_id]);
-                items.push(res::Item {
+                let id = this.item_id_to_def_id[&node_id];
+                let item = res::Item {
                     id,
                     loc: item.loc,
-                    annotations: this.resolve_annotations(item.annotations),
+                    annotations: this
+                        .resolve_annotations(item.annotations)
+                        .into_boxed_slice(),
                     kind: match item.kind {
                         ast::ItemKind::Function(function) => {
-                            res::ItemKind::Function(this.resolve_function(function))
+                            res::ItemKind::Function(Box::new(this.resolve_function(function)))
                         }
-                        ast::ItemKind::TypeDef(type_def) => {
-                            res::ItemKind::TypeDef(this.resolve_type_def(node_id, type_def))
-                        }
+                        ast::ItemKind::TypeDef(type_def) => res::ItemKind::TypeDef(Box::new(
+                            this.resolve_type_def(node_id, type_def),
+                        )),
                     },
-                });
-                mod_items.push(id.0);
+                };
+                this.add_item(id, item);
+                mod_items.push(id);
             }
             for child in module.child_modules {
                 let id = this.modules[&child.id].id;
-                this.resolve_module(items, child);
+                this.resolve_module(child);
                 mod_items.push(id);
             }
-            items.push(res::Item {
-                id: res::ItemId(this.def_id_for_module(module.id)),
+            let item = res::Item {
+                id: this.def_id_for_module(module.id),
                 loc: SrcLoc::dummy().with_file(module.name),
-                annotations: Vec::new(),
-                kind: res::ItemKind::Module(res::Module {
+                annotations: Vec::new().into_boxed_slice(),
+                kind: res::ItemKind::Module(Box::new(res::Module {
                     name: Ident {
                         symbol: module.name,
                         loc: SrcLoc::dummy().with_file(module.name),
                     },
-                    items: mod_items,
-                }),
-            });
+                    items: mod_items.into_boxed_slice(),
+                })),
+            };
+            this.add_item(item.id, item);
         })
     }
     pub fn resolve(mut self, modules: Vec<ast::Module>) -> Result<GlobalContext, ResolveErrored> {
         //First pass : Declare everything
         self.declare(&modules);
         //Second pass : Resolve
-        let items = {
-            let mut items = Vec::new();
+        let nodes = {
             for module in modules.into_iter() {
-                self.resolve_module(&mut items, module);
+                self.resolve_module(module);
             }
-            items
+            std::mem::take(&mut self.nodes)
+                .into_iter_enumerated()
+                .map(|(id, node)| node.unwrap_or_else(|| panic!("missing node for '{:?}'", id)))
+                .collect()
         };
         let mut builtins = Builtins::default();
         if let Some(builtin_module) = self.builtin_module {
@@ -1166,7 +1271,7 @@ impl Resolve {
                 builtins.insert(builtin, id);
             }
         }
-        let context = build_global_context(items, builtins, self.parents);
+        let context = build_global_context(nodes, builtins, self.parents);
         if !self.diag.report_all() {
             Ok(context)
         } else {

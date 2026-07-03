@@ -122,7 +122,8 @@ impl<'ctxt> MirDump<'ctxt> {
                     }
                     AggregateKind::ArrayList(ty) => format!("array_list[{}]", ty),
                     AggregateKind::String => "string".to_string(),
-                    AggregateKind::Variant(_, name, args) => {
+                    AggregateKind::Variant(id, index, args) => {
+                        let name = self.ctxt.type_def(*id).case(*index).name;
                         format!("{}{}", name, display_generic_args(args))
                     }
                 };

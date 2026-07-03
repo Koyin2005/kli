@@ -2,14 +2,14 @@ use std::collections::{HashSet, VecDeque};
 
 use crate::{
     mir::{BodySource, Constant, ConstantValue, Context, Location, visitor::Visit},
-    resolved_ast::{DefId, LambdaId},
+    resolved_ast::DefId,
     types::GenericArg,
 };
 
 type FunctionId = DefId;
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum InstanceKind {
-    Lambda(LambdaId),
+    Lambda(DefId),
     Function(FunctionId),
 }
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]

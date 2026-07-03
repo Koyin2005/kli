@@ -1,9 +1,9 @@
 use crate::{
     ast::{IsResource, Mutable},
     collect::CtxtRef,
+    collect::TypeDefKind,
     diagnostics::emit_fatal_diagnostic,
     mir::{BinaryOp, Body, CastKind, Location, PointerCast, Stmt, StmtKind, visitor::Visit},
-    resolved_ast::TypeDefKind,
     src_loc::SrcLoc,
     types::{FunctionType, PointerType, Type},
     unsafety,
@@ -44,8 +44,11 @@ impl Visit for WellFormed<'_> {
             match proj {
                 super::PlaceProjection::CaseDowncast(index, _) => {
                     ty = if let Type::Named(id, _, ref args) = ty {
-                        let case = &self.ctxt.expect_type(id).expect_variant().cases[*index];
-                        self.ctxt.type_of(case.ty.as_ref().unwrap().id).bind(args)
+                        self.ctxt
+                            .type_def(id)
+                            .case(*index)
+                            .expect_field()
+                            .type_of(args, self.ctxt)
                     } else {
                         emit_fatal_diagnostic(loc, format!("Cannot get inner value of '{}'", ty))
                     };
@@ -91,7 +94,7 @@ impl Visit for WellFormed<'_> {
             super::Rvalue::Discriminant(place) => {
                 self.assert(
                     if let Type::Named(id, _, _) = self.body.type_of_place(place, self.ctxt)
-                        && let TypeDefKind::Variant(_) = self.ctxt.expect_type(id).kind
+                        && let TypeDefKind::Variant(_) = self.ctxt.type_def(id).kind
                     {
                         true
                     } else {
@@ -199,7 +202,12 @@ impl Visit for WellFormed<'_> {
                     let len_ty = self.body.type_of_operand(len, self.ctxt);
                     self.assert(len_ty == Type::Int, || "len should be int".to_string(), loc);
                 }
-                super::AggregateKind::Variant(id, _, args) => {
+                super::AggregateKind::Variant(id, index, args) => {
+                    let type_def = self.ctxt.type_def(*id);
+                    let case_def = type_def.case(*index);
+                    let field = case_def.expect_field();
+                    let field_ty = field.type_of(args, self.ctxt);
+
                     let field = self.assert_with_some(
                         fields.as_slice(),
                         |fields| {
@@ -217,13 +225,6 @@ impl Visit for WellFormed<'_> {
                         },
                         loc,
                     );
-                    let (variant_def, index) = self.ctxt.expect_case(*id);
-                    let case_ty = variant_def.cases[index].ty.as_ref();
-                    let field_id = case_ty.map(|case| case.id);
-                    let field_id = field_id.unwrap_or_else(|| {
-                        emit_fatal_diagnostic(loc, "should have a field if init".to_string())
-                    });
-                    let field_ty = self.ctxt.type_of(field_id).bind(args);
                     let operand_ty = self.body.type_of_operand(field, self.ctxt);
                     self.assert(
                         field_ty == operand_ty,

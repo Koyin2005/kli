@@ -10,8 +10,8 @@ use crate::{
 pub struct Lexer<'src> {
     chars: Peekable<Chars<'src>>,
     file: Symbol,
-    line: usize,
-    start_line: usize,
+    line: u32,
+    start_line: u32,
     diag: DiagnosticReporter,
 }
 impl<'s> Lexer<'s> {
@@ -30,7 +30,7 @@ impl<'s> Lexer<'s> {
     fn next_char(&mut self) -> Option<char> {
         self.chars.next().inspect(|x| {
             if *x == '\n' {
-                self.line += 1;
+                self.line = self.line.checked_add(1).expect("file too big");
             }
         })
     }

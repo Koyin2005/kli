@@ -1,7 +1,7 @@
 use crate::ident::Symbol;
 #[derive(Debug, Clone, Copy)]
 pub struct SrcLoc {
-    pub line: usize,
+    pub line: u32,
     pub file: Symbol,
 }
 impl SrcLoc {

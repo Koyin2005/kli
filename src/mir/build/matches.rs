@@ -4,7 +4,7 @@ use crate::{
     mir::{BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind, build::Builder},
     src_loc::SrcLoc,
     typed_ast::{CaseArm, Expr, Pattern, PatternKind},
-    types::Type,
+    types::{CaseId, Type},
 };
 
 struct MatchInfo<'a> {
@@ -20,7 +20,7 @@ enum Test {
 #[derive(Debug, Clone)]
 enum MatchBranch {
     IntSwitch(Place, Vec<(i64, MatchBranch)>, Box<MatchBranch>),
-    VariantSwitch(Place, Vec<(usize, MatchBranch)>, Box<MatchBranch>),
+    VariantSwitch(Place, Vec<(CaseId, MatchBranch)>, Box<MatchBranch>),
     If {
         place: Place,
         true_tree: Box<MatchBranch>,
@@ -34,7 +34,7 @@ enum TestCase {
     True,
     False,
     Equals(i64),
-    Variant(usize),
+    Variant(CaseId),
 }
 type TestMatrix = Vec<(usize, Vec<MatchTest>)>;
 #[derive(Debug, Clone)]
@@ -130,7 +130,7 @@ impl Builder<'_> {
                         case: TestCase::Variant(*index),
                     }];
                     tests.extend(self.match_tests(
-                        place.with_case_downcast(*index, self.ctxt.name(*id).symbol),
+                        place.with_case_downcast(*index, self.ctxt.expect_ident(*id).symbol),
                         inner,
                     ));
                     tests
@@ -204,7 +204,7 @@ impl Builder<'_> {
                         let block = self.switch_to_new_block();
                         self.lower_tree(loc, arm, info, end_blocks);
                         SwitchTarget {
-                            value: value.try_into().unwrap(),
+                            value: value.into_usize().try_into().unwrap(),
                             target: block,
                         }
                     })

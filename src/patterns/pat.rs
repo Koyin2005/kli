@@ -56,10 +56,9 @@ impl Pat {
                 use crate::typed_ast::FieldId;
                 let fields: &mut dyn Fn(FieldId) -> crate::types::FieldName = match &self.ty {
                     Type::Record(fields) => &mut |i| fields[i].name,
-                    &Type::Named(id, ..) => {
-                        let fields = &ctxt.expect_type(id).expect_record().fields;
-                        &mut |i| crate::types::FieldName::Named(fields[i].name.symbol)
-                    }
+                    &Type::Named(id, ..) => &mut move |i| {
+                        crate::types::FieldName::Named(ctxt.type_def(id).fields()[i].name)
+                    },
                     _ => unreachable!("should be a record"),
                 };
                 f.write_str("{")?;

@@ -563,6 +563,7 @@ impl Parser {
                 Ok(Expr {
                     loc,
                     kind: ExprKind::Lambda(Box::new(Lambda {
+                        id: self.next_node_id(),
                         params,
                         resource,
                         body: Box::new(body),

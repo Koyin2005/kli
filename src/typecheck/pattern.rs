@@ -2,7 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::Mutable,
-    resolved_ast::{self, Pattern, PatternField, PatternKind, Var},
+    collect::TypeDefKind,
+    resolved_ast::{Pattern, PatternField, PatternKind, Var},
     typed_ast::{self, FieldId},
     types::{FieldName, RecordField, Region, Type},
 };
@@ -43,9 +44,9 @@ impl TypeCheck<'_> {
                     }
                 };
                 let ctxt = self.ctxt();
-                let type_def = ctxt.expect_type(id);
-                let variant_def = match type_def.kind {
-                    resolved_ast::TypeDefKind::Variant(ref variant_def) => variant_def,
+                let type_def = ctxt.type_def(id);
+                let cases = match type_def.kind {
+                    TypeDefKind::Variant(ref variant_def) => variant_def,
                     _ => {
                         self.ctxt().diag().add_diagnostic(
                             "expected 'variant' type but got 'record'".to_string(),
@@ -61,11 +62,9 @@ impl TypeCheck<'_> {
                         };
                     }
                 };
-                let Some((i, case_def)) = variant_def
-                    .cases
-                    .iter()
-                    .enumerate()
-                    .find(|(_, case_def)| case_def.name.symbol == name.symbol)
+                let Some((i, &case_def)) = cases
+                    .iter_enumerated()
+                    .find(|(_, case_def)| case_def.name == name.symbol)
                 else {
                     self.ctxt().diag().add_diagnostic(
                         format!("'{}' has no case '{}'", ty_name, name.symbol),
@@ -81,12 +80,13 @@ impl TypeCheck<'_> {
                     };
                 };
                 let case_id = case_def.id;
-                let inner = match (&case_def.ty, inner) {
+                let inner = match (
+                    case_def.field.map(|field| field.type_of(&args, ctxt)),
+                    inner,
+                ) {
                     (None, None) => None,
                     (Some(inner_ty), Some(inner)) => {
-                        let ty = self.ctxt().type_of(inner_ty.id);
-                        let ty = ty.bind(&args);
-                        Some(Box::new(self.check_pattern(inner, ty, binding_mode)))
+                        Some(Box::new(self.check_pattern(inner, inner_ty, binding_mode)))
                     }
                     (None, Some(inner)) => {
                         self.ctxt().diag().add_diagnostic(
@@ -105,10 +105,7 @@ impl TypeCheck<'_> {
                             name.loc,
                         );
                         Some(Box::new(typed_ast::Pattern {
-                            ty: {
-                                let ty = self.ctxt().type_of(ty.id);
-                                ty.bind(&args)
-                            },
+                            ty,
                             loc,
                             kind: typed_ast::PatternKind::Err,
                         }))

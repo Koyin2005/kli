@@ -35,7 +35,7 @@ pub fn pattern_to_pat(ctxt: CtxtRef<'_>, pattern: &Pattern) -> Pat {
         },
         PatternKind::Case(id, _, _, inner) => Pat {
             ty,
-            constructor: Constructor::Case(ctxt.name(*id).symbol),
+            constructor: Constructor::Case(ctxt.expect_ident(*id).symbol),
             fields: inner
                 .as_ref()
                 .map(|inner| pattern_to_pat(ctxt, inner).with_index(0))

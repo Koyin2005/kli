@@ -7,11 +7,13 @@ use crate::{
     Symbol,
     ast::{IsResource, Mutable},
     collect::CtxtRef,
+    define_id,
     ident::Ident,
     index_vec::IndexVec,
     resolved_ast::{DefId, LocalRegionId},
     typed_ast::FieldId,
 };
+define_id!(CaseId);
 pub mod lower;
 #[derive(Clone, Debug)]
 pub enum PointerType {
@@ -341,35 +343,16 @@ impl Type {
             Type::Record(fields) => fields.iter().any(|field| field.ty.is_resource(ctxt)),
             Type::Infer(_) => unreachable!("Cannot 'infer' its a resource"),
             &Type::Named(id, _, ref args) => {
-                let item = ctxt.expect_item(id);
-                let is_copy = item
-                    .annotations
+                let is_copy = ctxt
+                    .expect_annotations(id)
                     .iter()
                     .any(|annotation| annotation.kind == crate::resolved_ast::AnnotationKind::Copy);
-                if !is_copy {
+                if !is_copy || ctxt.is_type_recursive(id) {
                     return true;
                 }
-                match item.expect_type_def().kind {
-                    crate::resolved_ast::TypeDefKind::Record(ref record) => {
-                        for field in record.fields.iter() {
-                            if ctxt.type_of(field.id).bind(args).is_resource(ctxt) {
-                                return true;
-                            }
-                        }
-                        false
-                    }
-                    crate::resolved_ast::TypeDefKind::Variant(ref variant) => {
-                        for case in variant.cases.iter() {
-                            let Some(id) = case.ty.as_ref().map(|case| case.id) else {
-                                continue;
-                            };
-                            if ctxt.type_of(id).bind(args).is_resource(ctxt) {
-                                return true;
-                            }
-                        }
-                        false
-                    }
-                }
+                ctxt.type_def(id)
+                    .all_fields()
+                    .any(|field| field.type_of(args, ctxt).is_resource(ctxt))
             }
         }
     }
