@@ -113,7 +113,7 @@ impl Builder<'_> {
                 let index = capture_info
                     .captures
                     .iter()
-                    .position(|(curr, _)| curr.1 == var.1)
+                    .position(|capture| capture.var.1 == var.1)
                     .unwrap();
                 Place::local(env_ptr)
                     .with_deref()
@@ -479,7 +479,7 @@ impl Builder<'_> {
                 };
                 let checked_result = self.assign_to_temp(
                     expr.loc,
-                    Type::record(vec![Type::Bool, Type::Int]),
+                    Type::tuple(vec![Type::Bool, Type::Int]),
                     Rvalue::Binary(
                         mir::BinaryOp::Overflow(overflow_op),
                         Box::new((left_operand, right_operand)),
@@ -510,9 +510,7 @@ impl Builder<'_> {
                 let is_resource = lambda.is_resource == IsResource::Resource;
                 let function = Operand::Constant(self.lambda_code(lambda));
                 if is_resource {
-                    let env_ty =
-                        Type::record(lambda.captures.iter().map(|(_, ty)| ty.clone()).collect());
-
+                    let env_ty = Type::closure_env(lambda.captures.iter().cloned());
                     let env = self.assign_to_temp(
                         expr.loc,
                         Type::pointer(env_ty.clone()),
@@ -529,7 +527,7 @@ impl Builder<'_> {
                                 field_names: lambda
                                     .captures
                                     .iter()
-                                    .map(|capture| capture.0.0)
+                                    .map(|capture| capture.var.0)
                                     .map(FieldName::Named)
                                     .collect(),
                             },
@@ -539,7 +537,7 @@ impl Builder<'_> {
                                 .map(|capture| {
                                     Operand::Load(Place::local(
                                         self.body
-                                            .local_for_var(capture.0.1)
+                                            .local_for_var(capture.var.1)
                                             .expect("Should have a local for var"),
                                     ))
                                 })

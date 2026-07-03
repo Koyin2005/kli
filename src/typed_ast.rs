@@ -42,11 +42,16 @@ pub enum PlaceKind {
     Var(Var),
     Deref(Box<Expr>),
 }
+#[derive(Debug, Clone)]
+pub struct Capture {
+    pub var: Var,
+    pub ty: Type,
+}
 #[derive(Debug)]
 pub struct Lambda {
     pub id: DefId,
     pub is_resource: IsResource,
-    pub captures: Vec<(Var, Type)>,
+    pub captures: Vec<Capture>,
     pub params: Vec<Param>,
     pub return_type: Type,
     pub body: Expr,

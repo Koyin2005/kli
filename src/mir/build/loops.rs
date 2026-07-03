@@ -153,7 +153,7 @@ impl Builder<'_> {
                 let body_block = self.current_block;
                 let result = self.assign_to_temp(
                     iterator.loc,
-                    Type::record([Type::Char, Type::Int].into()),
+                    Type::tuple([Type::Char, Type::Int].into()),
                     Rvalue::DecodeUtf8(
                         Operand::Load(byte_ptr),
                         Operand::Load(Place::local(current_index)),

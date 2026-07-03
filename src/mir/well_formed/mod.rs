@@ -370,7 +370,12 @@ impl Visit for WellFormed<'_> {
                 let rhs_ty = self.body.type_of_rvalue(rhs, self.ctxt);
                 self.assert(
                     lhs_ty == rhs_ty,
-                    || format!("Cannot assign non equal types {} and {}", lhs_ty, rhs_ty),
+                    || {
+                        format!(
+                            "Cannot assign non equal types {} and {} for {:?} {:?}",
+                            lhs_ty, rhs_ty, lhs, rhs
+                        )
+                    },
                     stmt.loc,
                 );
             }

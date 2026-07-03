@@ -8,7 +8,7 @@ use crate::{
     index_vec::IndexVec,
     resolved_ast::{DefId, Var, VarId},
     src_loc::SrcLoc,
-    typed_ast::FieldId,
+    typed_ast::{Capture, FieldId},
     types::{CaseId, FieldName, GenericArg, GenericArgs, PointerType, Region, Type},
 };
 pub mod build;
@@ -290,11 +290,11 @@ pub struct LocalInfo {
 pub struct Captures {
     ///The local for the restored pointer with the proper type
     pub env_ptr: Option<Local>,
-    pub captures: Vec<(Var, Type)>,
+    pub captures: Vec<Capture>,
 }
 impl Captures {
     pub fn env_type(&self) -> Type {
-        Type::record(self.captures.iter().map(|(_, ty)| ty.clone()).collect())
+        Type::closure_env(self.captures.iter().cloned())
     }
 }
 #[derive(Clone)]
@@ -385,7 +385,7 @@ impl Body {
                 *function.return_type
             }
             Rvalue::Binary(op, left_and_right) => match op {
-                BinaryOp::Overflow(_) => Type::record([Type::Bool, Type::Int].into()),
+                BinaryOp::Overflow(_) => Type::tuple([Type::Bool, Type::Int].into()),
                 BinaryOp::Unchecked(_) | BinaryOp::Wrapping(_) => Type::Int,
                 BinaryOp::Offset => {
                     let (left, _) = left_and_right.as_ref();
@@ -401,7 +401,7 @@ impl Body {
                 BinaryOp::Lesser => Type::Bool,
             },
             Rvalue::Allocate { ty, count: _ } => Type::pointer(ty.clone()),
-            Rvalue::DecodeUtf8(_, _) => Type::record([Type::Char, Type::Int].into()),
+            Rvalue::DecodeUtf8(_, _) => Type::tuple([Type::Char, Type::Int].into()),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 AggregateKind::Array(ty, count) => Type::Array(Box::new(ty.clone()), *count),
                 AggregateKind::Record { field_names } => Type::Record(
@@ -442,7 +442,7 @@ impl Body {
                             Type::Imm(region, Box::new(pointee))
                         }
                         PointerCast::BoxToRaw | PointerCast::RefToRaw(_) => Type::pointer(pointee),
-                        PointerCast::RawToRaw(ty) => Type::pointer(ty.clone()),
+                        PointerCast::RawToRaw(to) => Type::pointer(to.clone()),
                         PointerCast::RawToBox => Type::Box(Box::new(pointee)),
                         &PointerCast::RawToRef(mutable, region) => {
                             Type::reference(pointee, mutable, region)

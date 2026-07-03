@@ -7,7 +7,7 @@ use crate::{
     },
     src_loc::SrcLoc,
     typecheck::root::TypeCheck,
-    typed_ast::{self, FieldId, RecordFieldInit},
+    typed_ast::{self, Capture, FieldId, RecordFieldInit},
     types::{FieldName, FunctionSig, FunctionType, PointerType, RecordField, Type},
 };
 
@@ -186,11 +186,9 @@ impl TypeCheck<'_> {
         });
         let captures = captures
             .into_iter()
-            .map(|capture| {
-                (
-                    Var(self.var_name(capture), capture),
-                    self.var_type(capture).clone(),
-                )
+            .map(|capture| Capture {
+                var: Var(self.var_name(capture), capture),
+                ty: self.var_type(capture).clone(),
             })
             .collect();
         typed_ast::Expr {

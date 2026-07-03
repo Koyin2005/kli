@@ -11,7 +11,7 @@ use crate::{
     ident::Ident,
     index_vec::IndexVec,
     resolved_ast::{DefId, LocalRegionId},
-    typed_ast::FieldId,
+    typed_ast::{Capture, FieldId},
 };
 define_id!(CaseId);
 pub mod lower;
@@ -190,6 +190,19 @@ pub enum Type {
     Named(DefId, Symbol, GenericArgs),
 }
 impl Type {
+    pub fn closure_env(fields: impl Iterator<Item = Capture>) -> Self {
+        Self::record_named_fields(fields.map(|capture| (capture.var.0, capture.ty)))
+    }
+    pub fn record_named_fields(fields: impl Iterator<Item = (Symbol, Self)>) -> Self {
+        Self::Record(
+            fields
+                .map(|(name, ty)| RecordField {
+                    name: FieldName::Named(name),
+                    ty,
+                })
+                .collect(),
+        )
+    }
     pub fn new_function(params: Vec<Self>, return_ty: Self) -> Self {
         Self::Function(FunctionType {
             resource: IsResource::Data,
@@ -251,7 +264,7 @@ impl Type {
     pub fn pointer(ty: Self) -> Self {
         Self::RawPointer(Box::new(ty))
     }
-    pub fn record(field_tys: Vec<Self>) -> Self {
+    pub fn tuple(field_tys: Vec<Self>) -> Self {
         Self::Record(
             field_tys
                 .into_iter()

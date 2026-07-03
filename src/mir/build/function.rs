@@ -117,9 +117,9 @@ impl Builder<'_> {
             let env_ty = builder.body.capture_info.as_ref().unwrap().env_type();
             let casted = builder.assign_to_temp(
                 lambda.body.loc,
-                Type::pointer(env_ty),
+                Type::pointer(env_ty.clone()),
                 Rvalue::pointer_cast(
-                    PointerCast::RawToRaw(Type::Byte),
+                    PointerCast::RawToRaw(env_ty),
                     Operand::Load(Place::local(Local::FIRST_PARAM)),
                 ),
             );
