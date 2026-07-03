@@ -8,7 +8,7 @@ use crate::{
     resolved_ast::DefId,
     src_loc::SrcLoc,
     typed_ast::{self, Lambda},
-    types::{FunctionType, Type},
+    types::{FunctionType, GenericArgs, Type},
 };
 
 impl Builder<'_> {
@@ -58,7 +58,7 @@ impl Builder<'_> {
         builder.add_finished_body();
     }
     pub(super) fn lambda_code(&mut self, lambda: &Lambda) -> Constant {
-        let _ty = Type::Function(FunctionType {
+        let ty = Type::Function(FunctionType {
             resource: IsResource::Data,
             params: lambda.params.iter().map(|param| param.ty.clone()).collect(),
             return_type: Box::new(lambda.return_type.clone()),
@@ -68,7 +68,19 @@ impl Builder<'_> {
             .bodies
             .contains_key(&BodySource::Lambda(lambda.id))
         {
-            todo!("Handle lambdas")
+            let args = if !self
+                .ctxt
+                .generics(self.ctxt.expect_parent(lambda.id))
+                .is_empty()
+            {
+                todo!("Handle generic lambdas")
+            } else {
+                GenericArgs::new()
+            };
+            return Constant {
+                ty: Box::new(ty),
+                value: crate::mir::ConstantValue::NamedConst(lambda.id, args),
+            };
         }
         let is_resource = lambda.is_resource == IsResource::Resource;
         let context = &mut *self.mir_context;
@@ -116,6 +128,18 @@ impl Builder<'_> {
         builder.expr_into_dest(Place::return_place(), &lambda.body);
         builder.finish_block(lambda.body.loc, TerminatorKind::Return);
         builder.add_finished_body();
-        todo!("Handle lambda ids")
+        let args = if !self
+            .ctxt
+            .generics(self.ctxt.expect_parent(lambda.id))
+            .is_empty()
+        {
+            todo!("Handle generic lambdas")
+        } else {
+            GenericArgs::new()
+        };
+        Constant {
+            ty: Box::new(ty),
+            value: crate::mir::ConstantValue::NamedConst(lambda.id, args),
+        }
     }
 }
