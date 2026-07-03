@@ -28,6 +28,9 @@ impl<'ctxt> MirDump<'ctxt> {
             BodySource::Lambda(lambda) => {
                 write!(self.output, "lambda {}", self.ctxt.display(lambda))?;
             }
+            BodySource::ClosureShim(lambda) => {
+                write!(self.output,"lambda_shim {}",self.ctxt.display(lambda))?;
+            }
         }
         writeln!(self.output, "() -> {}", body.return_type)?;
         for (local, info) in body.locals.iter_enumerated() {

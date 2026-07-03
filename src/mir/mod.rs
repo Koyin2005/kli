@@ -272,6 +272,7 @@ impl BasicBlock {
 pub enum BodySource {
     Function(DefId),
     Lambda(DefId),
+    ClosureShim(DefId),
 }
 #[derive(Clone)]
 pub enum LocalKind {
