@@ -318,7 +318,7 @@ impl CtxtRef<'_> {
             },
             Node::CaseField(field) => Lower::new(self, id, None).lower_type(&field.ty),
             Node::Field(field) => Lower::new(self, id, None).lower_type(&field.ty),
-            Node::Lambda(_) => todo!("Idk handle lowering these"),
+            Node::Lambda(_) => unreachable!("Can't get the type of lambda"),
         };
         Scheme::new(ty)
     }
@@ -338,7 +338,7 @@ impl CtxtRef<'_> {
             Node::Case(_) | Node::CaseField(_) | Node::Field(_) => {
                 self.generics(self.expect_parent(id))
             }
-            Node::Lambda(_) => todo!("Handle lambda"),
+            Node::Lambda(_) => self.generics(self.expect_parent(id)),
         })
     }
     pub fn ancestors(self, id: DefId) -> impl Iterator<Item = DefId> {

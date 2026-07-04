@@ -70,8 +70,9 @@ impl Builder<'_> {
                 .collect(),
             return_type: lambda.return_type.clone(),
         });
-        let args = if !ctxt.generics(ctxt.expect_parent(lambda.id)).is_empty() {
-            todo!("Handle generic lambdas")
+        let generics = ctxt.generics(lambda.id);
+        let args = if generics.is_empty() {
+            generics.instantiate_identity()
         } else {
             GenericArgs::new()
         };
@@ -87,8 +88,9 @@ impl Builder<'_> {
         id: DefId,
         lambda: &Lambda,
     ) -> Constant {
-        let args = if !ctxt.generics(ctxt.expect_parent(lambda.id)).is_empty() {
-            todo!("Handle generic lambdas")
+        let generics = ctxt.generics(lambda.id);
+        let args = if !generics.is_empty() {
+            generics.instantiate_identity()
         } else {
             GenericArgs::new()
         };
