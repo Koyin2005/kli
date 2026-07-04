@@ -13,13 +13,6 @@ use crate::{
     typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
     types::{PointerType, Region, Type},
 };
-
-#[derive(Debug, Clone, Copy)]
-enum CaptureError {
-    NotAnUpvar,
-    BorrowsLocal,
-    DataFunction,
-}
 #[derive(Debug, Clone, Copy)]
 enum PlaceUse {
     Read,
@@ -403,7 +396,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     let captures = lambda.captures.as_slice();
                     let mut errors = Vec::new();
                     for capture in captures {
-                    let loc = expr.loc;
+                        let loc = expr.loc;
                         let var = capture.var.1;
                         this.move_from_var(var, loc);
                         let info = &this.vars[&var];

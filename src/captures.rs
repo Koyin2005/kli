@@ -72,7 +72,6 @@ pub fn captures(ctxt: CtxtRef<'_>, id: DefId) -> Option<CaptureSet> {
         lambda.params.iter(),
         &lambda.body,
     );
-    println!("{:?} {:?}", id, collector.captures);
     let mut map = HashMap::new();
     for (i, var) in collector.captures.iter().copied().enumerate() {
         map.insert(var, i);

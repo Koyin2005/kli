@@ -75,10 +75,10 @@ impl Builder<'_> {
         } else {
             GenericArgs::new()
         };
-        return Constant {
+        Constant {
             ty: Box::new(ty),
             value: crate::mir::ConstantValue::NamedConst(lambda.id, args),
-        };
+        }
     }
 
     pub(super) fn closure_shim(

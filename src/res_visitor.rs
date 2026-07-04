@@ -1,8 +1,6 @@
-use crate::{
-    resolved_ast::{
-        BlockBody, Expr, ExprKind, GenericArgs, LocalRegionId, Param, Pattern, Place, PlaceKind,
-        Region, Stmt, StmtKind, Type, TypeKind, Var,
-    },
+use crate::resolved_ast::{
+    BlockBody, Expr, ExprKind, GenericArgs, LocalRegionId, Param, Pattern, Place, PlaceKind,
+    Region, Stmt, StmtKind, Type, TypeKind, Var,
 };
 
 pub trait Visitor {
@@ -65,7 +63,7 @@ pub trait Visitor {
         match &stmt.kind {
             StmtKind::Let(let_binding) => {
                 if let Some(ref ty) = let_binding.ty {
-                    self.visit_type(&ty);
+                    self.visit_type(ty);
                 }
                 self.visit_expr(&let_binding.value);
                 self.visit_pattern(&let_binding.pattern);

@@ -243,8 +243,8 @@ impl<'ctxt> TypeCheck<'ctxt> {
             );
         }
     }
-    pub(super) fn check_function<'c>(
-        func_ctxt: &'c mut FunctionCtxt,
+    pub(super) fn check_function(
+        func_ctxt: &mut FunctionCtxt,
         extra_params: Vec<(Ident, Type)>,
         sig: FunctionSig,
         params: &[res::Param],

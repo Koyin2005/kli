@@ -176,12 +176,11 @@ impl FunctionCtxt<'_> {
                         .and_then(|sig| sig.params.get(i))
                         .cloned();
                     let loc = lambda.params[i].loc;
-                    let ty = match (param, param_ty) {
+                    match (param, param_ty) {
                         (None, None) => root.fresh_ty(loc),
                         (Some(ty), None) | (None, Some(ty)) => ty,
                         (Some(ty), Some(expected)) => root.unify(expected, ty, loc),
-                    };
-                    ty
+                    }
                 })
                 .collect(),
             if let Some(ty) = expected_sig.as_ref().map(|sig| &*sig.return_type).cloned() {
@@ -491,9 +490,6 @@ impl FunctionCtxt<'_> {
             &ExprKind::Var(var) => {
                 let Var(var, id) = var;
                 let var_ty = self.root().var_type(id);
-                if self.root().ctxt().node(self.id).lambda().is_some() {
-                    println!("{:?}", self.id);
-                }
                 make_expr(
                     var_ty.clone(),
                     typed_ast::ExprKind::Load(typed_ast::Place {

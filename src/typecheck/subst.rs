@@ -1,8 +1,8 @@
 use crate::{
     typecheck::infer::TypeInfer,
     typed_ast::{
-        Expr, ExprKind, Function, IteratorType, Param, Pattern, PatternKind, Place, PlaceKind,
-        Stmt, StmtKind,
+        Expr, ExprKind, Function, IteratorType, Pattern, PatternKind, Place, PlaceKind, Stmt,
+        StmtKind,
     },
     types::{FunctionType, GenericArg, Region, Type},
 };

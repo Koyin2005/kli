@@ -542,13 +542,17 @@ impl Builder<'_> {
                                 .iter()
                                 .map(|capture| {
                                     Operand::Load(Place::local(
-                                        self.body.local_for_var(capture.var.1).unwrap_or_else(
+                                        self.body.local_for_var(capture.var.1).map_or_else(
                                             || {
-                                                panic!(
-                                                    "Should have a local for var {:?}",
-                                                    capture.var
+                                                Local::new(
+                                                    self.ctxt
+                                                        .captures(lambda.id)
+                                                        .unwrap_or_default()
+                                                        .capture_index(capture.var.1)
+                                                        .unwrap(),
                                                 )
                                             },
+                                            std::convert::identity,
                                         ),
                                     ))
                                 })
