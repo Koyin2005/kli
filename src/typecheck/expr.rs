@@ -6,18 +6,23 @@ use crate::{
         LocalRegionId, Pattern, Place, PlaceKind, Var,
     },
     src_loc::SrcLoc,
-    typecheck::root::TypeCheck,
+    typecheck::root::{FunctionCtxt, TypeCheck},
     typed_ast::{self, Capture, FieldId, RecordFieldInit},
     types::{FieldName, FunctionSig, FunctionType, PointerType, RecordField, Type},
 };
 
-impl TypeCheck<'_> {
+impl FunctionCtxt<'_> {
     fn check_place(&self, place: &Place, expected_ty: Option<Type>) -> typed_ast::Place {
         let (ty, kind) = match &place.kind {
             &PlaceKind::Var(var) => (
-                self.var_type(var.1).clone(),
-                if self.capture(var.1) {
-                    typed_ast::PlaceKind::Upvar(var)
+                self.root().var_type(var.1).clone(),
+                if self
+                    .root()
+                    .ctxt()
+                    .captures(self.id)
+                    .is_some_and(|captures| captures.captured(var.1))
+                {
+                    typed_ast::PlaceKind::Upvar(self.id, var)
                 } else {
                     typed_ast::PlaceKind::Var(var)
                 },
@@ -25,17 +30,23 @@ impl TypeCheck<'_> {
             PlaceKind::Deref(value) => {
                 let value = self.check_expr(value, None);
                 (
-                    match self.simplify_type(value.ty.clone()).as_pointer_type() {
+                    match self
+                        .root()
+                        .simplify_type(value.ty.clone())
+                        .as_pointer_type()
+                    {
                         Ok((PointerType::Raw | PointerType::Reference(..), ty)) => ty.clone(),
-                        Ok((p, ty)) => self.non_deref_error(&Type::pointer_type(p, ty), value.loc),
-                        Err(ty) => self.non_deref_error(&ty, value.loc),
+                        Ok((p, ty)) => self
+                            .root()
+                            .non_deref_error(&Type::pointer_type(p, ty), value.loc),
+                        Err(ty) => self.root().non_deref_error(&ty, value.loc),
                     },
                     typed_ast::PlaceKind::Deref(Box::new(value)),
                 )
             }
         };
         let ty = if let Some(expected) = expected_ty {
-            self.unify(expected, ty, place.loc)
+            self.root().unify(expected, ty, place.loc)
         } else {
             ty
         };
@@ -53,11 +64,11 @@ impl TypeCheck<'_> {
         body: &Expr,
     ) -> typed_ast::Expr {
         let iterator = self.check_expr(iterator, None);
-        let element = self.iterator_element(iterator.ty.clone());
+        let element = self.root().iterator_element(iterator.ty.clone());
         let (iterator_type, element) = match element {
             Ok((iterator_type, ty)) => (Some(iterator_type), ty),
             Err(_) => {
-                self.ctxt().diag().add_diagnostic(
+                self.root().ctxt().diag().add_diagnostic(
                     format!("Cannot use '{}' as an iterator", iterator.ty),
                     iterator.loc,
                 );
@@ -104,16 +115,16 @@ impl TypeCheck<'_> {
         };
         let place = self.check_place(place, expected);
         let region = {
-            let region = self.lower_region(region);
+            let region = self.root().lower_region(region);
             match ty_region {
-                Some(expected) => self.unify_region(expected, region, loc),
+                Some(expected) => self.root().unify_region(expected, region, loc),
                 None => region,
             }
         };
         if let Some(ty_mutable) = ty_mutable
             && ty_mutable != mutable
         {
-            self.ctxt().diag().add_diagnostic(
+            self.root().ctxt().diag().add_diagnostic(
                 format!("Expected a '{}' but got '{}'", ty_mutable, mutable),
                 loc,
             );
@@ -121,7 +132,7 @@ impl TypeCheck<'_> {
         if let Some(expected) = expected_ty
             && expected.as_reference_type().is_err()
         {
-            self.expect_ty_error("reference", &expected, loc);
+            self.root().expect_ty_error("reference", &expected, loc);
         }
         typed_ast::Expr {
             ty: Type::reference(place.ty.clone(), mutable, region),
@@ -140,67 +151,85 @@ impl TypeCheck<'_> {
         lambda: &Lambda,
         hint: Option<Type>,
     ) -> typed_ast::Expr {
-        let expected_sig = match hint.clone().map(|ty| self.simplify_type(ty)) {
-            Some(Type::Function(ref function)) => Some(function.clone()),
+        let expected_sig = match hint.clone().map(|ty| self.root().simplify_type(ty)) {
+            Some(Type::Function(function)) => Some(function),
             _ => None,
         };
-        let (captures, (params, body)) = self.with_capture_scope(|this| {
-            let params = lambda
-                .params
+        let params = lambda
+            .params
+            .iter()
+            .map(|param| typed_ast::LambdaParam {
+                loc: param.loc,
+                var: param.var,
+            })
+            .collect::<Vec<_>>();
+        let root = self.root();
+        let sig = FunctionSig::new(
+            lambda
+                .param_tys
                 .iter()
                 .enumerate()
-                .map(|(i, &(name, var, ref ty))| {
-                    let ty = match ty {
-                        Some(ty) => {
-                            let ty = this.lower_type(ty);
-                            if let Some(sig) = &expected_sig
-                                && let Some(expect) = sig.params.get(i)
-                            {
-                                this.unify(expect.clone(), ty.clone(), name.loc);
-                            }
-                            ty
-                        }
-                        None => expected_sig
-                            .as_ref()
-                            .and_then(|sig| sig.params.get(i).cloned())
-                            .unwrap_or_else(|| this.fresh_ty(name.loc)),
+                .map(|(i, param)| {
+                    let param = param.as_ref().map(|param| root.lower_type(param));
+                    let param_ty = expected_sig
+                        .as_ref()
+                        .and_then(|sig| sig.params.get(i))
+                        .cloned();
+                    let loc = lambda.params[i].loc;
+                    let ty = match (param, param_ty) {
+                        (None, None) => root.fresh_ty(loc),
+                        (Some(ty), None) | (None, Some(ty)) => ty,
+                        (Some(ty), Some(expected)) => root.unify(expected, ty, loc),
                     };
-
-                    this.declare_var(var, ty.clone(), name.symbol);
-                    typed_ast::Param { name, var, ty }
+                    ty
                 })
-                .collect::<Vec<_>>();
-            let body = this.check_expr(
-                &lambda.body,
-                expected_sig.as_ref().map(|sig| (*sig.return_type).clone()),
-            );
-            (params, body)
-        });
-        let function = Type::Function(FunctionType {
-            resource: lambda.resource,
-            params: params
-                .iter()
-                .map(|typed_ast::Param { ty, .. }| ty.clone())
                 .collect(),
-            return_type: Box::new(body.ty.clone()),
-        });
-        let captures = captures
+            if let Some(ty) = expected_sig.as_ref().map(|sig| &*sig.return_type).cloned() {
+                ty
+            } else {
+                root.fresh_ty(lambda.body.loc)
+            },
+        );
+        let capture_map = self.root().ctxt().captures(id).unwrap_or_default();
+        let captures = capture_map
+            .into_vars()
             .into_iter()
             .map(|capture| Capture {
-                var: Var(self.var_name(capture), capture),
-                ty: self.var_type(capture).clone(),
+                var: Var(self.root().var_name(capture), capture),
+                ty: self.root().var_type(capture),
             })
-            .collect();
+            .collect::<Vec<_>>();
+        TypeCheck::check_function(
+            &mut FunctionCtxt::new(root, id),
+            captures
+                .iter()
+                .map(|capture| {
+                    (
+                        capture.var.ident(lambda.loc),
+                        self.root().var_type(capture.var.1),
+                    )
+                })
+                .collect(),
+            sig.clone(),
+            &lambda.params,
+            Some(&lambda.body),
+        );
+        let function = Type::Function(FunctionType {
+            resource: lambda.resource,
+            params: sig.params.clone(),
+            return_type: Box::new(sig.return_type.clone()),
+        });
         typed_ast::Expr {
             ty: function,
             loc,
             kind: typed_ast::ExprKind::Lambda(Box::new(typed_ast::Lambda {
+                loc: lambda.loc,
                 id,
                 captures,
                 is_resource: lambda.resource,
                 params,
-                return_type: body.ty.clone(),
-                body,
+                param_tys: sig.params,
+                return_type: Box::new(sig.return_type),
             })),
         }
     }
@@ -212,7 +241,7 @@ impl TypeCheck<'_> {
         expected_ty: Option<Type>,
     ) -> typed_ast::Expr {
         fn check_call_sig(
-            this: &TypeCheck,
+            this: &FunctionCtxt,
             callee_loc: SrcLoc,
             args: &[Expr],
             params: Vec<Type>,
@@ -220,7 +249,7 @@ impl TypeCheck<'_> {
             expected_ty: Option<Type>,
         ) -> (Type, Vec<typed_ast::Expr>) {
             if params.len() != args.len() {
-                this.ctxt().diag().add_diagnostic(
+                this.root().ctxt().diag().add_diagnostic(
                     format!(
                         "Expected '{}' arguments but got '{}'",
                         params.len(),
@@ -251,18 +280,18 @@ impl TypeCheck<'_> {
             let ty = match (expected_ty, return_type) {
                 (None, None) => Type::Unknown,
                 (None, Some(ty)) | (Some(ty), None) => ty,
-                (Some(ty), Some(return_type)) => this.unify(ty, return_type, callee_loc),
+                (Some(ty), Some(return_type)) => this.root().unify(ty, return_type, callee_loc),
             };
             (ty, args)
         }
         if let ExprKind::Function(id, generic_args) = &callee.kind
-            && let Some(builtin) = self.ctxt().builtins().builtin_for(id.0)
+            && let Some(builtin) = self.root().ctxt().builtins().builtin_for(id.0)
         {
-            let generic_args = self.lower_generic_args_for(id.0, generic_args, loc);
+            let generic_args = self.root().lower_generic_args_for(id.0, loc, generic_args);
             let FunctionSig {
                 params,
                 return_type,
-            } = self.ctxt().signature_of(id.0).bind(&generic_args);
+            } = self.root().ctxt().signature_of(id.0).bind(&generic_args);
             let (ty, args) = check_call_sig(
                 self,
                 callee.loc,
@@ -281,20 +310,22 @@ impl TypeCheck<'_> {
                 ),
             }
         } else if let ExprKind::VariantCase(id, generic_args) = &callee.kind
-            && let cases = self.ctxt().type_def(self.ctxt().expect_parent(*id)).cases()
+            && let root = self.root()
+            && let ctxt = root.ctxt()
+            && let cases = ctxt.type_def(ctxt.expect_parent(*id)).cases()
             && let (index, case_def) = cases
                 .iter_enumerated()
                 .find_map(|(index, case)| (case.id == *id).then_some((index, case)))
                 .unwrap()
             && case_def.field.is_some()
-            && args.len() == 1
+            && args.len() == case_def.field.as_slice().len()
         {
-            let generic_args = self.lower_generic_args_for(*id, generic_args, loc);
+            let generic_args = root.lower_generic_args_for(*id, loc, generic_args);
             let Type::Function(FunctionType {
                 resource: _,
                 params,
                 return_type,
-            }) = self.ctxt().type_of(*id).bind(&generic_args)
+            }) = ctxt.type_of(*id).bind(&generic_args)
             else {
                 unreachable!("Should be a function")
             };
@@ -314,7 +345,7 @@ impl TypeCheck<'_> {
             }
         } else {
             let callee = self.check_expr(callee, None);
-            let callee_type = self.simplify_type(callee.ty.clone());
+            let callee_type = self.root().simplify_type(callee.ty.clone());
             let (params, return_type) = match callee_type {
                 Type::Function(FunctionType {
                     resource: _,
@@ -322,7 +353,7 @@ impl TypeCheck<'_> {
                     return_type,
                 }) => (params, Some(*return_type)),
                 ty => {
-                    self.expect_ty_error("function", &ty, callee.loc);
+                    self.root().expect_ty_error("function", &ty, callee.loc);
                     (Vec::new(), None)
                 }
             };
@@ -365,7 +396,7 @@ impl TypeCheck<'_> {
         field_inits: &[FieldInit],
         expected_ty: Option<Type>,
     ) -> typed_ast::Expr {
-        let expected_fields = match expected_ty.map(|ty| self.simplify_type(ty)) {
+        let expected_fields = match expected_ty.map(|ty| self.root().simplify_type(ty)) {
             Some(Type::Record(fields)) => Some(fields),
             _ => None,
         };
@@ -392,7 +423,8 @@ impl TypeCheck<'_> {
                         .and_then(|fields| field_id.map(|field| fields[field].ty.clone())),
                 );
                 if expected_fields.is_some() && !seen_fields.insert(name.symbol) {
-                    self.ctxt()
+                    self.root()
+                        .ctxt()
                         .diag()
                         .add_diagnostic(format!("Repeated field '{}'", name.symbol), name.loc);
                     return None;
@@ -400,7 +432,7 @@ impl TypeCheck<'_> {
                 let field_id = if let Some(field_id) = field_id {
                     field_id
                 } else if expected_fields.is_some() {
-                    self.ctxt().diag().add_diagnostic(
+                    self.root().ctxt().diag().add_diagnostic(
                         format!("'record' has no field '{}'", name.symbol),
                         name.loc,
                     );
@@ -415,8 +447,11 @@ impl TypeCheck<'_> {
             })
             .collect::<Box<[_]>>();
         let record_fields = if let Some(fields) = expected_fields {
-            let _ =
-                self.check_missing_fields(loc, seen_fields, fields.iter().map(|field| field.name));
+            let _ = self.root().check_missing_fields(
+                loc,
+                seen_fields,
+                fields.iter().map(|field| field.name),
+            );
             fields
         } else {
             expr_fields
@@ -442,7 +477,7 @@ impl TypeCheck<'_> {
             ExprKind::Block(block, region) => {
                 return self.check_block(loc, block, *region, expected_ty);
             }
-            ExprKind::Annotate(expr, ty) => self.check_expr(expr, Some(self.lower_type(ty))),
+            ExprKind::Annotate(expr, ty) => self.check_expr(expr, Some(self.root().lower_type(ty))),
             ExprKind::Err => typed_ast::Expr {
                 loc,
                 ty: Type::Unknown,
@@ -453,34 +488,43 @@ impl TypeCheck<'_> {
                 ty: Type::Bool,
                 kind: typed_ast::ExprKind::Bool(value),
             },
-            &ExprKind::Var(var, id) => {
-                let captured = self.capture(id);
-                let var_ty = self.var_type(id);
+            &ExprKind::Var(var) => {
+                let Var(var, id) = var;
+                let var_ty = self.root().var_type(id);
+                if self.root().ctxt().node(self.id).lambda().is_some() {
+                    println!("{:?}", self.id);
+                }
                 make_expr(
                     var_ty.clone(),
                     typed_ast::ExprKind::Load(typed_ast::Place {
                         ty: var_ty,
                         loc,
-                        kind: if !captured {
-                            typed_ast::PlaceKind::Var(Var(var, id))
+                        kind: if self
+                            .root()
+                            .ctxt()
+                            .captures(self.id)
+                            .is_some_and(|captures| captures.captured(id))
+                        {
+                            typed_ast::PlaceKind::Upvar(self.id, Var(var, id))
                         } else {
-                            typed_ast::PlaceKind::Upvar(Var(var, id))
+                            typed_ast::PlaceKind::Var(Var(var, id))
                         },
                     }),
                     loc,
                 )
             }
             &ExprKind::Function(FunctionDefId(id), ref args) => {
-                let args = self.lower_generic_args_for(id, args, loc);
+                let args = self.root().lower_generic_args_for(id, loc, args);
                 make_expr(
                     Type::Function(
-                        self.ctxt()
+                        self.root()
+                            .ctxt()
                             .signature_of(id)
                             .bind(&args)
                             .into_function_type(),
                     ),
-                    if let Some(builtin) = self.ctxt().builtins().builtin_for(id) {
-                        self.ctxt().diag().add_diagnostic(
+                    if let Some(builtin) = self.root().ctxt().builtins().builtin_for(id) {
+                        self.root().ctxt().diag().add_diagnostic(
                             format!("cannot use builtin '{}' here", builtin.name()),
                             loc,
                         );
@@ -492,8 +536,8 @@ impl TypeCheck<'_> {
                 )
             }
             &ExprKind::VariantCase(case_id, ref args) => {
-                let args = self.lower_generic_args_for(case_id, args, loc);
-                let ty = self.ctxt().type_of(case_id).bind(&args);
+                let args = self.root().lower_generic_args_for(case_id, loc, args);
+                let ty = self.root().ctxt().type_of(case_id).bind(&args);
                 typed_ast::Expr {
                     ty,
                     loc,
@@ -515,13 +559,16 @@ impl TypeCheck<'_> {
                 return self.check_call(loc, callee, args, expected_ty);
             }
             ExprKind::Panic(ty) => {
-                let ty = match (ty.as_ref().map(|ty| self.lower_type(ty)), expected_ty) {
+                let ty = match (
+                    ty.as_ref().map(|ty| self.root().lower_type(ty)),
+                    expected_ty,
+                ) {
                     (None, None) => {
-                        self.type_annotations_needed(loc);
+                        self.root().type_annotations_needed(loc);
                         Type::Unknown
                     }
                     (Some(ty), None) | (None, Some(ty)) => ty,
-                    (Some(given), Some(expected)) => self.unify(expected, given, loc),
+                    (Some(given), Some(expected)) => self.root().unify(expected, given, loc),
                 };
                 return typed_ast::Expr {
                     loc,
@@ -569,7 +616,7 @@ impl TypeCheck<'_> {
                     })
                     .collect();
                 let ty = Type::List(Box::new(expected_element.unwrap_or_else(|| {
-                    self.type_annotations_needed(loc);
+                    self.root().type_annotations_needed(loc);
                     Type::Unknown
                 })));
                 typed_ast::Expr {
@@ -582,8 +629,8 @@ impl TypeCheck<'_> {
                 let reference = self.check_expr(reference, None);
                 let pointee_ty = match reference.ty.clone().as_pointer_type() {
                     Ok((PointerType::Raw | PointerType::Reference(..), ty)) => ty.clone(),
-                    Ok((p, ty)) => self.non_deref_error(&Type::pointer_type(p, ty), loc),
-                    Err(ty) => self.non_deref_error(&ty, loc),
+                    Ok((p, ty)) => self.root().non_deref_error(&Type::pointer_type(p, ty), loc),
+                    Err(ty) => self.root().non_deref_error(&ty, loc),
                 };
                 typed_ast::Expr {
                     ty: pointee_ty.clone(),
@@ -595,12 +642,9 @@ impl TypeCheck<'_> {
                     }),
                 }
             }
-            &ExprKind::Lambda(lambda) => self.check_lambda(
-                loc,
-                lambda,
-                self.ctxt().node(lambda).expect_lambda(),
-                expected_ty.clone(),
-            ),
+            ExprKind::Lambda(lambda) => {
+                self.check_lambda(loc, lambda.id, lambda, expected_ty.clone())
+            }
             ExprKind::Borrow(borrow) => return self.check_borrow(loc, borrow, expected_ty),
             ExprKind::For(for_expr) => {
                 self.check_for_loop(loc, &for_expr.pattern, &for_expr.iterator, &for_expr.body)
@@ -615,7 +659,8 @@ impl TypeCheck<'_> {
                         let body = self.check_expr(&arm.body, expected_ty.clone());
                         if expected_ty.is_none() {
                             if let Some(ref prev_ty) = prev_ty {
-                                self.unify(prev_ty.clone(), body.ty.clone(), body.loc);
+                                self.root()
+                                    .unify(prev_ty.clone(), body.ty.clone(), body.loc);
                             } else {
                                 prev_ty = Some(body.ty.clone());
                             }
@@ -624,7 +669,7 @@ impl TypeCheck<'_> {
                     })
                     .collect();
                 let ty = expected_ty.or(prev_ty).unwrap_or_else(|| {
-                    self.type_annotations_needed(loc);
+                    self.root().type_annotations_needed(loc);
                     Type::Unknown
                 });
                 return typed_ast::Expr {
@@ -644,7 +689,7 @@ impl TypeCheck<'_> {
             }
         };
         if let Some(expected) = expected_ty {
-            expr.ty = self.unify(expected, expr.ty, expr.loc)
+            expr.ty = self.root().unify(expected, expr.ty, expr.loc)
         };
         expr
     }

@@ -1,0 +1,198 @@
+use crate::{
+    resolved_ast::{
+        BlockBody, Expr, ExprKind, GenericArgs, LocalRegionId, Param, Pattern, Place, PlaceKind,
+        Region, Stmt, StmtKind, Type, TypeKind, Var,
+    },
+};
+
+pub trait Visitor {
+    fn super_visit_block(&mut self, block_body: &BlockBody, _: Option<LocalRegionId>) {
+        for stmt in &block_body.stmts {
+            self.visit_stmt(stmt);
+        }
+        self.visit_expr(&block_body.expr);
+    }
+    fn super_visit_pattern(&mut self, pattern: &Pattern) {
+        match &pattern.kind {
+            crate::resolved_ast::PatternKind::Int(_)
+            | crate::resolved_ast::PatternKind::Bool(_) => {}
+            &crate::resolved_ast::PatternKind::Binding(.., name, var) => {
+                self.visit_var_def(Var(name.symbol, var))
+            }
+            crate::resolved_ast::PatternKind::Ref(pattern) => self.visit_pattern(pattern),
+            crate::resolved_ast::PatternKind::Case(_, pattern) => {
+                if let Some(pattern) = pattern {
+                    self.visit_pattern(pattern)
+                }
+            }
+            crate::resolved_ast::PatternKind::Record(pattern_fields) => {
+                for field in pattern_fields {
+                    self.visit_pattern(&field.pattern);
+                }
+            }
+        }
+    }
+    fn super_visit_type(&mut self, ty: &Type) {
+        match &ty.kind {
+            TypeKind::Unit
+            | TypeKind::Int
+            | TypeKind::Bool
+            | TypeKind::String
+            | TypeKind::Char
+            | TypeKind::Byte
+            | TypeKind::Param(..)
+            | TypeKind::Unknown => (),
+            TypeKind::Ptr(ty) | TypeKind::List(ty) | TypeKind::Box(ty) => self.visit_type(ty),
+            TypeKind::Imm(region, ty) | TypeKind::Mut(region, ty) => {
+                self.visit_region(**region);
+                self.visit_type(ty);
+            }
+            TypeKind::Function(function_type) => {
+                for param in function_type.params.iter() {
+                    self.visit_type(param);
+                }
+                self.visit_type(&function_type.return_type);
+            }
+            TypeKind::Named(_, generic_args) => self.visit_generic_args(generic_args),
+            TypeKind::Record(record_field_types) => {
+                for field in record_field_types {
+                    self.visit_type(&field.ty);
+                }
+            }
+        }
+    }
+    fn super_visit_stmt(&mut self, stmt: &Stmt) {
+        match &stmt.kind {
+            StmtKind::Let(let_binding) => {
+                if let Some(ref ty) = let_binding.ty {
+                    self.visit_type(&ty);
+                }
+                self.visit_expr(&let_binding.value);
+                self.visit_pattern(&let_binding.pattern);
+            }
+            StmtKind::Expr(expr) => self.visit_expr(expr),
+        }
+    }
+    fn super_visit_place(&mut self, place: &Place) {
+        match &place.kind {
+            PlaceKind::Var(_) => (),
+            PlaceKind::Deref(expr) => self.visit_expr(expr),
+        }
+    }
+    fn super_visit_expr(&mut self, expr: &Expr) {
+        match &expr.kind {
+            ExprKind::Block(block_body, id) => self.visit_block(block_body, *id),
+            ExprKind::Unit
+            | ExprKind::Err
+            | ExprKind::Int(_)
+            | ExprKind::Bool(_)
+            | ExprKind::String(_)
+            | ExprKind::Var(..) => (),
+            ExprKind::Lambda(lambda) => {
+                self.visit_body(
+                    lambda.param_tys.iter().flatten(),
+                    lambda.params.iter(),
+                    &lambda.body,
+                );
+            }
+            ExprKind::Annotate(expr, ty) => {
+                self.visit_expr(expr);
+                self.visit_type(ty);
+            }
+            ExprKind::Function(_, generic_args) => {
+                self.visit_generic_args(generic_args);
+            }
+            ExprKind::Binary(_, expr1, expr2) => {
+                self.visit_expr(expr1);
+                self.visit_expr(expr2);
+            }
+            ExprKind::Borrow(borrow_expr) => {
+                self.visit_place(&borrow_expr.place);
+            }
+            ExprKind::Panic(ty) => {
+                if let Some(ty) = ty {
+                    self.visit_type(ty)
+                }
+            }
+            ExprKind::Deref(expr) => self.visit_expr(expr),
+            ExprKind::Assign(place, expr) => {
+                self.visit_place(place);
+                self.visit_expr(expr);
+            }
+            ExprKind::For(for_expr) => {
+                self.visit_expr(&for_expr.iterator);
+                self.visit_pattern(&for_expr.pattern);
+                self.visit_expr(&for_expr.body);
+            }
+            ExprKind::Case(expr, case_arms) => {
+                self.visit_expr(expr);
+                for arm in case_arms {
+                    self.visit_pattern(&arm.pattern);
+                    self.visit_expr(&arm.body);
+                }
+            }
+            ExprKind::Print(expr) => {
+                if let Some(expr) = expr {
+                    self.visit_expr(expr);
+                }
+            }
+            ExprKind::List(exprs) => {
+                for expr in exprs {
+                    self.visit_expr(expr);
+                }
+            }
+            ExprKind::Call(callee, args) => {
+                self.visit_expr(callee);
+                for arg in args {
+                    self.visit_expr(arg);
+                }
+            }
+            ExprKind::Record(field_inits) => {
+                for field in field_inits {
+                    self.visit_expr(&field.value);
+                }
+            }
+            ExprKind::VariantCase(_, generic_args) => self.visit_generic_args(generic_args),
+            ExprKind::AddressOf(place) => self.visit_place(place),
+        }
+    }
+    fn visit_pattern(&mut self, pattern: &Pattern) {
+        self.super_visit_pattern(pattern);
+    }
+    fn visit_var_def(&mut self, _: Var) {}
+    fn visit_generic_args(&mut self, args: &GenericArgs) {
+        for arg in args.tys.iter() {
+            self.visit_type(arg);
+        }
+    }
+    fn visit_region(&mut self, _: Region) {}
+    fn visit_block(&mut self, block_body: &BlockBody, region: Option<LocalRegionId>) {
+        self.super_visit_block(block_body, region);
+    }
+    fn visit_type(&mut self, ty: &Type) {
+        self.super_visit_type(ty);
+    }
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        self.super_visit_stmt(stmt);
+    }
+    fn visit_place(&mut self, place: &Place) {
+        self.super_visit_place(place);
+    }
+    fn visit_expr(&mut self, expr: &Expr) {
+        self.super_visit_expr(expr);
+    }
+    fn visit_body<'a>(
+        &mut self,
+        tys: impl Iterator<Item = &'a Type>,
+        params: impl Iterator<Item = &'a Param>,
+        body: &Expr,
+    ) {
+        for param in params {
+            self.visit_var_def(param.var);
+        }
+        for ty in tys {
+            self.visit_type(ty);
+        }
+        self.visit_expr(body);
+    }
+}

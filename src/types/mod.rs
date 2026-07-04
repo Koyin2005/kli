@@ -357,7 +357,7 @@ impl Type {
             Type::Infer(_) => unreachable!("Cannot 'infer' its a resource"),
             &Type::Named(id, _, ref args) => {
                 let is_copy = ctxt
-                    .expect_annotations(id)
+                    .annotations(id)
                     .iter()
                     .any(|annotation| annotation.kind == crate::resolved_ast::AnnotationKind::Copy);
                 if !is_copy || ctxt.is_type_recursive(id) {

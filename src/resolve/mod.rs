@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::ast::{BorrowExpr, GenericArgs, ModuleId, NodeId, Path, StmtKind};
 use crate::collect::{GlobalContext, build_global_context};
@@ -212,6 +213,7 @@ impl Resolve {
             }
             ast::ExprKind::Lambda(lambda) => {
                 self.declare_def_id_for(self.current_module.unwrap(), lambda.id);
+                self.declare_in_exprs(&lambda.body);
             }
             ast::ExprKind::Block(block_body, _) => {
                 for stmt in block_body.stmts.iter() {
@@ -759,7 +761,7 @@ impl Resolve {
                 Res::Var(id) => {
                     let name = path.into_last().symbol;
                     self.error_on_generic_args("var", name, loc, args);
-                    res::ExprKind::Var(name, id)
+                    res::ExprKind::Var(res::Var(name, id))
                 }
                 Res::Function(function) => res::ExprKind::Function(
                     res::FunctionDefId(self.def_id_for(function)),
@@ -854,22 +856,31 @@ impl Resolve {
             ast::ExprKind::Path(path, args) => self.resolve_path_as_expr(loc, path, args),
             ast::ExprKind::Lambda(lambda) => self.in_scope(|this| {
                 let id = this.def_id_for(ModuleNodeId(this.current_module.unwrap(), lambda.id));
-                let lambda = res::Lambda {
+                let (params, param_tys): (Vec<_>, Vec<_>) = lambda
+                    .params
+                    .into_iter()
+                    .map(|(name, ty)| {
+                        let var = this.declare_var(name.symbol);
+                        let ty = ty.map(|ty| this.resolve_type(ty));
+                        (
+                            res::Param {
+                                loc: name.loc,
+                                var: res::Var(name.symbol, var),
+                            },
+                            ty,
+                        )
+                    })
+                    .unzip();
+                let lambda = Rc::new(res::Lambda {
+                    id,
                     loc,
-                    params: lambda
-                        .params
-                        .into_iter()
-                        .map(|(name, ty)| {
-                            let var = this.declare_var(name.symbol);
-                            let ty = ty.map(|ty| this.resolve_type(ty));
-                            (name, var, ty)
-                        })
-                        .collect(),
+                    params: params.into_boxed_slice(),
+                    param_tys: param_tys.into_boxed_slice(),
                     resource: lambda.resource,
                     body: this.resolve_expr(*lambda.body),
-                };
-                this.add_node(id, res::Node::Lambda(Box::new(lambda)));
-                res::ExprKind::Lambda(id)
+                });
+                this.add_node(id, res::Node::Lambda(Rc::clone(&lambda)));
+                res::ExprKind::Lambda(lambda)
             }),
             ast::ExprKind::Assign(place, value) => {
                 let place = self.resolve_place(*place);
@@ -933,44 +944,54 @@ impl Resolve {
         &mut self,
         params: Vec<ast::Param>,
         return_type: ast::Type,
-    ) -> (Vec<res::Param>, res::Type) {
+    ) -> (Box<[res::Param]>, Box<[res::Type]>, res::Type) {
         let (names, tys): (Vec<_>, Vec<_>) = params
             .into_iter()
             .map(|param| (param.name, self.resolve_type(param.ty)))
             .unzip();
         let return_type = self.resolve_type(return_type);
-        let params = names
+        let (params, param_tys): (Vec<_>, Vec<_>) = names
             .into_iter()
             .zip(tys)
-            .map(|(name, ty)| res::Param {
-                loc: name.loc,
-                var: res::Var(name.symbol, self.declare_var(name.symbol)),
-                ty,
+            .map(|(name, ty)| {
+                (
+                    res::Param {
+                        loc: name.loc,
+                        var: res::Var(name.symbol, self.declare_var(name.symbol)),
+                    },
+                    ty,
+                )
             })
-            .collect::<Vec<_>>();
-        (params, return_type)
+            .unzip();
+        (
+            params.into_boxed_slice(),
+            param_tys.into_boxed_slice(),
+            return_type,
+        )
     }
     fn resolve_function(&mut self, function: ast::Function) -> res::Function {
         self.resolve_item(|this| {
             this.in_scope(|this| {
-                let (generics, (params, return_type)) = if let Some(generics) = function.generics {
-                    let (generics, sig) = this.resolve_generics(generics, |this| {
-                        this.resolve_signature(function.params, function.return_type)
-                    });
-                    (Some(generics), sig)
-                } else {
-                    (
-                        None,
-                        this.resolve_signature(function.params, function.return_type),
-                    )
-                };
+                let (generics, (params, param_tys, return_type)) =
+                    if let Some(generics) = function.generics {
+                        let (generics, sig) = this.resolve_generics(generics, |this| {
+                            this.resolve_signature(function.params, function.return_type)
+                        });
+                        (Some(Box::new(generics)), sig)
+                    } else {
+                        (
+                            None,
+                            this.resolve_signature(function.params, function.return_type),
+                        )
+                    };
                 let body = function.body.map(|body| this.resolve_expr(body));
                 res::Function {
                     name: function.name,
+                    param_tys,
                     generics,
                     params,
-                    return_type,
-                    body,
+                    return_type: Box::new(return_type),
+                    body: body.map(Box::new),
                 }
             })
         })

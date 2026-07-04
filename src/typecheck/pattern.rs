@@ -4,13 +4,11 @@ use crate::{
     ast::Mutable,
     collect::TypeDefKind,
     resolved_ast::{Pattern, PatternField, PatternKind, Var},
+    typecheck::root::FunctionCtxt,
     typed_ast::{self, FieldId},
     types::{FieldName, RecordField, Region, Type},
 };
-
-use super::root::TypeCheck;
-
-impl TypeCheck<'_> {
+impl FunctionCtxt<'_> {
     pub fn check_pattern(
         &self,
         pattern: &Pattern,
@@ -18,10 +16,11 @@ impl TypeCheck<'_> {
         binding_mode: Option<(Region, Mutable)>,
     ) -> typed_ast::Pattern {
         let loc = pattern.loc;
-        let expected_type = self.simplify_type(expected_type);
+        let root = self.root();
+        let expected_type = root.simplify_type(expected_type);
         match pattern.kind {
             PatternKind::Int(value) => {
-                let _ = self.unify(expected_type, Type::Int, pattern.loc);
+                let _ = root.unify(expected_type, Type::Int, pattern.loc);
                 typed_ast::Pattern {
                     ty: Type::Int,
                     loc,
@@ -32,7 +31,7 @@ impl TypeCheck<'_> {
                 let (id, ty_name, args) = match expected_type {
                     Type::Named(id, ty_name, args) => (id, ty_name, args),
                     ty => {
-                        self.expect_ty_error("variant type", &ty, loc);
+                        root.expect_ty_error("variant type", &ty, loc);
                         if let Some(inner) = inner {
                             let _ = self.check_pattern(inner, Type::Unknown, binding_mode);
                         }
@@ -43,12 +42,12 @@ impl TypeCheck<'_> {
                         };
                     }
                 };
-                let ctxt = self.ctxt();
+                let ctxt = root.ctxt();
                 let type_def = ctxt.type_def(id);
                 let cases = match type_def.kind {
                     TypeDefKind::Variant(ref variant_def) => variant_def,
                     _ => {
-                        self.ctxt().diag().add_diagnostic(
+                        root.ctxt().diag().add_diagnostic(
                             "expected 'variant' type but got 'record'".to_string(),
                             loc,
                         );
@@ -66,7 +65,7 @@ impl TypeCheck<'_> {
                     .iter_enumerated()
                     .find(|(_, case_def)| case_def.name == name.symbol)
                 else {
-                    self.ctxt().diag().add_diagnostic(
+                    root.ctxt().diag().add_diagnostic(
                         format!("'{}' has no case '{}'", ty_name, name.symbol),
                         name.loc,
                     );
@@ -89,7 +88,7 @@ impl TypeCheck<'_> {
                         Some(Box::new(self.check_pattern(inner, inner_ty, binding_mode)))
                     }
                     (None, Some(inner)) => {
-                        self.ctxt().diag().add_diagnostic(
+                        root.ctxt().diag().add_diagnostic(
                             format!("'{}' has no inner fields", name.symbol),
                             name.loc,
                         );
@@ -100,7 +99,7 @@ impl TypeCheck<'_> {
                         )))
                     }
                     (Some(ty), None) => {
-                        self.ctxt().diag().add_diagnostic(
+                        root.ctxt().diag().add_diagnostic(
                             format!("'{}' has inner fields", name.symbol),
                             name.loc,
                         );
@@ -122,7 +121,7 @@ impl TypeCheck<'_> {
                     if let Ok((mutable, region, ty)) = expected_type.as_reference_type() {
                         (mutable, region, ty.clone())
                     } else {
-                        self.expect_ty_error("reference", &expected_type, pattern.loc);
+                        root.expect_ty_error("reference", &expected_type, pattern.loc);
                         (Mutable::Mutable, Region::Unknown, Type::Unknown)
                     };
                 let inner = self.check_pattern(inner, ty.clone(), Some((region, mutable)));
@@ -133,10 +132,10 @@ impl TypeCheck<'_> {
                 }
             }
             PatternKind::Record(ref pat_fields) => {
-                let expected_fields = match self.simplify_type(expected_type) {
+                let expected_fields = match root.simplify_type(expected_type) {
                     Type::Record(fields) => Some(fields),
                     ref ty => {
-                        self.expect_ty_error("record", ty, pattern.loc);
+                        root.expect_ty_error("record", ty, pattern.loc);
                         None
                     }
                 };
@@ -167,7 +166,7 @@ impl TypeCheck<'_> {
                             binding_mode,
                         );
                         if expected_fields.is_some() && !seen_fields.insert(name.symbol) {
-                            self.ctxt().diag().add_diagnostic(
+                            root.ctxt().diag().add_diagnostic(
                                 format!("Repeated field '{}'", name.symbol),
                                 name.loc,
                             );
@@ -177,7 +176,7 @@ impl TypeCheck<'_> {
                         let field_id = if let Some(field_id) = field_id {
                             field_id
                         } else if expected_fields.is_some() {
-                            self.ctxt().diag().add_diagnostic(
+                            root.ctxt().diag().add_diagnostic(
                                 format!("'record' has no field '{}'", name.symbol),
                                 name.loc,
                             );
@@ -192,7 +191,7 @@ impl TypeCheck<'_> {
                     })
                     .collect::<Vec<_>>();
                 let record_fields = if let Some(fields) = expected_fields {
-                    let _ = self.check_missing_fields(
+                    let _ = root.check_missing_fields(
                         pattern.loc,
                         seen_fields,
                         fields.iter().map(|field| field.name),
@@ -216,7 +215,7 @@ impl TypeCheck<'_> {
                 }
             }
             PatternKind::Bool(value) => {
-                self.unify(expected_type, Type::Bool, pattern.loc);
+                root.unify(expected_type, Type::Bool, pattern.loc);
                 typed_ast::Pattern {
                     loc,
                     ty: Type::Bool,
@@ -229,7 +228,7 @@ impl TypeCheck<'_> {
                 let (borrow, var_ty) = match (borrow, binding_mode) {
                     (None, _) => (None, expected_type.clone()),
                     (Some(_), None) => {
-                        self.ctxt().diag().add_diagnostic(
+                        root.ctxt().diag().add_diagnostic(
                             format!("Cannot create borrow binding '{}'", ident.symbol),
                             ident.loc,
                         );
@@ -237,7 +236,7 @@ impl TypeCheck<'_> {
                     }
                     (Some(borrow), Some((region, mutable))) => {
                         if !mutable.usable_as(borrow) {
-                            self.ctxt().diag().add_diagnostic(
+                            root.ctxt().diag().add_diagnostic(
                                 format!("Cannot create borrow binding '{}'", ident.symbol),
                                 ident.loc,
                             );
@@ -248,7 +247,7 @@ impl TypeCheck<'_> {
                         )
                     }
                 };
-                self.declare_var(var, var_ty.clone(), name);
+                root.declare_var(var, var_ty.clone(), name);
                 typed_ast::Pattern {
                     ty: expected_type,
                     loc,

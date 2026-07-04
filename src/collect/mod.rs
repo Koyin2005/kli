@@ -6,6 +6,7 @@ use std::{
 
 use crate::{
     Symbol,
+    captures::{self, captures},
     diagnostics::DiagnosticReporter,
     ident::Ident,
     index_vec::IndexVec,
@@ -19,6 +20,27 @@ use crate::{
         lower::Lower,
     },
 };
+
+pub struct Cache<R> {
+    value: RefCell<HashMap<DefId, R>>,
+}
+impl<R> Default for Cache<R> {
+    fn default() -> Self {
+        Self {
+            value: RefCell::default(),
+        }
+    }
+}
+impl<R: Clone> Cache<R> {
+    pub fn compute(&self, id: DefId, f: impl FnOnce(DefId) -> R) -> R {
+        if let Some(value) = self.value.borrow().get(&id) {
+            return value.clone();
+        };
+        let value = f(id);
+        self.value.borrow_mut().insert(id, value.clone());
+        value
+    }
+}
 #[derive(Clone, Copy)]
 pub struct Field {
     pub id: DefId,
@@ -135,8 +157,9 @@ impl Generics {
 }
 pub struct GlobalContext {
     diag: DiagnosticReporter,
-    idents: RefCell<HashMap<DefId, Option<Ident>>>,
-    generics: RefCell<HashMap<DefId, Generics>>,
+    idents: Cache<Option<Ident>>,
+    generics: Cache<Generics>,
+    captures: Cache<Option<captures::CaptureSet>>,
     parents: HashMap<DefId, DefId>,
     nodes: IndexVec<DefId, Node>,
     builtins: Builtins,
@@ -154,8 +177,13 @@ impl CtxtRef<'_> {
     pub fn node(&self, id: DefId) -> &Node {
         &self.0.nodes[id]
     }
-    pub fn expect_annotations(&self, id: DefId) -> &[resolved_ast::Annotation] {
-        &self.expect_item(id).annotations
+    #[track_caller]
+    pub fn annotations(&self, id: DefId) -> &[resolved_ast::Annotation] {
+        if let Some(item) = self.node(id).item() {
+            &item.annotations
+        } else {
+            &[]
+        }
     }
     #[track_caller]
     fn expect_item(&self, id: DefId) -> &Item {
@@ -198,26 +226,9 @@ impl CtxtRef<'_> {
                     if !seen_ids.insert(*id) {
                         return true;
                     }
-
-                    match &ctxt.expect_type(*id).kind {
-                        resolved_ast::TypeDefKind::Record(record) => {
-                            for &field in record.fields.iter() {
-                                if is_ty_recursive(ctxt, &ctxt.type_of(field).bind(args), seen_ids)
-                                {
-                                    return true;
-                                }
-                            }
-                        }
-                        resolved_ast::TypeDefKind::Variant(variant) => {
-                            for &case in variant.cases.iter() {
-                                let Some(field) = case.field else {
-                                    continue;
-                                };
-                                if is_ty_recursive(ctxt, &ctxt.type_of(field).bind(args), seen_ids)
-                                {
-                                    return true;
-                                }
-                            }
+                    for field in ctxt.type_def(*id).all_fields() {
+                        if is_ty_recursive(ctxt, &field.type_of(args, ctxt), seen_ids) {
+                            return true;
                         }
                     }
                     false
@@ -253,10 +264,7 @@ impl CtxtRef<'_> {
         self.ident(id).expect("expected an ident")
     }
     pub fn ident(self, id: DefId) -> Option<Ident> {
-        if let Some(&ident) = self.0.idents.borrow().get(&id) {
-            return ident;
-        }
-        let ident = 'a: {
+        self.0.idents.compute(id, |id| {
             Some(match self.node(id) {
                 Node::Item(item) => match &item.kind {
                     ItemKind::Function(function) => function.name,
@@ -269,11 +277,9 @@ impl CtxtRef<'_> {
                     loc: field.ty.loc,
                 },
                 Node::Field(field_def) => field_def.name,
-                Node::Lambda(_) => break 'a None,
+                Node::Lambda(_) => return None,
             })
-        };
-        self.0.idents.borrow_mut().insert(id, ident);
-        ident
+        })
     }
     pub fn type_of(self, id: DefId) -> Scheme<Type> {
         let ty = match self.node(id) {
@@ -317,14 +323,11 @@ impl CtxtRef<'_> {
         Scheme::new(ty)
     }
     pub fn generics(self, id: DefId) -> Generics {
-        if let Some(generics) = self.0.generics.borrow().get(&id) {
-            return generics.clone();
-        }
-        let generics = match self.node(id) {
+        self.0.generics.compute(id, |id| match self.node(id) {
             Node::Item(item) => match &item.kind {
                 ItemKind::Function(function_def) => function_def
                     .generics
-                    .as_ref()
+                    .as_deref()
                     .map_or_else(Generics::new, lower_generics),
                 ItemKind::Module(_) => Generics::new(),
                 ItemKind::TypeDef(type_def) => type_def
@@ -336,9 +339,7 @@ impl CtxtRef<'_> {
                 self.generics(self.expect_parent(id))
             }
             Node::Lambda(_) => todo!("Handle lambda"),
-        };
-        self.0.generics.borrow_mut().insert(id, generics.clone());
-        generics
+        })
     }
     pub fn ancestors(self, id: DefId) -> impl Iterator<Item = DefId> {
         struct Ancestors<'ctxt> {
@@ -404,11 +405,13 @@ impl CtxtRef<'_> {
         let function = self.expect_item(id).expect_function_def();
         let lower = Lower::new(self, id, None);
         Scheme::new(FunctionSig::new(
-            lower
-                .lower_types(&mut function.params.iter().map(|param| &param.ty))
-                .collect(),
+            lower.lower_types(&mut function.param_tys.iter()).collect(),
             lower.lower_type(&function.return_type),
         ))
+    }
+    #[track_caller]
+    pub fn captures(self, id: DefId) -> Option<captures::CaptureSet> {
+        self.0.captures.compute(id, |id| captures(self, id))
     }
     pub fn display(&self, id: DefId) -> impl std::fmt::Display {
         struct DisplayNode<'n> {
@@ -518,6 +521,7 @@ pub fn build_global_context(
         parents,
         generics: Default::default(),
         idents: Default::default(),
+        captures: Default::default(),
         nodes,
         diag,
         builtins,

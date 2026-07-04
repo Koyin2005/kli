@@ -305,8 +305,8 @@ fn main() {
         }
         had_error |= SafetyCheck::check(ctxt, id, function).is_err();
     }
-    for function in program.functions.values() {
-        had_error |= ResourceCheck::new(ctxt).check_function(function);
+    for (id, function) in program.functions.iter() {
+        had_error |= ResourceCheck::new(ctxt).check_function(*id, function);
     }
     if had_error {
         return;

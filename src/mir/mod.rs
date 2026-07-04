@@ -123,6 +123,7 @@ pub enum ConstantValue {
     Int(i64),
     Bool(bool),
     NamedConst(DefId, Vec<GenericArg>),
+    ClosureShim(DefId, Vec<GenericArg>),
     ZeroSized,
 }
 impl ConstantValue {
@@ -279,7 +280,7 @@ pub enum LocalKind {
     Temp,
     Env,
     Var(Var),
-    Param(Var),
+    Param(Option<Var>),
 }
 #[derive(Clone)]
 pub struct LocalInfo {
@@ -311,7 +312,7 @@ impl Body {
         self.locals
             .iter()
             .position(|local| {
-                let (LocalKind::Var(var) | LocalKind::Param(var)) = &local.kind else {
+                let (LocalKind::Var(var) | LocalKind::Param(Some(var))) = &local.kind else {
                     return false;
                 };
                 var.1 == var_id

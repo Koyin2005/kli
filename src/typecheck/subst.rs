@@ -1,7 +1,8 @@
 use crate::{
     typecheck::infer::TypeInfer,
     typed_ast::{
-        Expr, ExprKind, IteratorType, Param, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind,
+        Expr, ExprKind, Function, IteratorType, Param, Pattern, PatternKind, Place, PlaceKind,
+        Stmt, StmtKind,
     },
     types::{FunctionType, GenericArg, Region, Type},
 };
@@ -205,11 +206,13 @@ impl<'a> TypeSubst<'a> {
                 }
             }
             ExprKind::Lambda(lambda) => {
-                for Param { ty, .. } in lambda.params.iter_mut() {
+                for capture in lambda.captures.iter_mut() {
+                    self.subst_type(&mut capture.ty);
+                }
+                for ty in lambda.param_tys.iter_mut() {
                     self.subst_type(ty);
                 }
                 self.subst_type(&mut lambda.return_type);
-                self.subst_expr(&mut lambda.body);
             }
             ExprKind::Record(fields) => {
                 for field in fields {
@@ -218,5 +221,14 @@ impl<'a> TypeSubst<'a> {
             }
         }
         self.subst_type(&mut expr.ty);
+    }
+    pub fn subst_function(&mut self, function: &mut Function) {
+        for param in function.params.iter_mut() {
+            self.subst_type(&mut param.ty);
+        }
+        self.subst_type(&mut function.return_type);
+        if let Some(body) = function.body.as_mut() {
+            self.subst_expr(body);
+        }
     }
 }

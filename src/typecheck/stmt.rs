@@ -1,10 +1,10 @@
 use crate::{
     resolved_ast::{Stmt, StmtKind},
-    typecheck::root::TypeCheck,
+    typecheck::root::FunctionCtxt,
     typed_ast,
 };
 
-impl TypeCheck<'_> {
+impl FunctionCtxt<'_> {
     pub(super) fn check_stmt(&self, stmt: &Stmt) -> typed_ast::Stmt {
         let loc = stmt.loc;
         match &stmt.kind {

@@ -1,4 +1,5 @@
 use crate::{
+    Symbol,
     collect::CtxtRef,
     mir::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, CastKind,
@@ -29,14 +30,22 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, "lambda {}", self.ctxt.display(lambda))?;
             }
             BodySource::ClosureShim(lambda) => {
-                write!(self.output,"lambda_shim {}",self.ctxt.display(lambda))?;
+                write!(self.output, "lambda_shim {}", self.ctxt.display(lambda))?;
             }
         }
         writeln!(self.output, "() -> {}", body.return_type)?;
         for (local, info) in body.locals.iter_enumerated() {
             write!(self.output, " {:?}", local)?;
             match &info.kind {
-                LocalKind::Param(var) => write!(self.output, " param {}", var.0),
+                LocalKind::Param(var) => write!(
+                    self.output,
+                    " param {}",
+                    if let Some(var) = *var {
+                        var.0
+                    } else {
+                        Symbol::EMPTY_STRING
+                    }
+                ),
                 LocalKind::Var(var) => write!(self.output, " var {}", var.0),
                 LocalKind::Temp => write!(self.output, " temp {}", local.0),
                 LocalKind::Env => write!(self.output, " env"),
@@ -243,6 +252,13 @@ impl<'ctxt> MirDump<'ctxt> {
                 ConstantValue::ZeroSized => write!(self.output, "{}", constant.ty),
                 ConstantValue::NamedConst(id, ref args) => {
                     write!(self.output, "{}", self.ctxt.display(id))?;
+                    if !args.is_empty() {
+                        write!(self.output, "{}", display_generic_args(args))?;
+                    }
+                    Ok(())
+                }
+                ConstantValue::ClosureShim(id, ref args) => {
+                    write!(self.output, "closure shim ({})", self.ctxt.display(id))?;
                     if !args.is_empty() {
                         write!(self.output, "{}", display_generic_args(args))?;
                     }

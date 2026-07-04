@@ -2,12 +2,13 @@ use crate::{
     ast::IsResource,
     collect::CtxtRef,
     mir::{
-        BodySource, Captures, Constant, Context, Local, LocalKind, Operand, Place, PointerCast,
-        Rvalue, TerminatorKind, build::Builder, visitor::Visit, well_formed::WellFormed,
+        BodySource, CastKind, Constant, ConstantValue, Context, Local, LocalKind, Operand, Place,
+        PointerCast, Rvalue, TerminatorKind, build::Builder, visitor::Visit,
+        well_formed::WellFormed,
     },
     resolved_ast::DefId,
     src_loc::SrcLoc,
-    typed_ast::{self, Lambda},
+    typed_ast::{self, FieldId, Lambda},
     types::{FunctionType, GenericArgs, Type},
 };
 
@@ -57,89 +58,116 @@ impl Builder<'_> {
         }
         builder.add_finished_body();
     }
-    pub(super) fn lambda_code(&mut self, lambda: &Lambda) -> Constant {
+    pub(super) fn lambda_code_constant(ctxt: CtxtRef<'_>, lambda: &Lambda) -> Constant {
         let ty = Type::Function(FunctionType {
             resource: IsResource::Data,
-            params: lambda.params.iter().map(|param| param.ty.clone()).collect(),
-            return_type: Box::new(lambda.return_type.clone()),
+            params: lambda
+                .captures
+                .iter()
+                .map(|capture| &capture.ty)
+                .chain(lambda.param_tys.iter())
+                .cloned()
+                .collect(),
+            return_type: lambda.return_type.clone(),
         });
-        if self
-            .mir_context
-            .bodies
-            .contains_key(&BodySource::Lambda(lambda.id))
-        {
-            let args = if !self
-                .ctxt
-                .generics(self.ctxt.expect_parent(lambda.id))
-                .is_empty()
-            {
-                todo!("Handle generic lambdas")
-            } else {
-                GenericArgs::new()
-            };
-            return Constant {
-                ty: Box::new(ty),
-                value: crate::mir::ConstantValue::NamedConst(lambda.id, args),
-            };
-        }
-        let is_resource = lambda.is_resource == IsResource::Resource;
-        let context = &mut *self.mir_context;
-        let mut builder = Builder::new(
-            context,
-            BodySource::Lambda(lambda.id),
-            lambda.return_type.clone(),
-            if is_resource {
-                Some(Captures {
-                    env_ptr: None,
-                    captures: lambda.captures.clone(),
-                })
-            } else {
-                None
-            },
-            self.ctxt,
-        );
-
-        builder.add_param_locals(
-            std::iter::once(if is_resource {
-                Some((LocalKind::Env, Type::pointer(Type::Byte)))
-            } else {
-                None
-            })
-            .flatten()
-            .chain(
-                lambda
-                    .params
-                    .iter()
-                    .map(|param| (LocalKind::Param(param.var()), param.ty.clone())),
-            ),
-        );
-        if !lambda.captures.is_empty() {
-            let env_ty = builder.body.capture_info.as_ref().unwrap().env_type();
-            let casted = builder.assign_to_temp(
-                lambda.body.loc,
-                Type::pointer(env_ty.clone()),
-                Rvalue::pointer_cast(
-                    PointerCast::RawToRaw(env_ty),
-                    Operand::Load(Place::local(Local::FIRST_PARAM)),
-                ),
-            );
-            builder.body.capture_info.as_mut().unwrap().env_ptr = Some(casted);
-        }
-        builder.expr_into_dest(Place::return_place(), &lambda.body);
-        builder.finish_block(lambda.body.loc, TerminatorKind::Return);
-        builder.add_finished_body();
-        let args = if !self
-            .ctxt
-            .generics(self.ctxt.expect_parent(lambda.id))
-            .is_empty()
-        {
+        let args = if !ctxt.generics(ctxt.expect_parent(lambda.id)).is_empty() {
             todo!("Handle generic lambdas")
         } else {
             GenericArgs::new()
         };
-        Constant {
+        return Constant {
             ty: Box::new(ty),
             value: crate::mir::ConstantValue::NamedConst(lambda.id, args),
+        };
+    }
+
+    pub(super) fn closure_shim(
+        mir_context: &mut Context,
+        ctxt: CtxtRef<'_>,
+        id: DefId,
+        lambda: &Lambda,
+    ) -> Constant {
+        let args = if !ctxt.generics(ctxt.expect_parent(lambda.id)).is_empty() {
+            todo!("Handle generic lambdas")
+        } else {
+            GenericArgs::new()
+        };
+        let constant = Constant {
+            ty: Box::new(Type::new_function(
+                std::iter::once(Type::pointer(Type::Byte))
+                    .chain(lambda.param_tys.iter().cloned())
+                    .collect(),
+                *lambda.return_type.clone(),
+            )),
+            value: ConstantValue::ClosureShim(id, args),
+        };
+        if mir_context
+            .bodies
+            .contains_key(&BodySource::ClosureShim(id))
+        {
+            return constant;
         }
+        /*
+           fun(x) -> x + upvar
+
+           lambda l (upvar : int, x : int) -> int = ..
+
+           closure_shim l (env : ptr[byte], x : int) -> int = let env = cast(ptr[{upvar : int}],env); return (lambda l)(env^.upvar,x);
+        */
+
+        let mut builder = Builder::new(
+            mir_context,
+            BodySource::ClosureShim(id),
+            (*lambda.return_type).clone(),
+            None,
+            ctxt,
+        );
+        builder.add_param_locals(
+            std::iter::once((LocalKind::Param(None), Type::pointer(Type::Byte))).chain(
+                lambda
+                    .params
+                    .iter()
+                    .zip(lambda.param_tys.iter())
+                    .map(|(param, ty)| (LocalKind::Param(Some(param.var)), ty.clone())),
+            ),
+        );
+
+        let env_ty = Type::closure_env(lambda.captures.iter().cloned());
+        let casted_env = builder.assign_to_temp(
+            lambda.loc,
+            Type::pointer(env_ty.clone()),
+            Rvalue::Cast(
+                CastKind::PointerCast(PointerCast::RawToRaw(env_ty)),
+                Operand::Load(Place::local(Local::new(0))),
+            ),
+        );
+        builder.assign(
+            lambda.loc,
+            Place::return_place(),
+            Rvalue::Call(
+                Operand::Constant(Self::lambda_code_constant(ctxt, lambda)),
+                lambda
+                    .captures
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| {
+                        Place::local(casted_env)
+                            .with_deref()
+                            .with_field(FieldId::new(i))
+                    })
+                    .chain(
+                        lambda
+                            .params
+                            .iter()
+                            .enumerate()
+                            .map(|(i, _)| Place::local(Local::new(i + 1))),
+                    )
+                    .map(Operand::Load)
+                    .collect(),
+            ),
+        );
+        builder.finish_block(lambda.loc, TerminatorKind::Return);
+        builder.add_finished_body();
+        constant
     }
 }

@@ -15,6 +15,14 @@ define_id!(VarId);
 define_id!(LocalRegionId);
 #[derive(Debug, Clone, Copy)]
 pub struct Var(pub Symbol, pub VarId);
+impl Var {
+    pub fn ident(self, loc: SrcLoc) -> Ident {
+        Ident {
+            symbol: self.0,
+            loc,
+        }
+    }
+}
 #[derive(Debug)]
 pub struct BorrowExpr {
     pub mutable: Mutable,
@@ -23,9 +31,11 @@ pub struct BorrowExpr {
 }
 #[derive(Debug)]
 pub struct Lambda {
+    pub id: DefId,
     pub loc: SrcLoc,
-    pub params: Box<[(Ident, VarId, Option<Type>)]>,
     pub resource: IsResource,
+    pub param_tys: Box<[Option<Type>]>,
+    pub params: Box<[Param]>,
     pub body: Expr,
 }
 #[derive(Debug)]
@@ -189,12 +199,12 @@ pub enum ExprKind {
     Int(i64),
     Bool(bool),
     String(Rc<str>),
-    Var(Symbol, VarId),
+    Var(Var),
     Function(FunctionDefId, Box<GenericArgs>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Borrow(Box<BorrowExpr>),
     Panic(Option<Box<Type>>),
-    Lambda(DefId),
+    Lambda(Rc<Lambda>),
     Deref(Box<Expr>),
     Assign(Place, Box<Expr>),
     For(Box<ForExpr>),
@@ -206,7 +216,7 @@ pub enum ExprKind {
     VariantCase(DefId, Box<GenericArgs>),
     AddressOf(Box<Place>),
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum RegionKind {
     Param(Symbol, usize),
     Local(Symbol, LocalRegionId),
@@ -214,7 +224,7 @@ pub enum RegionKind {
     Unknown,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Region {
     pub loc: SrcLoc,
     pub kind: RegionKind,
@@ -248,7 +258,6 @@ pub struct Expr {
 pub struct Param {
     pub loc: SrcLoc,
     pub var: Var,
-    pub ty: Type,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GenericKind {
@@ -264,10 +273,11 @@ pub struct Generics {
 #[derive(Debug)]
 pub struct Function {
     pub name: Ident,
-    pub generics: Option<Generics>,
-    pub params: Vec<Param>,
-    pub return_type: Type,
-    pub body: Option<Expr>,
+    pub generics: Option<Box<Generics>>,
+    pub param_tys: Box<[Type]>,
+    pub return_type: Box<Type>,
+    pub params: Box<[Param]>,
+    pub body: Option<Box<Expr>>,
 }
 #[derive(Debug)]
 pub struct RecordFieldType {
@@ -432,7 +442,7 @@ impl Builtins {
 #[derive(Debug)]
 pub enum Node {
     Item(Box<Item>),
-    Lambda(Box<Lambda>),
+    Lambda(Rc<Lambda>),
     Field(Box<FieldDef>),
     Case(Box<CaseDef>),
     CaseField(Box<CaseField>),

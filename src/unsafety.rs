@@ -17,7 +17,7 @@ pub fn transmutable(from: &Type, to: &Type) -> bool {
 #[non_exhaustive]
 pub struct SafetyCheckError;
 pub fn is_unsafe(ctxt: CtxtRef, id: DefId) -> bool {
-    ctxt.expect_annotations(id)
+    ctxt.annotations(id)
         .iter()
         .any(|annotation| annotation.kind == AnnotationKind::Unsafe)
 }

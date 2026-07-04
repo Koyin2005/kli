@@ -5,7 +5,9 @@ use crate::collect::CtxtRef;
 use crate::resolved_ast::{self as res, DefId};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
-use crate::types::{FieldName, FunctionType, GenericArg, GenericKind, RecordField, Region, Type};
+use crate::types::{
+    FieldName, FunctionType, GenericArg, GenericArgs, GenericKind, RecordField, Region, Type,
+};
 pub struct Lower<'a> {
     ctxt: CtxtRef<'a>,
     id: DefId,
@@ -44,7 +46,7 @@ impl<'a> Lower<'a> {
         id: DefId,
         loc: SrcLoc,
         args: &res::GenericArgs,
-    ) -> Vec<GenericArg> {
+    ) -> GenericArgs {
         let generics = self.ctxt.generics(id);
         let arg_count = generics.count();
         let loc = args.loc.unwrap_or(loc);

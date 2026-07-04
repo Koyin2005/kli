@@ -8,11 +8,9 @@ use crate::{
     ast::{IsResource, Mutable},
     collect::CtxtRef,
     diagnostics::DiagnosticReporter,
-    resolved_ast::{LocalRegionId, VarId},
+    resolved_ast::{DefId, LocalRegionId, VarId},
     src_loc::SrcLoc,
-    typed_ast::{
-        Expr, ExprKind, Function, Param, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind,
-    },
+    typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
     types::{PointerType, Region, Type},
 };
 
@@ -37,7 +35,6 @@ struct VarInfo {
     loc: SrcLoc,
     name: Symbol,
     mutable: Mutable,
-    function_level: usize,
     loop_count: usize,
 }
 fn unify_state(state1: VarState, state2: VarState) -> Option<VarState> {
@@ -51,13 +48,9 @@ pub struct ResourceCheck<'ctxt> {
     vars: HashMap<VarId, VarInfo>,
     var_states: HashMap<VarId, VarState>,
     err: DiagnosticReporter,
-    is_current_function_resource: IsResource,
     expired_regions: HashSet<LocalRegionId>,
     borrowed: HashMap<VarId, (Mutable, Region)>,
     scopes: Vec<Vec<VarId>>,
-
-    function_level: usize,
-    capture_set: Option<HashMap<VarId, SrcLoc>>,
     loops: usize,
     ctxt: CtxtRef<'ctxt>,
 }
@@ -65,14 +58,11 @@ impl<'ctxt> ResourceCheck<'ctxt> {
     pub fn new(ctxt: CtxtRef<'ctxt>) -> Self {
         Self {
             ctxt,
-            is_current_function_resource: IsResource::Data,
             vars: HashMap::new(),
             var_states: HashMap::new(),
             err: DiagnosticReporter::new(),
             scopes: Vec::new(),
             expired_regions: HashSet::new(),
-            function_level: 0,
-            capture_set: None,
             loops: 0,
             borrowed: HashMap::new(),
         }
@@ -127,7 +117,6 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                 ty,
                 name,
                 mutable,
-                function_level: self.function_level,
                 loop_count: self.loops,
             },
         );
@@ -185,7 +174,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
     }
     fn place_mutable(&self, place: &Place) -> Mutable {
         match &place.kind {
-            PlaceKind::Var(var) | PlaceKind::Upvar(var) => self.vars[&var.1].mutable,
+            PlaceKind::Var(var) | PlaceKind::Upvar(_, var) => self.vars[&var.1].mutable,
             PlaceKind::Deref(_) => {
                 let mut place = place;
                 while let PlaceKind::Deref(value) = &place.kind {
@@ -262,7 +251,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
     }
     fn var_of(&self, place: &Place) -> Option<VarId> {
         match place.kind {
-            PlaceKind::Var(ref var) | PlaceKind::Upvar(ref var) => Some(var.1),
+            PlaceKind::Var(ref var) | PlaceKind::Upvar(_, ref var) => Some(var.1),
             PlaceKind::Deref(ref value) => {
                 if let ExprKind::Load(ref place) = value.kind {
                     self.var_of(place)
@@ -272,41 +261,10 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             }
         }
     }
-    fn capture_valid(&self, var: VarId) -> Result<(), CaptureError> {
-        let info = &self.vars[&var];
-        if info.function_level == self.function_level {
-            return Err(CaptureError::NotAnUpvar);
-        }
-        //Function is not a resource, can't capture anything
-        if self.is_current_function_resource == IsResource::Data {
-            return Err(CaptureError::DataFunction);
-        }
-        if !self.outlives_generic_regions(&info.ty) {
-            return Err(CaptureError::BorrowsLocal);
-        }
-        Ok(())
-    }
-    fn capture_if_upvar(&mut self, var: VarId, loc: SrcLoc) {
-        let cause = match self.capture_valid(var) {
-            Ok(()) => {
-                let capture_set = self.capture_set.as_mut().expect("Should have capture set");
-                capture_set.insert(var, loc);
-                return;
-            }
-            Err(CaptureError::NotAnUpvar) => return,
-            Err(CaptureError::DataFunction) => "because 'data' functions cannot capture",
-            Err(CaptureError::BorrowsLocal) => "because borrowed content cannot be captured",
-        };
-        self.err.add_diagnostic(
-            format!("Cannot capture '{}' {}", self.vars[&var].name, cause),
-            loc,
-        );
-    }
     fn check_place_use(&mut self, place: &Place, place_use: PlaceUse) {
         match &place.kind {
-            PlaceKind::Var(var) | PlaceKind::Upvar(var) => {
+            PlaceKind::Var(var) | PlaceKind::Upvar(_, var) => {
                 let var = var.1;
-                self.capture_if_upvar(var, place.loc);
                 match place_use {
                     PlaceUse::Write => {
                         self.write_to_var(var, place.loc);
@@ -321,10 +279,9 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     let Ok((_, ref ty)) = place.ty.clone().as_pointer_type() else {
                         unreachable!()
                     };
-                    let Some(var) = self.var_of(place) else {
+                    let Some(_) = self.var_of(place) else {
                         return self.check_place_use(place, place_use);
                     };
-                    self.capture_if_upvar(var, place.loc);
                     match place_use {
                         PlaceUse::Read => {
                             if ty.is_resource(self.ctxt) {
@@ -443,44 +400,49 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             }
             ExprKind::Lambda(lambda) => {
                 self.in_drop_scope(|this| {
-                    let capture_info = this.capture_set.replace(Default::default());
-                    let old_resource = std::mem::replace(
-                        &mut this.is_current_function_resource,
-                        lambda.is_resource,
-                    );
-                    this.function_level += 1;
-                    for Param { name, var, ty } in lambda.params.iter() {
-                        this.init_var(
-                            Mutable::Immutable,
-                            *var,
-                            name.loc,
-                            name.symbol,
-                            ty.clone(),
-                            true,
-                        );
-                    }
-                    this.check_expr(&lambda.body);
-                    if let Some(captures) = this.capture_set.as_ref() {
-                        let mut errors = Vec::new();
-                        for (&var, &loc) in captures {
-                            let var_info = &this.vars[&var];
-                            if this.regions_in(&var_info.ty).iter().any(|region| {
-                                *region != Region::Static || *region != Region::Unknown
-                            }) {
-                                errors.push((var_info.name, loc));
-                            }
-                        }
-                        errors.sort_by_key(|(_, loc)| loc.line);
-                        for (name, loc) in errors {
+                    let captures = lambda.captures.as_slice();
+                    let mut errors = Vec::new();
+                    for capture in captures {
+                    let loc = expr.loc;
+                        let var = capture.var.1;
+                        this.move_from_var(var, loc);
+                        let info = &this.vars[&var];
+                        //Function is not a resource, can't capture anything
+                        if lambda.is_resource == IsResource::Data {
                             this.err.add_diagnostic(
-                                format!("Cannot capture '{}' that contains borrows", name),
+                                format!(
+                                    "Cannot capture '{}', as data functions cannot capture",
+                                    info.name
+                                ),
                                 loc,
                             );
                         }
+                        if !this.outlives_generic_regions(&info.ty) {
+                            this.err.add_diagnostic(
+                                format!(
+                                    "Cannot capture '{}', as  borrowed content cannot be captured",
+                                    info.name
+                                ),
+                                loc,
+                            );
+                        }
+
+                        let var_info = &this.vars[&capture.var.1];
+                        if this
+                            .regions_in(&var_info.ty)
+                            .iter()
+                            .any(|region| *region != Region::Static || *region != Region::Unknown)
+                        {
+                            errors.push((var_info.name, expr.loc));
+                        }
                     }
-                    this.is_current_function_resource = old_resource;
-                    this.function_level -= 1;
-                    this.capture_set = capture_info;
+                    errors.sort_by_key(|(_, loc)| loc.line);
+                    for (name, loc) in errors {
+                        this.err.add_diagnostic(
+                            format!("Cannot capture '{}' that contains borrows", name),
+                            loc,
+                        );
+                    }
                 });
             }
             &ExprKind::Borrow {
@@ -498,7 +460,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                 }
 
                 let var = match &place.kind {
-                    PlaceKind::Upvar(var) => var,
+                    PlaceKind::Upvar(_, var) => var,
                     PlaceKind::Var(var) => var,
                     PlaceKind::Deref(_) => {
                         self.err
@@ -591,12 +553,20 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             }
         }
     }
-    pub fn check_function(mut self, function: &Function) -> bool {
+    pub fn check_function(mut self, id: DefId, function: &Function) -> bool {
         self.in_drop_scope(|this| {
-            for param in function.params.iter() {
+            let captures = this.ctxt.captures(id).unwrap_or_default().into_vars();
+            for (i, param) in function.params.iter().enumerate() {
+                let var = if let Some(var) = param.var {
+                    var
+                } else if !captures.is_empty() {
+                    captures[i]
+                } else {
+                    continue;
+                };
                 this.init_var(
                     Mutable::Immutable,
-                    param.var,
+                    var,
                     param.name.loc,
                     param.name.symbol,
                     param.ty.clone(),

@@ -38,7 +38,7 @@ pub struct Place {
 }
 #[derive(Debug)]
 pub enum PlaceKind {
-    Upvar(Var),
+    Upvar(DefId, Var),
     Var(Var),
     Deref(Box<Expr>),
 }
@@ -48,13 +48,19 @@ pub struct Capture {
     pub ty: Type,
 }
 #[derive(Debug)]
+pub struct LambdaParam {
+    pub var: Var,
+    pub loc: SrcLoc,
+}
+#[derive(Debug)]
 pub struct Lambda {
     pub id: DefId,
+    pub loc: SrcLoc,
     pub is_resource: IsResource,
     pub captures: Vec<Capture>,
-    pub params: Vec<Param>,
-    pub return_type: Type,
-    pub body: Expr,
+    pub params: Vec<LambdaParam>,
+    pub param_tys: Vec<Type>,
+    pub return_type: Box<Type>,
 }
 #[derive(Debug)]
 pub struct LetBinding {
@@ -144,12 +150,12 @@ pub struct GenericParam {
 #[derive(Debug, Clone)]
 pub struct Param {
     pub name: Ident,
-    pub var: VarId,
+    pub var: Option<VarId>,
     pub ty: Type,
 }
 impl Param {
-    pub fn var(&self) -> Var {
-        Var(self.name.symbol, self.var)
+    pub fn var(&self) -> Option<Var> {
+        Some(Var(self.name.symbol, self.var?))
     }
 }
 pub struct Function {

@@ -41,7 +41,7 @@ where
     V: Visitor + ?Sized,
 {
     match &place.kind {
-        PlaceKind::Var(_) | PlaceKind::Upvar(_) => (),
+        PlaceKind::Var(_) | PlaceKind::Upvar(..) => (),
         PlaceKind::Deref(value) => v.visit_expr(value),
     }
 }
@@ -122,9 +122,7 @@ where
             v.visit_pattern(pattern);
             v.visit_expr(body);
         }
-        ExprKind::Lambda(lambda) => {
-            v.visit_expr(&lambda.body);
-        }
+        ExprKind::Lambda(_) => {}
         ExprKind::Case(matched, arms) => {
             v.visit_expr(matched);
             for arm in arms {

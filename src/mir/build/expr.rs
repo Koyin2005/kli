@@ -38,7 +38,7 @@ impl Builder<'_> {
                 })
             }
             ExprKind::Lambda(ref lambda) if lambda.is_resource == IsResource::Data => {
-                Some(self.lambda_code(lambda))
+                Some(Self::lambda_code_constant(self.ctxt, lambda))
             }
             ExprKind::Const(id, ref args) => {
                 let ty = expr.ty.clone();
@@ -104,21 +104,18 @@ impl Builder<'_> {
     pub(super) fn lower_place(&mut self, place: &typed_ast::Place) -> Place {
         match &place.kind {
             typed_ast::PlaceKind::Var(var) => {
-                let local = self.body.local_for_var(var.1).unwrap();
+                let Some(local) = self.body.local_for_var(var.1) else {
+                    unreachable!("should have a local for {:?} at {:?}", var, place.loc)
+                };
                 Place::local(local)
             }
-            typed_ast::PlaceKind::Upvar(var) => {
-                let capture_info = self.body.capture_info.as_ref().unwrap();
-                let env_ptr = capture_info.env_ptr.unwrap();
-                let index = capture_info
-                    .captures
-                    .iter()
-                    .position(|capture| capture.var.1 == var.1)
-                    .unwrap();
-                Place::local(env_ptr)
-                    .with_deref()
-                    .with_field(FieldId::new(index))
-            }
+            typed_ast::PlaceKind::Upvar(id, var) => Place::local(Local::new(
+                self.ctxt
+                    .captures(*id)
+                    .unwrap_or_default()
+                    .capture_index(var.1)
+                    .unwrap(),
+            )),
 
             typed_ast::PlaceKind::Deref(value) => self.place(value).with_deref(),
         }
@@ -508,7 +505,16 @@ impl Builder<'_> {
             ExprKind::AddressOf(place) => Rvalue::RawPtrTo(self.lower_place(place)),
             ExprKind::Lambda(lambda) => {
                 let is_resource = lambda.is_resource == IsResource::Resource;
-                let function = Operand::Constant(self.lambda_code(lambda));
+                let function = if !is_resource {
+                    Operand::Constant(Self::lambda_code_constant(self.ctxt, lambda))
+                } else {
+                    Operand::Constant(Self::closure_shim(
+                        self.mir_context,
+                        self.ctxt,
+                        lambda.id,
+                        lambda,
+                    ))
+                };
                 if is_resource {
                     let env_ty = Type::closure_env(lambda.captures.iter().cloned());
                     let env = self.assign_to_temp(
@@ -536,9 +542,14 @@ impl Builder<'_> {
                                 .iter()
                                 .map(|capture| {
                                     Operand::Load(Place::local(
-                                        self.body
-                                            .local_for_var(capture.var.1)
-                                            .expect("Should have a local for var"),
+                                        self.body.local_for_var(capture.var.1).unwrap_or_else(
+                                            || {
+                                                panic!(
+                                                    "Should have a local for var {:?}",
+                                                    capture.var
+                                                )
+                                            },
+                                        ),
                                     ))
                                 })
                                 .collect(),
@@ -553,9 +564,9 @@ impl Builder<'_> {
                             Operand::Load(Place::local(env)),
                         ),
                     );
-                    let param_tys = lambda.params.iter().map(|param| param.ty.clone()).collect();
+                    let param_tys = lambda.param_tys.clone();
                     Rvalue::Aggregate(
-                        AggregateKind::Closure(param_tys, Box::new(lambda.return_type.clone())),
+                        AggregateKind::Closure(param_tys, lambda.return_type.clone()),
                         [Operand::Load(Place::local(erased_env)), function]
                             .into_iter()
                             .collect(),
