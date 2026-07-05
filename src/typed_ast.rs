@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::BTreeMap, rc::Rc};
 
 use crate::{
     ast::{BinaryOp, IsResource, Mutable},
@@ -168,5 +168,5 @@ pub struct Function {
 }
 
 pub struct Program {
-    pub functions: HashMap<DefId, Function>,
+    pub functions: BTreeMap<DefId, Function>,
 }

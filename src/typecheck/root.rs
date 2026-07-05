@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
 };
 
 use crate::{
@@ -314,7 +314,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
     }
     fn check_function_item(
         &self,
-        functions: &mut HashMap<DefId, Function>,
+        functions: &mut BTreeMap<DefId, Function>,
         id: DefId,
         function: &res::Function,
     ) {
@@ -343,7 +343,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
     pub fn check(self) -> Result<typed_ast::Program, TypeError> {
         self.validate_main();
         self.validate_types_non_recursive();
-        let mut functions = HashMap::new();
+        let mut functions = BTreeMap::new();
         for item in self.ctxt.all_items() {
             let Some(function) = item.function_def() else {
                 continue;
