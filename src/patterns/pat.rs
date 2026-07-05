@@ -134,13 +134,11 @@ fn split_constructors(
     all_constructors: Vec<Constructor>,
     seen_constructors: HashSet<Constructor>,
 ) -> (Vec<Constructor>, Vec<Constructor>) {
-    let has_wildcard = seen_constructors.contains(&Constructor::Wildcard);
     let mut seen = Vec::new();
     let mut missing = Vec::new();
     match ty {
         Type::Infer(_) | Type::Unknown => (),
-        Type::Unit
-        | Type::Int
+        Type::Int
         | Type::String
         | Type::Char
         | Type::Byte
@@ -150,10 +148,13 @@ fn split_constructors(
         | Type::Function(..)
         | Type::Array(..)
         | Type::RawPointer(_) => {
-            if has_wildcard {
-                ()
+            missing.push(Constructor::NonExhaustive);
+        }
+        Type::Unit => {
+            if seen_constructors.contains(&Constructor::Unit) {
+                seen.push(Constructor::Unit);
             } else {
-                missing.push(Constructor::NonExhaustive);
+                missing.push(Constructor::Missing);
             }
         }
         Type::Bool => {
@@ -161,26 +162,26 @@ fn split_constructors(
             let is_false = seen_constructors.contains(&Constructor::Bool(false));
             if is_true {
                 seen.push(Constructor::Bool(true));
-            } else if !has_wildcard {
+            } else {
                 missing.push(Constructor::Bool(true));
             }
             if is_false {
                 seen.push(Constructor::Bool(false));
-            } else if !has_wildcard {
+            } else {
                 missing.push(Constructor::Bool(false));
             }
         }
         Type::Imm(..) | Type::Mut(..) => {
             if seen_constructors.contains(&Constructor::Ref) {
                 seen.push(Constructor::Ref);
-            } else if !has_wildcard {
+            } else {
                 missing.push(Constructor::Ref);
             }
         }
         Type::Record(_) => {
             if seen_constructors.contains(&Constructor::Record) {
                 seen.push(Constructor::Record);
-            } else if !has_wildcard {
+            } else {
                 missing.push(Constructor::Record);
             }
         }
@@ -190,14 +191,14 @@ fn split_constructors(
                     Constructor::Record => {
                         if seen_constructors.contains(&Constructor::Record) {
                             seen.push(Constructor::Record)
-                        } else if !has_wildcard {
+                        } else {
                             missing.push(Constructor::Record);
                         }
                     }
                     Constructor::Case(_) => {
                         if seen_constructors.contains(&ctor) {
                             seen.push(ctor)
-                        } else if !has_wildcard {
+                        } else {
                             missing.push(ctor);
                         }
                     }
@@ -234,23 +235,6 @@ fn missing_patterns_inner(
     }
     let mut all_missing = Vec::new();
     for c in constructors {
-        if c == Constructor::Missing {
-            all_missing.extend(missing_ctors.iter().copied().map(|ctor| {
-                std::iter::once(Pat {
-                    ty: head.clone(),
-                    constructor: ctor,
-                    fields: fields_of(head, ctor, ctxt)
-                        .into_iter()
-                        .map(Pat::wildcard)
-                        .enumerate()
-                        .map(|(i, pat)| pat.with_index(i))
-                        .collect(),
-                })
-                .chain(tys[1..].iter().cloned().map(Pat::wildcard))
-                .collect()
-            }));
-            continue;
-        }
         let fields = fields_of(head, c, ctxt);
         let field_count = fields.len();
         let specialized = specialize(c, &fields, matrix.clone());
@@ -262,19 +246,36 @@ fn missing_patterns_inner(
 
         for row in missing {
             let mut row = row.into_iter();
-            let head_pat = Pat {
-                ty: head.clone(),
-                constructor: c,
-                fields: row
-                    .by_ref()
-                    .take(field_count)
-                    .enumerate()
-                    .map(|(i, pat)| pat.with_index(i))
-                    .collect(),
-            };
-            let mut new_row = vec![head_pat];
-            new_row.extend(row);
-            all_missing.push(new_row);
+            if c == Constructor::Missing {
+                all_missing.extend(missing_ctors.iter().copied().map(|ctor| {
+                    std::iter::once(Pat {
+                        ty: head.clone(),
+                        constructor: ctor,
+                        fields: fields_of(head, ctor, ctxt)
+                            .into_iter()
+                            .map(Pat::wildcard)
+                            .enumerate()
+                            .map(|(i, pat)| pat.with_index(i))
+                            .collect(),
+                    })
+                    .chain(row.clone())
+                    .collect()
+                }));
+            } else {
+                let head_pat = Pat {
+                    ty: head.clone(),
+                    constructor: c,
+                    fields: row
+                        .by_ref()
+                        .take(field_count)
+                        .enumerate()
+                        .map(|(i, pat)| pat.with_index(i))
+                        .collect(),
+                };
+                let mut new_row = vec![head_pat];
+                new_row.extend(row);
+                all_missing.push(new_row);
+            }
         }
     }
     all_missing
