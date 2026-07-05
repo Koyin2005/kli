@@ -275,6 +275,25 @@ pub enum BodySource {
     Lambda(DefId),
     ClosureShim(DefId),
 }
+impl BodySource {
+    fn def_id(self) -> DefId {
+        match self {
+            Self::ClosureShim(id) => id,
+            Self::Function(id) => id,
+            Self::Lambda(id) => id,
+        }
+    }
+    pub fn is_child_of(self, name: Symbol, ctxt: CtxtRef) -> bool {
+        let mut current = Some(self.def_id());
+        while let Some(id) = current {
+            if ctxt.ident(id).map(|ident| ident.symbol) == Some(name) {
+                return true;
+            }
+            current = ctxt.parent_of(id);
+        }
+        false
+    }
+}
 #[derive(Clone)]
 pub enum LocalKind {
     Temp,

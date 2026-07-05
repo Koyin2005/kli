@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     env,
     path::Path,
 };
@@ -219,7 +219,7 @@ pub enum Feature {
 }
 struct Config {
     path: String,
-    flags: HashSet<Feature>,
+    features: HashMap<Feature, HashSet<Symbol>>,
 }
 struct ConfigError;
 fn config() -> Result<Config, ConfigError> {
@@ -251,17 +251,14 @@ fn config() -> Result<Config, ConfigError> {
                 "output-instances" => Feature::OutputInstances,
                 _ => return None,
             };
-            Some(feature)
+            Some((feature, pieces.map(Symbol::intern).collect()))
         })
         .collect();
-    Ok(Config {
-        path,
-        flags: features,
-    })
+    Ok(Config { path, features })
 }
 fn build_file_tree(config: &Config) -> Result<Files, FileError> {
     let path = &config.path;
-    let include_std = !config.flags.contains(&Feature::NoStd);
+    let include_std = !config.features.contains_key(&Feature::NoStd);
     let file_tree = {
         let mut file_tree = find_all_src_files(Path::new(path))?;
         file_tree.files.insert(Symbol::BUILTINS, find_builtins());
@@ -318,14 +315,20 @@ fn main() {
         }
         mir::build::Builder::build_from_function(ctxt, &mut mir_context, id, function);
     }
-    if config.flags.contains(&Feature::OutputMir) {
+    if let Some(children) = config.features.get(&Feature::OutputMir) {
         for body in mir_context.body_iter() {
+            if !children
+                .iter()
+                .any(|child| body.src.is_child_of(*child, ctxt))
+            {
+                continue;
+            }
             mir::dump::MirDump::new(std::io::stdout(), ctxt)
                 .write_body(body)
                 .unwrap();
         }
     }
-    if config.flags.contains(&Feature::OutputInstances)
+    if config.features.contains_key(&Feature::OutputInstances)
         && let Some((main, _)) = ctxt.main_function()
     {
         let instances = InstanceCollector::new(&mir_context)
