@@ -341,7 +341,9 @@ impl Body {
                 })
                 .expect("should be a pointer type"),
             &PlaceProjection::Field(field) => {
-                ty.field_type(field, ctxt).expect("should be a record type")
+                ty.field_info(field, ctxt)
+                    .expect("should be a record type")
+                    .0
             }
             PlaceProjection::Index(_) | PlaceProjection::ConstantIndex(_) => {
                 let Type::Array(ty, _) = ty else {

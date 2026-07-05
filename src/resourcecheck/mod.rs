@@ -22,12 +22,25 @@ use crate::{
 pub enum MovePlace {
     Var(Var),
     FieldOf(Box<MovePlace>, FieldId),
+    Deref(Box<MovePlace>),
 }
 impl MovePlace {
+    fn indirect(&self) -> bool {
+        match self {
+            Self::Var(_) => false,
+            Self::Deref(_) => true,
+            Self::FieldOf(parent, _) => parent.indirect(),
+        }
+    }
     fn from_place(place: &Place) -> Option<Self> {
         match place.kind {
             PlaceKind::Invalid => None,
-            PlaceKind::Deref(_) => None,
+            PlaceKind::Deref(ref inner) => {
+                let ExprKind::Load(ref place) = inner.kind else {
+                    return None;
+                };
+                Self::from_place(place).map(|inner| MovePlace::Deref(Box::new(inner)))
+            }
             PlaceKind::Var(var) | PlaceKind::Upvar(_, var) => Some(MovePlace::Var(var)),
             PlaceKind::Field(ref place, field) => {
                 Self::from_place(place).map(|place| MovePlace::FieldOf(Box::new(place), field))
@@ -35,7 +48,11 @@ impl MovePlace {
         }
     }
 }
-
+#[derive(PartialEq, Eq, Clone, Copy, Hash)]
+enum PlaceProjection {
+    Field(FieldId),
+    Deref,
+}
 #[derive(Debug, Clone, Copy)]
 enum PlaceUse {
     Read,
@@ -66,24 +83,23 @@ fn unify_state_or_move(state1: PlaceState, state2: PlaceState) -> PlaceState {
 enum PlacePath {
     Var(VarId),
     Field(MovePlaceId, FieldId),
+    Deref(MovePlaceId),
 }
 define_id!(MovePlaceId);
 struct PlaceInfo {
     parent: Option<MovePlaceId>,
     place: PlacePath,
     state: PlaceState,
-    children: HashMap<FieldId, MovePlaceId>,
+    children: HashMap<PlaceProjection, MovePlaceId>,
 }
+#[derive(Default)]
 pub struct PlaceMap {
     place_info: IndexVec<MovePlaceId, PlaceInfo>,
     place_ids: HashMap<PlacePath, MovePlaceId>,
 }
 impl PlaceMap {
     pub fn new() -> Self {
-        Self {
-            place_info: IndexVec::new(),
-            place_ids: HashMap::new(),
-        }
+        Default::default()
     }
     fn state_map(&self) -> HashMap<MovePlaceId, PlaceState> {
         self.place_info
@@ -106,12 +122,14 @@ impl PlaceMap {
                         })
                     })
             }
-            MovePlace::FieldOf(parent, field) => {
+            &MovePlace::FieldOf(ref parent, field) => {
                 let parent = self.id_of(parent);
-                if let Some(child) = self.place_info[parent].children.get(field) {
+                if let Some(child) = self.place_info[parent]
+                    .children
+                    .get(&PlaceProjection::Field(field))
+                {
                     return *child;
                 }
-                let field = *field;
                 let path = PlacePath::Field(parent, field);
                 let id = *self.place_ids.entry(path).or_insert_with(|| {
                     self.place_info.push(PlaceInfo {
@@ -121,7 +139,31 @@ impl PlaceMap {
                         state: PlaceState::Owned,
                     })
                 });
-                self.place_info[parent].children.insert(field, id);
+                self.place_info[parent]
+                    .children
+                    .insert(PlaceProjection::Field(field), id);
+                id
+            }
+            MovePlace::Deref(parent) => {
+                let parent = self.id_of(parent);
+                if let Some(&child) = self.place_info[parent]
+                    .children
+                    .get(&PlaceProjection::Deref)
+                {
+                    return child;
+                }
+                let path = PlacePath::Deref(parent);
+                let id = *self.place_ids.entry(path).or_insert_with(|| {
+                    self.place_info.push(PlaceInfo {
+                        parent: Some(parent),
+                        place: path,
+                        children: HashMap::new(),
+                        state: PlaceState::Owned,
+                    })
+                });
+                self.place_info[parent]
+                    .children
+                    .insert(PlaceProjection::Deref, id);
                 id
             }
         }
@@ -313,16 +355,53 @@ impl<'ctxt> ResourceCheck<'ctxt> {
         })
         .is_continue()
     }
+    fn type_of(&self, place: &MovePlace) -> Type {
+        match place {
+            MovePlace::Deref(inner) => self.type_of(inner).as_pointer_type().unwrap().1,
+            MovePlace::FieldOf(inner, field) => {
+                self.type_of(inner).field_info(*field, self.ctxt).unwrap().0
+            }
+            MovePlace::Var(var) => self.vars[&var.1].ty.clone(),
+        }
+    }
+    fn type_of_path(&self, path: PlacePath) -> Type {
+        match path {
+            PlacePath::Deref(inner) => {
+                self.type_of_path(self.place_map.place_info[inner].place)
+                    .as_pointer_type()
+                    .unwrap()
+                    .1
+            }
+            PlacePath::Field(inner, field) => {
+                self.type_of_path(self.place_map.place_info[inner].place)
+                    .field_info(field, self.ctxt)
+                    .unwrap()
+                    .0
+            }
+            PlacePath::Var(var) => self.vars[&var].ty.clone(),
+        }
+    }
     fn mutability_of(&self, place: &MovePlace) -> Mutable {
         match place {
             MovePlace::Var(var) => self.vars[&var.1].mutable,
             MovePlace::FieldOf(parent, _) => self.mutability_of(parent),
+            MovePlace::Deref(_) => {
+                let mut inner_place = place;
+                while let MovePlace::Deref(inner) = inner_place {
+                    let ty = self.type_of(inner);
+                    if matches!(ty, Type::Imm(..)) {
+                        return Mutable::Immutable;
+                    }
+                    inner_place = inner;
+                }
+                Mutable::Mutable
+            }
         }
     }
     fn loop_depth_of(&self, place_id: MovePlaceId) -> usize {
         match self.place_map.place_info[place_id].place {
             PlacePath::Var(var) => self.vars[&var].loop_count,
-            PlacePath::Field(parent, _) => self.loop_depth_of(parent),
+            PlacePath::Field(parent, _) | PlacePath::Deref(parent) => self.loop_depth_of(parent),
         }
     }
     fn borrow_of(&self, place_id: MovePlaceId) -> Option<(Mutable, Region)> {
@@ -348,6 +427,30 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                 None
             })
     }
+    #[track_caller]
+    fn format_move_place(&self, place: &MovePlace) -> (Type, String) {
+        match place {
+            MovePlace::Var(var) => {
+                let info = &self.vars[&var.1];
+                (info.ty.clone(), info.name.to_string())
+            }
+            MovePlace::FieldOf(inner, field) => {
+                let (inner_ty, mut inner_str) = self.format_move_place(inner);
+                let (ty, name) = inner_ty
+                    .field_info(*field, self.ctxt)
+                    .expect("should have a field");
+                inner_str.push('.');
+                inner_str.push_str(&name.to_string());
+                (ty, inner_str)
+            }
+            MovePlace::Deref(inner) => {
+                let (inner_ty, mut inner_str) = self.format_move_place(inner);
+                let ty = inner_ty.as_pointer_type().unwrap().1;
+                inner_str.push('^');
+                (ty, inner_str)
+            }
+        }
+    }
     fn check_move_place_use(
         &mut self,
         loc: SrcLoc,
@@ -357,12 +460,14 @@ impl<'ctxt> ResourceCheck<'ctxt> {
     ) {
         let id = self.place_map.id_of(&place);
         let mutable = self.mutability_of(&place);
-
         match place_use {
             PlaceUse::Read => {
                 if self.place_map.combined_state(id) == PlaceState::Moved {
                     self.err.add_diagnostic(
-                        format!("Cannot read from {:?} as it has been moved from", place),
+                        format!(
+                            "Cannot read from '{}' as it has been moved from",
+                            self.format_move_place(&place).1
+                        ),
                         loc,
                     );
                     return;
@@ -370,8 +475,13 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             }
             PlaceUse::Write => {
                 if mutable == Mutable::Immutable {
-                    self.err
-                        .add_diagnostic(format!("Cannot write to immutable {:?}", place), loc);
+                    self.err.add_diagnostic(
+                        format!(
+                            "Cannot write to immutable place '{}'",
+                            self.format_move_place(&place).1
+                        ),
+                        loc,
+                    );
                 }
             }
         }
@@ -379,7 +489,10 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             PlaceUse::Write => {
                 if ty.is_resource(self.ctxt) && self.borrow_of(id).is_some() {
                     self.err.add_diagnostic(
-                        format!("Cannot assign to '{:?}' while borrowed", place),
+                        format!(
+                            "Cannot assign to '{}' while borrowed",
+                            self.format_move_place(&place).1
+                        ),
                         loc,
                     );
                     return;
@@ -396,7 +509,10 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     let loop_depth = self.loop_depth_of(id);
                     if loop_depth < self.loops {
                         self.err.add_diagnostic(
-                            format!("Cannot move from '{:?}' in a loop", place),
+                            format!(
+                                "Cannot move from '{}' in a loop",
+                                self.format_move_place(&place).1
+                            ),
                             loc,
                         );
                         return;
@@ -404,7 +520,20 @@ impl<'ctxt> ResourceCheck<'ctxt> {
 
                     if self.borrow_of(id).is_some() {
                         self.err.add_diagnostic(
-                            format!("Cannot move from '{:?}' while borrowed", place),
+                            format!(
+                                "Cannot move from '{}' while borrowed",
+                                self.format_move_place(&place).1
+                            ),
+                            loc,
+                        );
+                        return;
+                    }
+                    if place.indirect() {
+                        self.err.add_diagnostic(
+                            format!(
+                                "Cannot move from '{}', as it contains indirection",
+                                self.format_move_place(&place).1
+                            ),
                             loc,
                         );
                         return;
@@ -417,52 +546,37 @@ impl<'ctxt> ResourceCheck<'ctxt> {
         };
         self.place_map.update_state_with_children(id, new_state);
     }
-    fn check_deref_place_use(&mut self, place: &Place, place_use: PlaceUse) {
-        match &place.kind {
-            PlaceKind::Deref(value) => match &value.kind {
-                ExprKind::Load(inner_place) => {
-                    let Some(inner_move_place) = MovePlace::from_place(inner_place) else {
-                        self.check_deref_place_use(inner_place, place_use);
-                        return;
-                    };
-                    let path = self.place_map.id_of(&inner_move_place);
-                    if self.place_map.combined_state(path) == PlaceState::Moved {
-                        self.err.add_diagnostic(
-                            format!(
-                                "Cannot read from deref of {:?} as it has been moved from",
-                                inner_move_place
-                            ),
-                            inner_place.loc,
-                        );
-                        return;
+    fn can_borrow_place_with_region(&self, region: Region, id: MovePlaceId) -> bool {
+        let path = self.place_map.place_info[id].place;
+        match path {
+            PlacePath::Var(_) => {
+                matches!(region, Region::Local(..))
+            }
+            PlacePath::Field(parent, _) => self.can_borrow_place_with_region(region, parent),
+            PlacePath::Deref(_) => {
+                let ty = self.type_of_path(path);
+                let regions_in = self.regions_in(&ty);
+                match region {
+                    Region::Static | Region::Unknown | Region::Infer(_) => {
+                        regions_in.iter().all(|&curr| {
+                            matches!(curr, Region::Infer(_) | Region::Static | Region::Unknown)
+                                || curr == region
+                        })
                     }
-                    if self.borrow_of(path).is_some() {
-                        self.err.add_diagnostic(
-                            format!(
-                                "Cannot read from deref of {:?} as it has been moved from",
-                                inner_move_place
-                            ),
-                            inner_place.loc,
-                        );
-                        return;
-                    }
-                    match place_use {
-                        PlaceUse::Read => {
-                            if inner_place.ty.is_resource(self.ctxt) {
-                                self.err.add_diagnostic(
-                                    format!("Cannot move out from deref of {:?}", inner_move_place),
-                                    inner_place.loc,
-                                );
-                                return;
-                            }
-                        }
-                        PlaceUse::Write => {}
-                    }
+                    Region::Local(_, _) => regions_in.iter().all(|&curr| {
+                        matches!(
+                            curr,
+                            Region::Infer(_) | Region::Unknown | Region::Param(..) | Region::Static
+                        ) || curr == region
+                    }),
+                    Region::Param(_, _) => regions_in.iter().all(|curr| {
+                        matches!(
+                            curr,
+                            Region::Infer(_) | Region::Unknown | Region::Param(..) | Region::Static
+                        ) || *curr == region
+                    }),
                 }
-                _ => self.check_expr(value),
-            },
-            PlaceKind::Field(inner, _) => self.check_deref_place_use(inner, place_use),
-            PlaceKind::Invalid | PlaceKind::Upvar(..) | PlaceKind::Var(_) => (),
+            }
         }
     }
     fn check_place_use(&mut self, place: &Place, place_use: PlaceUse) {
@@ -473,7 +587,6 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             _ => MovePlace::from_place(place),
         };
         let Some(place) = move_place else {
-            self.check_deref_place_use(place, place_use);
             return;
         };
         self.check_move_place_use(loc, ty, place, place_use);
@@ -633,7 +746,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     }
                 }
 
-                let move_place = match MovePlace::from_place(&place) {
+                let move_place = match MovePlace::from_place(place) {
                     Some(place) => place,
                     None => {
                         self.err
@@ -644,15 +757,22 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                 let id = self.place_map.id_of(&move_place);
                 if self.place_map.combined_state(id) == PlaceState::Moved {
                     self.err.add_diagnostic(
-                        format!("Cannot borrow '{:?}' while moved", move_place),
+                        format!(
+                            "Cannot borrow '{}' while moved",
+                            self.format_move_place(&move_place).1
+                        ),
                         place.loc,
                     );
                     return;
                 }
                 // TODO : Allow borrowing from place with longer region
-                if !matches!(region, Region::Local(..)) {
+                if !self.can_borrow_place_with_region(region, id) {
                     self.err.add_diagnostic(
-                        format!("Cannot borrow '{:?}' with region '{}'", move_place, region),
+                        format!(
+                            "Cannot borrow '{}' with region '{}'",
+                            self.format_move_place(&move_place).1,
+                            region
+                        ),
                         place.loc,
                     );
                 }

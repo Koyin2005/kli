@@ -19,7 +19,7 @@ pub struct Pat {
 impl Pat {
     pub fn wildcard(ty: Type) -> Self {
         Self {
-            ty: ty,
+            ty,
             constructor: Constructor::Wildcard,
             fields: Vec::new(),
         }

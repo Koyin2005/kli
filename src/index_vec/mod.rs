@@ -9,9 +9,7 @@ pub struct IndexVec<I, V>(Vec<V>, PhantomData<I>);
 
 impl<I: Debug + Id, V: Debug> Debug for IndexVec<I, V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list()
-            .entries(self.iter_enumerated().map(|(i, value)| (i, value)))
-            .finish()
+        f.debug_list().entries(self.iter_enumerated()).finish()
     }
 }
 impl<I, V> Default for IndexVec<I, V> {

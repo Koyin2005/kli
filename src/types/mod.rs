@@ -210,39 +210,59 @@ impl Type {
             return_type: Box::new(return_ty),
         })
     }
-    pub fn field_type(&self, field_id: FieldId, ctxt: CtxtRef<'_>) -> Option<Type> {
+    pub fn field_info(&self, field_id: FieldId, ctxt: CtxtRef<'_>) -> Option<(Type, FieldName)> {
         match self {
             Self::Record(fields) => fields
                 .iter_enumerated()
                 .find(|(id, _)| *id == field_id)
-                .map(|(_, field)| field.ty.clone()),
+                .map(|(_, field)| (field.ty.clone(), field.name)),
             Self::Function(FunctionType {
                 resource: IsResource::Resource,
                 params,
                 return_type,
             }) => match field_id {
-                id if id == FieldId::FIRST_FIELD => Some(Type::pointer(Type::Byte)),
-                id if id == FieldId::new(1) => Some(Type::function_type(
-                    IsResource::Data,
-                    {
-                        let mut params = params.clone();
-                        params.insert(0, Self::pointer(Type::Byte));
-                        params
-                    },
-                    (**return_type).clone(),
+                id if id == FieldId::FIRST_FIELD => Some((
+                    Type::pointer(Type::Byte),
+                    FieldName::Named(Symbol::intern("env")),
+                )),
+                id if id == FieldId::new(1) => Some((
+                    Type::function_type(
+                        IsResource::Data,
+                        {
+                            let mut params = params.clone();
+                            params.insert(0, Self::pointer(Type::Byte));
+                            params
+                        },
+                        (**return_type).clone(),
+                    ),
+                    FieldName::Named(Symbol::intern("code")),
                 )),
                 _ => None,
             },
             Self::List(ty) => match field_id {
-                id if id == FieldId::FIRST_FIELD => Some(Type::pointer((**ty).clone())),
-                id if id == FieldId::new(1) => Some(Type::Int),
-                id if id == FieldId::new(2) => Some(Type::Int),
+                id if id == FieldId::FIRST_FIELD => Some((
+                    Type::pointer((**ty).clone()),
+                    FieldName::Named(Symbol::intern("ptr")),
+                )),
+                id if id == FieldId::new(1) => {
+                    Some((Type::Int, FieldName::Named(Symbol::intern("cap"))))
+                }
+                id if id == FieldId::new(2) => {
+                    Some((Type::Int, FieldName::Named(Symbol::intern("len"))))
+                }
                 _ => None,
             },
             Self::String => match field_id {
-                id if id == FieldId::FIRST_FIELD => Some(Type::pointer(Type::Byte)),
-                id if id == FieldId::new(1) => Some(Type::Int),
-                id if id == FieldId::new(2) => Some(Type::Int),
+                id if id == FieldId::FIRST_FIELD => Some((
+                    Type::pointer(Type::Byte),
+                    FieldName::Named(Symbol::intern("ptr")),
+                )),
+                id if id == FieldId::new(1) => {
+                    Some((Type::Int, FieldName::Named(Symbol::intern("cap"))))
+                }
+                id if id == FieldId::new(2) => {
+                    Some((Type::Int, FieldName::Named(Symbol::intern("len"))))
+                }
                 _ => None,
             },
             &Self::Named(id, _, ref args) => ctxt
@@ -250,7 +270,7 @@ impl Type {
                 .fields()
                 .get(field_id)
                 .copied()
-                .map(|field| field.type_of(args, ctxt)),
+                .map(|field| (field.type_of(args, ctxt), FieldName::Named(field.name))),
             _ => None,
         }
     }
