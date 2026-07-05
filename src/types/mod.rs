@@ -210,7 +210,7 @@ impl Type {
             return_type: Box::new(return_ty),
         })
     }
-    pub fn field_type(&self, field_id: FieldId) -> Option<Type> {
+    pub fn field_type(&self, field_id: FieldId, ctxt: CtxtRef<'_>) -> Option<Type> {
         match self {
             Self::Record(fields) => fields
                 .iter_enumerated()
@@ -245,6 +245,12 @@ impl Type {
                 id if id == FieldId::new(2) => Some(Type::Int),
                 _ => None,
             },
+            &Self::Named(id, _, ref args) => ctxt
+                .type_def(id)
+                .fields()
+                .get(field_id)
+                .copied()
+                .map(|field| field.type_of(args, ctxt)),
             _ => None,
         }
     }

@@ -13,7 +13,7 @@ use crate::{
 pub struct FunctionDefId(pub DefId);
 define_id!(VarId);
 define_id!(LocalRegionId);
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Var(pub Symbol, pub VarId);
 impl Var {
     pub fn ident(self, loc: SrcLoc) -> Ident {
@@ -156,18 +156,26 @@ pub struct FieldInit {
     pub value: Expr,
 }
 #[derive(Debug)]
+pub enum GenericArg {
+    Type(Type),
+    Region(Region),
+}
+#[derive(Debug)]
 pub struct GenericArgs {
     pub loc: Option<SrcLoc>,
-    pub tys: Vec<Type>,
+    pub args: Vec<GenericArg>,
 }
 impl GenericArgs {
     pub const NONE: Self = Self {
         loc: None,
-        tys: Vec::new(),
+        args: Vec::new(),
     };
-    pub fn tys(&self) -> Option<&[Type]> {
+    pub fn len(&self) -> usize {
+        self.args.len()
+    }
+    pub fn args(&self) -> Option<&[GenericArg]> {
         if self.loc.is_some() {
-            Some(&self.tys)
+            Some(&self.args)
         } else {
             None
         }

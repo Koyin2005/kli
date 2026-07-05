@@ -3,7 +3,7 @@ use crate::{
     collect::{CtxtRef, TypeDefKind},
     types::Type,
 };
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Constructor {
     Bool(bool),
     Int(i64),
@@ -12,6 +12,7 @@ pub enum Constructor {
     Ref,
     Case(Symbol),
     NonExhaustive,
+    Missing,
 }
 
 pub fn constructors_of_ty(ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Constructor> {
@@ -35,7 +36,9 @@ pub fn constructors_of_ty(ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Constructor> {
         }
         Type::Infer(_) => unreachable!("Cannot have infer here"),
         Type::Named(id, ..) => match ctxt.type_def(*id).kind {
-            TypeDefKind::Record(_) => vec![Constructor::Record],
+            TypeDefKind::Record(_) => {
+                vec![Constructor::Record]
+            }
             TypeDefKind::Variant(ref cases) => cases
                 .iter()
                 .map(|case| case.name)
@@ -50,7 +53,8 @@ pub fn fields_of(ty: &Type, constructor: Constructor, ctxt: CtxtRef<'_>) -> Vec<
         Constructor::Int(_)
         | Constructor::Bool(_)
         | Constructor::NonExhaustive
-        | Constructor::Wildcard => Vec::new(),
+        | Constructor::Wildcard
+        | Constructor::Missing => Vec::new(),
         Constructor::Ref => {
             let (Type::Imm(_, ty) | Type::Mut(_, ty)) = ty else {
                 unreachable!("Should be a view")

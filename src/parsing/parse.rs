@@ -605,6 +605,14 @@ impl Parser {
                         kind: ExprKind::Deref(Box::new(expr)),
                     }
                 }
+                TokenKind::Dot => {
+                    self.next_token();
+                    let name = self.expect_ident("field name")?;
+                    Expr {
+                        loc: expr.loc,
+                        kind: ExprKind::Field(Box::new(expr), name),
+                    }
+                }
                 _ => break Ok(expr),
             }
         }

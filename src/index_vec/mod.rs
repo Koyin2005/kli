@@ -4,9 +4,16 @@ use std::{
     marker::PhantomData,
     ops::{Index, IndexMut},
 };
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(PartialEq, Eq, Clone, Hash)]
 pub struct IndexVec<I, V>(Vec<V>, PhantomData<I>);
 
+impl<I: Debug + Id, V: Debug> Debug for IndexVec<I, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list()
+            .entries(self.iter_enumerated().map(|(i, value)| (i, value)))
+            .finish()
+    }
+}
 impl<I, V> Default for IndexVec<I, V> {
     fn default() -> Self {
         Self(Vec::default(), PhantomData)

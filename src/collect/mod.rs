@@ -119,8 +119,16 @@ impl Generics {
         self.params.is_empty()
     }
     #[track_caller]
-    pub const fn kind(&self, index: usize) -> GenericKind {
-        self.params.as_slice()[index].kind
+    pub fn kind(&self, index: usize) -> GenericKind {
+        self.params
+            .as_slice()
+            .get(index)
+            .unwrap_or_else(|| panic!("generic param for {:?} not found", index))
+            .kind
+    }
+    #[track_caller]
+    pub fn get_kind(&self, index: usize) -> Option<GenericKind> {
+        self.params.as_slice().get(index).map(|param| param.kind)
     }
     pub const fn count(&self) -> usize {
         self.params.len()
@@ -192,6 +200,7 @@ impl CtxtRef<'_> {
         };
         item
     }
+    #[track_caller]
     pub fn type_def(self, id: DefId) -> TypeDefInfo {
         let type_def = self.expect_type(id);
         lower_type_def(self, type_def)

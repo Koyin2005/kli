@@ -182,7 +182,8 @@ impl Resolve {
             | ast::ExprKind::Path(..) => (),
             ast::ExprKind::Annotate(expr, _)
             | ast::ExprKind::Deref(expr)
-            | ast::ExprKind::AddressOf(expr) => self.declare_in_exprs(expr),
+            | ast::ExprKind::AddressOf(expr)
+            | ast::ExprKind::Field(expr, _) => self.declare_in_exprs(expr),
             ast::ExprKind::List(exprs) => {
                 for expr in exprs {
                     self.declare_in_exprs(expr);
@@ -240,6 +241,24 @@ impl Resolve {
             self.current_module = old_module;
         }
     }
+    fn is_region_param(&self, name: Ident) -> bool {
+        self.generic_kinds
+            .get(&name.symbol)
+            .is_some_and(|kind| *kind == res::GenericKind::Region)
+    }
+    fn resolve_region_param(&mut self, name: Ident, index: usize) -> res::RegionKind {
+        if self
+            .generic_kinds
+            .insert(name.symbol, res::GenericKind::Region)
+            .is_some_and(|kind| kind != res::GenericKind::Region)
+        {
+            self.diag.add_diagnostic(
+                format!("Generic kind mismatch for '{}'", name.symbol),
+                name.loc,
+            );
+        }
+        res::RegionKind::Param(name.symbol, index)
+    }
     fn resolve_region(&mut self, region: ast::Region) -> res::Region {
         match region {
             ast::Region::Named(name) => res::Region {
@@ -250,19 +269,7 @@ impl Resolve {
                         res::RegionKind::Unknown
                     }
                     Some(Res::LocalRegion(region)) => res::RegionKind::Local(name.symbol, region),
-                    Some(Res::Param(index)) => {
-                        if self
-                            .generic_kinds
-                            .insert(name.symbol, res::GenericKind::Region)
-                            .is_some_and(|kind| kind != res::GenericKind::Region)
-                        {
-                            self.diag.add_diagnostic(
-                                format!("Generic kind mismatch for '{}'", name.symbol),
-                                name.loc,
-                            );
-                        }
-                        res::RegionKind::Param(name.symbol, index)
-                    }
+                    Some(Res::Param(index)) => self.resolve_region_param(name, index),
                     Some(
                         Res::TypeAlias(_)
                         | Res::Builtin(_)
@@ -312,10 +319,29 @@ impl Resolve {
         };
         res::GenericArgs {
             loc: Some(args.loc),
-            tys: args
+            args: args
                 .args
                 .into_iter()
-                .map(|arg| self.resolve_type(arg.ty))
+                .map(|arg| match arg.ty.kind {
+                    ast::TypeKind::Named(name, None)
+                        if let Some(Res::LocalRegion(local)) = self.resolve_name(name.symbol) =>
+                    {
+                        res::GenericArg::Region(res::Region {
+                            loc: arg.ty.loc,
+                            kind: res::RegionKind::Local(name.symbol, local),
+                        })
+                    }
+                    ast::TypeKind::Named(name, None)
+                        if let Some(Res::Param(index)) = self.resolve_name(name.symbol)
+                            && self.is_region_param(name) =>
+                    {
+                        res::GenericArg::Region(res::Region {
+                            loc: arg.ty.loc,
+                            kind: res::RegionKind::Param(name.symbol, index),
+                        })
+                    }
+                    _ => res::GenericArg::Type(self.resolve_type(arg.ty)),
+                })
                 .collect(),
         }
     }
@@ -411,15 +437,15 @@ impl Resolve {
                 Some(Res::TypeAlias(alias)) => match alias {
                     TypeAlias::Ptr => {
                         let args = self.resolve_generic_args(args);
-                        let arg: Result<[_; 1], _> = args.tys.try_into();
+                        let arg_count = args.args.len();
+                        let arg: Result<[_; 1], _> = args.args.try_into();
                         let ty = match arg {
-                            Ok([arg]) => arg,
-                            Err(args) => {
+                            Ok([res::GenericArg::Type(arg)]) => arg,
+                            _ => {
                                 self.diag.add_diagnostic(
                                     format!(
-                                        "Expected '{}' generic arg but got '{}'",
-                                        1,
-                                        args.len()
+                                        "Expected '{}' type generic arg but got '{}'",
+                                        1, arg_count
                                     ),
                                     name.loc,
                                 );
@@ -433,15 +459,15 @@ impl Resolve {
                     }
                     TypeAlias::Box => {
                         let args = self.resolve_generic_args(args);
-                        let arg: Result<[_; 1], _> = args.tys.try_into();
+                        let count = args.len();
+                        let arg: Result<[_; 1], _> = args.args.try_into();
                         let ty = match arg {
-                            Ok([arg]) => arg,
-                            Err(args) => {
+                            Ok([res::GenericArg::Type(arg)]) => arg,
+                            _ => {
                                 self.diag.add_diagnostic(
                                     format!(
-                                        "Expected '{}' generic arg but got '{}'",
-                                        1,
-                                        args.len()
+                                        "Expected '{}' type generic arg but got '{}'",
+                                        1, count
                                     ),
                                     name.loc,
                                 );
@@ -455,16 +481,13 @@ impl Resolve {
                     }
                     TypeAlias::Byte => {
                         let args = self.resolve_generic_args(args);
-                        let arg: Result<[_; _], _> = args.tys.try_into();
+                        let count = args.len();
+                        let arg: Result<[_; _], _> = args.args.try_into();
                         match arg {
                             Ok([]) => (),
-                            Err(args) => {
+                            _ => {
                                 self.diag.add_diagnostic(
-                                    format!(
-                                        "Expected '{}' generic args but got '{}'",
-                                        0,
-                                        args.len()
-                                    ),
+                                    format!("Expected '{}' generic args but got '{}'", 0, count),
                                     name.loc,
                                 );
                             }
@@ -782,6 +805,9 @@ impl Resolve {
                 Box::new(self.resolve_expr(*expr)),
                 Box::new(self.resolve_type(*ty)),
             ),
+            ast::ExprKind::Field(expr, field) => {
+                res::ExprKind::Field(Box::new(self.resolve_expr(*expr)), field)
+            }
             ast::ExprKind::Panic(ty) => {
                 res::ExprKind::Panic(ty.map(|ty| Box::new(self.resolve_type(ty))))
             }

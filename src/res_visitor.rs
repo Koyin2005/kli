@@ -1,6 +1,6 @@
 use crate::resolved_ast::{
-    BlockBody, Expr, ExprKind, GenericArgs, LocalRegionId, Param, Pattern, Region, Stmt, StmtKind,
-    Type, TypeKind, Var,
+    BlockBody, Expr, ExprKind, GenericArg, GenericArgs, LocalRegionId, Param, Pattern, Region,
+    Stmt, StmtKind, Type, TypeKind, Var,
 };
 
 pub trait Visitor {
@@ -153,8 +153,11 @@ pub trait Visitor {
     }
     fn visit_var_def(&mut self, _: Var) {}
     fn visit_generic_args(&mut self, args: &GenericArgs) {
-        for arg in args.tys.iter() {
-            self.visit_type(arg);
+        for arg in args.args.iter() {
+            match arg {
+                GenericArg::Region(region) => self.visit_region(*region),
+                GenericArg::Type(ty) => self.visit_type(ty),
+            }
         }
     }
     fn visit_region(&mut self, _: Region) {}

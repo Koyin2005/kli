@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
+    collect::TypeDefKind,
     resolved_ast::{
         BlockBody, BorrowExpr, DefId, Expr, ExprKind, FieldInit, FunctionDefId, Lambda,
         LocalRegionId, Pattern, Var,
@@ -86,12 +87,14 @@ impl FunctionCtxt<'_> {
             }),
             &Type::Named(id, _, ref args) => {
                 let ctxt = self.root().ctxt();
-                ctxt.type_def(id)
-                    .fields()
-                    .iter_enumerated()
-                    .find_map(|(index, field)| {
-                        (field.name == name.symbol).then(|| (index, field.type_of(args, ctxt)))
-                    })
+                match ctxt.type_def(id).kind {
+                    TypeDefKind::Record(ref fields) => {
+                        fields.iter_enumerated().find_map(|(index, field)| {
+                            (field.name == name.symbol).then(|| (index, field.type_of(args, ctxt)))
+                        })
+                    }
+                    _ => None,
+                }
             }
             _ => None,
         }) else {
@@ -356,23 +359,24 @@ impl FunctionCtxt<'_> {
                     args.into_boxed_slice(),
                 ),
             }
-        } else if let ExprKind::VariantCase(id, generic_args) = &callee.kind
+        } else if let ExprKind::VariantCase(variant_id, generic_args) = &callee.kind
             && let root = self.root()
             && let ctxt = root.ctxt()
-            && let cases = ctxt.type_def(ctxt.expect_parent(*id)).cases()
+            && let ty_id = ctxt.expect_parent(*variant_id)
+            && let cases = ctxt.type_def(ty_id).cases()
             && let (index, case_def) = cases
                 .iter_enumerated()
-                .find_map(|(index, case)| (case.id == *id).then_some((index, case)))
+                .find_map(|(index, case)| (case.id == *variant_id).then_some((index, case)))
                 .unwrap()
             && case_def.field.is_some()
             && args.len() == case_def.field.as_slice().len()
         {
-            let generic_args = root.lower_generic_args_for(*id, loc, generic_args);
+            let generic_args = root.lower_generic_args_for(*variant_id, loc, generic_args);
             let Type::Function(FunctionType {
                 resource: _,
                 params,
                 return_type,
-            }) = ctxt.type_of(*id).bind(&generic_args)
+            }) = ctxt.type_of(*variant_id).bind(&generic_args)
             else {
                 unreachable!("Should be a function")
             };
@@ -388,7 +392,7 @@ impl FunctionCtxt<'_> {
             typed_ast::Expr {
                 ty,
                 loc,
-                kind: typed_ast::ExprKind::VariantInit(*id, index, generic_args, Box::new(arg)),
+                kind: typed_ast::ExprKind::VariantInit(ty_id, index, generic_args, Box::new(arg)),
             }
         } else {
             let callee = self.check_expr(callee, None);

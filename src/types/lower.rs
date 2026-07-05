@@ -50,22 +50,29 @@ impl<'a> Lower<'a> {
         let generics = self.ctxt.generics(id);
         let arg_count = generics.count();
         let loc = args.loc.unwrap_or(loc);
-        if let Some(tys) = args.tys() {
-            if arg_count != tys.len() {
+        if let Some(args) = args.args() {
+            if arg_count != args.len() {
                 self.ctxt.diag().add_diagnostic(
                     format!(
                         "Expected '{}' generic args but got '{}'",
                         arg_count,
-                        tys.len()
+                        args.len()
                     ),
                     loc,
                 );
             }
-            let remaining = tys.len().abs_diff(arg_count);
-            tys.iter()
-                .map(|arg| self.lower_type(arg))
-                .chain(std::iter::repeat_n(Type::Unknown, remaining))
-                .map(GenericArg::Type)
+            let remaining = args.len().abs_diff(arg_count);
+            args.iter()
+                .map(|arg| match arg {
+                    res::GenericArg::Region(region) => {
+                        GenericArg::Region(self.lower_region(region))
+                    }
+                    res::GenericArg::Type(ty) => GenericArg::Type(self.lower_type(ty)),
+                })
+                .chain(std::iter::repeat_n(
+                    GenericArg::Type(Type::Unknown),
+                    remaining,
+                ))
                 .collect()
         } else if let Some(infer) = self.infer {
             generics.instantiate(&mut infer.borrow_mut(), loc)

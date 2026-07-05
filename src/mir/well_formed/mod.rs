@@ -54,9 +54,10 @@ impl Visit for WellFormed<'_> {
                     };
                 }
                 super::PlaceProjection::Field(field_id) => {
+                    let field_ty = ty.field_type(*field_id, self.ctxt);
                     ty = self.assert_with_some(
                         &ty,
-                        |ty| ty.field_type(*field_id),
+                        |_| field_ty,
                         || format!("Cannot take a field of '{}'", ty),
                         loc,
                     )

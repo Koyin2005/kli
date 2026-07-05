@@ -194,6 +194,7 @@ pub enum ExprKind {
     Lambda(Box<Lambda>),
     Block(BlockBody, Option<Ident>),
     Deref(Box<Expr>),
+    Field(Box<Expr>, Ident),
     Bool(bool),
     Number(u64),
     Record(RecordExpr),
