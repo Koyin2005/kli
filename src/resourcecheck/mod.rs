@@ -765,7 +765,6 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     );
                     return;
                 }
-                // TODO : Allow borrowing from place with longer region
                 if !self.can_borrow_place_with_region(region, id) {
                     self.err.add_diagnostic(
                         format!(
