@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     resolved_ast::{
         BlockBody, BorrowExpr, DefId, Expr, ExprKind, FieldInit, FunctionDefId, Lambda,
-        LocalRegionId, Pattern, Place, PlaceKind, Var,
+        LocalRegionId, Pattern, Var,
     },
     src_loc::SrcLoc,
     typecheck::root::{FunctionCtxt, TypeCheck},
@@ -12,9 +12,9 @@ use crate::{
 };
 
 impl FunctionCtxt<'_> {
-    fn check_place(&self, place: &Place, expected_ty: Option<Type>) -> typed_ast::Place {
+    fn check_place(&self, place: &Expr, expected_ty: Option<Type>) -> typed_ast::Place {
         let (ty, kind) = match &place.kind {
-            &PlaceKind::Var(var) => (
+            &ExprKind::Var(var) => (
                 self.root().var_type(var.1).clone(),
                 if self
                     .root()
@@ -27,7 +27,7 @@ impl FunctionCtxt<'_> {
                     typed_ast::PlaceKind::Var(var)
                 },
             ),
-            PlaceKind::Deref(value) => {
+            ExprKind::Deref(value) => {
                 let value = self.check_expr(value, None);
                 (
                     match self
@@ -44,6 +44,24 @@ impl FunctionCtxt<'_> {
                     typed_ast::PlaceKind::Deref(Box::new(value)),
                 )
             }
+            ExprKind::Field(receiver, field) => {
+                let receiver = self.check_place(receiver, None);
+                if let Some((id, field_ty)) = self.check_field(place.loc, &receiver.ty, *field) {
+                    (
+                        field_ty,
+                        typed_ast::PlaceKind::Field(Box::new(receiver), id),
+                    )
+                } else {
+                    (Type::Unknown, typed_ast::PlaceKind::Invalid)
+                }
+            }
+            _ => {
+                self.root()
+                    .ctxt()
+                    .diag()
+                    .add_diagnostic("invalid place".to_string(), place.loc);
+                (Type::Unknown, typed_ast::PlaceKind::Invalid)
+            }
         };
         let ty = if let Some(expected) = expected_ty {
             self.root().unify(expected, ty, place.loc)
@@ -56,6 +74,36 @@ impl FunctionCtxt<'_> {
             kind,
         }
     }
+    fn check_field(
+        &self,
+        loc: SrcLoc,
+        reciever_ty: &Type,
+        name: crate::ident::Ident,
+    ) -> Option<(FieldId, Type)> {
+        let Some((field_id, field_type)) = (match reciever_ty {
+            Type::Record(fields) => fields.iter_enumerated().find_map(|(index, field)| {
+                (field.name == FieldName::Named(name.symbol)).then(|| (index, field.ty.clone()))
+            }),
+            &Type::Named(id, _, ref args) => {
+                let ctxt = self.root().ctxt();
+                ctxt.type_def(id)
+                    .fields()
+                    .iter_enumerated()
+                    .find_map(|(index, field)| {
+                        (field.name == name.symbol).then(|| (index, field.type_of(args, ctxt)))
+                    })
+            }
+            _ => None,
+        }) else {
+            self.root().ctxt().diag().add_diagnostic(
+                format!("'{}' does not have field '{}'", reciever_ty, name.symbol),
+                loc,
+            );
+            return None;
+        };
+        Some((field_id, field_type))
+    }
+
     fn check_for_loop(
         &self,
         loc: SrcLoc,
@@ -487,28 +535,6 @@ impl FunctionCtxt<'_> {
                 ty: Type::Bool,
                 kind: typed_ast::ExprKind::Bool(value),
             },
-            &ExprKind::Var(var) => {
-                let Var(var, id) = var;
-                let var_ty = self.root().var_type(id);
-                make_expr(
-                    var_ty.clone(),
-                    typed_ast::ExprKind::Load(typed_ast::Place {
-                        ty: var_ty,
-                        loc,
-                        kind: if self
-                            .root()
-                            .ctxt()
-                            .captures(self.id)
-                            .is_some_and(|captures| captures.captured(id))
-                        {
-                            typed_ast::PlaceKind::Upvar(self.id, Var(var, id))
-                        } else {
-                            typed_ast::PlaceKind::Var(Var(var, id))
-                        },
-                    }),
-                    loc,
-                )
-            }
             &ExprKind::Function(FunctionDefId(id), ref args) => {
                 let args = self.root().lower_generic_args_for(id, loc, args);
                 make_expr(
@@ -539,6 +565,14 @@ impl FunctionCtxt<'_> {
                     loc,
                     kind: typed_ast::ExprKind::Const(case_id, args),
                 }
+            }
+            ExprKind::Var(_) | ExprKind::Deref(_) | ExprKind::Field(..) => {
+                let place = self.check_place(expr, expected_ty);
+                return typed_ast::Expr {
+                    ty: place.ty.clone(),
+                    loc,
+                    kind: typed_ast::ExprKind::Load(place),
+                };
             }
             ExprKind::Print(arg) => {
                 let arg = arg.as_ref().map(|arg| Box::new(self.check_expr(arg, None)));
@@ -619,23 +653,6 @@ impl FunctionCtxt<'_> {
                     ty,
                     loc,
                     kind: typed_ast::ExprKind::List(elements),
-                }
-            }
-            ExprKind::Deref(reference) => {
-                let reference = self.check_expr(reference, None);
-                let pointee_ty = match reference.ty.clone().as_pointer_type() {
-                    Ok((PointerType::Raw | PointerType::Reference(..), ty)) => ty.clone(),
-                    Ok((p, ty)) => self.root().non_deref_error(&Type::pointer_type(p, ty), loc),
-                    Err(ty) => self.root().non_deref_error(&ty, loc),
-                };
-                typed_ast::Expr {
-                    ty: pointee_ty.clone(),
-                    loc,
-                    kind: typed_ast::ExprKind::Load(typed_ast::Place {
-                        ty: pointee_ty,
-                        loc: reference.loc,
-                        kind: typed_ast::PlaceKind::Deref(Box::new(reference)),
-                    }),
                 }
             }
             ExprKind::Lambda(lambda) => {

@@ -116,7 +116,8 @@ impl Builder<'_> {
                     .capture_index(var.1)
                     .unwrap(),
             )),
-
+            typed_ast::PlaceKind::Field(place, field) => self.lower_place(place).with_field(*field),
+            typed_ast::PlaceKind::Invalid => unreachable!("cannot lower invalid place"),
             typed_ast::PlaceKind::Deref(value) => self.place(value).with_deref(),
         }
     }

@@ -1,6 +1,6 @@
 use crate::resolved_ast::{
-    BlockBody, Expr, ExprKind, GenericArgs, LocalRegionId, Param, Pattern, Place, PlaceKind,
-    Region, Stmt, StmtKind, Type, TypeKind, Var,
+    BlockBody, Expr, ExprKind, GenericArgs, LocalRegionId, Param, Pattern, Region, Stmt, StmtKind,
+    Type, TypeKind, Var,
 };
 
 pub trait Visitor {
@@ -71,12 +71,6 @@ pub trait Visitor {
             StmtKind::Expr(expr) => self.visit_expr(expr),
         }
     }
-    fn super_visit_place(&mut self, place: &Place) {
-        match &place.kind {
-            PlaceKind::Var(_) => (),
-            PlaceKind::Deref(expr) => self.visit_expr(expr),
-        }
-    }
     fn super_visit_expr(&mut self, expr: &Expr) {
         match &expr.kind {
             ExprKind::Block(block_body, id) => self.visit_block(block_body, *id),
@@ -105,16 +99,16 @@ pub trait Visitor {
                 self.visit_expr(expr2);
             }
             ExprKind::Borrow(borrow_expr) => {
-                self.visit_place(&borrow_expr.place);
+                self.visit_expr(&borrow_expr.place);
             }
             ExprKind::Panic(ty) => {
                 if let Some(ty) = ty {
                     self.visit_type(ty)
                 }
             }
-            ExprKind::Deref(expr) => self.visit_expr(expr),
+            ExprKind::Deref(expr) | ExprKind::Field(expr, _) => self.visit_expr(expr),
             ExprKind::Assign(place, expr) => {
-                self.visit_place(place);
+                self.visit_expr(place);
                 self.visit_expr(expr);
             }
             ExprKind::For(for_expr) => {
@@ -151,7 +145,7 @@ pub trait Visitor {
                 }
             }
             ExprKind::VariantCase(_, generic_args) => self.visit_generic_args(generic_args),
-            ExprKind::AddressOf(place) => self.visit_place(place),
+            ExprKind::AddressOf(place) => self.visit_expr(place),
         }
     }
     fn visit_pattern(&mut self, pattern: &Pattern) {
@@ -172,9 +166,6 @@ pub trait Visitor {
     }
     fn visit_stmt(&mut self, stmt: &Stmt) {
         self.super_visit_stmt(stmt);
-    }
-    fn visit_place(&mut self, place: &Place) {
-        self.super_visit_place(place);
     }
     fn visit_expr(&mut self, expr: &Expr) {
         self.super_visit_expr(expr);

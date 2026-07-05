@@ -41,6 +41,8 @@ pub enum PlaceKind {
     Upvar(DefId, Var),
     Var(Var),
     Deref(Box<Expr>),
+    Field(Box<Place>, FieldId),
+    Invalid,
 }
 #[derive(Debug, Clone)]
 pub struct Capture {

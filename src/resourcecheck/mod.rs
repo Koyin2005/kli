@@ -168,6 +168,8 @@ impl<'ctxt> ResourceCheck<'ctxt> {
     fn place_mutable(&self, place: &Place) -> Mutable {
         match &place.kind {
             PlaceKind::Var(var) | PlaceKind::Upvar(_, var) => self.vars[&var.1].mutable,
+            PlaceKind::Invalid => Mutable::Mutable,
+            PlaceKind::Field(place, _) => self.place_mutable(place),
             PlaceKind::Deref(_) => {
                 let mut place = place;
                 while let PlaceKind::Deref(value) = &place.kind {
@@ -252,6 +254,8 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     None
                 }
             }
+            PlaceKind::Field(ref place, _) => self.var_of(place),
+            PlaceKind::Invalid => None,
         }
     }
     fn check_place_use(&mut self, place: &Place, place_use: PlaceUse) {
@@ -267,6 +271,10 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     }
                 }
             }
+            PlaceKind::Field(inner, _) => {
+                self.check_place_use(inner, place_use);
+            }
+            PlaceKind::Invalid => (),
             PlaceKind::Deref(expr) => match &expr.kind {
                 ExprKind::Load(place) => {
                     let Ok((_, ref ty)) = place.ty.clone().as_pointer_type() else {
@@ -455,7 +463,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                 let var = match &place.kind {
                     PlaceKind::Upvar(_, var) => var,
                     PlaceKind::Var(var) => var,
-                    PlaceKind::Deref(_) => {
+                    PlaceKind::Deref(_) | PlaceKind::Field(..) | PlaceKind::Invalid => {
                         self.err
                             .add_diagnostic("Cannot borrow this place".to_string(), place.loc);
                         return;

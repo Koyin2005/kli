@@ -41,8 +41,9 @@ where
     V: Visitor + ?Sized,
 {
     match &place.kind {
-        PlaceKind::Var(_) | PlaceKind::Upvar(..) => (),
+        PlaceKind::Var(_) | PlaceKind::Upvar(..) | PlaceKind::Invalid => (),
         PlaceKind::Deref(value) => v.visit_expr(value),
+        PlaceKind::Field(place, _) => v.visit_place(place),
     }
 }
 pub fn walk_stmt<V>(v: &mut V, stmt: &Stmt)

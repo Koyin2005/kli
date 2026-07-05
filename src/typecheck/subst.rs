@@ -94,7 +94,8 @@ impl<'a> TypeSubst<'a> {
     pub fn subst_place(&mut self, place: &mut Place) {
         match &mut place.kind {
             PlaceKind::Deref(expr) => self.subst_expr(expr),
-            PlaceKind::Var(..) | PlaceKind::Upvar(..) => (),
+            PlaceKind::Field(place, _) => self.subst_place(place),
+            PlaceKind::Var(..) | PlaceKind::Upvar(..) | PlaceKind::Invalid => (),
         }
         self.subst_type(&mut place.ty);
     }

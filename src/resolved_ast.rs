@@ -26,7 +26,7 @@ impl Var {
 #[derive(Debug)]
 pub struct BorrowExpr {
     pub mutable: Mutable,
-    pub place: Place,
+    pub place: Expr,
     pub region: Region,
 }
 #[derive(Debug)]
@@ -38,17 +38,6 @@ pub struct Lambda {
     pub params: Box<[Param]>,
     pub body: Expr,
 }
-#[derive(Debug)]
-pub struct Place {
-    pub loc: SrcLoc,
-    pub kind: PlaceKind,
-}
-#[derive(Debug)]
-pub enum PlaceKind {
-    Var(Var),
-    Deref(Box<Expr>),
-}
-
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Builtin {
     Allocate,
@@ -206,7 +195,7 @@ pub enum ExprKind {
     Panic(Option<Box<Type>>),
     Lambda(Rc<Lambda>),
     Deref(Box<Expr>),
-    Assign(Place, Box<Expr>),
+    Assign(Box<Expr>, Box<Expr>),
     For(Box<ForExpr>),
     Case(Box<Expr>, Box<[CaseArm]>),
     Print(Option<Box<Expr>>),
@@ -214,7 +203,8 @@ pub enum ExprKind {
     Call(Box<Expr>, Box<[Expr]>),
     Record(Vec<FieldInit>),
     VariantCase(DefId, Box<GenericArgs>),
-    AddressOf(Box<Place>),
+    AddressOf(Box<Expr>),
+    Field(Box<Expr>, Ident),
 }
 #[derive(Debug, Clone, Copy)]
 pub enum RegionKind {

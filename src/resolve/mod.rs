@@ -17,6 +17,7 @@ pub struct ResolveErrored;
 enum NameResolutionError {
     NotInScope,
     InvalidPathStart,
+    VariableField(SrcLoc, res::Var, Vec<Ident>),
 }
 struct ModuleInfo {
     env: Scope,
@@ -566,16 +567,6 @@ impl Resolve {
                 .expect("There should be a pushed scope"),
         )
     }
-    fn path_error(&mut self, path: &ast::Path, loc: SrcLoc, error: NameResolutionError) {
-        match error {
-            NameResolutionError::NotInScope => {
-                self.path_not_in_scope_error(path, loc);
-            }
-            NameResolutionError::InvalidPathStart => {
-                self.invalid_path_start_error(path, loc);
-            }
-        }
-    }
     fn resolve_pattern(&mut self, pattern: ast::Pattern) -> res::Pattern {
         let loc = pattern.loc;
         let kind = match pattern.kind {
@@ -617,50 +608,6 @@ impl Resolve {
         let pattern = self.resolve_pattern(let_binding.pattern);
         res::LetBinding { pattern, ty, value }
     }
-    fn resolve_place(&mut self, place: ast::Expr) -> Option<res::Place> {
-        let loc = place.loc;
-        match place.kind {
-            ast::ExprKind::Deref(expr) => Some(res::Place {
-                loc,
-                kind: res::PlaceKind::Deref(Box::new(self.resolve_expr(*expr))),
-            }),
-            ast::ExprKind::Path(path, args) => {
-                let kind = match self.resolve_path(&path) {
-                    Err(err) => {
-                        self.resolve_generic_args(args);
-                        self.path_error(&path, loc, err);
-                        return None;
-                    }
-                    Ok(Res::Var(var)) => {
-                        let name = path.expect_head().symbol;
-                        self.error_on_generic_args("var", name, loc, args);
-                        res::PlaceKind::Var(res::Var(name, var))
-                    }
-                    Ok(
-                        Res::Builtin(_)
-                        | Res::Function(..)
-                        | Res::Param(_)
-                        | Res::LocalRegion(_)
-                        | Res::Module(_)
-                        | Res::TypeAlias(_)
-                        | Res::VariantCase(..)
-                        | Res::TypeDef(_),
-                    ) => {
-                        self.diag.add_diagnostic(
-                            format!("Can't use '{}' as place", path),
-                            path.expect_head().loc,
-                        );
-                        return None;
-                    }
-                };
-                Some(res::Place { loc, kind })
-            }
-            _ => {
-                self.diag.add_diagnostic("Invalid place".to_string(), loc);
-                None
-            }
-        }
-    }
     fn resolve_stmt(&mut self, stmt: ast::Stmt) -> res::Stmt {
         let loc = stmt.loc;
         match stmt.kind {
@@ -691,11 +638,12 @@ impl Resolve {
         }
     }
     fn resolve_path(&mut self, path: &Path) -> Result<Res, NameResolutionError> {
-        let Some(head) = self.resolve_name(path.head().symbol) else {
+        let head_seg = *path.head();
+        let Some(head) = self.resolve_name(head_seg.symbol) else {
             return Err(NameResolutionError::NotInScope);
         };
         let mut curr = head;
-        for segment in path.segments_iter().into_iter().skip(1) {
+        for (index, &segment) in path.segments_iter().into_iter().enumerate().skip(1) {
             curr = match curr {
                 Res::Module(module) => {
                     let env = &self.modules[&module].env;
@@ -718,10 +666,16 @@ impl Resolve {
                     };
                     Res::VariantCase(ModuleNodeId(id.0, cases[case].id))
                 }
+                Res::Var(var) => {
+                    return Err(NameResolutionError::VariableField(
+                        head_seg.loc,
+                        res::Var(head_seg.symbol, var),
+                        path.segments()[index..].to_vec(),
+                    ));
+                }
                 Res::Builtin(_)
                 | Res::Function(_)
                 | Res::Param(_)
-                | Res::Var(_)
                 | Res::LocalRegion(_)
                 | Res::TypeAlias(_)
                 | Res::VariantCase(..) => return Err(NameResolutionError::InvalidPathStart),
@@ -744,6 +698,19 @@ impl Resolve {
                     }
                     NameResolutionError::InvalidPathStart => {
                         self.invalid_path_start_error(&path, loc);
+                    }
+                    NameResolutionError::VariableField(loc, var, fields) => {
+                        let expr = res::Expr {
+                            loc,
+                            kind: res::ExprKind::Var(var),
+                        };
+                        return fields
+                            .into_iter()
+                            .fold(expr, |expr, field| res::Expr {
+                                loc: expr.loc,
+                                kind: res::ExprKind::Field(Box::new(expr), field),
+                            })
+                            .kind;
                     }
                 }
                 res::ExprKind::Err
@@ -802,15 +769,7 @@ impl Resolve {
                 )
             }),
             ast::ExprKind::AddressOf(expr) => {
-                let Some(place) = self.resolve_place(*expr) else {
-                    self.diag
-                        .add_diagnostic("cannot take address of non place".to_string(), loc);
-                    return res::Expr {
-                        loc,
-                        kind: res::ExprKind::Err,
-                    };
-                };
-                res::ExprKind::AddressOf(Box::new(place))
+                res::ExprKind::AddressOf(Box::new(self.resolve_expr(*expr)))
             }
             ast::ExprKind::Unit => res::ExprKind::Unit,
             ast::ExprKind::String(value) => res::ExprKind::String(value.into()),
@@ -883,15 +842,9 @@ impl Resolve {
                 res::ExprKind::Lambda(lambda)
             }),
             ast::ExprKind::Assign(place, value) => {
-                let place = self.resolve_place(*place);
+                let place = self.resolve_expr(*place);
                 let value = self.resolve_expr(*value);
-                let Some(place) = place else {
-                    return res::Expr {
-                        loc,
-                        kind: res::ExprKind::Err,
-                    };
-                };
-                res::ExprKind::Assign(place, Box::new(value))
+                res::ExprKind::Assign(Box::new(place), Box::new(value))
             }
             ast::ExprKind::Borrow(borrow_expr) => {
                 let BorrowExpr {
@@ -899,14 +852,8 @@ impl Resolve {
                     expr,
                     region,
                 } = *borrow_expr;
-                let place = self.resolve_place(expr);
+                let place = self.resolve_expr(expr);
                 let region = self.resolve_region(region);
-                let Some(place) = place else {
-                    return res::Expr {
-                        loc,
-                        kind: res::ExprKind::Err,
-                    };
-                };
                 res::ExprKind::Borrow(Box::new(res::BorrowExpr {
                     mutable,
                     place,
