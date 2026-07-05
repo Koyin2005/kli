@@ -22,7 +22,8 @@ where
         PatternKind::Binding(..)
         | PatternKind::Err
         | PatternKind::Bool(_)
-        | PatternKind::Int(..) => (),
+        | PatternKind::Int(..)
+        | PatternKind::Unit => (),
         PatternKind::Ref(pattern) => v.visit_pattern(pattern),
         PatternKind::Case(.., inner) => {
             if let Some(inner) = inner {

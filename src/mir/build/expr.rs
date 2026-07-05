@@ -151,7 +151,9 @@ impl Builder<'_> {
             typed_ast::PatternKind::Ref(pattern) => {
                 self.assign_place_to_pattern(pattern, place.with_deref());
             }
-            typed_ast::PatternKind::Bool(_) | typed_ast::PatternKind::Int(_) => (),
+            typed_ast::PatternKind::Bool(_)
+            | typed_ast::PatternKind::Int(_)
+            | typed_ast::PatternKind::Unit => (),
             typed_ast::PatternKind::Record(fields) => {
                 for field in fields {
                     self.assign_place_to_pattern(

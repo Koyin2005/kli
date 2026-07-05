@@ -29,6 +29,7 @@ impl Pat {
     }
     pub fn format(&self, ctxt: CtxtRef<'_>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.constructor {
+            Constructor::Unit => f.write_str("()"),
             Constructor::Missing => f.write_str("missing"),
             Constructor::Bool(value) => {
                 if value {

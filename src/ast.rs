@@ -81,6 +81,7 @@ pub enum PatternKind {
     Case(Ident, Option<Box<Pattern>>),
     Int(u64),
     Record(Vec<PatternField>),
+    Unit,
 }
 #[derive(Debug)]
 pub struct CaseArm {

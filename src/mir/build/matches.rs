@@ -156,7 +156,7 @@ impl Builder<'_> {
                 },
             }],
             PatternKind::Ref(pattern) => self.match_tests(place.with_deref(), pattern),
-            PatternKind::Binding(..) | PatternKind::Err => Vec::new(),
+            PatternKind::Binding(..) | PatternKind::Err | PatternKind::Unit => Vec::new(),
             PatternKind::Record(pattern_fields) => pattern_fields
                 .iter()
                 .flat_map(|field| {

@@ -12,7 +12,8 @@ pub trait Visitor {
     }
     fn super_visit_pattern(&mut self, pattern: &Pattern) {
         match &pattern.kind {
-            crate::resolved_ast::PatternKind::Int(_)
+            crate::resolved_ast::PatternKind::Unit
+            | crate::resolved_ast::PatternKind::Int(_)
             | crate::resolved_ast::PatternKind::Bool(_) => {}
             &crate::resolved_ast::PatternKind::Binding(.., name, var) => {
                 self.visit_var_def(Var(name.symbol, var))

@@ -13,6 +13,11 @@ pub fn pattern_to_pat(ctxt: CtxtRef<'_>, pattern: &Pattern) -> Pat {
             constructor: Constructor::Int(*value),
             fields: Vec::new(),
         },
+        PatternKind::Unit => Pat {
+            ty,
+            constructor: Constructor::Unit,
+            fields: Vec::new(),
+        },
         PatternKind::Ref(inner) => Pat {
             ty,
             constructor: Constructor::Ref,

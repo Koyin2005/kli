@@ -593,6 +593,7 @@ impl Resolve {
     fn resolve_pattern(&mut self, pattern: ast::Pattern) -> res::Pattern {
         let loc = pattern.loc;
         let kind = match pattern.kind {
+            ast::PatternKind::Unit => res::PatternKind::Unit,
             ast::PatternKind::Int(value) => res::PatternKind::Int(match value.try_into() {
                 Ok(number) => number,
                 Err(_) => {

@@ -27,6 +27,14 @@ impl FunctionCtxt<'_> {
                     kind: typed_ast::PatternKind::Int(value),
                 }
             }
+            PatternKind::Unit => {
+                let _ = root.unify(expected_type, Type::Unit, pattern.loc);
+                typed_ast::Pattern {
+                    ty: Type::Unit,
+                    loc,
+                    kind: typed_ast::PatternKind::Unit,
+                }
+            }
             PatternKind::Case(name, ref inner) => {
                 let (id, ty_name, args) = match expected_type {
                     Type::Named(id, ty_name, args) => (id, ty_name, args),

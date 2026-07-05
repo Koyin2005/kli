@@ -187,6 +187,18 @@ impl Parser {
     fn parse_pattern(&mut self) -> Result<Pattern, ParseError> {
         let loc = self.current_loc();
         match self.peek_token().kind {
+            TokenKind::LeftParen => {
+                self.next_token();
+                if self.matches_token(&TokenKind::RightParen) {
+                    return Ok(Pattern {
+                        loc,
+                        kind: PatternKind::Unit,
+                    });
+                }
+                let pattern = self.parse_pattern()?;
+                self.expect(&TokenKind::RightParen)?;
+                Ok(pattern)
+            }
             TokenKind::Number(number) => {
                 self.next_token();
                 Ok(Pattern {

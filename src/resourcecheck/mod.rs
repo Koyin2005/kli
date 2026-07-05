@@ -269,7 +269,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
     }
     fn check_pattern(&mut self, pattern: &Pattern, in_ref: bool) {
         match &pattern.kind {
-            PatternKind::Bool(_) | PatternKind::Int(_) | PatternKind::Err => (),
+            PatternKind::Bool(_) | PatternKind::Int(_) | PatternKind::Err | PatternKind::Unit => (),
             PatternKind::Record(fields) => {
                 for field in fields {
                     self.check_pattern(&field.pattern, in_ref);

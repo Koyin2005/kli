@@ -241,6 +241,7 @@ pub enum PatternKind {
     Case(Ident, Option<Box<Pattern>>),
     Binding(Option<Mutable>, Mutable, Ident, VarId),
     Record(Box<[PatternField]>),
+    Unit,
 }
 #[derive(Debug)]
 pub struct Pattern {
