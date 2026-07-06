@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 
 use crate::collect::{CtxtRef, Generics};
+use crate::lang_items::LangItem;
 use crate::resolved_ast::{self as res, DefId, TypeName};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
@@ -173,17 +174,9 @@ impl<'a> Lower<'a> {
                     Type::pointer(ty)
                 }
                 TypeName::Box => {
-                    let args = self.lower_generic_args_with(Generics::default(), 1, ty.loc, args);
-                    let ty = if let Ok([GenericArg::Type(ty)]) = <[_; _]>::try_from(args) {
-                        ty
-                    } else {
-                        self.ctxt.diag().add_diagnostic(
-                            "Expected a 'type' generic arg for 'box'".to_string(),
-                            ty.loc,
-                        );
-                        Type::Unknown
-                    };
-                    Type::Box(Box::new(ty))
+                    let id = self.ctxt.lang_items().expect(LangItem::Box);
+                    let args = self.lower_generic_args(id, ty.loc, args);
+                    Type::Named(id, self.ctxt.expect_ident(id).symbol, args)
                 }
             },
             res::TypeKind::List(ty) => Type::List(Box::new(self.lower_type(ty))),

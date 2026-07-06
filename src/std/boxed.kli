@@ -1,3 +1,4 @@
+@lang_item("box")
 type Box[T] = {
     inner : ptr[T]
 }
