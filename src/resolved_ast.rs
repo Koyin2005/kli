@@ -200,7 +200,7 @@ pub enum ExprKind {
     VariantCase(DefId, Box<GenericArgs>),
     AddressOf(Box<Expr>),
     Field(Box<Expr>, Ident),
-    NamedRecord(DefId, Box<GenericArgs>, Box<[FieldInit]>),
+    NamedRecord(TypeName, Box<GenericArgs>, Box<[FieldInit]>),
 }
 #[derive(Debug, Clone, Copy)]
 pub enum RegionKind {

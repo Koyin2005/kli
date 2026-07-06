@@ -10,7 +10,7 @@ use crate::{
     src_loc::SrcLoc,
     typecheck::root::{FunctionCtxt, TypeCheck},
     typed_ast::{self, Capture, FieldId, RecordFieldInit},
-    types::{FieldName, FunctionSig, FunctionType, PointerType, RecordField, Type},
+    types::{FieldName, FunctionSig, FunctionType, GenericArgs, PointerType, RecordField, Type},
 };
 
 impl FunctionCtxt<'_> {
@@ -713,25 +713,40 @@ impl FunctionCtxt<'_> {
                     kind: typed_ast::ExprKind::Assign(Box::new(place), Box::new(value)),
                 }
             }
-            ExprKind::NamedRecord(id, args, fields) => {
-                let ty_def = self.root().ctxt().type_def(*id);
-                let args = self.root().lower_generic_args_for(*id, loc, args);
-                let field_info = match ty_def.kind {
-                    TypeDefKind::Record(ref fields) => fields,
-                    TypeDefKind::Variant(_) => {
-                        self.root().ctxt().diag().add_diagnostic(
-                            format!("Cannot record init 'variant {}'", ty_def.name),
-                            loc,
-                        );
-                        &IndexVec::new()
+            &ExprKind::NamedRecord(name, ref args, ref fields) => {
+                let (info, args) = match self.root().lower_type_name(loc, name, args) {
+                    Type::Named(id, name, args) => (Ok((id, name)), args),
+                    ty => {
+                        self.ctxt()
+                            .diag()
+                            .add_diagnostic(format!("Cannot construct '{}'", ty), loc);
+                        (Err(ty), GenericArgs::new())
                     }
                 };
-                if !self.ctxt().same_module(*id, self.id) && !self.ctxt().is_opaque(self.id) {
-                    self.ctxt().diag().add_diagnostic(
-                        format!("Cannot construct '{}' in this scope", self.ctxt().display(*id)),
-                        loc,
-                    );
-                }
+                let field_info = if let Ok((id, _)) = info {
+                    if !self.ctxt().same_module(id, self.id) && !self.ctxt().is_opaque(self.id) {
+                        self.ctxt().diag().add_diagnostic(
+                            format!(
+                                "Cannot construct '{}' in this scope",
+                                self.ctxt().display(id)
+                            ),
+                            loc,
+                        );
+                    }
+                    let ty_def = self.root().ctxt().type_def(id);
+                    match ty_def.kind {
+                        TypeDefKind::Record(fields) => fields,
+                        TypeDefKind::Variant(_) => {
+                            self.root().ctxt().diag().add_diagnostic(
+                                format!("Cannot record init 'variant {}'", ty_def.name),
+                                loc,
+                            );
+                            IndexVec::new()
+                        }
+                    }
+                } else {
+                    IndexVec::new()
+                };
 
                 let field_map = field_info
                     .iter_enumerated()
@@ -771,10 +786,17 @@ impl FunctionCtxt<'_> {
                     seen_fields,
                     field_info.iter().map(|field| FieldName::Named(field.name)),
                 );
-                typed_ast::Expr {
-                    ty: Type::Named(*id, ty_def.name, args.clone()),
-                    loc,
-                    kind: typed_ast::ExprKind::NamedRecord(*id, args, fields),
+                match info {
+                    Ok((id, name)) => typed_ast::Expr {
+                        ty: Type::Named(id, name, args.clone()),
+                        loc,
+                        kind: typed_ast::ExprKind::NamedRecord(id, args, fields),
+                    },
+                    Err(ty) => typed_ast::Expr {
+                        ty,
+                        loc,
+                        kind: typed_ast::ExprKind::Err,
+                    },
                 }
             }
         };

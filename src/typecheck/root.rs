@@ -49,6 +49,14 @@ impl<'ctxt> RootCtxt<'ctxt> {
     pub(super) fn lower_type(&self, ty: &res::Type) -> Type {
         self.lower().lower_type(ty)
     }
+    pub(super) fn lower_type_name(
+        &self,
+        loc: SrcLoc,
+        ty: res::TypeName,
+        args: &res::GenericArgs,
+    ) -> Type {
+        self.lower().lower_type_name(loc, ty, args)
+    }
     pub(super) fn lower_generic_args_for(
         &self,
         id: DefId,

@@ -861,16 +861,7 @@ impl Resolve {
                 res::ExprKind::Case(Box::new(matched), arms)
             }
             ast::ExprKind::NamedRecord(path, fields) => {
-                let ty_def = self
-                    .resolve_type_path(&path.path, loc)
-                    .and_then(|name| match name {
-                        res::TypeName::UserDefined(id) => Some(id),
-                        _ => {
-                            self.diag
-                                .add_diagnostic(format!("Can't construct '{}'", path.path), loc);
-                            None
-                        }
-                    });
+                let ty_def = self.resolve_type_path(&path.path, loc);
                 let generic_args = self.resolve_generic_args(path.generic_args);
                 let fields = fields
                     .into_iter()
@@ -879,13 +870,17 @@ impl Resolve {
                         value: self.resolve_expr(field.value),
                     })
                     .collect::<Vec<_>>();
-                let Some(id) = ty_def else {
+                let Some(type_name) = ty_def else {
                     return res::Expr {
                         loc,
                         kind: res::ExprKind::Err,
                     };
                 };
-                res::ExprKind::NamedRecord(id, Box::new(generic_args), fields.into_boxed_slice())
+                res::ExprKind::NamedRecord(
+                    type_name,
+                    Box::new(generic_args),
+                    fields.into_boxed_slice(),
+                )
             }
             ast::ExprKind::For(pattern, iterator, body) => {
                 let iterator = self.resolve_expr(*iterator);
