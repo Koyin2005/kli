@@ -143,7 +143,6 @@ fn split_constructors(
         | Type::Char
         | Type::Byte
         | Type::Param(..)
-        | Type::Box(..)
         | Type::List(..)
         | Type::Function(..)
         | Type::Array(..)

@@ -120,7 +120,6 @@ impl<'ctxt> RootCtxt<'ctxt> {
             | Type::List(_)
             | Type::String
             | Type::Function(_)
-            | Type::Box(_)
             | Type::Record(_)
             | Type::RawPointer(_)
             | Type::Byte

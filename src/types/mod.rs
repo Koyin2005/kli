@@ -179,7 +179,6 @@ pub enum Type {
     Char,
     Byte,
     Param(Symbol, usize),
-    Box(Box<Type>),
     List(Box<Type>),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
@@ -311,14 +310,27 @@ impl Type {
             Mutable::Mutable => Self::Mut(region, Box::new(self)),
         }
     }
-    pub fn as_pointer_type(self) -> Result<(PointerType, Self), Self> {
+    pub fn into_pointer_type(self, ctxt: CtxtRef<'_>) -> Result<(PointerType, Self), Self> {
         match self {
             Self::RawPointer(ty) => Ok((PointerType::Raw, *ty)),
-            Self::Box(ty) => Ok((PointerType::Box, *ty)),
+            Self::Named(..) => Ok((PointerType::Box, self.into_box(ctxt)?)),
             Self::Imm(region, ty) => Ok((PointerType::Reference(region, Mutable::Immutable), *ty)),
             Self::Mut(region, ty) => Ok((PointerType::Reference(region, Mutable::Mutable), *ty)),
             _ => Err(self),
         }
+    }
+    pub fn into_box(self, ctxt: CtxtRef<'_>) -> Result<Self, Self> {
+        if self.as_box(ctxt).is_none() {
+            return Err(self);
+        }
+        let Self::Named(_, _, args) = self else {
+            return Err(self);
+        };
+        let [arg] = args.try_into().unwrap();
+        let GenericArg::Type(ty) = arg else {
+            unreachable!()
+        };
+        Ok(ty)
     }
     pub fn as_box(&self, ctxt: CtxtRef<'_>) -> Option<&Type> {
         use crate::lang_items::LangItem;
@@ -338,7 +350,6 @@ impl Type {
     pub fn pointer_kind(&self, ctxt: CtxtRef<'_>) -> Option<PointerType> {
         match self {
             Self::RawPointer(_) => Some(PointerType::Raw),
-            Self::Box(_) => Some(PointerType::Box),
             Self::Named(..) if self.as_box(ctxt).is_some() => Some(PointerType::Box),
             &Self::Imm(region, _) => Some(PointerType::Reference(region, Mutable::Immutable)),
             &Self::Mut(region, _) => Some(PointerType::Reference(region, Mutable::Mutable)),
@@ -396,7 +407,6 @@ impl Type {
                 ..
             })
             | Type::String
-            | Type::Box(_)
             | Type::Param(..)
             | Type::List(_) => true,
             Type::Record(fields) => fields.iter().any(|field| field.ty.is_resource(ctxt)),
@@ -433,8 +443,7 @@ impl Type {
             | Type::String
             | Type::Char
             | Type::Byte
-            | Type::Param(..)
-            | Type::Box(_) => ControlFlow::Continue(()),
+            | Type::Param(..) => ControlFlow::Continue(()),
             Type::List(ty) | Type::RawPointer(ty) | Type::Array(ty, _) => {
                 ty.visit(visit_ty, visit_region)
             }
@@ -497,11 +506,6 @@ impl Display for Type {
             Type::String => f.pad("string"),
             Type::Infer(_) => f.pad("_"),
             &Type::Param(name, _) => write!(f, "{}", name),
-            Type::Box(ty) => {
-                f.pad("box[")?;
-                write!(f, "{}", ty)?;
-                f.pad("]")
-            }
             Type::List(ty) => {
                 f.pad("list[")?;
                 write!(f, "{}", ty)?;
@@ -554,7 +558,6 @@ pub trait TypeMap {
             | Type::Param(..) => Ok(ty),
             Type::Array(ty, count) => Ok(Type::Array(Box::new(self.map_type(*ty)?), count)),
             Type::RawPointer(ty) => Ok(Type::RawPointer(Box::new(self.map_type(*ty)?))),
-            Type::Box(ty) => Ok(Type::Box(Box::new(self.map_type(*ty)?))),
             Type::List(ty) => Ok(Type::List(Box::new(self.map_type(*ty)?))),
             Type::Imm(region, ty) => Ok(Type::Imm(
                 self.map_region(region)?,

@@ -317,9 +317,10 @@ impl Visit for WellFormed<'_> {
             super::Rvalue::Allocate { .. } => (),
             super::Rvalue::Cast(cast_kind, operand) => match cast_kind {
                 CastKind::PointerCast(pointer_cast) => {
+                    let ctxt = self.ctxt;
                     let (pointer_type, _) = self.assert_with_some(
-                        self.body.type_of_operand(operand, self.ctxt),
-                        |ty| ty.as_pointer_type().ok(),
+                        self.body.type_of_operand(operand, ctxt),
+                        |ty| ty.into_pointer_type(ctxt).ok(),
                         || "Cannot take a non pointer type".to_string(),
                         loc,
                     );

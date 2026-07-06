@@ -23,7 +23,6 @@ pub fn constructors_of_ty(ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Constructor> {
 
         Type::Unit => vec![Constructor::Unit],
         Type::Char
-        | Type::Box(_)
         | Type::String
         | Type::Unknown
         | Type::Param(..)

@@ -357,7 +357,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
     }
     fn type_of(&self, place: &MovePlace) -> Type {
         match place {
-            MovePlace::Deref(inner) => self.type_of(inner).as_pointer_type().unwrap().1,
+            MovePlace::Deref(inner) => self.type_of(inner).into_pointer_type(self.ctxt).unwrap().1,
             MovePlace::FieldOf(inner, field) => {
                 self.type_of(inner).field_info(*field, self.ctxt).unwrap().0
             }
@@ -368,7 +368,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
         match path {
             PlacePath::Deref(inner) => {
                 self.type_of_path(self.place_map.place_info[inner].place)
-                    .as_pointer_type()
+                    .into_pointer_type(self.ctxt)
                     .unwrap()
                     .1
             }
@@ -445,7 +445,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             }
             MovePlace::Deref(inner) => {
                 let (inner_ty, mut inner_str) = self.format_move_place(inner);
-                let ty = inner_ty.as_pointer_type().unwrap().1;
+                let ty = inner_ty.into_pointer_type(self.ctxt).unwrap().1;
                 inner_str.push('^');
                 (ty, inner_str)
             }

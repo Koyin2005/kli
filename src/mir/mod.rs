@@ -361,7 +361,7 @@ impl Body {
     ) -> Type {
         match projection {
             PlaceProjection::Deref => ty
-                .as_pointer_type()
+                .into_pointer_type(ctxt)
                 .ok()
                 .and_then(|(pointer, ty)| match pointer {
                     PointerType::Raw | PointerType::Reference(..) => Some(ty),
@@ -421,8 +421,10 @@ impl Body {
                 BinaryOp::Unchecked(_) | BinaryOp::Wrapping(_) => Type::Int,
                 BinaryOp::Offset => {
                     let (left, _) = left_and_right.as_ref();
-                    let (PointerType::Raw, ty) =
-                        self.type_of_operand(left, ctxt).as_pointer_type().unwrap()
+                    let (PointerType::Raw, ty) = self
+                        .type_of_operand(left, ctxt)
+                        .into_pointer_type(ctxt)
+                        .unwrap()
                     else {
                         unreachable!("should be a raw pointer")
                     };
