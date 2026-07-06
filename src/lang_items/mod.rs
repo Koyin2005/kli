@@ -6,16 +6,12 @@ use crate::{
 pub enum LangItem {
     Box,
     ArrayList,
-    ArrayListNew,
-    ArrayListPush,
 }
 impl LangItem {
     pub const fn name(&self) -> &'static str {
         match self {
             Self::Box => "box",
             Self::ArrayList => "array_list",
-            Self::ArrayListNew => "array_list_new",
-            Self::ArrayListPush => "array_list_push",
         }
     }
     pub fn with_name(name: &str) -> Option<Self> {
@@ -23,12 +19,10 @@ impl LangItem {
             .into_iter()
             .find(|&item| item.name() == name)
     }
-    pub const COUNT: usize = 4;
+    pub const COUNT: usize = 2;
     pub const ALL_LANG_ITEMS: [LangItem; Self::COUNT] = [
         LangItem::Box,
         LangItem::ArrayList,
-        LangItem::ArrayListNew,
-        LangItem::ArrayListPush,
     ];
 }
 #[derive(Clone, Copy)]
