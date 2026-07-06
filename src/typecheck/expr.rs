@@ -49,7 +49,12 @@ impl FunctionCtxt<'_> {
             }
             ExprKind::Field(receiver, field) => {
                 let receiver = self.check_place(receiver, None);
-                if let Some((id, field_ty)) = self.check_field(place.loc, &receiver.ty, *field) {
+                if let Some((id, named_info, field_ty)) =
+                    self.check_field(place.loc, &receiver.ty, *field)
+                {
+                    if let Some((_, field_id)) = named_info {
+                        let _ = self.check_field_visibility(field_id, place.loc);
+                    }
                     (
                         field_ty,
                         typed_ast::PlaceKind::Field(Box::new(receiver), id),
@@ -82,31 +87,33 @@ impl FunctionCtxt<'_> {
         loc: SrcLoc,
         reciever_ty: &Type,
         name: crate::ident::Ident,
-    ) -> Option<(FieldId, Type)> {
-        let Some((field_id, field_type)) = (match reciever_ty {
+    ) -> Option<(FieldId, Option<(DefId, DefId)>, Type)> {
+        let field_info = match reciever_ty {
             Type::Record(fields) => fields.iter_enumerated().find_map(|(index, field)| {
-                (field.name == FieldName::Named(name.symbol)).then(|| (index, field.ty.clone()))
+                (field.name == FieldName::Named(name.symbol))
+                    .then(|| (index, None, field.ty.clone()))
             }),
             &Type::Named(id, _, ref args) => {
                 let ctxt = self.root().ctxt();
                 match ctxt.type_def(id).kind {
                     TypeDefKind::Record(ref fields) => {
                         fields.iter_enumerated().find_map(|(index, field)| {
-                            (field.name == name.symbol).then(|| (index, field.type_of(args, ctxt)))
+                            (field.name == name.symbol)
+                                .then(|| (index, Some((id, field.id)), field.type_of(args, ctxt)))
                         })
                     }
                     _ => None,
                 }
             }
             _ => None,
-        }) else {
+        };
+        if field_info.is_none() {
             self.root().ctxt().diag().add_diagnostic(
                 format!("'{}' does not have field '{}'", reciever_ty, name.symbol),
                 loc,
             );
-            return None;
-        };
-        Some((field_id, field_type))
+        }
+        field_info
     }
 
     fn check_for_loop(
@@ -719,6 +726,13 @@ impl FunctionCtxt<'_> {
                         &IndexVec::new()
                     }
                 };
+                if !self.ctxt().same_module(*id, self.id) && !self.ctxt().is_opaque(self.id) {
+                    self.ctxt().diag().add_diagnostic(
+                        format!("Cannot construct '{}' in this scope", self.ctxt().display(*id)),
+                        loc,
+                    );
+                }
+
                 let field_map = field_info
                     .iter_enumerated()
                     .map(|(i, &field)| (field.name, (i, field)))
@@ -740,7 +754,15 @@ impl FunctionCtxt<'_> {
                                 .as_ref()
                                 .map(|(_, field)| field.type_of(&args, self.root().ctxt())),
                         );
-                        let (id, _) = field_info?;
+                        let (id, _) = if let Some(field_info) = field_info {
+                            field_info
+                        } else {
+                            self.ctxt().diag().add_diagnostic(
+                                format!("Unknown field '{}'", field.name.symbol),
+                                field.name.loc,
+                            );
+                            return None;
+                        };
                         Some(RecordFieldInit { index: id, value })
                     })
                     .collect();

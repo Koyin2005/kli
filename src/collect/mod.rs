@@ -12,7 +12,7 @@ use crate::{
     ident::Ident,
     index_vec::IndexVec,
     lang_items::LangItems,
-    resolved_ast::{self, Builtins, DefId, Item, ItemKind, Node, TypeDef},
+    resolved_ast::{self, AnnotationKind, Builtins, DefId, Item, ItemKind, Node, TypeDef},
     scheme::Scheme,
     src_loc::SrcLoc,
     typecheck::infer::TypeInfer,
@@ -466,6 +466,16 @@ impl CtxtRef<'_> {
         });
         self.0.std_lib.set(std_lib);
         std_lib
+    }
+    pub fn same_module(&self, src: DefId, from: DefId) -> bool {
+        let src_module = self.module_of(src);
+        let from_module = self.module_of(from);
+        src_module == from_module
+    }
+    pub fn is_opaque(&self, id: DefId) -> bool {
+        self.annotations(id)
+            .iter()
+            .any(|annotation| annotation.kind == AnnotationKind::Opaque)
     }
     pub fn module_of(&self, mut id: DefId) -> DefId {
         loop {

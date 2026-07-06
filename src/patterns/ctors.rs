@@ -1,7 +1,7 @@
 use crate::{
     Symbol,
     collect::{CtxtRef, TypeDefKind},
-    resolved_ast::{AnnotationKind, DefId},
+    resolved_ast::DefId,
     types::Type,
 };
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -38,14 +38,7 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Cons
         }
         Type::Infer(_) => unreachable!("Cannot have infer here"),
         Type::Named(id, ..) => {
-            let ty_module = ctxt.module_of(*id);
-            let match_module = ctxt.module_of(from);
-            if ty_module != match_module
-                && ctxt
-                    .annotations(*id)
-                    .iter()
-                    .any(|annotation| annotation.kind == AnnotationKind::Opaque)
-            {
+            if !ctxt.same_module(*id, from) && ctxt.is_opaque(*id) {
                 return vec![Constructor::NonExhaustive];
             }
             match ctxt.type_def(*id).kind {

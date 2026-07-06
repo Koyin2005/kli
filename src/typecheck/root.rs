@@ -131,7 +131,6 @@ impl<'ctxt> RootCtxt<'ctxt> {
     pub(super) fn fresh_ty(&self, loc: SrcLoc) -> Type {
         Type::Infer(self.infer.borrow_mut().fresh_ty(loc))
     }
-
     pub(super) fn check_missing_fields(
         &self,
         loc: SrcLoc,
@@ -192,11 +191,32 @@ impl<'ctxt> FunctionCtxt<'ctxt> {
     pub fn root(&self) -> &RootCtxt<'_> {
         self.root
     }
+    pub fn ctxt(&self) -> CtxtRef<'_> {
+        self.root.ctxt
+    }
     pub(super) fn check_binding(&self, binding: &res::LetBinding) -> LetBinding {
         let ty = binding.ty.as_ref().map(|ty| self.root().lower_type(ty));
         let value = self.check_expr(&binding.value, ty);
         let pattern = self.check_pattern(&binding.pattern, value.ty.clone(), None);
         LetBinding { pattern, value }
+    }
+    pub(super) fn check_field_visibility(
+        &self,
+        field_id: DefId,
+        loc: SrcLoc,
+    ) -> Result<(), TypeError> {
+        if self.ctxt().same_module(field_id, self.id) {
+            return Ok(());
+        }
+        let ty_id = self.ctxt().expect_parent(field_id);
+        if !self.ctxt().is_opaque(ty_id) {
+            return Ok(());
+        }
+        let name = self.ctxt().expect_ident(field_id).symbol;
+        self.ctxt()
+            .diag()
+            .add_diagnostic(format!("Cannot access '{}'", name), loc);
+        Err(TypeError)
     }
 }
 pub struct TypeError;
