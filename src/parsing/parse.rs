@@ -21,6 +21,7 @@ enum Precedence {
     None,
     Term,
     Factor,
+    Equality,
 }
 pub struct ParseError;
 pub struct Parser {
@@ -148,6 +149,7 @@ impl Parser {
             TokenKind::Minus => Some((Precedence::Factor, BinaryOp::Subtract)),
             TokenKind::Slash => Some((Precedence::Term, BinaryOp::Divide)),
             TokenKind::Star => Some((Precedence::Term, BinaryOp::Multiply)),
+            TokenKind::DoubleEqual => Some((Precedence::Equality,BinaryOp::Equals)),
             _ => None,
         }
     }

@@ -57,6 +57,7 @@ pub enum BinaryOp {
     Subtract,
     Multiply,
     Divide,
+    Equals
 }
 #[derive(Debug)]
 pub enum Place {

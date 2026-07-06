@@ -498,6 +498,7 @@ impl Builder<'_> {
                     }
                     BinaryOp::Subtract => OverflowOp::Subtract,
                     BinaryOp::Multiply => OverflowOp::Multiply,
+                    BinaryOp::Equals => return Self::binary_op_rvalue(mir::BinaryOp::Equals, left_operand, right_operand)
                 };
                 let checked_result = self.assign_to_temp(
                     expr.loc,
