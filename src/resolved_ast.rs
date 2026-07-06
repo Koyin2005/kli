@@ -42,7 +42,6 @@ pub struct Lambda {
 pub enum Builtin {
     Allocate,
     Deallocate,
-    Freeze,
     PtrRead,
     PtrWrite,
     Transmute,
@@ -70,9 +69,8 @@ impl Builtin {
             i += 1;
         }
     };
-    pub const COUNT: usize = 9;
+    pub const COUNT: usize = 8;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
-        Builtin::Freeze,
         Builtin::Allocate,
         Builtin::Deallocate,
         Builtin::PtrRead,
@@ -86,7 +84,6 @@ impl Builtin {
         match self {
             Builtin::Allocate => "allocate",
             Builtin::Deallocate => "deallocate",
-            Builtin::Freeze => "freeze",
             Builtin::PtrRead => "ptr_read",
             Builtin::PtrWrite => "ptr_write",
             Builtin::Transmute => "transmute",

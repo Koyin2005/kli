@@ -280,10 +280,6 @@ impl Builder<'_> {
                 self.push_stmt(loc, mir::StmtKind::Deallocate({ operands }.swap_remove(0)));
                 BuiltinResult::Unit
             }
-            Builtin::Freeze => BuiltinResult::Rvalue(Rvalue::pointer_cast(
-                PointerCast::Freeze,
-                { operands }.swap_remove(0),
-            )),
             Builtin::PtrRead => {
                 let [ptr] = { operands }.try_into().unwrap();
                 let deref = self

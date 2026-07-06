@@ -1,14 +1,7 @@
 use crate::{
-    ast::{IsResource, Mutable},
-    collect::{CtxtRef, TypeDefKind},
-    diagnostics::emit_fatal_diagnostic,
-    mir::{
-        BinaryOp, Body, CastKind, CopyNonOverlapping, DropInPlace, Location, PointerCast, Stmt,
-        StmtKind, visitor::Visit,
-    },
-    src_loc::SrcLoc,
-    types::{FunctionType, PointerType, Type},
-    unsafety,
+    ast::IsResource, collect::{CtxtRef, TypeDefKind}, diagnostics::emit_fatal_diagnostic, mir::{
+        BinaryOp, Body, CastKind, CopyNonOverlapping, DropInPlace, Location, PointerCast, Stmt, StmtKind, visitor::Visit,
+    }, src_loc::SrcLoc, types::{FunctionType, PointerType, Type}, unsafety,
 };
 pub struct WellFormed<'ctxt> {
     ctxt: CtxtRef<'ctxt>,
@@ -324,21 +317,9 @@ impl Visit for WellFormed<'_> {
                         loc,
                     );
                     match (pointer_cast, pointer_type) {
-                        (PointerCast::BoxToRaw, PointerType::Box) => (),
-                        (PointerCast::Freeze, PointerType::Reference(_, Mutable::Mutable)) => (),
                         (
-                            PointerCast::RawToRaw(_)
-                            | PointerCast::RawToBox
-                            | PointerCast::RawToRef(..),
+                            PointerCast::RawToRaw(_),
                             PointerType::Raw,
-                        ) => (),
-                        (
-                            PointerCast::RefToRaw(Mutable::Immutable),
-                            PointerType::Reference(_, Mutable::Immutable),
-                        ) => (),
-                        (
-                            PointerCast::RefToRaw(Mutable::Mutable),
-                            PointerType::Reference(_, Mutable::Mutable),
                         ) => (),
                         (cast, pointer_type) => {
                             self.assert(
@@ -386,11 +367,9 @@ impl Visit for WellFormed<'_> {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
             StmtKind::DropInPlace(drop_in_place) => {
-                let DropInPlace {
-                    pointer_to_place,
-                    count,
-                } = drop_in_place.as_ref();
-                let pointer_ty = self.body.type_of_operand(&pointer_to_place, self.ctxt);
+                
+                let DropInPlace { pointer_to_place, count } = drop_in_place.as_ref();
+                let pointer_ty = self.body.type_of_operand(pointer_to_place, self.ctxt);
                 let count_ty = self.body.type_of_operand(count, self.ctxt);
                 self.assert(
                     pointer_ty.as_pointer().is_some(),

@@ -218,15 +218,6 @@ impl<'ctxt> MirDump<'ctxt> {
                         super::PointerCast::RawToRaw(to) => {
                             write!(self.output, "RawToRaw({})", to)?
                         }
-                        super::PointerCast::BoxToRaw => write!(self.output, "BoxToRaw")?,
-                        super::PointerCast::RawToBox => write!(self.output, "RawToBox")?,
-                        super::PointerCast::RefToRaw(mutable) => {
-                            write!(self.output, "RefToRaw({})", mutable)?
-                        }
-                        super::PointerCast::RawToRef(mutable, region) => {
-                            write!(self.output, "RawToRef({},{})", mutable, region)?
-                        }
-                        super::PointerCast::Freeze => write!(self.output, "Freeze")?,
                     },
                 }
                 write!(self.output, ")(")?;
