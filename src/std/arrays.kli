@@ -1,10 +1,12 @@
 @opaque
+@lang_item("array_list")
 type ArrayList[T] = {
     ptr : ptr[T],
     len : int,
     cap : int
 }
 
+@lang_item("array_list_new")
 fun new[T]() -> ArrayList[T] = do
     ArrayList {
         ptr = allocate(1),
@@ -34,7 +36,7 @@ fun grow[r,T](l : mut[r] ArrayList[T]) -> () =
     end
 
 
-
+@lang_item("array_list_push")
 fun push[r,T](l : mut[r] ArrayList[T], value : T) -> () = do
     case l^.len == l^.cap of
     | true -> do in r1 grow(borrow mut l^ in r1) end
