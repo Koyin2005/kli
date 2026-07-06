@@ -57,7 +57,6 @@ pub enum TokenKind {
     False,
     Error,
     Region,
-    ArrayList,
     While,
     At,
     Type,
@@ -123,7 +122,6 @@ impl Display for TokenKind {
             Self::Ident(name) => name,
             Self::Error => "{error}",
             Self::Region => "region",
-            Self::ArrayList => "arraylist",
             Self::Type => "type",
             Self::Eof => "EOF",
         };

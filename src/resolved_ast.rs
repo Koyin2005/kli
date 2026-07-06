@@ -194,7 +194,6 @@ pub enum ExprKind {
     For(Box<ForExpr>),
     Case(Box<Expr>, Box<[CaseArm]>),
     Print(Option<Box<Expr>>),
-    List(Box<[Expr]>),
     Call(Box<Expr>, Box<[Expr]>),
     Record(Vec<FieldInit>),
     VariantCase(DefId, Box<GenericArgs>),
@@ -290,12 +289,12 @@ pub enum TypeName {
     Byte,
     UserDefined(DefId),
     Box,
+    ArrayList,
     Param(Symbol, usize),
 }
 #[derive(Debug)]
 pub enum TypeKind {
     Ptr(Box<Type>),
-    List(Box<Type>),
     Imm(Box<Region>, Box<Type>),
     Mut(Box<Region>, Box<Type>),
     Function(Box<FunctionType>),

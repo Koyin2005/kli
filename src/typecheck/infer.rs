@@ -124,9 +124,6 @@ impl TypeInfer {
                 assert_eq!(name1, name2);
                 Some(Type::Param(name1, index1))
             }
-            (Type::List(ty1), Type::List(ty2)) => {
-                self.unify_ty(*ty1, *ty2).map(|ty| Type::List(Box::new(ty)))
-            }
             (Type::Array(ty1, count1), Type::Array(ty2, count2)) if count1 == count2 => self
                 .unify_ty(*ty1, *ty2)
                 .map(|ty| Type::Array(Box::new(ty), count1)),
@@ -212,7 +209,6 @@ impl TypeInfer {
                 | Type::Array(..)
                 | Type::Function(..)
                 | Type::Byte
-                | Type::List(_)
                 | Type::Imm(..)
                 | Type::Mut(..)
                 | Type::Record(..)

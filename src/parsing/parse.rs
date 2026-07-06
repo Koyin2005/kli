@@ -563,22 +563,6 @@ impl Parser {
                     kind: ExprKind::String(string),
                 })
             }
-            TokenKind::ArrayList => {
-                self.next_token();
-                self.expect(&TokenKind::LeftBracket)?;
-                let mut values = Vec::new();
-                while self.check_is_not_token(&TokenKind::RightBracket) {
-                    values.push(self.parse_expr()?);
-                    if !self.match_coma() {
-                        break;
-                    }
-                }
-                self.expect(&TokenKind::RightBracket)?;
-                Ok(Expr {
-                    loc,
-                    kind: ExprKind::List(values),
-                })
-            }
             TokenKind::Fun => {
                 self.next_token();
                 let _ = self.expect(&TokenKind::LeftParen);
@@ -785,16 +769,6 @@ impl Parser {
                 Ok(Type {
                     loc,
                     kind: TypeKind::String,
-                })
-            }
-            TokenKind::ArrayList => {
-                self.next_token();
-                let _ = self.expect(&TokenKind::LeftBracket);
-                let ty = self.parse_type()?;
-                let _ = self.expect(&TokenKind::RightBracket);
-                Ok(Type {
-                    loc,
-                    kind: TypeKind::List(Box::new(ty)),
                 })
             }
             TokenKind::LeftParen => {

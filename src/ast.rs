@@ -208,7 +208,6 @@ pub struct InstancePath {
 pub enum ExprKind {
     Unit,
     Annotate(Box<Expr>, Box<Type>),
-    List(Vec<Expr>),
     String(String),
     Print(Option<Box<Expr>>),
     Panic(Option<Type>),
@@ -267,7 +266,6 @@ pub enum TypeKind {
     Record(RecordType),
     Named(InstancePath),
     Function(FunctionType),
-    List(Box<Type>),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
 }

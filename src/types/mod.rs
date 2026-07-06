@@ -179,7 +179,6 @@ pub enum Type {
     Char,
     Byte,
     Param(Symbol, usize),
-    List(Box<Type>),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
     Function(FunctionType),
@@ -236,19 +235,6 @@ impl Type {
                     ),
                     FieldName::Named(Symbol::intern("code")),
                 )),
-                _ => None,
-            },
-            Self::List(ty) => match field_id {
-                id if id == FieldId::FIRST_FIELD => Some((
-                    Type::pointer((**ty).clone()),
-                    FieldName::Named(Symbol::intern("ptr")),
-                )),
-                id if id == FieldId::new(1) => {
-                    Some((Type::Int, FieldName::Named(Symbol::intern("cap"))))
-                }
-                id if id == FieldId::new(2) => {
-                    Some((Type::Int, FieldName::Named(Symbol::intern("len"))))
-                }
                 _ => None,
             },
             Self::String => match field_id {
@@ -407,8 +393,7 @@ impl Type {
                 ..
             })
             | Type::String
-            | Type::Param(..)
-            | Type::List(_) => true,
+            | Type::Param(..) => true,
             Type::Record(fields) => fields.iter().any(|field| field.ty.is_resource(ctxt)),
             Type::Infer(_) => unreachable!("Cannot 'infer' its a resource"),
             &Type::Named(id, _, ref args) => {
@@ -444,9 +429,7 @@ impl Type {
             | Type::Char
             | Type::Byte
             | Type::Param(..) => ControlFlow::Continue(()),
-            Type::List(ty) | Type::RawPointer(ty) | Type::Array(ty, _) => {
-                ty.visit(visit_ty, visit_region)
-            }
+            Type::RawPointer(ty) | Type::Array(ty, _) => ty.visit(visit_ty, visit_region),
             &(Type::Imm(region, ref ty) | Type::Mut(region, ref ty)) => {
                 visit_region(region)?;
                 ty.visit(visit_ty, visit_region)
@@ -506,11 +489,6 @@ impl Display for Type {
             Type::String => f.pad("string"),
             Type::Infer(_) => f.pad("_"),
             &Type::Param(name, _) => write!(f, "{}", name),
-            Type::List(ty) => {
-                f.pad("list[")?;
-                write!(f, "{}", ty)?;
-                f.pad("]")
-            }
             Type::Imm(region, ty) => {
                 write!(f, "imm [{}] {}", region, ty)
             }
@@ -558,7 +536,6 @@ pub trait TypeMap {
             | Type::Param(..) => Ok(ty),
             Type::Array(ty, count) => Ok(Type::Array(Box::new(self.map_type(*ty)?), count)),
             Type::RawPointer(ty) => Ok(Type::RawPointer(Box::new(self.map_type(*ty)?))),
-            Type::List(ty) => Ok(Type::List(Box::new(self.map_type(*ty)?))),
             Type::Imm(region, ty) => Ok(Type::Imm(
                 self.map_region(region)?,
                 Box::new(self.map_type(*ty)?),

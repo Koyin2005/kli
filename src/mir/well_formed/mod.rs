@@ -159,30 +159,6 @@ impl Visit for WellFormed<'_> {
                         loc,
                     );
                 }
-                super::AggregateKind::ArrayList(ty) => {
-                    let [ptr, cap, len] = self.assert_with_some(
-                        fields.as_slice(),
-                        |fields| {
-                            if let [ptr, cap, len] = fields {
-                                Some([ptr, cap, len])
-                            } else {
-                                None
-                            }
-                        },
-                        || "ArrayList must have 3 fields".to_string(),
-                        loc,
-                    );
-                    let ptr_ty = self.body.type_of_operand(ptr, self.ctxt);
-                    self.assert(
-                        ptr_ty == Type::pointer(ty.clone()),
-                        || "ptr should point to same type".to_string(),
-                        loc,
-                    );
-                    let cap_ty = self.body.type_of_operand(cap, self.ctxt);
-                    self.assert(cap_ty == Type::Int, || "cap should be int".to_string(), loc);
-                    let len_ty = self.body.type_of_operand(len, self.ctxt);
-                    self.assert(len_ty == Type::Int, || "len should be int".to_string(), loc);
-                }
                 super::AggregateKind::Array(ty, count) => {
                     self.assert(
                         fields.len() == (*count).try_into().unwrap(),

@@ -34,7 +34,7 @@ pub trait Visitor {
     fn super_visit_type(&mut self, ty: &Type) {
         match &ty.kind {
             TypeKind::Unknown => (),
-            TypeKind::Ptr(ty) | TypeKind::List(ty) => self.visit_type(ty),
+            TypeKind::Ptr(ty) => self.visit_type(ty),
             TypeKind::Imm(region, ty) | TypeKind::Mut(region, ty) => {
                 self.visit_region(**region);
                 self.visit_type(ty);
@@ -119,11 +119,6 @@ pub trait Visitor {
             }
             ExprKind::Print(expr) => {
                 if let Some(expr) = expr {
-                    self.visit_expr(expr);
-                }
-            }
-            ExprKind::List(exprs) => {
-                for expr in exprs {
                     self.visit_expr(expr);
                 }
             }

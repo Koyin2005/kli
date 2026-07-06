@@ -100,10 +100,6 @@ impl<'ctxt> RootCtxt<'ctxt> {
             pointee: Type,
         ) -> Result<(IteratorType, Type), Type> {
             match this.simplify_type(pointee) {
-                Type::List(element) => Ok((
-                    IteratorType::ArrayListRef(region, mutable, (*element).clone()),
-                    Type::reference(*element, mutable, region),
-                )),
                 Type::String => Ok((IteratorType::StringIter(region, mutable), Type::Char)),
                 pointee => Err(Type::reference(pointee, mutable, region)),
             }
@@ -125,7 +121,6 @@ impl<'ctxt> RootCtxt<'ctxt> {
             | Type::Char
             | Type::Param(..)
             | Type::Unit
-            | Type::List(_)
             | Type::String
             | Type::Function(_)
             | Type::Record(_)

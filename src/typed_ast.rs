@@ -121,7 +121,6 @@ pub enum ExprKind {
     Function(DefId, GenericArgs),
     Const(DefId, GenericArgs),
     Print(Option<Box<Expr>>),
-    List(Vec<Expr>),
     Call(Box<Expr>, Vec<Expr>),
     Load(Place),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),

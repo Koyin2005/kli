@@ -24,7 +24,7 @@ impl<'a> TypeSubst<'a> {
             | Type::Char
             | Type::Param(..)
             | Type::Byte => (),
-            Type::Array(ty, _) | Type::List(ty) | Type::RawPointer(ty) => self.subst_type(ty),
+            Type::Array(ty, _) | Type::RawPointer(ty) => self.subst_type(ty),
             Type::Imm(region, ty) | Type::Mut(region, ty) => {
                 self.subst_region(region);
                 self.subst_type(ty);
@@ -145,11 +145,6 @@ impl<'a> TypeSubst<'a> {
                     self.subst_generic_arg(arg);
                 }
                 self.subst_expr(expr)
-            }
-            ExprKind::List(exprs) => {
-                for expr in exprs {
-                    self.subst_expr(expr);
-                }
             }
             ExprKind::Call(callee, args) => {
                 self.subst_expr(callee);

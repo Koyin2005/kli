@@ -28,7 +28,6 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Cons
         | Type::Unknown
         | Type::Param(..)
         | Type::Int
-        | Type::List(_)
         | Type::Function(..)
         | Type::RawPointer(..)
         | Type::Byte

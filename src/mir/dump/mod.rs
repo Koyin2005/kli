@@ -135,7 +135,6 @@ impl<'ctxt> MirDump<'ctxt> {
                         output.push(')');
                         output
                     }
-                    AggregateKind::ArrayList(ty) => format!("array_list[{}]", ty),
                     AggregateKind::String => "string".to_string(),
                     AggregateKind::Variant(id, index, args) => {
                         let name = self.ctxt.type_def(*id).case(*index).name;
@@ -153,7 +152,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 };
                 let ctxt = self.ctxt;
                 let field_name = move |i: FieldId| match kind {
-                    AggregateKind::ArrayList(_) | AggregateKind::String => Some(
+                    AggregateKind::String => Some(
                         match i {
                             types::LIST_PTR_FIELD => "ptr",
                             types::LIST_CAPICITY_FIELD => "cap",

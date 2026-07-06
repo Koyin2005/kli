@@ -7,7 +7,7 @@ pub enum LangItem {
     Box,
     ArrayList,
     ArrayListNew,
-    ArrayListPush
+    ArrayListPush,
 }
 impl LangItem {
     pub const fn name(&self) -> &'static str {
@@ -24,7 +24,12 @@ impl LangItem {
             .find(|&item| item.name() == name)
     }
     pub const COUNT: usize = 4;
-    pub const ALL_LANG_ITEMS: [LangItem; Self::COUNT] = [LangItem::Box,LangItem::ArrayList,LangItem::ArrayListNew,LangItem::ArrayListPush];
+    pub const ALL_LANG_ITEMS: [LangItem; Self::COUNT] = [
+        LangItem::Box,
+        LangItem::ArrayList,
+        LangItem::ArrayListNew,
+        LangItem::ArrayListPush,
+    ];
 }
 #[derive(Clone, Copy)]
 pub struct LangItems([Option<DefId>; LangItem::COUNT]);

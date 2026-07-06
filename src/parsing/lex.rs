@@ -185,7 +185,6 @@ impl<'s> Lexer<'s> {
                 "of" => TokenKind::Of,
                 "do" => TokenKind::Do,
                 "region" => TokenKind::Region,
-                "arraylist" => TokenKind::ArrayList,
                 "type" => TokenKind::Type,
                 "while" => TokenKind::While,
                 _ => TokenKind::Ident(src),

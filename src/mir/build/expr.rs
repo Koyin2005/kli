@@ -10,7 +10,7 @@ use crate::{
     resolved_ast::Builtin,
     src_loc::SrcLoc,
     typed_ast::{self, Expr, ExprKind, FieldId, Pattern},
-    types::{FieldName, FunctionType, LIST_LEN_FIELD, Type},
+    types::{FieldName, FunctionType, Type},
 };
 pub(super) enum BuiltinResult {
     Rvalue(Rvalue),
@@ -71,20 +71,12 @@ impl Builder<'_> {
             Place::local(self.expr_into_temp(expr))
         }
     }
-    pub(super) fn len_operand(&mut self, loc: SrcLoc, ty: &Type, place: Place) -> Operand {
-        if let Type::List(_) = ty {
-            Operand::Load(Place::local(self.assign_to_temp(
-                loc,
-                Type::Int,
-                Rvalue::Use(Operand::Load(place.with_field(LIST_LEN_FIELD))),
-            )))
-        } else {
-            Operand::Load(Place::local(self.assign_to_temp(
-                loc,
-                Type::Int,
-                Rvalue::Len(place),
-            )))
-        }
+    pub(super) fn len_operand(&mut self, loc: SrcLoc, _: &Type, place: Place) -> Operand {
+        Operand::Load(Place::local(self.assign_to_temp(
+            loc,
+            Type::Int,
+            Rvalue::Len(place),
+        )))
     }
     fn operand_as_place(&mut self, loc: SrcLoc, ty: Type, operand: Operand) -> Place {
         match operand {
@@ -206,7 +198,6 @@ impl Builder<'_> {
             | ExprKind::Load(_)
             | ExprKind::Call(..)
             | ExprKind::Binary(..)
-            | ExprKind::List(..)
             | ExprKind::Print(_)
             | ExprKind::For { .. }
             | ExprKind::Assign(..)
@@ -385,50 +376,6 @@ impl Builder<'_> {
                 AggregateKind::Variant(id, index, args.clone()),
                 [self.operand(value)].into(),
             ),
-            ExprKind::List(exprs) => {
-                let ty = if let Type::List(ty) = &expr.ty {
-                    (**ty).clone()
-                } else {
-                    unreachable!("Should be an array")
-                };
-                let array_ty = Type::Array(Box::new(ty.clone()), exprs.len().try_into().unwrap());
-                let len_constant =
-                    Operand::Constant(Constant::int(exprs.len().try_into().unwrap()));
-                let ptr_to_buf = self.assign_to_temp(
-                    expr.loc,
-                    Type::pointer(array_ty.clone()),
-                    Rvalue::Allocate {
-                        ty: array_ty.clone(),
-                        count: Operand::Constant(Constant::int(1)),
-                    },
-                );
-                let operands = exprs.iter().map(|expr| self.operand(expr)).collect();
-                self.assign(
-                    expr.loc,
-                    Place::local(ptr_to_buf).with_deref(),
-                    Rvalue::Aggregate(
-                        AggregateKind::Array(ty.clone(), exprs.len().try_into().unwrap()),
-                        operands,
-                    ),
-                );
-                let ptr = self.assign_to_temp(
-                    expr.loc,
-                    Type::pointer(ty.clone()),
-                    Rvalue::pointer_cast(
-                        PointerCast::RawToRaw(ty.clone()),
-                        Operand::Load(Place::local(ptr_to_buf)),
-                    ),
-                );
-                Rvalue::Aggregate(
-                    AggregateKind::ArrayList(ty),
-                    [
-                        Operand::Load(Place::local(ptr)),
-                        len_constant.clone(),
-                        len_constant.clone(),
-                    ]
-                    .into(),
-                )
-            }
             ExprKind::Call(callee, args) => match &callee.ty {
                 Type::Function(function_ty) => {
                     let FunctionType { resource, .. } = function_ty;

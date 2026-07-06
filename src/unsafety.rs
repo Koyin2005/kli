@@ -9,7 +9,6 @@ use crate::{
 pub fn transmutable(ctxt: CtxtRef<'_>, from: &Type, to: &Type) -> bool {
     match (from, to) {
         (Type::Byte, Type::Bool) | (Type::Bool, Type::Byte) => true,
-        (Type::List(_), Type::String) | (Type::String, Type::List(_)) => true,
         _ => from.pointer_kind(ctxt).is_some() && to.pointer_kind(ctxt).is_some(),
     }
 }

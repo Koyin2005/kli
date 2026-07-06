@@ -694,29 +694,6 @@ impl FunctionCtxt<'_> {
                     kind: typed_ast::ExprKind::Binary(*binary_op, Box::new(left), Box::new(right)),
                 }
             }
-            ExprKind::List(elements) => {
-                let mut expected_element = match &expected_ty {
-                    &Some(Type::List(ref ty)) => Some((**ty).clone()),
-                    _ => None,
-                };
-                let elements = elements
-                    .iter()
-                    .map(|element| {
-                        let element = self.check_expr(element, expected_element.clone());
-                        expected_element.get_or_insert_with(|| element.ty.clone());
-                        element
-                    })
-                    .collect();
-                let ty = Type::List(Box::new(expected_element.unwrap_or_else(|| {
-                    self.root().type_annotations_needed(loc);
-                    Type::Unknown
-                })));
-                typed_ast::Expr {
-                    ty,
-                    loc,
-                    kind: typed_ast::ExprKind::List(elements),
-                }
-            }
             ExprKind::Lambda(lambda) => {
                 self.check_lambda(loc, lambda.id, lambda, expected_ty.clone())
             }

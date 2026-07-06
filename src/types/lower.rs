@@ -155,6 +155,11 @@ impl<'a> Lower<'a> {
                 let args = self.lower_generic_args(id, loc, args);
                 Type::Named(id, self.ctxt.expect_ident(id).symbol, args)
             }
+            TypeName::ArrayList => {
+                let id = self.ctxt.lang_items().expect(LangItem::ArrayList);
+                let args = self.lower_generic_args(id, loc, args);
+                Type::Named(id, self.ctxt.expect_ident(id).symbol, args)
+            }
         }
     }
     pub fn lower_type(&self, ty: &res::Type) -> Type {
@@ -181,7 +186,6 @@ impl<'a> Lower<'a> {
             }),
             res::TypeKind::Unknown => Type::Unknown,
             &res::TypeKind::Named(name, ref args) => self.lower_type_name(ty.loc, name, args),
-            res::TypeKind::List(ty) => Type::List(Box::new(self.lower_type(ty))),
             res::TypeKind::Imm(region, ty) => {
                 let region = self.lower_region(region);
                 let ty = self.lower_type(ty);

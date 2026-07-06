@@ -672,11 +672,6 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     self.check_expr(arg);
                 }
             }
-            ExprKind::List(values) => {
-                for value in values {
-                    self.check_expr(value);
-                }
-            }
             ExprKind::Record(fields) | ExprKind::NamedRecord(.., fields) => {
                 for field in fields {
                     self.check_expr(&field.value);

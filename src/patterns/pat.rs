@@ -150,7 +150,6 @@ fn split_constructors(
         | Type::Char
         | Type::Byte
         | Type::Param(..)
-        | Type::List(..)
         | Type::Function(..)
         | Type::Array(..)
         | Type::RawPointer(_) => {}

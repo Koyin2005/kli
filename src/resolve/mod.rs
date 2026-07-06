@@ -30,6 +30,7 @@ enum TypeAlias {
     Ptr,
     Byte,
     Box,
+    ArrayList,
 }
 type Scope = HashMap<Symbol, Res>;
 
@@ -95,7 +96,12 @@ impl Resolve {
         let env = Scope::from_iter(builtins.into_iter().chain([
             (Symbol::intern("ptr"), Res::TypeAlias(TypeAlias::Ptr)),
             (Symbol::intern("byte"), Res::TypeAlias(TypeAlias::Byte)),
+            //FIXME : Make box Box instead
             (Symbol::intern("box"), Res::TypeAlias(TypeAlias::Box)),
+            (
+                Symbol::intern("ArrayList"),
+                Res::TypeAlias(TypeAlias::ArrayList),
+            ),
         ]));
         Self {
             parents: HashMap::new(),
@@ -171,11 +177,6 @@ impl Resolve {
             | ast::ExprKind::Deref(expr)
             | ast::ExprKind::AddressOf(expr)
             | ast::ExprKind::Field(expr, _) => self.declare_in_exprs(expr),
-            ast::ExprKind::List(exprs) => {
-                for expr in exprs {
-                    self.declare_in_exprs(expr);
-                }
-            }
             ast::ExprKind::Print(expr) => {
                 if let Some(expr) = expr {
                     self.declare_in_exprs(expr);
@@ -394,6 +395,7 @@ impl Resolve {
                 TypeAlias::Ptr => Some(res::TypeName::Ptr),
                 TypeAlias::Box => Some(res::TypeName::Box),
                 TypeAlias::Byte => Some(res::TypeName::Byte),
+                TypeAlias::ArrayList => Some(res::TypeName::ArrayList),
             },
             Ok(Res::TypeDef(id)) => Some(res::TypeName::UserDefined(self.def_id_for(id))),
             Ok(Res::VariantCase(..)) => {
@@ -429,7 +431,6 @@ impl Resolve {
             ast::TypeKind::String => {
                 res::TypeKind::Named(res::TypeName::String, Box::new(res::GenericArgs::NONE))
             }
-            ast::TypeKind::List(ty) => res::TypeKind::List(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::Record(ast::RecordType { fields }) => {
                 let fields = fields
                     .into_iter()
@@ -780,12 +781,6 @@ impl Resolve {
             ast::ExprKind::Call(callee, args) => res::ExprKind::Call(
                 Box::new(self.resolve_expr(*callee)),
                 args.into_iter().map(|arg| self.resolve_expr(arg)).collect(),
-            ),
-            ast::ExprKind::List(values) => res::ExprKind::List(
-                values
-                    .into_iter()
-                    .map(|value| self.resolve_expr(value))
-                    .collect(),
             ),
             ast::ExprKind::Deref(value) => {
                 res::ExprKind::Deref(Box::new(self.resolve_expr(*value)))
