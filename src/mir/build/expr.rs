@@ -284,25 +284,6 @@ impl Builder<'_> {
                 PointerCast::Freeze,
                 { operands }.swap_remove(0),
             )),
-            Builtin::BoxFromRaw => BuiltinResult::Rvalue(Rvalue::pointer_cast(
-                PointerCast::RawToBox,
-                { operands }.swap_remove(0),
-            )),
-            Builtin::BoxIntoRaw => BuiltinResult::Rvalue(Rvalue::pointer_cast(
-                PointerCast::BoxToRaw,
-                { operands }.swap_remove(0),
-            )),
-            Builtin::RefFromRaw(mutable) => {
-                let (_, region, _) = ty.as_reference_type().expect("should be a reference type");
-                BuiltinResult::Rvalue(Rvalue::pointer_cast(
-                    PointerCast::RawToRef(mutable, region),
-                    { operands }.swap_remove(0),
-                ))
-            }
-            Builtin::RefIntoRaw(mutable) => BuiltinResult::Rvalue(Rvalue::pointer_cast(
-                PointerCast::RefToRaw(mutable),
-                { operands }.swap_remove(0),
-            )),
             Builtin::PtrRead => {
                 let [ptr] = { operands }.try_into().unwrap();
                 let deref = self

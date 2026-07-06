@@ -2,6 +2,12 @@ type Box[T] = {
     inner : ptr[T]
 }
 
+
+fun box_into_raw[T](b : box[T]) -> ptr[T] = transmute(b)
+
+@unsafe
+fun box_from_raw[T](b : ptr[T]) -> box[T];
+
 fun alloc[T](value : T) -> box[T] = do
     let ptr = allocate[T](1);
     ptr_write(ptr,value);

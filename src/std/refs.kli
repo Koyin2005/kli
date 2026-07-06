@@ -11,3 +11,17 @@ fun swap[r,T](m : mut[r] T, value : T) -> T = do
     ptr_write(p,value);
     tmp
 end
+
+
+fun freeze[r,T](r : mut[r] T) -> imm[r] T = transmute(r)
+
+
+fun ref_into_raw[r,T](r : imm[r] T) -> ptr[T] = transmute(r)
+fun ref_into_raw_mut[r,T](r : mut[r] T) -> ptr[T] = transmute(r)
+
+
+@unsafe
+fun ref_from_raw[r,T](p : ptr[T]) -> imm[r] T = transmute(p)
+
+@unsafe
+fun ref_from_raw_mut[r,T](p : ptr[T]) -> mut[r] T = transmute(p)

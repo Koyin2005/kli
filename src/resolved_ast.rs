@@ -43,10 +43,6 @@ pub enum Builtin {
     Allocate,
     Deallocate,
     Freeze,
-    BoxFromRaw,
-    BoxIntoRaw,
-    RefFromRaw(Mutable),
-    RefIntoRaw(Mutable),
     PtrRead,
     PtrWrite,
     Transmute,
@@ -74,17 +70,11 @@ impl Builtin {
             i += 1;
         }
     };
-    pub const COUNT: usize = 15;
+    pub const COUNT: usize = 9;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
         Builtin::Freeze,
         Builtin::Allocate,
         Builtin::Deallocate,
-        Builtin::BoxFromRaw,
-        Builtin::BoxIntoRaw,
-        Builtin::RefFromRaw(Mutable::Immutable),
-        Builtin::RefFromRaw(Mutable::Mutable),
-        Builtin::RefIntoRaw(Mutable::Immutable),
-        Builtin::RefIntoRaw(Mutable::Mutable),
         Builtin::PtrRead,
         Builtin::PtrWrite,
         Builtin::Transmute,
@@ -97,16 +87,6 @@ impl Builtin {
             Builtin::Allocate => "allocate",
             Builtin::Deallocate => "deallocate",
             Builtin::Freeze => "freeze",
-            Builtin::BoxFromRaw => "box_from_raw",
-            Builtin::BoxIntoRaw => "box_into_raw",
-            Builtin::RefIntoRaw(mutable) => match mutable {
-                Mutable::Immutable => "ref_into_raw",
-                Mutable::Mutable => "ref_into_raw_mut",
-            },
-            Builtin::RefFromRaw(mutable) => match mutable {
-                Mutable::Immutable => "ref_from_raw",
-                Mutable::Mutable => "ref_from_raw_mut",
-            },
             Builtin::PtrRead => "ptr_read",
             Builtin::PtrWrite => "ptr_write",
             Builtin::Transmute => "transmute",
