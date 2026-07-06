@@ -30,7 +30,6 @@ fun grow[r,T](l : mut[r] ArrayList[T]) -> () =
         l^.cap = new_cap
     end
 
-fun offset[T](p : ptr[T], value : int) -> ptr[T] = panic
 
 fun len_equal(l1 : int, l2: int) -> bool = 
     case (l1 - l2) of
