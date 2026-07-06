@@ -186,7 +186,7 @@ pub enum Rvalue {
     DecodeUtf8(Operand, Operand),
     Len(Place),
     Discriminant(Place),
-    DanglingPtr(Type)
+    DanglingPtr(Type),
 }
 impl Rvalue {
     pub fn pointer_cast(cast: PointerCast, operand: Operand) -> Self {
@@ -468,7 +468,7 @@ impl Body {
             },
             Rvalue::Discriminant(_) => Type::Int,
             Rvalue::RawPtrTo(place) => Type::pointer(self.type_of_place(place, ctxt)),
-            Rvalue::DanglingPtr(ty) => Type::pointer(ty.clone())
+            Rvalue::DanglingPtr(ty) => Type::pointer(ty.clone()),
         }
     }
     pub fn src_info(&self, loc: Location) -> SrcLoc {

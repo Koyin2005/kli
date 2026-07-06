@@ -8,14 +8,18 @@ type ArrayList[T] = {
 
 fun new[T]() -> ArrayList[T] = do
     ArrayList {
-        ptr = allocate(1),
+        ptr = invalid_ptr(),
         len = 0,
-        cap = 1
+        cap = 0
     }
 end
 
 
 fun with_capacity[T](cap : int) -> ArrayList[T] = do
+    let cap = case cap < 0 of 
+    | true -> 0
+    | false -> cap
+    end;
     ArrayList {
         ptr = allocate(cap),
         len = 0,

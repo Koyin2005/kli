@@ -20,10 +20,7 @@ impl LangItem {
             .find(|&item| item.name() == name)
     }
     pub const COUNT: usize = 2;
-    pub const ALL_LANG_ITEMS: [LangItem; Self::COUNT] = [
-        LangItem::Box,
-        LangItem::ArrayList,
-    ];
+    pub const ALL_LANG_ITEMS: [LangItem; Self::COUNT] = [LangItem::Box, LangItem::ArrayList];
 }
 #[derive(Clone, Copy)]
 pub struct LangItems([Option<DefId>; LangItem::COUNT]);
