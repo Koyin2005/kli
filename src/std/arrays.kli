@@ -14,6 +14,15 @@ fun new[T]() -> ArrayList[T] = do
     }
 end
 
+
+fun with_capacity[T](cap : int) -> ArrayList[T] = do
+    ArrayList {
+        ptr = allocate(cap),
+        len = 0,
+        cap = cap
+    }
+end
+
 @unsafe
 fun reallocate[T](p : ptr[T], new_len : int) -> ptr[T] = 
     do
