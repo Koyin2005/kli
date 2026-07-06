@@ -288,7 +288,7 @@ impl<'ctxt> MirDump<'ctxt> {
                         pointer_to_place,
                         count,
                     } = drop.as_ref();
-                    write!(self.output, "copy_non_overlapping(")?;
+                    write!(self.output, "drop_in_place(")?;
                     self.write_operand(pointer_to_place)?;
                     write!(self.output, ",")?;
                     self.write_operand(count)?;

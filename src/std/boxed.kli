@@ -32,3 +32,5 @@ fun deref_mut[r,T](x : mut[r] box[T]) -> mut[r] T = do
     let inner_ptr : ptr[T] = box_into_raw(ptr_read(ptr_to_box));
     std.refs.ref_from_raw_mut(inner_ptr)
 end
+
+fun drop[T](b : box[T]) -> () = drop_in_place(box_into_raw(b),1)
