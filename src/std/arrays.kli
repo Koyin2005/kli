@@ -34,14 +34,9 @@ fun grow[r,T](l : mut[r] ArrayList[T]) -> () =
     end
 
 
-fun len_equal(l1 : int, l2: int) -> bool = 
-    case (l1 - l2) of
-    | 0 -> true
-    | _ -> false
-    end
 
 fun push[r,T](l : mut[r] ArrayList[T], value : T) -> () = do
-    case len_equal(l^.len,l^.cap) of
+    case l^.len == l^.cap of
     | true -> do in r1 grow(borrow mut l^ in r1) end
     | false -> () 
     end;
@@ -50,7 +45,7 @@ fun push[r,T](l : mut[r] ArrayList[T], value : T) -> () = do
 end
 
 fun pop[r,T](l : mut[r] ArrayList[T]) -> std.optional.Option[T] = do
-    case len_equal(l^.len,0) of 
+    case l^.len == 0 of 
     | true -> std.optional.Option.None
     | false -> do
         let value = ptr_read(offset(l^.ptr,l^.len));
@@ -62,7 +57,7 @@ end
 
 fun drop[T](l : ArrayList[T]) -> () = do
     let mut l = l;
-    while std.bools.not(len_equal(l.len,0)) do
+    while l.len > 0 do
         drop_in_place(l.ptr);
         l.ptr = offset(l.ptr,1);
         l.len = l.len - 1
