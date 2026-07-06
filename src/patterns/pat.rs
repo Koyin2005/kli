@@ -139,6 +139,10 @@ fn split_constructors(
 ) -> (Vec<Constructor>, Vec<Constructor>) {
     let mut seen = Vec::new();
     let mut missing = Vec::new();
+    let had_non_exhaustive = all_constructors.contains(&Constructor::NonExhaustive);
+    if had_non_exhaustive {
+        missing.push(Constructor::NonExhaustive);
+    }
     match ty {
         Type::Infer(_) | Type::Unknown => (),
         Type::Int
@@ -149,9 +153,7 @@ fn split_constructors(
         | Type::List(..)
         | Type::Function(..)
         | Type::Array(..)
-        | Type::RawPointer(_) => {
-            missing.push(Constructor::NonExhaustive);
-        }
+        | Type::RawPointer(_) => {}
         Type::Unit => {
             if seen_constructors.contains(&Constructor::Unit) {
                 seen.push(Constructor::Unit);
@@ -188,23 +190,25 @@ fn split_constructors(
             }
         }
         Type::Named(..) => {
-            for ctor in all_constructors {
-                match ctor {
-                    Constructor::Record => {
-                        if seen_constructors.contains(&Constructor::Record) {
-                            seen.push(Constructor::Record)
-                        } else {
-                            missing.push(Constructor::Record);
+            if !had_non_exhaustive {
+                for ctor in all_constructors {
+                    match ctor {
+                        Constructor::Record => {
+                            if seen_constructors.contains(&Constructor::Record) {
+                                seen.push(Constructor::Record)
+                            } else {
+                                missing.push(Constructor::Record);
+                            }
                         }
-                    }
-                    Constructor::Case(_) => {
-                        if seen_constructors.contains(&ctor) {
-                            seen.push(ctor)
-                        } else {
-                            missing.push(ctor);
+                        Constructor::Case(_) => {
+                            if seen_constructors.contains(&ctor) {
+                                seen.push(ctor)
+                            } else {
+                                missing.push(ctor);
+                            }
                         }
+                        _ => continue,
                     }
-                    _ => continue,
                 }
             }
         }

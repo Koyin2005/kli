@@ -1,8 +1,8 @@
+@opaque
 @lang_item("box")
 type Box[T] = {
     inner : ptr[T]
 }
-
 
 fun box_into_raw[T](b : Box[T]) -> ptr[T] = b.inner
 
