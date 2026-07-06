@@ -6,6 +6,7 @@ use crate::{
     define_id,
     ident::Ident,
     index_vec::IndexVec,
+    lang_items::LangItem,
     src_loc::SrcLoc,
     typed_ast::FieldId,
 };
@@ -372,6 +373,7 @@ pub enum ItemKind {
 pub enum AnnotationKind {
     Copy,
     Unsafe,
+    LangItem(LangItem),
 }
 #[derive(Debug)]
 pub struct Annotation {

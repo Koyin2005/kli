@@ -460,11 +460,9 @@ impl Body {
                 AggregateKind::String => Type::String,
             },
             Rvalue::Cast(cast, _) => match cast {
-                CastKind::PointerCast(cast) => {
-                    match cast {
-                        PointerCast::RawToRaw(to) => Type::pointer(to.clone()),
-                    }
-                }
+                CastKind::PointerCast(cast) => match cast {
+                    PointerCast::RawToRaw(to) => Type::pointer(to.clone()),
+                },
                 CastKind::Transmute(ty) => ty.clone(),
             },
             Rvalue::Discriminant(_) => Type::Int,

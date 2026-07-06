@@ -6,6 +6,7 @@ use crate::collect::{GlobalContext, build_global_context};
 use crate::diagnostics::DiagnosticReporter;
 use crate::ident::Ident;
 use crate::index_vec::IndexVec;
+use crate::lang_items::LangItem;
 use crate::resolved_ast::{
     Builtin, Builtins, DefId, GenericKind, LocalRegionId, VarId, VariantDef,
 };
@@ -1171,6 +1172,20 @@ impl Resolve {
                                 );
                             }
                             res::AnnotationKind::Unsafe
+                        }
+                        Symbol::LANG_ITEM => {
+                            if let [field] = annotation.fields.as_slice()
+                                && let ast::AnnotationField::String(_, name) = field
+                                && let Some(lang_item) = LangItem::with_name(name)
+                            {
+                                res::AnnotationKind::LangItem(lang_item)
+                            } else {
+                                self.diag.add_diagnostic(
+                                    format!("invalid fields for '{}'", annotation.name.symbol),
+                                    annotation.loc,
+                                );
+                                return None;
+                            }
                         }
                         _ => {
                             self.diag.add_diagnostic(

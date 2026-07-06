@@ -20,6 +20,6 @@ pub use collect::CtxtRef;
 pub use ident::Symbol;
 pub mod arenas;
 mod captures;
+mod lang_items;
 mod res_visitor;
 pub mod unsafety;
-mod lang_items;

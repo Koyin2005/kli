@@ -2,6 +2,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     fmt::Debug,
+    hash::Hash,
 };
 
 use crate::{
@@ -10,6 +11,7 @@ use crate::{
     diagnostics::DiagnosticReporter,
     ident::Ident,
     index_vec::IndexVec,
+    lang_items::LangItems,
     resolved_ast::{self, Builtins, DefId, Item, ItemKind, Node, TypeDef},
     scheme::Scheme,
     src_loc::SrcLoc,
@@ -21,23 +23,23 @@ use crate::{
     },
 };
 
-pub struct Cache<R> {
-    value: RefCell<HashMap<DefId, R>>,
+pub struct Cache<Key, R> {
+    value: RefCell<HashMap<Key, R>>,
 }
-impl<R> Default for Cache<R> {
+impl<Key, R> Default for Cache<Key, R> {
     fn default() -> Self {
         Self {
             value: RefCell::default(),
         }
     }
 }
-impl<R: Clone> Cache<R> {
-    pub fn compute(&self, id: DefId, f: impl FnOnce(DefId) -> R) -> R {
-        if let Some(value) = self.value.borrow().get(&id) {
+impl<Key: Copy + Eq + Hash, R: Clone> Cache<Key, R> {
+    pub fn compute(&self, key: Key, f: impl FnOnce(Key) -> R) -> R {
+        if let Some(value) = self.value.borrow().get(&key) {
             return value.clone();
         };
-        let value = f(id);
-        self.value.borrow_mut().insert(id, value.clone());
+        let value = f(key);
+        self.value.borrow_mut().insert(key, value.clone());
         value
     }
 }
@@ -164,9 +166,10 @@ impl Generics {
 }
 pub struct GlobalContext {
     diag: DiagnosticReporter,
-    idents: Cache<Option<Ident>>,
-    generics: Cache<Generics>,
-    captures: Cache<Option<captures::CaptureSet>>,
+    idents: Cache<DefId, Option<Ident>>,
+    generics: Cache<DefId, Generics>,
+    captures: Cache<DefId, Option<captures::CaptureSet>>,
+    lang_items: Cache<(), LangItems>,
     parents: HashMap<DefId, DefId>,
     nodes: IndexVec<DefId, Node>,
     builtins: Builtins,
@@ -465,6 +468,9 @@ impl CtxtRef<'_> {
         self.0.std_lib.set(std_lib);
         std_lib
     }
+    pub fn lang_items(self) -> LangItems {
+        self.0.lang_items.compute((), |()| LangItems::collect(self))
+    }
 }
 fn lower_generics(generics: &resolved_ast::Generics) -> Generics {
     Generics {
@@ -527,6 +533,7 @@ pub fn build_global_context(
     let diag = DiagnosticReporter::new();
     GlobalContext {
         parents,
+        lang_items: Default::default(),
         generics: Default::default(),
         idents: Default::default(),
         captures: Default::default(),
