@@ -372,9 +372,7 @@ impl Visit for WellFormed<'_> {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
             StmtKind::DropInPlace(drop_in_place) => {
-                let DropInPlace {
-                    pointer_to_place,
-                } = drop_in_place.as_ref();
+                let DropInPlace { pointer_to_place } = drop_in_place.as_ref();
                 let pointer_ty = self.body.type_of_operand(pointer_to_place, self.ctxt);
                 self.assert(
                     pointer_ty.as_pointer().is_some(),

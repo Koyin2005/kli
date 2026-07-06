@@ -61,7 +61,11 @@ fun pop[r,T](l : mut[r] ArrayList[T]) -> std.optional.Option[T] = do
 end
 
 fun drop[T](l : ArrayList[T]) -> () = do
-    # FIXME : Replace with while loop
-    drop_in_place(l.ptr,l.len);
+    let mut l = l;
+    while std.bools.not(len_equal(l.len,0)) do
+        drop_in_place(l.ptr);
+        l.ptr = offset(l.ptr,1);
+        l.len = l.len - 1
+    end;
     deallocate(l.ptr)
 end

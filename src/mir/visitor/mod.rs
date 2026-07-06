@@ -26,9 +26,7 @@ pub trait Visit {
                 self.visit_operand(loc, count);
             }
             StmtKind::DropInPlace(drop) => {
-                let DropInPlace {
-                    pointer_to_place,
-                } = drop.as_ref();
+                let DropInPlace { pointer_to_place } = drop.as_ref();
                 self.visit_operand(loc, pointer_to_place);
             }
         }
