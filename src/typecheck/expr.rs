@@ -53,7 +53,7 @@ impl FunctionCtxt<'_> {
                 if let Some((id, named_info, field_ty)) =
                     self.check_field(place.loc, &receiver.ty, *field)
                 {
-                    if let Some((_, field_id)) = named_info {
+                    if let Some(field_id) = named_info {
                         let _ = self.check_field_visibility(field_id, place.loc);
                     }
                     (
@@ -88,7 +88,7 @@ impl FunctionCtxt<'_> {
         loc: SrcLoc,
         reciever_ty: &Type,
         name: crate::ident::Ident,
-    ) -> Option<(FieldId, Option<(DefId, DefId)>, Type)> {
+    ) -> Option<(FieldId, Option<DefId>, Type)> {
         let field_info = match reciever_ty {
             Type::Record(fields) => fields.iter_enumerated().find_map(|(index, field)| {
                 (field.name == FieldName::Named(name.symbol))
@@ -100,7 +100,7 @@ impl FunctionCtxt<'_> {
                     TypeDefKind::Record(ref fields) => {
                         fields.iter_enumerated().find_map(|(index, field)| {
                             (field.name == name.symbol)
-                                .then(|| (index, Some((id, field.id)), field.type_of(args, ctxt)))
+                                .then(|| (index, Some(field.id), field.type_of(args, ctxt)))
                         })
                     }
                     _ => None,
