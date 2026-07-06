@@ -509,6 +509,18 @@ impl Parser {
                     kind: ExprKind::Path(path),
                 })
             }
+            TokenKind::While => {
+                self.next_token();
+                let condition = self.parse_expr()?;
+                let body = {
+                    let loc = self.current_loc();
+                    self.parse_block_expr(loc)?
+                };
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::While(Box::new(condition), Box::new(body)),
+                })
+            }
             TokenKind::Print => {
                 self.next_token();
                 let _ = self.expect(&TokenKind::LeftParen);
