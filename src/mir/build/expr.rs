@@ -240,12 +240,11 @@ impl Builder<'_> {
             .collect::<Vec<_>>();
         match builtin {
             Builtin::DropInPlace => {
-                let [pointer, count] = operands.try_into().unwrap();
+                let [pointer] = operands.try_into().unwrap();
                 self.push_stmt(
                     loc,
                     mir::StmtKind::DropInPlace(Box::new(DropInPlace {
                         pointer_to_place: pointer,
-                        count,
                     })),
                 );
                 BuiltinResult::Unit

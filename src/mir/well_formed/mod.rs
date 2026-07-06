@@ -374,18 +374,11 @@ impl Visit for WellFormed<'_> {
             StmtKind::DropInPlace(drop_in_place) => {
                 let DropInPlace {
                     pointer_to_place,
-                    count,
                 } = drop_in_place.as_ref();
                 let pointer_ty = self.body.type_of_operand(pointer_to_place, self.ctxt);
-                let count_ty = self.body.type_of_operand(count, self.ctxt);
                 self.assert(
                     pointer_ty.as_pointer().is_some(),
                     || format!("pointer to place should be pointer not {}", pointer_ty),
-                    stmt.loc,
-                );
-                self.assert(
-                    count_ty == Type::Int,
-                    || format!("count should be int not '{}'", count_ty),
                     stmt.loc,
                 );
             }

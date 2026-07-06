@@ -286,12 +286,9 @@ impl<'ctxt> MirDump<'ctxt> {
                 StmtKind::DropInPlace(drop) => {
                     let DropInPlace {
                         pointer_to_place,
-                        count,
                     } = drop.as_ref();
                     write!(self.output, "drop_in_place(")?;
                     self.write_operand(pointer_to_place)?;
-                    write!(self.output, ",")?;
-                    self.write_operand(count)?;
                     writeln!(self.output, ")")?;
                 }
                 StmtKind::CopyNonOverlapping(copy) => {

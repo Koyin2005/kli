@@ -242,7 +242,6 @@ pub struct CopyNonOverlapping {
 #[derive(Clone)]
 pub struct DropInPlace {
     pub pointer_to_place: Operand,
-    pub count: Operand,
 }
 #[derive(Clone)]
 pub enum StmtKind {
