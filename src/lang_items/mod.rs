@@ -23,8 +23,8 @@ impl LangItem {
             .into_iter()
             .find(|&item| item.name() == name)
     }
-    pub const COUNT: usize = 1;
-    pub const ALL_LANG_ITEMS: [LangItem; Self::COUNT] = [LangItem::Box];
+    pub const COUNT: usize = 4;
+    pub const ALL_LANG_ITEMS: [LangItem; Self::COUNT] = [LangItem::Box,LangItem::ArrayList,LangItem::ArrayListNew,LangItem::ArrayListPush];
 }
 #[derive(Clone, Copy)]
 pub struct LangItems([Option<DefId>; LangItem::COUNT]);
