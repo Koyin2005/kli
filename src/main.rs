@@ -298,7 +298,7 @@ fn main() {
     let mut had_error = false;
     for (&id, function) in program.functions.iter() {
         if let Some(ref body) = function.body {
-            had_error |= PatternCheck::new(ctxt).check(body);
+            had_error |= PatternCheck::new(ctxt, id).check(body);
         }
         had_error |= SafetyCheck::check(ctxt, id, function).is_err();
     }

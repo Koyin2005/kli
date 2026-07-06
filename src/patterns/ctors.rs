@@ -1,6 +1,7 @@
 use crate::{
     Symbol,
     collect::{CtxtRef, TypeDefKind},
+    resolved_ast::{AnnotationKind, DefId},
     types::Type,
 };
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -16,7 +17,7 @@ pub enum Constructor {
     Missing,
 }
 
-pub fn constructors_of_ty(ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Constructor> {
+pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Constructor> {
     match ty {
         Type::Bool => vec![Constructor::Bool(true), Constructor::Bool(false)],
         Type::Imm(..) | Type::Mut(..) => vec![Constructor::Ref],
@@ -36,16 +37,28 @@ pub fn constructors_of_ty(ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Constructor> {
             vec![Constructor::Record]
         }
         Type::Infer(_) => unreachable!("Cannot have infer here"),
-        Type::Named(id, ..) => match ctxt.type_def(*id).kind {
-            TypeDefKind::Record(_) => {
-                vec![Constructor::Record]
+        Type::Named(id, ..) => {
+            let ty_module = ctxt.module_of(*id);
+            let match_module = ctxt.module_of(from);
+            if ty_module != match_module
+                && ctxt
+                    .annotations(*id)
+                    .iter()
+                    .any(|annotation| annotation.kind == AnnotationKind::Opaque)
+            {
+                return vec![Constructor::NonExhaustive];
             }
-            TypeDefKind::Variant(ref cases) => cases
-                .iter()
-                .map(|case| case.name)
-                .map(Constructor::Case)
-                .collect(),
-        },
+            match ctxt.type_def(*id).kind {
+                TypeDefKind::Record(_) => {
+                    vec![Constructor::Record]
+                }
+                TypeDefKind::Variant(ref cases) => cases
+                    .iter()
+                    .map(|case| case.name)
+                    .map(Constructor::Case)
+                    .collect(),
+            }
+        }
     }
 }
 

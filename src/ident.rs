@@ -23,6 +23,7 @@ enum NamedSymbol {
     Unsafe,
     LangItem,
     Box,
+    Opaque,
 }
 impl NamedSymbol {
     pub const fn content(self) -> &'static str {
@@ -36,6 +37,7 @@ impl NamedSymbol {
             Self::Unsafe => "unsafe",
             Self::LangItem => "lang_item",
             Self::Box => "box",
+            Self::Opaque => "opaque",
         }
     }
 }
@@ -55,7 +57,7 @@ const fn byte_eq(b1: &[u8], b2: &[u8]) -> bool {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol(SymbolId);
 impl Symbol {
-    const NAMED_SYMBOLS: [NamedSymbol; 9] = [
+    const NAMED_SYMBOLS: [NamedSymbol; 10] = [
         NamedSymbol::Empty,
         NamedSymbol::Main,
         NamedSymbol::Std,
@@ -65,6 +67,7 @@ impl Symbol {
         NamedSymbol::Unsafe,
         NamedSymbol::LangItem,
         NamedSymbol::Box,
+        NamedSymbol::Opaque,
     ];
     const fn expect_symbol(name: NamedSymbol) -> Symbol {
         let content = name.content();
@@ -93,6 +96,7 @@ impl Symbol {
     pub const UNSAFE: Self = Self::expect_symbol(NamedSymbol::Unsafe);
     pub const LANG_ITEM: Self = Self::expect_symbol(NamedSymbol::LangItem);
     pub const BOX: Self = Self::expect_symbol(NamedSymbol::Box);
+    pub const OPAQUE: Self = Self::expect_symbol(NamedSymbol::Opaque);
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }

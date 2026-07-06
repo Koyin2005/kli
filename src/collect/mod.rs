@@ -467,6 +467,19 @@ impl CtxtRef<'_> {
         self.0.std_lib.set(std_lib);
         std_lib
     }
+    pub fn module_of(&self, mut id: DefId) -> DefId {
+        loop {
+            let node = self.node(id);
+            let Node::Item(item) = node else {
+                id = self.expect_parent(id);
+                continue;
+            };
+            match &item.kind {
+                ItemKind::Module(_) => break item.id,
+                _ => id = self.expect_parent(item.id),
+            }
+        }
+    }
     pub fn lang_items(self) -> LangItems {
         self.0.lang_items.compute((), |()| LangItems::collect(self))
     }

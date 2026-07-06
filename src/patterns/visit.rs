@@ -2,6 +2,7 @@ use crate::{
     collect::CtxtRef,
     diagnostics::DiagnosticReporter,
     patterns::{convert, pat::missing_patterns},
+    resolved_ast::DefId,
     src_loc::SrcLoc,
     typed_ast::{Expr, ExprKind, Pattern},
     typed_ast_visitor::{Visitor, walk_expr},
@@ -10,12 +11,14 @@ use crate::{
 pub struct PatternCheck<'ctxt> {
     diag: DiagnosticReporter,
     ctxt: CtxtRef<'ctxt>,
+    id: DefId,
 }
 impl<'ctxt> PatternCheck<'ctxt> {
-    pub fn new(ctxt: CtxtRef<'ctxt>) -> Self {
+    pub fn new(ctxt: CtxtRef<'ctxt>, id: DefId) -> Self {
         Self {
             diag: DiagnosticReporter::new(),
             ctxt,
+            id,
         }
     }
     pub fn check(mut self, body: &Expr) -> bool {
@@ -29,6 +32,7 @@ impl Visitor for PatternCheck<'_> {
             ExprKind::Case(matchee, arms) => {
                 self.visit_expr(matchee);
                 check_patterns(
+                    self.id,
                     self.ctxt,
                     &mut self.diag,
                     matchee.loc,
@@ -44,6 +48,7 @@ impl Visitor for PatternCheck<'_> {
     }
     fn visit_pattern(&mut self, pattern: &crate::typed_ast::Pattern) {
         check_patterns(
+            self.id,
             self.ctxt,
             &mut self.diag,
             pattern.loc,
@@ -54,6 +59,7 @@ impl Visitor for PatternCheck<'_> {
 }
 
 fn check_patterns(
+    id: DefId,
     ctxt: CtxtRef<'_>,
     diag: &mut DiagnosticReporter,
     loc: SrcLoc,
@@ -62,6 +68,7 @@ fn check_patterns(
 ) {
     let tys = [ty.clone()];
     let missing = missing_patterns(
+        id,
         ctxt,
         &tys,
         &mut patterns

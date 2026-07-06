@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use crate::{
     collect::CtxtRef,
     patterns::ctors::{Constructor, constructors_of_ty, fields_of},
+    resolved_ast::DefId,
     types::Type,
 };
 #[derive(Clone)]
@@ -84,11 +85,13 @@ impl Pat {
 }
 
 pub fn missing_patterns(
+    from_id: DefId,
     ctxt: CtxtRef<'_>,
     ty: &[Type; 1],
     patterns: &mut dyn Iterator<Item = Pat>,
 ) -> Vec<Pat> {
-    let missing = missing_patterns_inner(ctxt, ty, patterns.map(|pat| vec![pat]).collect());
+    let missing =
+        missing_patterns_inner(from_id, ctxt, ty, patterns.map(|pat| vec![pat]).collect());
     missing
         .into_iter()
         .map(|mut row| row.swap_remove(0))
@@ -209,6 +212,7 @@ fn split_constructors(
     (seen, missing)
 }
 fn missing_patterns_inner(
+    from_id: DefId,
     ctxt: CtxtRef<'_>,
     tys: &'_ [Type],
     matrix: Vec<Vec<Pat>>,
@@ -220,7 +224,7 @@ fn missing_patterns_inner(
             Vec::new()
         };
     };
-    let all_constructors = constructors_of_ty(ctxt, head);
+    let all_constructors = constructors_of_ty(from_id, ctxt, head);
     let (mut constructors, missing_ctors) = split_constructors(
         head,
         all_constructors,
@@ -238,6 +242,7 @@ fn missing_patterns_inner(
         let field_count = fields.len();
         let specialized = specialize(c, &fields, matrix.clone());
         let missing = missing_patterns_inner(
+            from_id,
             ctxt,
             &fields.iter().chain(&tys[1..]).cloned().collect::<Vec<_>>(),
             specialized,

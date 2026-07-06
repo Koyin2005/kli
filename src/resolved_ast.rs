@@ -374,6 +374,7 @@ pub enum AnnotationKind {
     Copy,
     Unsafe,
     LangItem(LangItem),
+    Opaque,
 }
 #[derive(Debug)]
 pub struct Annotation {
@@ -388,6 +389,13 @@ pub struct Item {
     pub kind: ItemKind,
 }
 impl Item {
+    pub fn kind_str(&self) -> &'static str {
+        match &self.kind {
+            ItemKind::TypeDef(_) => "type def",
+            ItemKind::Function(_) => "function def",
+            ItemKind::Module(_) => "module def",
+        }
+    }
     pub fn ident(&self) -> Ident {
         match &self.kind {
             ItemKind::Function(function) => function.name,
@@ -442,6 +450,15 @@ pub enum Node {
 }
 
 impl Node {
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Node::Item(item) => item.kind_str(),
+            Node::Lambda(_) => "lambda",
+            Node::Field(_) => "field",
+            Node::Case(_) => "case",
+            Node::CaseField(_) => "case field",
+        }
+    }
     pub fn item(&self) -> Option<&Item> {
         match self {
             Self::Item(item) => Some(item),
