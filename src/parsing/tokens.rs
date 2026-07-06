@@ -55,6 +55,7 @@ pub enum TokenKind {
     Error,
     Region,
     ArrayList,
+    While,
     At,
     Type,
     AddrOf,
@@ -88,6 +89,7 @@ impl Display for TokenKind {
                 f.write_str(literal)?;
                 return f.write_str("\"");
             }
+            Self::While => "while",
             Self::LeftParen => "(",
             Self::RightParen => ")",
             Self::LeftBracket => "[",

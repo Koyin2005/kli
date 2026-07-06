@@ -178,6 +178,7 @@ impl<'s> Lexer<'s> {
                 "region" => TokenKind::Region,
                 "arraylist" => TokenKind::ArrayList,
                 "type" => TokenKind::Type,
+                "while" => TokenKind::While,
                 _ => TokenKind::Ident(src),
             },
         })
