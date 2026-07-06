@@ -199,7 +199,7 @@ pub enum ExprKind {
     Call(Box<Expr>, Vec<Expr>),
     Borrow(Box<BorrowExpr>),
     Case(Box<Expr>, Vec<CaseArm>),
-    While(Box<Expr>,Box<Expr>),
+    While(Box<Expr>, Box<Expr>),
     For(Box<Pattern>, Box<Expr>, Box<Expr>),
     Assign(Box<Expr>, Box<Expr>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),

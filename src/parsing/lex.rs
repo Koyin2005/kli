@@ -52,16 +52,14 @@ impl<'s> Lexer<'s> {
     }
     fn skip_whitespace(&mut self) {
         while let Some(&c) = self.chars.peek() {
-            if c.is_whitespace(){
+            if c.is_whitespace() {
                 self.next_char();
-            }
-            else if c == '#' {
+            } else if c == '#' {
                 self.next_char();
                 while !self.chars.peek().is_some_and(|c| *c == '\n') {
                     self.next_char();
                 }
-            }
-            else {
+            } else {
                 break;
             }
         }

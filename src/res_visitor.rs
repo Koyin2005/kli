@@ -88,7 +88,7 @@ pub trait Visitor {
             ExprKind::Function(_, generic_args) => {
                 self.visit_generic_args(generic_args);
             }
-            ExprKind::Binary(_, expr1, expr2) => {
+            ExprKind::Binary(_, expr1, expr2) | ExprKind::While(expr1, expr2) => {
                 self.visit_expr(expr1);
                 self.visit_expr(expr2);
             }

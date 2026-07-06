@@ -195,7 +195,7 @@ impl Resolve {
                 }
             }
             ast::ExprKind::Assign(expr1, expr2)
-            | ast::ExprKind::While(expr1,expr2)
+            | ast::ExprKind::While(expr1, expr2)
             | ast::ExprKind::Binary(_, expr1, expr2)
             | ast::ExprKind::For(_, expr1, expr2) => {
                 self.declare_in_exprs(expr1);
@@ -752,8 +752,10 @@ impl Resolve {
                     region,
                 )
             }),
-            ast::ExprKind::While(condition,body) => {
-                todo!("While loop")
+            ast::ExprKind::While(condition, body) => {
+                let condition = self.resolve_expr(*condition);
+                let body = self.resolve_expr(*body);
+                res::ExprKind::While(Box::new(condition), Box::new(body))
             }
             ast::ExprKind::AddressOf(expr) => {
                 res::ExprKind::AddressOf(Box::new(self.resolve_expr(*expr)))

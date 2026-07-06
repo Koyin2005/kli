@@ -201,6 +201,7 @@ pub enum ExprKind {
     AddressOf(Box<Expr>),
     Field(Box<Expr>, Ident),
     NamedRecord(TypeName, Box<GenericArgs>, Box<[FieldInit]>),
+    While(Box<Expr>, Box<Expr>),
 }
 #[derive(Debug, Clone, Copy)]
 pub enum RegionKind {
