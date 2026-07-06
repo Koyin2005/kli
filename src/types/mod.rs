@@ -341,7 +341,7 @@ impl Type {
         if id != box_id {
             return None;
         }
-        let arg = args.get(0)?;
+        let arg = args.first()?;
         let GenericArg::Type(ty) = arg else {
             return None;
         };

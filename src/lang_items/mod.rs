@@ -13,12 +13,9 @@ impl LangItem {
         }
     }
     pub fn with_name(name: &str) -> Option<Self> {
-        for item in Self::ALL_LANG_ITEMS {
-            if item.name() == name {
-                return Some(item);
-            }
-        }
-        None
+        Self::ALL_LANG_ITEMS
+            .into_iter()
+            .find(|&item| item.name() == name)
     }
     pub const COUNT: usize = 1;
     pub const ALL_LANG_ITEMS: [LangItem; Self::COUNT] = [LangItem::Box];
