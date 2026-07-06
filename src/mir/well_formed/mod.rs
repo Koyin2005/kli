@@ -296,7 +296,8 @@ impl Visit for WellFormed<'_> {
                         | BinaryOp::Overflow(_)
                         | BinaryOp::Unchecked(_)
                         | BinaryOp::Wrapping(_)
-                        | BinaryOp::Lesser,
+                        | BinaryOp::Lesser
+                        | BinaryOp::Greater,
                         Type::Int,
                         Type::Int,
                     ) => (),
