@@ -7,7 +7,7 @@ type ArrayList[T] = {
 fun new[T]() -> ArrayList[T] = do
     ArrayList {
         ptr = allocate(1),
-        len = 1,
+        len = 0,
         cap = 1
     }
 end
@@ -49,9 +49,14 @@ fun push[r,T](l : mut[r] ArrayList[T], value : T) -> () = do
 end
 
 fun pop[r,T](l : mut[r] ArrayList[T]) -> std.optional.Option[T] = do
-    let value = ptr_read(offset(l^.ptr,l^.len));
-    l^.len = l^.len - 1;
-    std.optional.Option.Some(value)
+    case len_equal(l^.len,0) of 
+    | true -> std.optional.Option.None
+    | false -> do
+        let value = ptr_read(offset(l^.ptr,l^.len));
+        l^.len = l^.len - 1;
+        std.optional.Option.Some(value)
+        end
+    end
 end
 
 fun drop[T](l : ArrayList[T]) -> () = do
