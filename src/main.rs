@@ -192,15 +192,15 @@ fn find_std_lib() -> FileEntry {
     FileEntry {
         name: Symbol::STD,
         kind: FileEntryKind::Folder(BTreeMap::from([
+            file_from("arrays", array_file),
             file_from("bools", bool_file),
+            file_from("boxed", box_file),
             file_from("ints", int_file),
             file_from("io", io_file),
-            file_from("boxed", box_file),
+            file_from("optional", optional_file),
+            file_from("phantom", phantom_file),
             file_from("refs", ref_file),
             file_from("strings", string_file),
-            file_from("arrays", array_file),
-            file_from("optional", optional_file),
-            file_from("phantom", phantom_file)
         ])),
     }
 }
