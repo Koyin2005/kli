@@ -176,6 +176,7 @@ fn find_std_lib() -> FileEntry {
     let string_file = include_str!("std/strings.kli");
     let array_file = include_str!("std/arrays.kli");
     let optional_file = include_str!("std/optional.kli");
+    let phantom_file = include_str!("std/phantom.kli");
     fn file_from(name: &str, src: &str) -> (Symbol, FileEntry) {
         let name = Symbol::intern(name);
         (
@@ -199,6 +200,7 @@ fn find_std_lib() -> FileEntry {
             file_from("strings", string_file),
             file_from("arrays", array_file),
             file_from("optional", optional_file),
+            file_from("phantom", phantom_file)
         ])),
     }
 }
