@@ -1,9 +1,5 @@
 use crate::{
-    CtxtRef,
-    resolved_ast::{AnnotationKind, Builtin, DefId},
-    typed_ast::{ExprKind, Function, PlaceKind},
-    typed_ast_visitor::{Visitor, walk_expr},
-    types::{PointerType, Type},
+    CtxtRef, builtins::Builtin, resolved_ast::{AnnotationKind, DefId}, typed_ast::{ExprKind, Function, PlaceKind}, typed_ast_visitor::{Visitor, walk_expr}, types::{PointerType, Type},
 };
 
 pub fn transmutable(ctxt: CtxtRef<'_>, from: &Type, to: &Type) -> bool {

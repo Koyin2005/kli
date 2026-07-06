@@ -1,16 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{BinaryOp, IsResource},
-    index_vec::IndexVec,
-    mir::{
+    ast::{BinaryOp, IsResource}, builtins::Builtin, index_vec::IndexVec, mir::{
         self, AggregateKind, Constant, ConstantValue, CopyNonOverlapping, DropInPlace, Local,
         Operand, OverflowOp, Place, PointerCast, Rvalue, build::Builder,
-    },
-    resolved_ast::Builtin,
-    src_loc::SrcLoc,
-    typed_ast::{self, Expr, ExprKind, FieldId, Pattern},
-    types::{FieldName, FunctionType, Type},
+    }, src_loc::SrcLoc, typed_ast::{self, Expr, ExprKind, FieldId, Pattern}, types::{FieldName, FunctionType, Type},
 };
 pub(super) enum BuiltinResult {
     Rvalue(Rvalue),

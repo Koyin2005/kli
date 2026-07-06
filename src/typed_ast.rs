@@ -1,12 +1,7 @@
 use std::{collections::BTreeMap, rc::Rc};
 
 use crate::{
-    ast::{BinaryOp, IsResource, Mutable},
-    define_id,
-    ident::Ident,
-    resolved_ast::{Builtin, DefId, LocalRegionId, Var, VarId},
-    src_loc::SrcLoc,
-    types::{CaseId, GenericArgs, GenericKind, Region, Type},
+    ast::{BinaryOp, IsResource, Mutable}, builtins::Builtin, define_id, ident::Ident, resolved_ast::{DefId, LocalRegionId, Var, VarId}, src_loc::SrcLoc, types::{CaseId, GenericArgs, GenericKind, Region, Type},
 };
 
 #[derive(Debug)]

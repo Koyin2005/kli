@@ -23,3 +23,4 @@ mod captures;
 mod lang_items;
 mod res_visitor;
 pub mod unsafety;
+mod builtins;

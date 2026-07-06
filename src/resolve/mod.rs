@@ -2,13 +2,14 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::ast::{BorrowExpr, GenericArgs, ModuleId, NodeId, Path, StmtKind};
+use crate::builtins::{Builtin, Builtins};
 use crate::collect::{GlobalContext, build_global_context};
 use crate::diagnostics::DiagnosticReporter;
 use crate::ident::Ident;
 use crate::index_vec::IndexVec;
 use crate::lang_items::LangItem;
 use crate::resolved_ast::{
-    Builtin, Builtins, DefId, GenericKind, LocalRegionId, VarId, VariantDef,
+     DefId, GenericKind, LocalRegionId, VarId, VariantDef,
 };
 use crate::src_loc::SrcLoc;
 use crate::{Symbol, ast, resolved_ast as res};

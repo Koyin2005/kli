@@ -6,18 +6,7 @@ use std::{
 };
 
 use crate::{
-    Symbol,
-    captures::{self, captures},
-    diagnostics::DiagnosticReporter,
-    ident::Ident,
-    index_vec::IndexVec,
-    lang_items::LangItems,
-    resolved_ast::{self, AnnotationKind, Builtins, DefId, Item, ItemKind, Node, TypeDef},
-    scheme::Scheme,
-    src_loc::SrcLoc,
-    typecheck::infer::TypeInfer,
-    typed_ast::FieldId,
-    types::{
+    Symbol, builtins::Builtins, captures::{self, captures}, diagnostics::DiagnosticReporter, ident::Ident, index_vec::IndexVec, lang_items::LangItems, resolved_ast::{self, AnnotationKind, DefId, Item, ItemKind, Node, TypeDef}, scheme::Scheme, src_loc::SrcLoc, typecheck::infer::TypeInfer, typed_ast::FieldId, types::{
         CaseId, FunctionSig, GenericArg, GenericArgsRef, GenericKind, GenericParam, Region, Type,
         lower::Lower,
     },
