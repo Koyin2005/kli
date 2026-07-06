@@ -61,6 +61,7 @@ pub trait Visit {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue) {
         match rvalue {
+            Rvalue::DanglingPtr(_) => (),
             Rvalue::Discriminant(place) => self.visit_place(loc, place),
             Rvalue::Len(place) => self.visit_place(loc, place),
             Rvalue::Use(operand) => self.visit_operand(loc, operand),

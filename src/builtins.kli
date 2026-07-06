@@ -19,3 +19,5 @@ fun offset[T](p : ptr[T], offset: int) -> ptr[T];
 
 @unsafe
 fun drop_in_place[T](p : ptr[T]) -> ();
+
+fun invalid_ptr[T]() ->  ptr[T];

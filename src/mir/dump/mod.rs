@@ -91,6 +91,7 @@ impl<'ctxt> MirDump<'ctxt> {
     }
     fn write_rvalue(&mut self, rvalue: &Rvalue) -> std::io::Result<()> {
         match rvalue {
+            Rvalue::DanglingPtr(_) => (),
             Rvalue::Use(operand) => {
                 self.write_operand(operand)?;
             }

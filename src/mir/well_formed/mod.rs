@@ -94,6 +94,8 @@ impl Visit for WellFormed<'_> {
         self.super_visit_rvalue(loc, rvalue);
         let loc = self.body.src_info(loc);
         match rvalue {
+            super::Rvalue::DanglingPtr(_) => {
+            }
             super::Rvalue::Discriminant(place) => {
                 self.assert(
                     if let Type::Named(id, _, _) = self.body.type_of_place(place, self.ctxt)

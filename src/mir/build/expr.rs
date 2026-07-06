@@ -230,6 +230,9 @@ impl Builder<'_> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::InvalidPtr => {
+                BuiltinResult::Rvalue(Rvalue::DanglingPtr(ty.as_pointer().unwrap().clone()))
+            }
             Builtin::DropInPlace => {
                 let [pointer] = operands.try_into().unwrap();
                 self.push_stmt(
