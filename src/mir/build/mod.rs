@@ -26,13 +26,11 @@ impl<'ctxt> Builder<'ctxt> {
         mir_context: &'ctxt mut Context,
         source: BodySource,
         return_type: Type,
-        captures: Option<super::Captures>,
         ctxt: CtxtRef<'ctxt>,
     ) -> Self {
         Self {
             mir_context,
             body: Body {
-                capture_info: captures,
                 src: source,
                 locals: Locals::default(),
                 blocks: IndexVec::from_iter([BasicBlock::default()]),

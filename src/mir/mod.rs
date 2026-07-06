@@ -9,7 +9,7 @@ use crate::{
     index_vec::IndexVec,
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
-    typed_ast::{Capture, FieldId},
+    typed_ast::FieldId,
     types::{CaseId, FieldName, GenericArg, GenericArgs, PointerType, Region, Type},
 };
 pub mod build;
@@ -316,23 +316,10 @@ pub struct LocalInfo {
     pub ty: Type,
     pub kind: LocalKind,
 }
-
-#[derive(Clone)]
-pub struct Captures {
-    ///The local for the restored pointer with the proper type
-    pub env_ptr: Option<Local>,
-    pub captures: Vec<Capture>,
-}
-impl Captures {
-    pub fn env_type(&self) -> Type {
-        Type::closure_env(self.captures.iter().cloned())
-    }
-}
 #[derive(Clone)]
 pub struct Body {
     pub src: BodySource,
     pub return_type: Type,
-    pub capture_info: Option<Captures>,
     pub locals: Locals,
     pub blocks: IndexVec<BasicBlockId, BasicBlock>,
 }

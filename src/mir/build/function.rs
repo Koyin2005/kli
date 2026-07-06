@@ -41,7 +41,6 @@ impl Builder<'_> {
             mir_context,
             BodySource::Function(id),
             function.return_type.clone(),
-            None,
             ctxt,
         );
         builder.add_param_locals(
@@ -121,7 +120,6 @@ impl Builder<'_> {
             mir_context,
             BodySource::ClosureShim(id),
             (*lambda.return_type).clone(),
-            None,
             ctxt,
         );
         builder.add_param_locals(
