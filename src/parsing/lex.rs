@@ -56,7 +56,7 @@ impl<'s> Lexer<'s> {
                 self.next_char();
             } else if c == '#' {
                 self.next_char();
-                while !self.chars.peek().is_some_and(|c| *c == '\n') {
+                while self.chars.peek().is_some_and(|c| *c != '\n') {
                     self.next_char();
                 }
             } else {
@@ -73,6 +73,17 @@ impl<'s> Lexer<'s> {
     fn next_token_from_char(&mut self, kind: TokenKind) -> Token {
         self.next_char();
         self.new_token(kind)
+    }
+    fn next_token_from_char_or_char_match<const N: usize>(
+        &mut self,
+        single_kind: TokenKind,
+        next_kinds: [(char, TokenKind); N],
+    ) -> Token {
+        self.next_char();
+        let kind = next_kinds
+            .into_iter()
+            .find_map(|(c, kind)| self.match_char(c).map(|_| kind));
+        self.new_token(kind.unwrap_or(single_kind))
     }
     fn next_token_from_char_or_chars(
         &mut self,
@@ -189,10 +200,9 @@ impl<'s> Lexer<'s> {
         match c {
             '@' => Some(self.next_token_from_char(TokenKind::At)),
             '.' => Some(self.next_token_from_char(TokenKind::Dot)),
-            '=' => Some(self.next_token_from_char_or_chars(
-                '>',
+            '=' => Some(self.next_token_from_char_or_char_match(
                 TokenKind::Equal,
-                TokenKind::ThickArrow,
+                [('>', TokenKind::ThickArrow), ('=', TokenKind::DoubleEqual)],
             )),
             '(' => Some(self.next_token_from_char(TokenKind::LeftParen)),
             ')' => Some(self.next_token_from_char(TokenKind::RightParen)),

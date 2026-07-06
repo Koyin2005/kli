@@ -50,6 +50,7 @@ pub enum TokenKind {
     For,
     Arrow,
     ThickArrow,
+    DoubleEqual,
     True,
     False,
     Error,
@@ -84,6 +85,7 @@ impl Display for TokenKind {
             Self::Do => "do",
             Self::Dot => ".",
             Self::AddrOf => "addr_of",
+            Self::DoubleEqual => "==",
             Self::StringLiteral(literal) => {
                 f.write_str("\"")?;
                 f.write_str(literal)?;
