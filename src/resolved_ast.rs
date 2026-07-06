@@ -50,6 +50,8 @@ pub enum Builtin {
     PtrRead,
     PtrWrite,
     Transmute,
+    Memcopy,
+    Offset,
 }
 impl Builtin {
     const _NO_REPEATS: () = {
@@ -71,7 +73,7 @@ impl Builtin {
             i += 1;
         }
     };
-    pub const COUNT: usize = 12;
+    pub const COUNT: usize = 14;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
         Builtin::Freeze,
         Builtin::Allocate,
@@ -85,6 +87,8 @@ impl Builtin {
         Builtin::PtrRead,
         Builtin::PtrWrite,
         Builtin::Transmute,
+        Builtin::Memcopy,
+        Builtin::Offset,
     ];
     pub const fn name(self) -> &'static str {
         match self {
@@ -104,6 +108,8 @@ impl Builtin {
             Builtin::PtrRead => "ptr_read",
             Builtin::PtrWrite => "ptr_write",
             Builtin::Transmute => "transmute",
+            Builtin::Memcopy => "memcopy",
+            Builtin::Offset => "offset",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {

@@ -3,8 +3,8 @@ use crate::{
     collect::CtxtRef,
     mir::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, CastKind,
-        ConstantValue, LocalKind, Operand, Place, PlaceProjection, Rvalue, StmtKind,
-        TerminatorKind,
+        ConstantValue, CopyNonOverlapping, LocalKind, Operand, Place, PlaceProjection, Rvalue,
+        StmtKind, TerminatorKind,
     },
     typed_ast::FieldId,
     types::{self, display_generic_args},
@@ -290,6 +290,17 @@ impl<'ctxt> MirDump<'ctxt> {
                 StmtKind::Deallocate(value) => {
                     write!(self.output, "deallocate(")?;
                     self.write_operand(value)?;
+                    writeln!(self.output, ")")?;
+                }
+                StmtKind::CopyNonOverlapping(copy) => {
+                    let CopyNonOverlapping { dst, src, count } = copy.as_ref();
+
+                    write!(self.output, "copy_non_overlapping(")?;
+                    self.write_operand(dst)?;
+                    write!(self.output, ",")?;
+                    self.write_operand(src)?;
+                    write!(self.output, ",")?;
+                    self.write_operand(count)?;
                     writeln!(self.output, ")")?;
                 }
                 StmtKind::Noop => writeln!(self.output, "noop")?,

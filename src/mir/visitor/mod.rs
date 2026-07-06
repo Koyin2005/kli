@@ -1,6 +1,6 @@
 use crate::mir::{
-    BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Place, PlaceBase,
-    PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
+    BasicBlock, BasicBlockId, Body, Constant, CopyNonOverlapping, Local, Location, Operand, Place,
+    PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
 };
 
 pub trait Visit {
@@ -18,6 +18,12 @@ pub trait Visit {
                 if let Some(operand) = operand {
                     self.visit_operand(loc, operand);
                 }
+            }
+            StmtKind::CopyNonOverlapping(copy) => {
+                let CopyNonOverlapping { dst, src, count } = copy.as_ref();
+                self.visit_operand(loc, dst);
+                self.visit_operand(loc, src);
+                self.visit_operand(loc, count);
             }
         }
     }

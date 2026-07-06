@@ -1,9 +1,11 @@
 use crate::{
     ast::{IsResource, Mutable},
-    collect::CtxtRef,
-    collect::TypeDefKind,
+    collect::{CtxtRef, TypeDefKind},
     diagnostics::emit_fatal_diagnostic,
-    mir::{BinaryOp, Body, CastKind, Location, PointerCast, Stmt, StmtKind, visitor::Visit},
+    mir::{
+        BinaryOp, Body, CastKind, CopyNonOverlapping, Location, PointerCast, Stmt, StmtKind,
+        visitor::Visit,
+    },
     src_loc::SrcLoc,
     types::{FunctionType, PointerType, Type},
     unsafety,
@@ -383,6 +385,32 @@ impl Visit for WellFormed<'_> {
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt) {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
+            StmtKind::CopyNonOverlapping(copy) => {
+                let CopyNonOverlapping { dst, src, count } = copy.as_ref();
+                let dst_ty = self.body.type_of_operand(dst, self.ctxt);
+                let src_ty = self.body.type_of_operand(src, self.ctxt);
+                let count_ty = self.body.type_of_operand(count, self.ctxt);
+                self.assert(
+                    dst_ty == src_ty,
+                    || format!("src and dst have types {} and {}", dst_ty, src_ty),
+                    stmt.loc,
+                );
+                self.assert(
+                    count_ty == Type::Int,
+                    || format!("count should be int not '{}'", count_ty),
+                    stmt.loc,
+                );
+                self.assert(
+                    dst_ty.as_pointer() == src_ty.as_pointer() && dst_ty.as_pointer().is_some(),
+                    || {
+                        format!(
+                            "dst and src should be pointers, not {} and {}",
+                            dst_ty, src_ty
+                        )
+                    },
+                    stmt.loc,
+                );
+            }
             StmtKind::Assign(lhs, rhs) => {
                 let lhs_ty = self.body.type_of_place(lhs, self.ctxt);
                 let rhs_ty = self.body.type_of_rvalue(rhs, self.ctxt);

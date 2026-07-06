@@ -26,3 +26,8 @@ fun ptr_read[T](p : ptr[T]) -> T;
 
 @unsafe
 fun ptr_write[T](p : ptr[T], value : T) -> ();
+
+@unsafe
+fun memcopy[T](dst : ptr[T], src : ptr[T], count : int) -> ();
+
+fun offset[T](p : ptr[T], offset: int) -> ptr[T];

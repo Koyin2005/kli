@@ -239,12 +239,19 @@ pub struct Stmt {
     pub kind: StmtKind,
 }
 #[derive(Clone)]
+pub struct CopyNonOverlapping {
+    pub dst: Operand,
+    pub src: Operand,
+    pub count: Operand,
+}
+#[derive(Clone)]
 pub enum StmtKind {
     Noop,
     Assign(Place, Box<Rvalue>),
     Assert(Operand, AssertKind),
     Print(Option<Operand>),
     Deallocate(Operand),
+    CopyNonOverlapping(Box<CopyNonOverlapping>),
 }
 define_id!(BasicBlockId);
 impl BasicBlockId {
