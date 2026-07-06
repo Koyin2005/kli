@@ -51,8 +51,19 @@ impl<'s> Lexer<'s> {
         }
     }
     fn skip_whitespace(&mut self) {
-        while self.chars.peek().is_some_and(|c| c.is_whitespace()) {
-            self.next_char();
+        while let Some(&c) = self.chars.peek() {
+            if c.is_whitespace(){
+                self.next_char();
+            }
+            else if c == '#' {
+                self.next_char();
+                while !self.chars.peek().is_some_and(|c| *c == '\n') {
+                    self.next_char();
+                }
+            }
+            else {
+                break;
+            }
         }
     }
     fn current_loc(&self) -> SrcLoc {
