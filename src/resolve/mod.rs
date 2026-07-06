@@ -932,29 +932,30 @@ impl Resolve {
     }
     fn resolve_function(&mut self, function: ast::Function) -> res::Function {
         self.resolve_item(|this| {
-            this.in_scope(|this| {
-                let (generics, (params, param_tys, return_type)) =
-                    if let Some(generics) = function.generics {
-                        let (generics, sig) = this.resolve_generics(generics, |this| {
-                            this.resolve_signature(function.params, function.return_type)
-                        });
-                        (Some(Box::new(generics)), sig)
-                    } else {
+            let (generics, (params, param_tys, return_type), body) =
+                if let Some(generics) = function.generics {
+                    let (generics, (sig, body)) = this.resolve_generics(generics, |this| {
                         (
-                            None,
                             this.resolve_signature(function.params, function.return_type),
+                            function.body.map(|body| this.resolve_expr(body)),
                         )
-                    };
-                let body = function.body.map(|body| this.resolve_expr(body));
-                res::Function {
-                    name: function.name,
-                    param_tys,
-                    generics,
-                    params,
-                    return_type: Box::new(return_type),
-                    body: body.map(Box::new),
-                }
-            })
+                    });
+                    (Some(Box::new(generics)), sig, body)
+                } else {
+                    (
+                        None,
+                        this.resolve_signature(function.params, function.return_type),
+                        function.body.map(|body| this.resolve_expr(body)),
+                    )
+                };
+            res::Function {
+                name: function.name,
+                param_tys,
+                generics,
+                params,
+                return_type: Box::new(return_type),
+                body: body.map(Box::new),
+            }
         })
     }
     fn resolve_type_def_body(
@@ -1019,7 +1020,7 @@ impl Resolve {
         })
     }
     fn resolve_item<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        let value = f(self);
+        let value = self.in_scope(|this| f(this));
         self.generics = 0;
         self.vars = 0;
         value
