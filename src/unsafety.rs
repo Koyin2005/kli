@@ -6,11 +6,11 @@ use crate::{
     types::{PointerType, Type},
 };
 
-pub fn transmutable(from: &Type, to: &Type) -> bool {
+pub fn transmutable(ctxt: CtxtRef<'_>, from: &Type, to: &Type) -> bool {
     match (from, to) {
         (Type::Byte, Type::Bool) | (Type::Bool, Type::Byte) => true,
         (Type::List(_), Type::String) | (Type::String, Type::List(_)) => true,
-        _ => from.pointer_kind().is_some() && to.pointer_kind().is_some(),
+        _ => from.pointer_kind(ctxt).is_some() && to.pointer_kind(ctxt).is_some(),
     }
 }
 
@@ -61,7 +61,7 @@ impl Visitor for SafetyCheck<'_> {
                             crate::types::GenericArg::Type(ty2),
                         ],
                     ) = &args.as_array()
-                    && !transmutable(ty1, ty2)
+                    && !transmutable(self.ctxt, ty1, ty2)
                 {
                     self.ctxt.diag().add_diagnostic(
                         format!("cannot transmute from '{}' to '{}'", ty1, ty2),
@@ -78,7 +78,7 @@ impl Visitor for SafetyCheck<'_> {
             ExprKind::Function(id, _) if is_unsafe(self.ctxt, id) => UnsafeCause::Function(id),
             ExprKind::Load(ref place)
                 if let PlaceKind::Deref(ref value) = place.kind
-                    && let Some(PointerType::Raw) = value.ty.pointer_kind() =>
+                    && let Some(PointerType::Raw) = value.ty.pointer_kind(self.ctxt) =>
             {
                 UnsafeCause::RawDeref
             }

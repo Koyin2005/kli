@@ -38,9 +38,10 @@ impl FunctionCtxt<'_> {
                         .as_pointer_type()
                     {
                         Ok((PointerType::Raw | PointerType::Reference(..), ty)) => ty.clone(),
-                        Ok((p, ty)) => self
-                            .root()
-                            .non_deref_error(&Type::pointer_type(p, ty), value.loc),
+                        Ok((p, ty)) => self.root().non_deref_error(
+                            &Type::pointer_type(p, ty, self.root().ctxt()),
+                            value.loc,
+                        ),
                         Err(ty) => self.root().non_deref_error(&ty, value.loc),
                     },
                     typed_ast::PlaceKind::Deref(Box::new(value)),

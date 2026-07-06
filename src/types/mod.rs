@@ -9,6 +9,7 @@ use crate::{
     collect::CtxtRef,
     define_id,
     index_vec::IndexVec,
+    lang_items::LangItem,
     resolved_ast::{DefId, LocalRegionId},
     typed_ast::{Capture, FieldId},
 };
@@ -319,18 +320,38 @@ impl Type {
             _ => Err(self),
         }
     }
-    pub fn pointer_kind(&self) -> Option<PointerType> {
+    pub fn as_box(&self, ctxt: CtxtRef<'_>) -> Option<&Type> {
+        use crate::lang_items::LangItem;
+        let &Self::Named(id, _, ref args) = self else {
+            return None;
+        };
+        let box_id = ctxt.lang_items().get(LangItem::Box)?;
+        if id != box_id {
+            return None;
+        }
+        let arg = args.get(0)?;
+        let GenericArg::Type(ty) = arg else {
+            return None;
+        };
+        Some(ty)
+    }
+    pub fn pointer_kind(&self, ctxt: CtxtRef<'_>) -> Option<PointerType> {
         match self {
             Self::RawPointer(_) => Some(PointerType::Raw),
             Self::Box(_) => Some(PointerType::Box),
+            Self::Named(..) if self.as_box(ctxt).is_some() => Some(PointerType::Box),
             &Self::Imm(region, _) => Some(PointerType::Reference(region, Mutable::Immutable)),
             &Self::Mut(region, _) => Some(PointerType::Reference(region, Mutable::Mutable)),
             _ => None,
         }
     }
-    pub fn pointer_type(pointer: PointerType, pointee: Self) -> Self {
+    pub fn pointer_type(pointer: PointerType, pointee: Self, ctxt: CtxtRef<'_>) -> Self {
         match pointer {
-            PointerType::Box => Self::Box(Box::new(pointee)),
+            PointerType::Box => {
+                let id = ctxt.lang_items().expect(LangItem::Box);
+                let name = ctxt.expect_ident(id).symbol;
+                Self::Named(id, name, vec![GenericArg::Type(pointee)])
+            }
             PointerType::Reference(region, mutable) => pointee.reference(mutable, region),
             PointerType::Raw => Self::pointer(pointee),
         }

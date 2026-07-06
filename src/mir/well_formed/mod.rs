@@ -337,7 +337,7 @@ impl Visit for WellFormed<'_> {
                 CastKind::Transmute(to) => {
                     let from = self.body.type_of_operand(operand, self.ctxt);
                     self.assert(
-                        unsafety::transmutable(&from, to),
+                        unsafety::transmutable(self.ctxt, &from, to),
                         || format!("Cannot transmute {} into {}", from, to),
                         loc,
                     );
