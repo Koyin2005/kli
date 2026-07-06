@@ -9,6 +9,7 @@ pub struct Token {
 }
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TokenKind {
+    With,
     LeftBrace,
     RightBrace,
     Equal,
@@ -124,6 +125,7 @@ impl Display for TokenKind {
             Self::Region => "region",
             Self::Type => "type",
             Self::Eof => "EOF",
+            Self::With => "with"
         };
         f.write_str(txt)
     }
