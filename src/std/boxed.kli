@@ -4,34 +4,34 @@ type Box[T] = {
 }
 
 
-fun box_into_raw[T](b : box[T]) -> ptr[T] = transmute(b)
+fun box_into_raw[T](b : Box[T]) -> ptr[T] = b.inner
 
 @unsafe
-fun box_from_raw[T](p : ptr[T]) -> box[T] = transmute(p)
+fun box_from_raw[T](p : ptr[T]) -> Box[T] = Box { inner = p}
 
-fun alloc[T](value : T) -> box[T] = do
+fun alloc[T](value : T) -> Box[T] = do
     let ptr = allocate[T](1);
     ptr_write(ptr,value);
     box_from_raw(ptr)
 end
 
-fun dealloc[T](b : box[T]) -> T = do 
+fun dealloc[T](b : Box[T]) -> T = do 
     let ptr = box_into_raw(b);
     let value = ptr_read(ptr);
     deallocate(ptr);
     value
 end
 
-fun deref[r,T](x : imm[r] box[T]) -> imm[r] T = do
-    let ptr_to_box : ptr[box[T]] = std.refs.ref_into_raw(x);
-    let inner_ptr : ptr[T] = box_into_raw(ptr_read(ptr_to_box));
+fun deref[r,T](x : imm[r] Box[T]) -> imm[r] T = do
+    let ptr_to_box : ptr[Box[T]] = std.refs.ref_into_raw(x);
+    let inner_ptr : ptr[T] = ptr_to_box^.inner;
     std.refs.ref_from_raw(inner_ptr)
 end
 
-fun deref_mut[r,T](x : mut[r] box[T]) -> mut[r] T = do
-    let ptr_to_box : ptr[box[T]] = std.refs.ref_into_raw_mut(x);
-    let inner_ptr : ptr[T] = box_into_raw(ptr_read(ptr_to_box));
+fun deref_mut[r,T](x : mut[r] Box[T]) -> mut[r] T = do
+    let ptr_to_box : ptr[Box[T]] = std.refs.ref_into_raw_mut(x);
+    let inner_ptr : ptr[T] = ptr_to_box^.inner;
     std.refs.ref_from_raw_mut(inner_ptr)
 end
 
-fun drop[T](b : box[T]) -> () = drop_in_place(box_into_raw(b),1)
+fun drop[T](b : Box[T]) -> () = drop_in_place(box_into_raw(b),1)
