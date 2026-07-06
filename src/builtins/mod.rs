@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{Symbol, resolved_ast::DefId};
-
+use crate::{Symbol, def_ids::DefId};
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Builtin {

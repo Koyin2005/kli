@@ -2,8 +2,9 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 
 use crate::collect::{CtxtRef, Generics};
+use crate::def_ids::DefId;
 use crate::lang_items::LangItem;
-use crate::resolved_ast::{self as res, DefId, TypeName};
+use crate::resolved_ast::{self as res, TypeName};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
 use crate::types::{

@@ -3,10 +3,11 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     ast::BinaryOp,
     collect::TypeDefKind,
+    def_ids::DefId,
     index_vec::IndexVec,
     resolved_ast::{
-        BlockBody, BorrowExpr, DefId, Expr, ExprKind, FieldInit, FunctionDefId, Lambda,
-        LocalRegionId, Pattern, Var,
+        BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, FunctionDefId, Lambda, LocalRegionId,
+        Pattern, Var,
     },
     src_loc::SrcLoc,
     typecheck::root::{FunctionCtxt, TypeCheck},

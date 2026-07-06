@@ -1,7 +1,7 @@
 use crate::{
     Symbol,
     collect::{CtxtRef, TypeDefKind},
-    resolved_ast::DefId,
+    def_ids::DefId,
     types::Type,
 };
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]

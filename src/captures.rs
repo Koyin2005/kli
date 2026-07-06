@@ -2,8 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     CtxtRef,
+    def_ids::DefId,
     res_visitor::Visitor,
-    resolved_ast::{DefId, ExprKind, VarId},
+    resolved_ast::{ExprKind, VarId},
 };
 #[derive(Clone, Default)]
 pub struct CaptureSet {

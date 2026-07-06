@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use crate::{
     collect::CtxtRef,
+    def_ids::DefId,
     patterns::ctors::{Constructor, constructors_of_ty, fields_of},
-    resolved_ast::DefId,
     types::Type,
 };
 #[derive(Clone)]

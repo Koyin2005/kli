@@ -7,10 +7,11 @@ use crate::{
     Symbol,
     ast::{IsResource, Mutable},
     collect::CtxtRef,
+    def_ids::DefId,
     define_id,
     index_vec::IndexVec,
     lang_items::LangItem,
-    resolved_ast::{DefId, LocalRegionId},
+    resolved_ast::LocalRegionId,
     typed_ast::{Capture, FieldId},
 };
 define_id!(CaseId);

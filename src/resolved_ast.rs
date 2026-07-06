@@ -3,6 +3,7 @@ use std::rc::Rc;
 use crate::{
     Symbol,
     ast::{BinaryOp, IsResource, Mutable},
+    def_ids::DefId,
     define_id,
     ident::Ident,
     index_vec::IndexVec,
@@ -348,10 +349,6 @@ impl Item {
     pub fn expect_function_def(&self) -> &Function {
         self.function_def().expect("should be a function")
     }
-}
-define_id!(DefId);
-impl DefId {
-    pub const ROOT: Self = Self(0);
 }
 
 #[derive(Debug)]

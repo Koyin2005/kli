@@ -1,7 +1,4 @@
-use crate::{
-    CtxtRef,
-    resolved_ast::{AnnotationKind, DefId},
-};
+use crate::{CtxtRef, def_ids::DefId, resolved_ast::AnnotationKind};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LangItem {
     Box,

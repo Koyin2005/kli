@@ -1,8 +1,8 @@
 use crate::{
     collect::CtxtRef,
+    def_ids::DefId,
     diagnostics::DiagnosticReporter,
     patterns::{convert, pat::missing_patterns},
-    resolved_ast::DefId,
     src_loc::SrcLoc,
     typed_ast::{Expr, ExprKind, Pattern},
     typed_ast_visitor::{Visitor, walk_expr},

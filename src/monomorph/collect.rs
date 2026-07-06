@@ -1,8 +1,8 @@
 use std::collections::{HashSet, VecDeque};
 
 use crate::{
+    def_ids::DefId,
     mir::{BodySource, Constant, ConstantValue, Context, Location, visitor::Visit},
-    resolved_ast::DefId,
     types::GenericArg,
 };
 

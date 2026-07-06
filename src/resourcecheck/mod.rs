@@ -7,10 +7,11 @@ use crate::{
     Symbol,
     ast::{IsResource, Mutable},
     collect::CtxtRef,
+    def_ids::DefId,
     define_id,
     diagnostics::DiagnosticReporter,
     index_vec::IndexVec,
-    resolved_ast::{DefId, LocalRegionId, Var, VarId},
+    resolved_ast::{LocalRegionId, Var, VarId},
     src_loc::SrcLoc,
     typed_ast::{
         Expr, ExprKind, FieldId, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind,

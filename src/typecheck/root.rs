@@ -6,8 +6,9 @@ use std::{
 use crate::{
     Symbol,
     collect::CtxtRef,
+    def_ids::DefId,
     ident::Ident,
-    resolved_ast::{self as res, DefId, VarId},
+    resolved_ast::{self as res, VarId},
     src_loc::SrcLoc,
     typecheck::{infer::TypeInfer, subst::TypeSubst},
     typed_ast::{self, Function, IteratorType, LetBinding},

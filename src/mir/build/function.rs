@@ -1,12 +1,12 @@
 use crate::{
     ast::IsResource,
     collect::CtxtRef,
+    def_ids::DefId,
     mir::{
         BodySource, CastKind, Constant, ConstantValue, Context, Local, LocalKind, Operand, Place,
         PointerCast, Rvalue, TerminatorKind, build::Builder, visitor::Visit,
         well_formed::WellFormed,
     },
-    resolved_ast::DefId,
     src_loc::SrcLoc,
     typed_ast::{self, FieldId, Lambda},
     types::{FunctionType, GenericArgs, Type},
