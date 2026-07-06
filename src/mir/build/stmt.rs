@@ -36,6 +36,27 @@ impl Builder<'_> {
             } => {
                 self.for_loop(pattern, iterator, iterator_type, body);
             }
+            ExprKind::While(condition, body) => {
+                // while cond body
+                // L1
+                //  if cond goto L2 else goto L3
+                // L2
+                //  body
+                //  goto L1
+                // L3
+                let loop_start = self.goto_to_new_block(condition.loc);
+                let condition = self.operand(condition);
+
+                let body_start_block = self.switch_to_new_block();
+                self.expr_stmt(body);
+                self.finish_block_with_goto(expr.loc, loop_start);
+
+                let end_block = self.new_block();
+                self.switch_to_block(loop_start);
+                self.finish_block_with_if(expr.loc, condition, body_start_block, end_block);
+
+                self.switch_to_block(end_block);
+            }
             ExprKind::BuiltinCall(builtin, _, args) => {
                 match self.builtin_call(expr.loc, &expr.ty, *builtin, args) {
                     BuiltinResult::Rvalue(value) => {

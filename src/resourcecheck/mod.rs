@@ -602,8 +602,20 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             }
         }
     }
+    fn in_loop_body(&mut self, in_body: impl FnOnce(&mut Self)) {
+        let new_loop = self.loops + 1;
+        let old_loop = std::mem::replace(&mut self.loops, new_loop);
+        self.in_drop_scope(in_body);
+        self.loops = old_loop;
+    }
     fn check_expr(&mut self, expr: &Expr) {
         match &expr.kind {
+            ExprKind::While(condition, body) => {
+                self.in_loop_body(|this| {
+                    this.check_expr(condition);
+                    this.check_expr(body)
+                });
+            }
             ExprKind::Block(body, region) => {
                 self.in_drop_scope(|this| {
                     for stmt in &body.stmts {
@@ -800,14 +812,10 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                 body,
             } => {
                 self.check_expr(iterator);
-                let new_loop = self.loops + 1;
-                let old_loop = std::mem::replace(&mut self.loops, new_loop);
-
-                self.in_drop_scope(|this| {
+                self.in_loop_body(|this| {
                     this.check_pattern(pattern, false);
                     this.check_expr(body);
                 });
-                self.loops = old_loop;
             }
             ExprKind::Case(value, arms) => {
                 self.check_expr(value);

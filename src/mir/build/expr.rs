@@ -217,7 +217,8 @@ impl Builder<'_> {
             | ExprKind::BuiltinCall(..)
             | ExprKind::Const(..)
             | ExprKind::AddressOf(..)
-            | ExprKind::NamedRecord(..) => {
+            | ExprKind::NamedRecord(..)
+            | ExprKind::While(..) => {
                 let rvalue = self.build_rvalue(expr);
                 self.assign(expr.loc, dest, rvalue);
             }
@@ -518,7 +519,10 @@ impl Builder<'_> {
                 let temp = self.expr_into_temp(expr);
                 Rvalue::Use(Operand::Load(Place::local(temp)))
             }
-            ExprKind::For { .. } | ExprKind::Print(_) | ExprKind::Assign(..) => {
+            ExprKind::For { .. }
+            | ExprKind::Print(_)
+            | ExprKind::Assign(..)
+            | ExprKind::While(..) => {
                 self.expr_stmt(expr);
                 Rvalue::Use(Operand::Constant(Constant::unit()))
             }

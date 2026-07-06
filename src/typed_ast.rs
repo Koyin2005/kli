@@ -141,6 +141,7 @@ pub enum ExprKind {
     Lambda(Box<Lambda>),
     AddressOf(Box<Place>),
     NamedRecord(DefId, GenericArgs, Box<[RecordFieldInit]>),
+    While(Box<Expr>, Box<Expr>),
 }
 #[derive(Debug)]
 pub struct CaseArm {

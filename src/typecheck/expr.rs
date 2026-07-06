@@ -534,7 +534,13 @@ impl FunctionCtxt<'_> {
         let make_expr = |ty, kind, loc| typed_ast::Expr { ty, kind, loc };
         let mut expr = match kind {
             ExprKind::While(condition, body) => {
-                todo!("While loop")
+                let condition = self.check_expr(condition, Some(Type::Bool));
+                let body = self.check_expr(body, Some(Type::Unit));
+                typed_ast::Expr {
+                    ty: Type::Unit,
+                    loc,
+                    kind: typed_ast::ExprKind::While(Box::new(condition), Box::new(body)),
+                }
             }
             ExprKind::Record(fields) => self.check_record(loc, fields, expected_ty.clone()),
             ExprKind::Block(block, region) => {
