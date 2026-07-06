@@ -10,4 +10,40 @@ fun value_or[T](o: Option[T], default : T) -> T =
     | .Some(x) -> x
     | .None -> default
     end
-    
+
+fun as_ref[r,T](o : imm[r] Option[T]) -> Option[imm[r] T] = 
+    case o of 
+    | ref .Some(borrow x) -> Option.Some(x)
+    | ref .None -> Option.None
+    end
+
+
+fun as_mut[r,T](o : mut[r] Option[T]) -> Option[mut[r] T] = 
+    case o of 
+    | ref .Some(borrow mut x) -> Option.Some(x)
+    | ref .None -> Option.None
+    end
+
+fun expect_value[T](o : Option[T]) -> T = 
+    case o of
+    | .Some(x) -> x
+    | .None -> panic
+    end
+
+fun map[T,U](o : Option[T], f : fun(T) => U) -> Option[U] = 
+    case o of 
+    | .Some(x) -> Option.Some(f(x))
+    | .None -> Option.None
+    end
+
+fun flatten[T](o : Option[Option[T]]) -> Option[T] = 
+    case o of
+    | .Some(x) -> x 
+    | .None -> Option.None
+    end 
+
+fun flat_map[T,U](o : Option[T], f : fun(T) => Option[U]) -> Option[U] = 
+    case o of 
+    | .Some(x) -> f(x)
+    | .None -> Option.None
+    end
