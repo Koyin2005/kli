@@ -15,8 +15,10 @@ end
 @unsafe
 fun reallocate[T](p : ptr[T], new_len : int) -> ptr[T] = 
     do
+        let new_ptr = allocate(new_len);
+        memcopy(new_ptr,p,new_len);
         deallocate(p);
-        allocate(new_len)
+        new_ptr
     end
 
 fun len[r,T](l : imm[r] ArrayList[T]) -> int = 
