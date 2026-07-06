@@ -6,7 +6,7 @@ type Box[T] = {
 fun box_into_raw[T](b : box[T]) -> ptr[T] = transmute(b)
 
 @unsafe
-fun box_from_raw[T](b : ptr[T]) -> box[T];
+fun box_from_raw[T](p : ptr[T]) -> box[T] = transmute(p)
 
 fun alloc[T](value : T) -> box[T] = do
     let ptr = allocate[T](1);
@@ -22,13 +22,13 @@ fun dealloc[T](b : box[T]) -> T = do
 end
 
 fun deref[r,T](x : imm[r] box[T]) -> imm[r] T = do
-    let ptr_to_box : ptr[box[T]] = ref_into_raw(x);
+    let ptr_to_box : ptr[box[T]] = std.refs.ref_into_raw(x);
     let inner_ptr : ptr[T] = box_into_raw(ptr_read(ptr_to_box));
-    ref_from_raw(inner_ptr)
+    std.refs.ref_from_raw(inner_ptr)
 end
 
 fun deref_mut[r,T](x : mut[r] box[T]) -> mut[r] T = do
-    let ptr_to_box : ptr[box[T]] = ref_into_raw_mut(x);
+    let ptr_to_box : ptr[box[T]] = std.refs.ref_into_raw_mut(x);
     let inner_ptr : ptr[T] = box_into_raw(ptr_read(ptr_to_box));
-    ref_from_raw_mut(inner_ptr)
+    std.refs.ref_from_raw_mut(inner_ptr)
 end
