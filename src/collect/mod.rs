@@ -120,11 +120,10 @@ impl Generics {
     }
     #[track_caller]
     pub fn kind(&self, index: usize) -> GenericKind {
-        self.params
-            .as_slice()
-            .get(index)
-            .unwrap_or_else(|| panic!("generic param for {:?} not found", index))
-            .kind
+        let Some(kind) = self.get_kind(index) else {
+            panic!("generic param for {:?} not found", index)
+        };
+        kind
     }
     #[track_caller]
     pub fn get_kind(&self, index: usize) -> Option<GenericKind> {

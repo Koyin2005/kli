@@ -1,0 +1,58 @@
+type ArrayList[T] = {
+    ptr : ptr[T],
+    len : int,
+    cap : int
+}
+
+fun new[T]() -> ArrayList[T] = do
+    ArrayList {
+        ptr = allocate(1),
+        len = 1,
+        cap = 1
+    }
+end
+
+@unsafe
+fun reallocate[T](p : ptr[T], new_len : int) -> ptr[T] = 
+    do
+        deallocate(p);
+        allocate(new_len)
+    end
+
+fun len[r,T](l : imm[r] ArrayList[T]) -> int = 
+    l^.len
+
+@unsafe
+fun grow[r,T](l : mut[r] ArrayList[T]) -> () = 
+    do
+        let new_cap = l^.cap * 2;
+        l^.ptr = reallocate(l^.ptr,new_cap);
+        l^.cap = new_cap
+    end
+
+fun offset[T](p : ptr[T], value : int) -> ptr[T] = panic
+
+fun len_equal(l1 : int, l2: int) -> bool = 
+    case (l1 - l2) of
+    | 0 -> true
+    | _ -> false
+    end
+
+fun push[r,T](l : mut[r] ArrayList[T], value : T) -> () = do
+    case len_equal(l^.len,l^.cap) of
+    | true -> do in r1 grow(borrow mut l^ in r1) end
+    | false -> () 
+    end;
+    ptr_write(offset(l^.ptr,l^.len),value);
+    l^.len = l^.len + 1
+end
+
+fun pop[r,T](l : mut[r] ArrayList[T]) -> std.optional.Option[T] = do
+    let value = ptr_read(offset(l^.ptr,l^.len));
+    l^.len = l^.len - 1;
+    std.optional.Option.Some(value)
+end
+
+fun drop[T](l : ArrayList[T]) -> () = do
+    deallocate(l.ptr)
+end

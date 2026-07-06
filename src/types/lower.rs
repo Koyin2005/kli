@@ -122,7 +122,6 @@ impl<'a> Lower<'a> {
             &res::TypeKind::Named(name, ref args) => match name {
                 TypeName::Param(name, param) => {
                     let _ = self.lower_generic_args_with(Generics::default(), 0, ty.loc, args);
-
                     if let GenericKind::Type = self.ctxt.generics(self.id).kind(param) {
                         Type::Param(name, param)
                     } else {
