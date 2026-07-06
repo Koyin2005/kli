@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
+    ast::BinaryOp,
     collect::TypeDefKind,
     index_vec::IndexVec,
     resolved_ast::{
@@ -646,11 +647,49 @@ impl FunctionCtxt<'_> {
                 }
             }
             ExprKind::Binary(binary_op, left, right) => {
-                let left = self.check_expr(left, Some(Type::Int));
-                let right = self.check_expr(right, Some(Type::Int));
+                #[derive(Clone, Copy)]
+                enum OperandTypes {
+                    Ints,
+                    Scalars,
+                }
+                impl OperandTypes {
+                    fn expected_types(self) -> (Option<Type>, Option<Type>) {
+                        match self {
+                            Self::Ints => (Some(Type::Int), Some(Type::Int)),
+                            Self::Scalars => (None, None),
+                        }
+                    }
+                }
+                let (operands, result) = match binary_op {
+                    BinaryOp::Add | BinaryOp::Divide | BinaryOp::Multiply | BinaryOp::Subtract => {
+                        (OperandTypes::Ints, Type::Int)
+                    }
+                    BinaryOp::Equals => (OperandTypes::Scalars, Type::Bool),
+                };
+                let (left_ty, right_ty) = operands.expected_types();
+                let left = self.check_expr(left, left_ty);
+                let right = self.check_expr(right, right_ty);
+                match (operands, &left.ty, &right.ty) {
+                    (OperandTypes::Ints, Type::Int, Type::Int)
+                    | (OperandTypes::Scalars, Type::Bool, Type::Bool)
+                    | (OperandTypes::Scalars, Type::Int, Type::Int)
+                    | (OperandTypes::Scalars, Type::Byte, Type::Byte)
+                    | (OperandTypes::Scalars, Type::Char, Type::Char) => (),
+                    (OperandTypes::Scalars, Type::RawPointer(ty1), Type::RawPointer(ty2)) => {
+                        let _ = self.root().unify((**ty1).clone(), (**ty2).clone(), loc);
+                    }
+                    (_, left, right) => {
+                        self.ctxt().diag().add_diagnostic(
+                            format!(
+                                "'{left}' and '{right}' are invalid operands for '{binary_op}'"
+                            ),
+                            loc,
+                        );
+                    }
+                }
                 typed_ast::Expr {
                     loc,
-                    ty: Type::Int,
+                    ty: result,
                     kind: typed_ast::ExprKind::Binary(*binary_op, Box::new(left), Box::new(right)),
                 }
             }

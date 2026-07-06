@@ -149,7 +149,7 @@ impl Parser {
             TokenKind::Minus => Some((Precedence::Factor, BinaryOp::Subtract)),
             TokenKind::Slash => Some((Precedence::Term, BinaryOp::Divide)),
             TokenKind::Star => Some((Precedence::Term, BinaryOp::Multiply)),
-            TokenKind::DoubleEqual => Some((Precedence::Equality,BinaryOp::Equals)),
+            TokenKind::DoubleEqual => Some((Precedence::Equality, BinaryOp::Equals)),
             _ => None,
         }
     }

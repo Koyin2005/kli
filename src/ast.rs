@@ -57,7 +57,18 @@ pub enum BinaryOp {
     Subtract,
     Multiply,
     Divide,
-    Equals
+    Equals,
+}
+impl Display for BinaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinaryOp::Add => f.write_str("+"),
+            BinaryOp::Subtract => f.write_str("-"),
+            BinaryOp::Multiply => f.write_str("*"),
+            BinaryOp::Divide => f.write_str("/"),
+            BinaryOp::Equals => f.write_str("=="),
+        }
+    }
 }
 #[derive(Debug)]
 pub enum Place {
