@@ -60,5 +60,6 @@ fun pop[r,T](l : mut[r] ArrayList[T]) -> std.optional.Option[T] = do
 end
 
 fun drop[T](l : ArrayList[T]) -> () = do
+    drop_in_place(l.ptr,l.len);
     deallocate(l.ptr)
 end

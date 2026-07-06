@@ -245,6 +245,11 @@ pub struct CopyNonOverlapping {
     pub count: Operand,
 }
 #[derive(Clone)]
+pub struct DropInPlace {
+    pub pointer_to_place: Operand,
+    pub count: Operand,
+}
+#[derive(Clone)]
 pub enum StmtKind {
     Noop,
     Assign(Place, Box<Rvalue>),
@@ -252,6 +257,7 @@ pub enum StmtKind {
     Print(Option<Operand>),
     Deallocate(Operand),
     CopyNonOverlapping(Box<CopyNonOverlapping>),
+    DropInPlace(Box<DropInPlace>),
 }
 define_id!(BasicBlockId);
 impl BasicBlockId {

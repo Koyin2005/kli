@@ -4,8 +4,8 @@ use crate::{
     ast::{BinaryOp, IsResource},
     index_vec::IndexVec,
     mir::{
-        self, AggregateKind, Constant, ConstantValue, CopyNonOverlapping, Local, Operand,
-        OverflowOp, Place, PointerCast, Rvalue, build::Builder,
+        self, AggregateKind, Constant, ConstantValue, CopyNonOverlapping, DropInPlace, Local,
+        Operand, OverflowOp, Place, PointerCast, Rvalue, build::Builder,
     },
     resolved_ast::Builtin,
     src_loc::SrcLoc,
@@ -238,6 +238,17 @@ impl Builder<'_> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::DropInPlace => {
+                let [pointer, count] = operands.try_into().unwrap();
+                self.push_stmt(
+                    loc,
+                    mir::StmtKind::DropInPlace(Box::new(DropInPlace {
+                        pointer_to_place: pointer,
+                        count,
+                    })),
+                );
+                BuiltinResult::Unit
+            }
             Builtin::Memcopy => {
                 let [dst, src, count] = operands.try_into().unwrap();
                 self.push_stmt(

@@ -3,8 +3,8 @@ use crate::{
     collect::{CtxtRef, TypeDefKind},
     diagnostics::emit_fatal_diagnostic,
     mir::{
-        BinaryOp, Body, CastKind, CopyNonOverlapping, Location, PointerCast, Stmt, StmtKind,
-        visitor::Visit,
+        BinaryOp, Body, CastKind, CopyNonOverlapping, DropInPlace, Location, PointerCast, Stmt,
+        StmtKind, visitor::Visit,
     },
     src_loc::SrcLoc,
     types::{FunctionType, PointerType, Type},
@@ -385,6 +385,24 @@ impl Visit for WellFormed<'_> {
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt) {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
+            StmtKind::DropInPlace(drop_in_place) => {
+                let DropInPlace {
+                    pointer_to_place,
+                    count,
+                } = drop_in_place.as_ref();
+                let pointer_ty = self.body.type_of_operand(&pointer_to_place, self.ctxt);
+                let count_ty = self.body.type_of_operand(count, self.ctxt);
+                self.assert(
+                    pointer_ty.as_pointer().is_some(),
+                    || format!("pointer to place should be pointer not {}", pointer_ty),
+                    stmt.loc,
+                );
+                self.assert(
+                    count_ty == Type::Int,
+                    || format!("count should be int not '{}'", count_ty),
+                    stmt.loc,
+                );
+            }
             StmtKind::CopyNonOverlapping(copy) => {
                 let CopyNonOverlapping { dst, src, count } = copy.as_ref();
                 let dst_ty = self.body.type_of_operand(dst, self.ctxt);
