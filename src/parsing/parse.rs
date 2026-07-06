@@ -16,13 +16,6 @@ use crate::{
     },
     src_loc::SrcLoc,
 };
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-enum Precedence {
-    None,
-    Term,
-    Factor,
-    Equality,
-}
 pub struct ParseError;
 pub struct Parser {
     diag: DiagnosticReporter,
@@ -143,13 +136,13 @@ impl Parser {
         let _ = self.expect(end);
         Ok(results)
     }
-    fn binary_op(&mut self) -> Option<(Precedence, BinaryOp)> {
+    fn binary_op(&mut self) -> Option<(u32, BinaryOp)> {
         match self.peek_token().kind {
-            TokenKind::Plus => Some((Precedence::Factor, BinaryOp::Add)),
-            TokenKind::Minus => Some((Precedence::Factor, BinaryOp::Subtract)),
-            TokenKind::Slash => Some((Precedence::Term, BinaryOp::Divide)),
-            TokenKind::Star => Some((Precedence::Term, BinaryOp::Multiply)),
-            TokenKind::DoubleEqual => Some((Precedence::Equality, BinaryOp::Equals)),
+            TokenKind::Plus => Some((10, BinaryOp::Add)),
+            TokenKind::Minus => Some((10, BinaryOp::Subtract)),
+            TokenKind::Slash => Some((15, BinaryOp::Divide)),
+            TokenKind::Star => Some((15, BinaryOp::Multiply)),
+            TokenKind::DoubleEqual => Some((5, BinaryOp::Equals)),
             _ => None,
         }
     }
@@ -660,13 +653,13 @@ impl Parser {
             }
         }
     }
-    fn parse_expr_precedence(&mut self, prec: Precedence) -> Result<Expr, ParseError> {
+    fn parse_expr_binding_power(&mut self, min_bp: u32) -> Result<Expr, ParseError> {
         let mut expr = self.parse_expr_postfix()?;
-        while let Some((curr_prec, op)) = self.binary_op()
-            && curr_prec >= prec
+        while let Some((curr_bp, op)) = self.binary_op()
+            && curr_bp >= min_bp
         {
             self.next_token();
-            let rhs = self.parse_expr_precedence(prec)?;
+            let rhs = self.parse_expr_binding_power(curr_bp)?;
             expr = Expr {
                 loc: expr.loc,
                 kind: ExprKind::Binary(op, Box::new(expr), Box::new(rhs)),
@@ -675,14 +668,14 @@ impl Parser {
         Ok(expr)
     }
     fn parse_assign(&mut self) -> Result<Expr, ParseError> {
-        let mut lhs = self.parse_expr_precedence(Precedence::None)?;
+        let mut lhs = self.parse_expr_binding_power(0)?;
         while self.matches_token(&TokenKind::Equal) {
             let loc = lhs.loc;
             lhs = Expr {
                 loc,
                 kind: ExprKind::Assign(
                     Box::new(lhs),
-                    Box::new(self.parse_expr_precedence(Precedence::None)?),
+                    Box::new(self.parse_expr_binding_power(0)?),
                 ),
             };
         }
