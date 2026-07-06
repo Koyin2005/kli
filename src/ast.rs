@@ -144,6 +144,12 @@ impl Path {
     pub fn tail_iter(&self) -> impl IntoIterator<Item = &Ident> {
         self.segments[1..].iter()
     }
+    pub fn last(&self) -> Ident {
+        *self
+            .segments
+            .last()
+            .expect("should have at least 1 segment")
+    }
 }
 impl Display for Path {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -178,6 +184,11 @@ pub struct BorrowExpr {
     pub region: Region,
 }
 #[derive(Debug)]
+pub struct InstancePath {
+    pub path: Path,
+    pub generic_args: Option<GenericArgs>,
+}
+#[derive(Debug)]
 pub enum ExprKind {
     Unit,
     Annotate(Box<Expr>, Box<Type>),
@@ -191,7 +202,7 @@ pub enum ExprKind {
     For(Box<Pattern>, Box<Expr>, Box<Expr>),
     Assign(Box<Expr>, Box<Expr>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
-    Path(Path, Option<GenericArgs>),
+    Path(InstancePath),
     Lambda(Box<Lambda>),
     Block(BlockBody, Option<Ident>),
     Deref(Box<Expr>),
@@ -199,6 +210,7 @@ pub enum ExprKind {
     Bool(bool),
     Number(u64),
     Record(RecordExpr),
+    NamedRecord(InstancePath, Vec<FieldInit>),
     AddressOf(Box<Expr>),
 }
 #[derive(Debug, Clone)]
@@ -212,23 +224,23 @@ pub enum IsResource {
     Resource,
     Data,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FunctionType {
     pub resource: IsResource,
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RecordField {
     pub id: NodeId,
     pub name: Ident,
     pub ty: Type,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RecordType {
     pub fields: Vec<RecordField>,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum TypeKind {
     Int,
     Bool,
@@ -236,18 +248,18 @@ pub enum TypeKind {
     Unit,
     Char,
     Record(RecordType),
-    Named(Ident, Option<GenericArgs>),
+    Named(InstancePath),
     Function(FunctionType),
     List(Box<Type>),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Type {
     pub loc: SrcLoc,
     pub kind: TypeKind,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Param {
     pub name: Ident,
     pub ty: Type,
@@ -269,11 +281,11 @@ pub struct Annotation {
     pub name: Ident,
     pub fields: Vec<AnnotationField>,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct GenericArg {
     pub ty: Type,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct GenericArgs {
     pub loc: SrcLoc,
     pub args: Vec<GenericArg>,
@@ -291,18 +303,18 @@ pub enum Region {
     Static(SrcLoc),
     Named(Ident),
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct CaseType {
     pub id: NodeId,
     pub ty: Type,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct CaseDef {
     pub id: NodeId,
     pub name: Ident,
     pub ty: Option<CaseType>,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum TypeDefKind {
     Record(RecordType),
     Variant(Vec<CaseDef>),

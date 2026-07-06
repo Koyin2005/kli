@@ -72,7 +72,7 @@ where
             }
             v.visit_expr(&body.expr);
         }
-        ExprKind::Record(fields) => {
+        ExprKind::Record(fields) | ExprKind::NamedRecord(.., fields) => {
             for field in fields {
                 v.visit_expr(&field.value);
             }

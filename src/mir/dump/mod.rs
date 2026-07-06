@@ -141,13 +141,18 @@ impl<'ctxt> MirDump<'ctxt> {
                         let name = self.ctxt.type_def(*id).case(*index).name;
                         format!("{}{}", name, display_generic_args(args))
                     }
+                    AggregateKind::NamedRecord(id, args) => {
+                        let name = self.ctxt.type_def(*id).name;
+                        format!("{}{}", name, display_generic_args(args))
+                    }
                 };
                 let (open_bracket, close_bracket) = match kind {
                     AggregateKind::Array(_, _) => ('[', ']'),
                     AggregateKind::Variant(..) => ('(', ')'),
                     _ => ('{', '}'),
                 };
-                let field_name = |i: FieldId| match kind {
+                let ctxt = self.ctxt;
+                let field_name = move |i: FieldId| match kind {
                     AggregateKind::ArrayList(_) | AggregateKind::String => Some(
                         match i {
                             types::LIST_PTR_FIELD => "ptr",
@@ -168,6 +173,9 @@ impl<'ctxt> MirDump<'ctxt> {
                         FieldId::FIRST_FIELD => "0".to_string(),
                         _ => unreachable!("Should only have one field"),
                     }),
+                    AggregateKind::NamedRecord(id, ..) => {
+                        Some(ctxt.type_def(*id).fields()[i].name.to_string())
+                    }
                 };
                 write!(self.output, "{name}{open_bracket}")?;
                 let mut first = true;

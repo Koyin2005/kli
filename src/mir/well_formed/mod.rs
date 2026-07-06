@@ -111,6 +111,23 @@ impl Visit for WellFormed<'_> {
                     || "Field names should be same length as fields".to_string(),
                     loc,
                 ),
+                super::AggregateKind::NamedRecord(id, args) => {
+                    let type_def = self.ctxt.type_def(*id);
+                    let field_info = type_def.fields();
+                    self.assert(
+                        fields.len() == field_info.len(),
+                        || "should have fields for each field def".to_string(),
+                        loc,
+                    );
+                    for (field, operand) in field_info.iter().zip(fields) {
+                        let field_ty = field.type_of(args, self.ctxt);
+                        self.assert(
+                            field_ty == self.body.type_of_operand(operand, self.ctxt),
+                            || format!("Field of '{}' should have type '{}'", field.name, field_ty),
+                            loc,
+                        );
+                    }
+                }
                 super::AggregateKind::Closure(..) => {
                     let (env, code) = self.assert_with_some(
                         fields.as_slice(),

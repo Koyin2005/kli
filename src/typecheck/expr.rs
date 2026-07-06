@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     collect::TypeDefKind,
+    index_vec::IndexVec,
     resolved_ast::{
         BlockBody, BorrowExpr, DefId, Expr, ExprKind, FieldInit, FunctionDefId, Lambda,
         LocalRegionId, Pattern, Var,
@@ -702,6 +703,55 @@ impl FunctionCtxt<'_> {
                     loc,
                     ty: Type::Unit,
                     kind: typed_ast::ExprKind::Assign(Box::new(place), Box::new(value)),
+                }
+            }
+            ExprKind::NamedRecord(id, args, fields) => {
+                let ty_def = self.root().ctxt().type_def(*id);
+                let args = self.root().lower_generic_args_for(*id, loc, args);
+                let field_info = match ty_def.kind {
+                    TypeDefKind::Record(ref fields) => fields,
+                    TypeDefKind::Variant(_) => {
+                        self.root().ctxt().diag().add_diagnostic(
+                            format!("Cannot record init 'variant {}'", ty_def.name),
+                            loc,
+                        );
+                        &IndexVec::new()
+                    }
+                };
+                let field_map = field_info
+                    .iter_enumerated()
+                    .map(|(i, &field)| (field.name, (i, field)))
+                    .collect::<HashMap<_, _>>();
+                let mut seen_fields = HashSet::new();
+                let fields = fields
+                    .iter()
+                    .filter_map(|field| {
+                        let field_info = field_map.get(&field.name.symbol).copied();
+                        if !seen_fields.insert(field.name.symbol) {
+                            self.root().ctxt().diag().add_diagnostic(
+                                format!("Repeated field '{}'", field.name.symbol),
+                                field.name.loc,
+                            );
+                        }
+                        let value = self.check_expr(
+                            &field.value,
+                            field_info
+                                .as_ref()
+                                .map(|(_, field)| field.type_of(&args, self.root().ctxt())),
+                        );
+                        let (id, _) = field_info?;
+                        Some(RecordFieldInit { index: id, value })
+                    })
+                    .collect();
+                let _ = self.root().check_missing_fields(
+                    expr.loc,
+                    seen_fields,
+                    field_info.iter().map(|field| FieldName::Named(field.name)),
+                );
+                typed_ast::Expr {
+                    ty: Type::Named(*id, ty_def.name, args.clone()),
+                    loc,
+                    kind: typed_ast::ExprKind::NamedRecord(*id, args, fields),
                 }
             }
         };

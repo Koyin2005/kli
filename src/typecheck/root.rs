@@ -230,13 +230,14 @@ impl<'ctxt> TypeCheck<'ctxt> {
                 .diag()
                 .add_diagnostic("'main' should not be generic".to_string(), main.name.loc);
         }
-        if !main.params.is_empty() {
+        let signature = self.ctxt.signature_of(main_id).skip();
+        if !signature.params.is_empty() {
             self.ctxt().diag().add_diagnostic(
                 "'main' should have no parameters".to_string(),
                 main.name.loc,
             );
         }
-        if !matches!(main.return_type.kind, res::TypeKind::Unit) {
+        if !matches!(signature.return_type, Type::Unit) {
             self.ctxt().diag().add_diagnostic(
                 "'main' should have '()' as return type".to_string(),
                 main.name.loc,

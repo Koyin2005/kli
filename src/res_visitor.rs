@@ -33,15 +33,8 @@ pub trait Visitor {
     }
     fn super_visit_type(&mut self, ty: &Type) {
         match &ty.kind {
-            TypeKind::Unit
-            | TypeKind::Int
-            | TypeKind::Bool
-            | TypeKind::String
-            | TypeKind::Char
-            | TypeKind::Byte
-            | TypeKind::Param(..)
-            | TypeKind::Unknown => (),
-            TypeKind::Ptr(ty) | TypeKind::List(ty) | TypeKind::Box(ty) => self.visit_type(ty),
+            TypeKind::Unknown => (),
+            TypeKind::Ptr(ty) | TypeKind::List(ty) => self.visit_type(ty),
             TypeKind::Imm(region, ty) | TypeKind::Mut(region, ty) => {
                 self.visit_region(**region);
                 self.visit_type(ty);
@@ -141,6 +134,12 @@ pub trait Visitor {
                 }
             }
             ExprKind::Record(field_inits) => {
+                for field in field_inits {
+                    self.visit_expr(&field.value);
+                }
+            }
+            ExprKind::NamedRecord(_, generic_args, field_inits) => {
+                self.visit_generic_args(generic_args);
                 for field in field_inits {
                     self.visit_expr(&field.value);
                 }

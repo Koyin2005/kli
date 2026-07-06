@@ -8,7 +8,6 @@ use crate::{
     ast::{IsResource, Mutable},
     collect::CtxtRef,
     define_id,
-    ident::Ident,
     index_vec::IndexVec,
     resolved_ast::{DefId, LocalRegionId},
     typed_ast::{Capture, FieldId},
@@ -28,7 +27,7 @@ pub enum GenericKind {
 }
 #[derive(Clone, Copy, Debug)]
 pub struct GenericParam {
-    pub name: Ident,
+    pub name: Symbol,
     pub kind: GenericKind,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

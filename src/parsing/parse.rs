@@ -4,9 +4,9 @@ use crate::{
     ast::{
         Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, CaseDef, CaseType,
         Expr, ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, Generics,
-        IsResource, Item, ItemKind, Lambda, LetBinding, Module, ModuleId, Mutable, NodeId, Param,
-        Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField, RecordType, Region,
-        Stmt, StmtKind, Type, TypeDef, TypeDefKind, TypeKind,
+        InstancePath, IsResource, Item, ItemKind, Lambda, LetBinding, Module, ModuleId, Mutable,
+        NodeId, Param, Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField,
+        RecordType, Region, Stmt, StmtKind, Type, TypeDef, TypeDefKind, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::{Ident, Symbol},
@@ -116,7 +116,6 @@ impl Parser {
             Ok(())
         } else {
             let loc = token.loc;
-            let kind = &token.kind;
             let msg = format!("Expected '{}' but got '{}'", kind, token.kind);
             self.diag.add_diagnostic(msg, loc);
             Err(ParseError)
@@ -375,7 +374,7 @@ impl Parser {
             kind: StmtKind::Let(binding),
         })
     }
-    fn parse_record_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
+    fn parse_record_expr_fields(&mut self) -> Result<Vec<FieldInit>, ParseError> {
         self.next_token();
         let fields = self.delimited_by(&TokenKind::RightBrace, |this| {
             let name = this.expect_ident("field name")?;
@@ -383,6 +382,10 @@ impl Parser {
             let value = this.parse_expr()?;
             Ok(FieldInit { name, value })
         })?;
+        Ok(fields)
+    }
+    fn parse_record_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
+        let fields = self.parse_record_expr_fields()?;
         Ok(Expr {
             loc,
             kind: ExprKind::Record(RecordExpr { fields }),
@@ -410,6 +413,21 @@ impl Parser {
         };
         let _ = self.expect(&TokenKind::RightParen);
         Ok(expr)
+    }
+    fn parse_path(&mut self) -> Result<InstancePath, ParseError> {
+        let Some(name) = self.match_ident() else {
+            unreachable!("Should be an ident here")
+        };
+        let mut path = vec![name];
+        while self.matches_token(&TokenKind::Dot) {
+            let name = self.expect_ident("field name or sub path")?;
+            path.push(name);
+        }
+        let generic_args = self.parse_optional_generic_args()?;
+        Ok(InstancePath {
+            path: Path::new(path),
+            generic_args,
+        })
     }
     fn parse_expr_prefix(&mut self) -> Result<Expr, ParseError> {
         let loc = self.current_loc();
@@ -478,18 +496,17 @@ impl Parser {
                 })
             }
             TokenKind::Ident(_) => {
-                let Some(name) = self.match_ident() else {
-                    unreachable!("Should be an ident here")
-                };
-                let mut path = vec![name];
-                while self.matches_token(&TokenKind::Dot) {
-                    let name = self.expect_ident("field name or sub path")?;
-                    path.push(name);
+                let path = self.parse_path()?;
+                if self.check_token(&TokenKind::LeftBrace) {
+                    let fields = self.parse_record_expr_fields()?;
+                    return Ok(Expr {
+                        loc,
+                        kind: ExprKind::NamedRecord(path, fields),
+                    });
                 }
-                let generic_args = self.parse_optional_generic_args()?;
                 Ok(Expr {
                     loc,
-                    kind: ExprKind::Path(Path::new(path), generic_args),
+                    kind: ExprKind::Path(path),
                 })
             }
             TokenKind::Print => {
@@ -788,11 +805,10 @@ impl Parser {
                 }
             }
             TokenKind::Ident(_) => {
-                let name = self.match_ident().expect("Expected valid ident");
-                let args = self.parse_optional_generic_args()?;
+                let path = self.parse_path()?;
                 Ok(Type {
                     loc,
-                    kind: TypeKind::Named(name, args),
+                    kind: TypeKind::Named(path),
                 })
             }
             TokenKind::Fun => {

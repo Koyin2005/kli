@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
 
-use crate::collect::CtxtRef;
-use crate::resolved_ast::{self as res, DefId};
+use crate::collect::{CtxtRef, Generics};
+use crate::resolved_ast::{self as res, DefId, TypeName};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
 use crate::types::{
@@ -41,14 +41,14 @@ impl<'a> Lower<'a> {
     ) -> impl Iterator<Item = Type> {
         tys.map(|ty| self.lower_type(ty))
     }
-    pub fn lower_generic_args(
+    fn lower_generic_args_with(
         &self,
-        id: DefId,
+        generics: Generics,
+        count: usize,
         loc: SrcLoc,
         args: &res::GenericArgs,
     ) -> GenericArgs {
-        let generics = self.ctxt.generics(id);
-        let arg_count = generics.count();
+        let arg_count = count;
         let loc = args.loc.unwrap_or(loc);
         if let Some(args) = args.args() {
             if arg_count != args.len() {
@@ -81,10 +81,20 @@ impl<'a> Lower<'a> {
                 format!("Expected '{}' generic args but got none", arg_count,),
                 loc,
             );
-            self.ctxt.generics(id).instantiate_unknown()
+            generics.instantiate_unknown()
         } else {
             Vec::new()
         }
+    }
+    pub fn lower_generic_args(
+        &self,
+        id: DefId,
+        loc: SrcLoc,
+        args: &res::GenericArgs,
+    ) -> GenericArgs {
+        let generics = self.ctxt.generics(id);
+        let count = generics.count();
+        self.lower_generic_args_with(generics, count, loc, args)
     }
     pub fn lower_type(&self, ty: &res::Type) -> Type {
         match &ty.kind {
@@ -109,13 +119,74 @@ impl<'a> Lower<'a> {
                     .collect()
             }),
             res::TypeKind::Unknown => Type::Unknown,
-            res::TypeKind::Char => Type::Char,
-            res::TypeKind::Bool => Type::Bool,
-            res::TypeKind::Int => Type::Int,
-            res::TypeKind::Unit => Type::Unit,
-            res::TypeKind::String => Type::String,
-            res::TypeKind::Byte => Type::Byte,
-            res::TypeKind::Box(ty) => Type::Box(Box::new(self.lower_type(ty))),
+            &res::TypeKind::Named(name, ref args) => match name {
+                TypeName::Param(name, param) => {
+                    let _ = self.lower_generic_args_with(Generics::default(), 0, ty.loc, args);
+
+                    if let GenericKind::Type = self.ctxt.generics(self.id).kind(param) {
+                        Type::Param(name, param)
+                    } else {
+                        self.ctxt
+                            .diag()
+                            .add_diagnostic(format!("Cannot use '{}' as a type", name), ty.loc);
+                        Type::Unknown
+                    }
+                }
+                TypeName::UserDefined(id) => {
+                    let args = self.lower_generic_args(id, ty.loc, args);
+                    Type::Named(id, self.ctxt.expect_ident(id).symbol, args)
+                }
+                TypeName::Byte => {
+                    let _ = self.lower_generic_args_with(Generics::default(), 0, ty.loc, args);
+                    Type::Byte
+                }
+                TypeName::Bool => {
+                    let _ = self.lower_generic_args_with(Generics::default(), 0, ty.loc, args);
+                    Type::Bool
+                }
+                TypeName::Unit => {
+                    let _ = self.lower_generic_args_with(Generics::default(), 0, ty.loc, args);
+                    Type::Unit
+                }
+                TypeName::Int => {
+                    let _ = self.lower_generic_args_with(Generics::default(), 0, ty.loc, args);
+                    Type::Int
+                }
+                TypeName::String => {
+                    let _ = self.lower_generic_args_with(Generics::default(), 0, ty.loc, args);
+                    Type::String
+                }
+                TypeName::Char => {
+                    let _ = self.lower_generic_args_with(Generics::default(), 0, ty.loc, args);
+                    Type::Char
+                }
+                TypeName::Ptr => {
+                    let args = self.lower_generic_args_with(Generics::default(), 1, ty.loc, args);
+                    let ty = if let Ok([GenericArg::Type(ty)]) = <[_; _]>::try_from(args) {
+                        ty
+                    } else {
+                        self.ctxt.diag().add_diagnostic(
+                            "Expected a 'type' generic arg for 'ptr'".to_string(),
+                            ty.loc,
+                        );
+                        Type::Unknown
+                    };
+                    Type::pointer(ty)
+                }
+                TypeName::Box => {
+                    let args = self.lower_generic_args_with(Generics::default(), 1, ty.loc, args);
+                    let ty = if let Ok([GenericArg::Type(ty)]) = <[_; _]>::try_from(args) {
+                        ty
+                    } else {
+                        self.ctxt.diag().add_diagnostic(
+                            "Expected a 'type' generic arg for 'box'".to_string(),
+                            ty.loc,
+                        );
+                        Type::Unknown
+                    };
+                    Type::Box(Box::new(ty))
+                }
+            },
             res::TypeKind::List(ty) => Type::List(Box::new(self.lower_type(ty))),
             res::TypeKind::Imm(region, ty) => {
                 let region = self.lower_region(region);
@@ -140,20 +211,6 @@ impl<'a> Lower<'a> {
                     params,
                     return_type: Box::new(return_type),
                 })
-            }
-            &res::TypeKind::Param(name, param) => {
-                if let GenericKind::Type = self.ctxt.generics(self.id).kind(param) {
-                    Type::Param(name, param)
-                } else {
-                    self.ctxt
-                        .diag()
-                        .add_diagnostic(format!("Cannot use '{}' as a type", name), ty.loc);
-                    Type::Unknown
-                }
-            }
-            &res::TypeKind::Named(id, ref args) => {
-                let args = self.lower_generic_args(id, ty.loc, args);
-                Type::Named(id, self.ctxt.expect_ident(id).symbol, args)
             }
         }
     }

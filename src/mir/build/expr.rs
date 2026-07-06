@@ -216,7 +216,8 @@ impl Builder<'_> {
             | ExprKind::Lambda(_)
             | ExprKind::BuiltinCall(..)
             | ExprKind::Const(..)
-            | ExprKind::AddressOf(..) => {
+            | ExprKind::AddressOf(..)
+            | ExprKind::NamedRecord(..) => {
                 let rvalue = self.build_rvalue(expr);
                 self.assign(expr.loc, dest, rvalue);
             }
@@ -302,6 +303,20 @@ impl Builder<'_> {
                     .as_operand(expr)
                     .unwrap_or_else(|| unreachable!("should be an constant operand '{:?}' ", expr));
                 Rvalue::Use(operand)
+            }
+            ExprKind::NamedRecord(id, generic_args, fields) => {
+                let mut field_map = fields
+                    .iter()
+                    .map(|field| (field.index, self.operand(&field.value)))
+                    .collect::<HashMap<_, _>>();
+                let fields = (0..fields.len())
+                    .map(FieldId::new)
+                    .map(|field| field_map.remove(&field).unwrap())
+                    .collect::<IndexVec<FieldId, _>>();
+                Rvalue::Aggregate(
+                    AggregateKind::NamedRecord(*id, generic_args.clone()),
+                    fields,
+                )
             }
             ExprKind::Record(fields) => {
                 let mut field_map = fields

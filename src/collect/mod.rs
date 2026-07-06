@@ -157,8 +157,8 @@ impl Generics {
             .iter()
             .enumerate()
             .map(|(i, param)| match param.kind {
-                GenericKind::Region => GenericArg::Region(Region::Param(param.name.symbol, i)),
-                GenericKind::Type => GenericArg::Type(Type::Param(param.name.symbol, i)),
+                GenericKind::Region => GenericArg::Region(Region::Param(param.name, i)),
+                GenericKind::Type => GenericArg::Type(Type::Param(param.name, i)),
             })
             .collect()
     }
@@ -474,7 +474,7 @@ fn lower_generics(generics: &resolved_ast::Generics) -> Generics {
             .iter()
             .zip(generics.names.iter().copied())
             .map(|(kind, name)| GenericParam {
-                name,
+                name: name.symbol,
                 kind: match kind {
                     resolved_ast::GenericKind::Region => GenericKind::Region,
                     resolved_ast::GenericKind::Type => GenericKind::Type,

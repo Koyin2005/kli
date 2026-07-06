@@ -60,6 +60,11 @@ impl<'a> TypeSubst<'a> {
             Region::Infer(var) => *region = self.infer.simplify_region(Region::Infer(*var)),
         }
     }
+    pub fn subst_generic_args(&mut self, args: &mut [GenericArg]) {
+        for arg in args {
+            self.subst_generic_arg(arg);
+        }
+    }
     pub fn subst_generic_arg(&mut self, arg: &mut GenericArg) {
         match arg {
             GenericArg::Region(region) => {
@@ -76,9 +81,7 @@ impl<'a> TypeSubst<'a> {
             PatternKind::Ref(pattern) => self.subst_pattern(pattern),
             PatternKind::Binding(.., ty) => self.subst_type(ty),
             PatternKind::Case(.., args, _, inner) => {
-                for arg in args {
-                    self.subst_generic_arg(arg);
-                }
+                self.subst_generic_args(args);
                 if let Some(inner) = inner {
                     self.subst_pattern(inner);
                 }
@@ -216,6 +219,12 @@ impl<'a> TypeSubst<'a> {
                 self.subst_type(&mut lambda.return_type);
             }
             ExprKind::Record(fields) => {
+                for field in fields {
+                    self.subst_expr(&mut field.value);
+                }
+            }
+            ExprKind::NamedRecord(_, args, fields) => {
+                self.subst_generic_args(args);
                 for field in fields {
                     self.subst_expr(&mut field.value);
                 }

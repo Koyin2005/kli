@@ -213,6 +213,7 @@ pub enum ExprKind {
     VariantCase(DefId, Box<GenericArgs>),
     AddressOf(Box<Expr>),
     Field(Box<Expr>, Ident),
+    NamedRecord(DefId, Box<GenericArgs>, Box<[FieldInit]>),
 }
 #[derive(Debug, Clone, Copy)]
 pub enum RegionKind {
@@ -290,22 +291,27 @@ pub struct FunctionType {
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
 }
-#[derive(Debug)]
-pub enum TypeKind {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TypeName {
     Unit,
     Int,
     Bool,
     String,
     Char,
+    Ptr,
     Byte,
+    UserDefined(DefId),
+    Box,
+    Param(Symbol, usize),
+}
+#[derive(Debug)]
+pub enum TypeKind {
     Ptr(Box<Type>),
     List(Box<Type>),
-    Box(Box<Type>),
     Imm(Box<Region>, Box<Type>),
     Mut(Box<Region>, Box<Type>),
     Function(Box<FunctionType>),
-    Named(DefId, Box<GenericArgs>),
-    Param(Symbol, usize),
+    Named(TypeName, Box<GenericArgs>),
     Unknown,
     Record(Box<[RecordFieldType]>),
 }

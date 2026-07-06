@@ -44,20 +44,6 @@ enum Res {
     TypeDef(ModuleNodeId),
     VariantCase(ModuleNodeId),
 }
-impl Res {
-    const fn kind(self) -> &'static str {
-        match self {
-            Res::LocalRegion(_) => "local region",
-            Res::Param(_) => "generic param",
-            Res::Builtin(_) => "builtin",
-            Res::Function(_) => "function",
-            Res::Var(_) => "var",
-            Res::Module(_) => "module",
-            Res::TypeAlias(_) | Res::TypeDef(_) => " type",
-            Res::VariantCase(_) => "case",
-        }
-    }
-}
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 struct ModuleNodeId(ModuleId, NodeId);
 struct CaseInfo {
@@ -226,8 +212,9 @@ impl Resolve {
                 }
                 self.declare_in_exprs(&block_body.expr);
             }
-            ast::ExprKind::Record(record_expr) => {
-                for field in record_expr.fields.iter() {
+            ast::ExprKind::Record(ast::RecordExpr { fields })
+            | ast::ExprKind::NamedRecord(_, fields) => {
+                for field in fields.iter() {
                     self.declare_in_exprs(&field.value);
                 }
             }
@@ -323,17 +310,21 @@ impl Resolve {
                 .args
                 .into_iter()
                 .map(|arg| match arg.ty.kind {
-                    ast::TypeKind::Named(name, None)
-                        if let Some(Res::LocalRegion(local)) = self.resolve_name(name.symbol) =>
-                    {
+                    ast::TypeKind::Named(ast::InstancePath {
+                        ref path,
+                        generic_args: None,
+                    }) if let Ok(Res::LocalRegion(local)) = self.resolve_path(path) => {
                         res::GenericArg::Region(res::Region {
                             loc: arg.ty.loc,
-                            kind: res::RegionKind::Local(name.symbol, local),
+                            kind: res::RegionKind::Local(path.last().symbol, local),
                         })
                     }
-                    ast::TypeKind::Named(name, None)
-                        if let Some(Res::Param(index)) = self.resolve_name(name.symbol)
-                            && self.is_region_param(name) =>
+                    ast::TypeKind::Named(ast::InstancePath {
+                        ref path,
+                        generic_args: None,
+                    }) if let Ok(Res::Param(index)) = self.resolve_path(path)
+                        && let name = path.last()
+                        && self.is_region_param(name) =>
                     {
                         res::GenericArg::Region(res::Region {
                             loc: arg.ty.loc,
@@ -377,13 +368,65 @@ impl Resolve {
             value,
         )
     }
+    fn resolve_type_path(&mut self, path: &Path, loc: SrcLoc) -> Option<res::TypeName> {
+        let name = *path.segments().last().unwrap();
+        match self.resolve_path(path) {
+            Err(err) => {
+                self.path_res_error(path, loc, err);
+                None
+            }
+            Ok(Res::Param(index)) => {
+                if self
+                    .generic_kinds
+                    .insert(name.symbol, res::GenericKind::Type)
+                    .is_some_and(|kind| kind != res::GenericKind::Type)
+                {
+                    self.diag.add_diagnostic(
+                        format!("Generic kind mismatch for '{}'", name.symbol),
+                        name.loc,
+                    );
+                }
+                Some(res::TypeName::Param(name.symbol, index))
+            }
+            Ok(Res::TypeAlias(alias)) => match alias {
+                TypeAlias::Ptr => Some(res::TypeName::Ptr),
+                TypeAlias::Box => Some(res::TypeName::Box),
+                TypeAlias::Byte => Some(res::TypeName::Byte),
+            },
+            Ok(Res::TypeDef(id)) => Some(res::TypeName::UserDefined(self.def_id_for(id))),
+            Ok(Res::VariantCase(..)) => {
+                self.cannot_use_as_error(name.symbol, "type", name.loc);
+                None
+            }
+            Ok(
+                Res::Builtin(_)
+                | Res::Function(_)
+                | Res::LocalRegion(_)
+                | Res::Var(_)
+                | Res::Module(_),
+            ) => {
+                self.cannot_use_as_error(name.symbol, "type", name.loc);
+                None
+            }
+        }
+    }
     fn resolve_type(&mut self, ty: ast::Type) -> res::Type {
         let kind = match ty.kind {
-            ast::TypeKind::Char => res::TypeKind::Char,
-            ast::TypeKind::Bool => res::TypeKind::Bool,
-            ast::TypeKind::Int => res::TypeKind::Int,
-            ast::TypeKind::Unit => res::TypeKind::Unit,
-            ast::TypeKind::String => res::TypeKind::String,
+            ast::TypeKind::Char => {
+                res::TypeKind::Named(res::TypeName::Char, Box::new(res::GenericArgs::NONE))
+            }
+            ast::TypeKind::Bool => {
+                res::TypeKind::Named(res::TypeName::Bool, Box::new(res::GenericArgs::NONE))
+            }
+            ast::TypeKind::Int => {
+                res::TypeKind::Named(res::TypeName::Int, Box::new(res::GenericArgs::NONE))
+            }
+            ast::TypeKind::Unit => {
+                res::TypeKind::Named(res::TypeName::Unit, Box::new(res::GenericArgs::NONE))
+            }
+            ast::TypeKind::String => {
+                res::TypeKind::Named(res::TypeName::String, Box::new(res::GenericArgs::NONE))
+            }
             ast::TypeKind::List(ty) => res::TypeKind::List(Box::new(self.resolve_type(*ty))),
             ast::TypeKind::Record(ast::RecordType { fields }) => {
                 let fields = fields
@@ -414,110 +457,15 @@ impl Resolve {
                 Box::new(self.resolve_region(region)),
                 Box::new(self.resolve_type(*ty)),
             ),
-            ast::TypeKind::Named(name, args) => match self.resolve_name(name.symbol) {
+            ast::TypeKind::Named(path) => match self.resolve_type_path(&path.path, ty.loc) {
                 None => {
-                    self.resolve_generic_args(args);
-                    self.not_in_scope_error(name.symbol, name.loc);
+                    self.resolve_generic_args(path.generic_args);
                     res::TypeKind::Unknown
                 }
-                Some(Res::Param(index)) => {
-                    if self
-                        .generic_kinds
-                        .insert(name.symbol, res::GenericKind::Type)
-                        .is_some_and(|kind| kind != res::GenericKind::Type)
-                    {
-                        self.diag.add_diagnostic(
-                            format!("Generic kind mismatch for '{}'", name.symbol),
-                            name.loc,
-                        );
-                    }
-                    self.error_on_generic_args("generic param", name.symbol, name.loc, args);
-                    res::TypeKind::Param(name.symbol, index)
-                }
-                Some(Res::TypeAlias(alias)) => match alias {
-                    TypeAlias::Ptr => {
-                        let args = self.resolve_generic_args(args);
-                        let arg_count = args.args.len();
-                        let arg: Result<[_; 1], _> = args.args.try_into();
-                        let ty = match arg {
-                            Ok([res::GenericArg::Type(arg)]) => arg,
-                            _ => {
-                                self.diag.add_diagnostic(
-                                    format!(
-                                        "Expected '{}' type generic arg but got '{}'",
-                                        1, arg_count
-                                    ),
-                                    name.loc,
-                                );
-                                res::Type {
-                                    loc: name.loc,
-                                    kind: res::TypeKind::Unknown,
-                                }
-                            }
-                        };
-                        res::TypeKind::Ptr(Box::new(ty))
-                    }
-                    TypeAlias::Box => {
-                        let args = self.resolve_generic_args(args);
-                        let count = args.len();
-                        let arg: Result<[_; 1], _> = args.args.try_into();
-                        let ty = match arg {
-                            Ok([res::GenericArg::Type(arg)]) => arg,
-                            _ => {
-                                self.diag.add_diagnostic(
-                                    format!(
-                                        "Expected '{}' type generic arg but got '{}'",
-                                        1, count
-                                    ),
-                                    name.loc,
-                                );
-                                res::Type {
-                                    loc: name.loc,
-                                    kind: res::TypeKind::Unknown,
-                                }
-                            }
-                        };
-                        res::TypeKind::Box(Box::new(ty))
-                    }
-                    TypeAlias::Byte => {
-                        let args = self.resolve_generic_args(args);
-                        let count = args.len();
-                        let arg: Result<[_; _], _> = args.args.try_into();
-                        match arg {
-                            Ok([]) => (),
-                            _ => {
-                                self.diag.add_diagnostic(
-                                    format!("Expected '{}' generic args but got '{}'", 0, count),
-                                    name.loc,
-                                );
-                            }
-                        };
-                        res::TypeKind::Byte
-                    }
-                },
-                Some(Res::TypeDef(id)) => {
-                    let args = self.resolve_generic_args(args);
-                    let id = self.def_id_for(id);
-                    res::TypeKind::Named(id, Box::new(args))
-                }
-                Some(Res::VariantCase(..)) => {
-                    self.resolve_generic_args(args);
-                    self.cannot_use_as_error(name.symbol, "type", name.loc);
-                    res::TypeKind::Unknown
-                }
-                Some(
-                    res @ (Res::Builtin(_)
-                    | Res::Function(_)
-                    | Res::LocalRegion(_)
-                    | Res::Var(_)
-                    | Res::Module(_)),
-                ) => {
-                    if !matches!(res, Res::Builtin(_) | Res::Function(_)) {
-                        self.error_on_generic_args(res.kind(), name.symbol, name.loc, args);
-                    }
-                    self.cannot_use_as_error(name.symbol, "type", name.loc);
-                    res::TypeKind::Unknown
-                }
+                Some(name) => res::TypeKind::Named(
+                    name,
+                    Box::new(self.resolve_generic_args(path.generic_args)),
+                ),
             },
         };
         res::Type { loc: ty.loc, kind }
@@ -707,6 +655,19 @@ impl Resolve {
         }
         Ok(curr)
     }
+    fn path_res_error(&mut self, path: &Path, loc: SrcLoc, err: NameResolutionError) {
+        match err {
+            NameResolutionError::NotInScope => {
+                self.path_not_in_scope_error(path, loc);
+            }
+            NameResolutionError::InvalidPathStart => {
+                self.invalid_path_start_error(path, loc);
+            }
+            NameResolutionError::VariableField(..) => {
+                self.invalid_path_start_error(path, loc);
+            }
+        }
+    }
     fn resolve_path_as_expr(
         &mut self,
         loc: SrcLoc,
@@ -717,11 +678,8 @@ impl Resolve {
             Err(error) => {
                 self.resolve_generic_args(args);
                 match error {
-                    NameResolutionError::NotInScope => {
-                        self.path_not_in_scope_error(&path, loc);
-                    }
-                    NameResolutionError::InvalidPathStart => {
-                        self.invalid_path_start_error(&path, loc);
+                    NameResolutionError::NotInScope | NameResolutionError::InvalidPathStart => {
+                        self.path_res_error(&path, loc, error);
                     }
                     NameResolutionError::VariableField(loc, var, fields) => {
                         let expr = res::Expr {
@@ -839,7 +797,9 @@ impl Resolve {
                     })
                     .collect(),
             ),
-            ast::ExprKind::Path(path, args) => self.resolve_path_as_expr(loc, path, args),
+            ast::ExprKind::Path(path) => {
+                self.resolve_path_as_expr(loc, path.path, path.generic_args)
+            }
             ast::ExprKind::Lambda(lambda) => self.in_scope(|this| {
                 let id = this.def_id_for(ModuleNodeId(this.current_module.unwrap(), lambda.id));
                 let (params, param_tys): (Vec<_>, Vec<_>) = lambda
@@ -898,6 +858,33 @@ impl Resolve {
                     })
                     .collect();
                 res::ExprKind::Case(Box::new(matched), arms)
+            }
+            ast::ExprKind::NamedRecord(path, fields) => {
+                let ty_def = self
+                    .resolve_type_path(&path.path, loc)
+                    .and_then(|name| match name {
+                        res::TypeName::UserDefined(id) => Some(id),
+                        _ => {
+                            self.diag
+                                .add_diagnostic(format!("Can't construct '{}'", path.path), loc);
+                            None
+                        }
+                    });
+                let generic_args = self.resolve_generic_args(path.generic_args);
+                let fields = fields
+                    .into_iter()
+                    .map(|field| res::FieldInit {
+                        name: field.name,
+                        value: self.resolve_expr(field.value),
+                    })
+                    .collect::<Vec<_>>();
+                let Some(id) = ty_def else {
+                    return res::Expr {
+                        loc,
+                        kind: res::ExprKind::Err,
+                    };
+                };
+                res::ExprKind::NamedRecord(id, Box::new(generic_args), fields.into_boxed_slice())
             }
             ast::ExprKind::For(pattern, iterator, body) => {
                 let iterator = self.resolve_expr(*iterator);

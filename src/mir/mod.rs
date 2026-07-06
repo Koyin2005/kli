@@ -141,6 +141,7 @@ pub enum AggregateKind {
         field_names: IndexVec<FieldId, FieldName>,
     },
     Closure(Vec<Type>, Box<Type>),
+    NamedRecord(DefId, GenericArgs),
     Variant(DefId, CaseId, GenericArgs),
     ArrayList(Type),
     Array(Type, u64),
@@ -443,7 +444,8 @@ impl Body {
                     (**return_type).clone(),
                 ),
                 AggregateKind::ArrayList(ty) => Type::List(Box::new(ty.clone())),
-                &AggregateKind::Variant(id, _, ref args) => {
+                &AggregateKind::Variant(id, _, ref args)
+                | &AggregateKind::NamedRecord(id, ref args) => {
                     let name = ctxt.type_def(id).name;
                     Type::Named(id, name, args.clone())
                 }
