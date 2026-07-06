@@ -58,6 +58,8 @@ pub enum BinaryOp {
     Multiply,
     Divide,
     Equals,
+    Lesser,
+    Greater,
 }
 impl Display for BinaryOp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -67,6 +69,8 @@ impl Display for BinaryOp {
             BinaryOp::Multiply => f.write_str("*"),
             BinaryOp::Divide => f.write_str("/"),
             BinaryOp::Equals => f.write_str("=="),
+            BinaryOp::Lesser => f.write_str("<"),
+            BinaryOp::Greater => f.write_str(">"),
         }
     }
 }

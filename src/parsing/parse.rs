@@ -138,11 +138,13 @@ impl Parser {
     }
     fn binary_op(&mut self) -> Option<(u32, BinaryOp)> {
         match self.peek_token().kind {
-            TokenKind::Plus => Some((10, BinaryOp::Add)),
-            TokenKind::Minus => Some((10, BinaryOp::Subtract)),
-            TokenKind::Slash => Some((15, BinaryOp::Divide)),
-            TokenKind::Star => Some((15, BinaryOp::Multiply)),
-            TokenKind::DoubleEqual => Some((5, BinaryOp::Equals)),
+            TokenKind::Plus => Some((30, BinaryOp::Add)),
+            TokenKind::Minus => Some((30, BinaryOp::Subtract)),
+            TokenKind::Slash => Some((40, BinaryOp::Divide)),
+            TokenKind::Star => Some((40, BinaryOp::Multiply)),
+            TokenKind::DoubleEqual => Some((10, BinaryOp::Equals)),
+            TokenKind::Lesser => Some((20, BinaryOp::Lesser)),
+            TokenKind::Greater => Some((20, BinaryOp::Greater)),
             _ => None,
         }
     }
@@ -673,10 +675,7 @@ impl Parser {
             let loc = lhs.loc;
             lhs = Expr {
                 loc,
-                kind: ExprKind::Assign(
-                    Box::new(lhs),
-                    Box::new(self.parse_expr_binding_power(0)?),
-                ),
+                kind: ExprKind::Assign(Box::new(lhs), Box::new(self.parse_expr_binding_power(0)?)),
             };
         }
         Ok(lhs)

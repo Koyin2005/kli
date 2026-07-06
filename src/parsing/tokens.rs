@@ -22,6 +22,8 @@ pub enum TokenKind {
     Of,
     Do,
     Dot,
+    Lesser,
+    Greater,
     LeftParen,
     RightParen,
     LeftBracket,
@@ -86,6 +88,8 @@ impl Display for TokenKind {
             Self::Dot => ".",
             Self::AddrOf => "addr_of",
             Self::DoubleEqual => "==",
+            Self::Lesser => "<",
+            Self::Greater => ">",
             Self::StringLiteral(literal) => {
                 f.write_str("\"")?;
                 f.write_str(literal)?;

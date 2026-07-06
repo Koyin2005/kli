@@ -158,6 +158,7 @@ pub enum BinaryOp {
     Overflow(OverflowOp),
     Unchecked(OverflowOp),
     Wrapping(OverflowOp),
+    Greater,
     Offset,
     Divide,
     Equals,
@@ -431,7 +432,7 @@ impl Body {
                 }
                 BinaryOp::Divide | BinaryOp::BitwiseAnd => Type::Int,
                 BinaryOp::Equals => Type::Bool,
-                BinaryOp::Lesser => Type::Bool,
+                BinaryOp::Lesser | BinaryOp::Greater => Type::Bool,
             },
             Rvalue::Allocate { ty, count: _ } => Type::pointer(ty.clone()),
             Rvalue::DecodeUtf8(_, _) => Type::tuple([Type::Char, Type::Int].into()),

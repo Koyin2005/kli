@@ -224,6 +224,8 @@ impl<'s> Lexer<'s> {
             c if Self::is_start_char(c) => self.ident_token(),
             c if c.is_numeric() => self.num_token(),
             '"' => self.string_token(),
+            '<' => Some(self.next_token_from_char(TokenKind::Lesser)),
+            '>' => Some(self.next_token_from_char(TokenKind::Greater)),
             _ => {
                 self.diag
                     .add_diagnostic(format!("Unrecognised char '{}'", c), self.current_loc());

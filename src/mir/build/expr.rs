@@ -505,6 +505,20 @@ impl Builder<'_> {
                             right_operand,
                         );
                     }
+                    BinaryOp::Lesser => {
+                        return Self::binary_op_rvalue(
+                            mir::BinaryOp::Lesser,
+                            left_operand,
+                            right_operand,
+                        );
+                    }
+                    BinaryOp::Greater => {
+                        return Self::binary_op_rvalue(
+                            mir::BinaryOp::Greater,
+                            left_operand,
+                            right_operand,
+                        );
+                    }
                 };
                 let checked_result = self.assign_to_temp(
                     expr.loc,

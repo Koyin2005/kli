@@ -665,6 +665,7 @@ impl FunctionCtxt<'_> {
                         (OperandTypes::Ints, Type::Int)
                     }
                     BinaryOp::Equals => (OperandTypes::Scalars, Type::Bool),
+                    BinaryOp::Lesser | BinaryOp::Greater => (OperandTypes::Ints, Type::Bool),
                 };
                 let (left_ty, right_ty) = operands.expected_types();
                 let left = self.check_expr(left, left_ty);
