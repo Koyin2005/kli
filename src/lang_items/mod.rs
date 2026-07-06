@@ -5,13 +5,17 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LangItem {
     Box,
-    ArrayList
+    ArrayList,
+    ArrayListNew,
+    ArrayListPush
 }
 impl LangItem {
     pub const fn name(&self) -> &'static str {
         match self {
             Self::Box => "box",
-            Self::ArrayList => "array_list"
+            Self::ArrayList => "array_list",
+            Self::ArrayListNew => "array_list_new",
+            Self::ArrayListPush => "array_list_push",
         }
     }
     pub fn with_name(name: &str) -> Option<Self> {
