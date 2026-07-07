@@ -210,7 +210,7 @@ pub enum ExprKind {
     Annotate(Box<Expr>, Box<Type>),
     String(String),
     Print(Option<Box<Expr>>),
-    Panic(Option<Type>),
+    Panic,
     Call(Box<Expr>, Vec<Expr>),
     Borrow(Box<BorrowExpr>),
     Case(Box<Expr>, Vec<CaseArm>),

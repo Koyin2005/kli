@@ -536,16 +536,9 @@ impl Parser {
             }
             TokenKind::Panic => {
                 self.next_token();
-                let ty = if self.matches_token(&TokenKind::LeftBracket) {
-                    let ty = self.parse_type()?;
-                    let _ = self.expect(&TokenKind::RightBracket);
-                    Some(ty)
-                } else {
-                    None
-                };
                 Ok(Expr {
                     loc,
-                    kind: ExprKind::Panic(ty),
+                    kind: ExprKind::Panic,
                 })
             }
             TokenKind::Case => self.parse_case_expr(loc),

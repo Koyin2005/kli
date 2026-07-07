@@ -172,7 +172,7 @@ impl Resolve {
             | ast::ExprKind::String(_)
             | ast::ExprKind::Bool(_)
             | ast::ExprKind::Number(_)
-            | ast::ExprKind::Panic(_)
+            | ast::ExprKind::Panic
             | ast::ExprKind::Path(..) => (),
             ast::ExprKind::Annotate(expr, _)
             | ast::ExprKind::Deref(expr)
@@ -777,9 +777,7 @@ impl Resolve {
             ast::ExprKind::Field(expr, field) => {
                 res::ExprKind::Field(Box::new(self.resolve_expr(*expr)), field)
             }
-            ast::ExprKind::Panic(ty) => {
-                res::ExprKind::Panic(ty.map(|ty| Box::new(self.resolve_type(ty))))
-            }
+            ast::ExprKind::Panic => res::ExprKind::Panic,
             ast::ExprKind::Call(callee, args) => res::ExprKind::Call(
                 Box::new(self.resolve_expr(*callee)),
                 args.into_iter().map(|arg| self.resolve_expr(arg)).collect(),

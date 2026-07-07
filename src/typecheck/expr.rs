@@ -612,21 +612,10 @@ impl FunctionCtxt<'_> {
             ExprKind::Call(callee, args) => {
                 return self.check_call(loc, callee, args, expected_ty);
             }
-            ExprKind::Panic(ty) => {
-                let ty = match (
-                    ty.as_ref().map(|ty| self.root().lower_type(ty)),
-                    expected_ty,
-                ) {
-                    (None, None) => {
-                        self.root().type_annotations_needed(loc);
-                        Type::Unknown
-                    }
-                    (Some(ty), None) | (None, Some(ty)) => ty,
-                    (Some(given), Some(expected)) => self.root().unify(expected, given, loc),
-                };
+            ExprKind::Panic => {
                 return typed_ast::Expr {
                     loc,
-                    ty,
+                    ty: Type::Never,
                     kind: typed_ast::ExprKind::Panic,
                 };
             }

@@ -116,7 +116,7 @@ pub enum ExprKind {
     Function(FunctionDefId, Box<GenericArgs>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Borrow(Box<BorrowExpr>),
-    Panic(Option<Box<Type>>),
+    Panic,
     Lambda(Rc<Lambda>),
     Deref(Box<Expr>),
     Assign(Box<Expr>, Box<Expr>),

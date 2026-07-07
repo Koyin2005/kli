@@ -73,7 +73,8 @@ pub trait Visitor {
             | ExprKind::Int(_)
             | ExprKind::Bool(_)
             | ExprKind::String(_)
-            | ExprKind::Var(..) => (),
+            | ExprKind::Var(..)
+            | ExprKind::Panic => (),
             ExprKind::Lambda(lambda) => {
                 self.visit_body(
                     lambda.param_tys.iter().flatten(),
@@ -95,11 +96,7 @@ pub trait Visitor {
             ExprKind::Borrow(borrow_expr) => {
                 self.visit_expr(&borrow_expr.place);
             }
-            ExprKind::Panic(ty) => {
-                if let Some(ty) = ty {
-                    self.visit_type(ty)
-                }
-            }
+
             ExprKind::Deref(expr) | ExprKind::Field(expr, _) => self.visit_expr(expr),
             ExprKind::Assign(place, expr) => {
                 self.visit_expr(place);
