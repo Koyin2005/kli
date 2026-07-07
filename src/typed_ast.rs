@@ -118,6 +118,7 @@ pub enum ExprKind {
     Unit,
     Err,
     Panic,
+    NeverToAny(Box<Expr>),
     BuiltinCall(Builtin, GenericArgs, Box<[Expr]>),
     VariantInit(DefId, CaseId, GenericArgs, Box<Expr>),
     Function(DefId, GenericArgs),

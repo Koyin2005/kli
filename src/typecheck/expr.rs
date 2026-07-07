@@ -299,7 +299,7 @@ impl FunctionCtxt<'_> {
         loc: SrcLoc,
         callee: &Expr,
         args: &[Expr],
-        expected_ty: Option<Type>,
+        ty_hint: Option<Type>,
     ) -> typed_ast::Expr {
         fn check_call_sig(
             this: &FunctionCtxt,
@@ -307,7 +307,6 @@ impl FunctionCtxt<'_> {
             args: &[Expr],
             params: Vec<Type>,
             return_type: Option<Type>,
-            expected_ty: Option<Type>,
         ) -> (Type, Vec<typed_ast::Expr>) {
             if params.len() != args.len() {
                 this.root().ctxt().diag().add_diagnostic(
@@ -338,11 +337,7 @@ impl FunctionCtxt<'_> {
                     .map(arg_map)
                     .collect::<Vec<_>>()
             };
-            let ty = match (expected_ty, return_type) {
-                (None, None) => Type::Unknown,
-                (None, Some(ty)) | (Some(ty), None) => ty,
-                (Some(ty), Some(return_type)) => this.root().unify(ty, return_type, callee_loc),
-            };
+            let ty = return_type.unwrap_or(Type::Unknown);
             (ty, args)
         }
         if let ExprKind::Function(id, generic_args) = &callee.kind
@@ -353,14 +348,7 @@ impl FunctionCtxt<'_> {
                 params,
                 return_type,
             } = self.root().ctxt().signature_of(id.0).bind(&generic_args);
-            let (ty, args) = check_call_sig(
-                self,
-                callee.loc,
-                args,
-                params,
-                Some(return_type),
-                expected_ty,
-            );
+            let (ty, args) = check_call_sig(self, callee.loc, args, params, Some(return_type));
             typed_ast::Expr {
                 ty,
                 loc,
@@ -391,14 +379,7 @@ impl FunctionCtxt<'_> {
             else {
                 unreachable!("Should be a function")
             };
-            let (ty, args) = check_call_sig(
-                self,
-                callee.loc,
-                args,
-                params,
-                Some(*return_type),
-                expected_ty,
-            );
+            let (ty, args) = check_call_sig(self, callee.loc, args, params, Some(*return_type));
             let [arg] = args.try_into().unwrap();
             typed_ast::Expr {
                 ty,
@@ -416,11 +397,10 @@ impl FunctionCtxt<'_> {
                 }) => (params, Some(*return_type)),
                 ty => {
                     self.root().expect_ty_error("function", &ty, callee.loc);
-                    (Vec::new(), None)
+                    (Vec::new(), ty_hint)
                 }
             };
-            let (ty, args) =
-                check_call_sig(self, callee.loc, args, params, return_type, expected_ty);
+            let (ty, args) = check_call_sig(self, callee.loc, args, params, return_type);
             typed_ast::Expr {
                 ty,
                 loc,
@@ -531,10 +511,34 @@ impl FunctionCtxt<'_> {
             kind: typed_ast::ExprKind::Record(expr_fields),
         }
     }
-    pub(super) fn check_expr(&self, expr: &Expr, expected_ty: Option<Type>) -> typed_ast::Expr {
+    pub(super) fn check_expr_coerces_to(
+        &self,
+        expr: &Expr,
+        target: Option<Type>,
+    ) -> typed_ast::Expr {
+        let mut expr = self.check_expr_kind(expr, target.clone());
+        if let Some(target) = target {
+            match self.unify_or_coerce(expr.loc, target.clone(), expr.ty.clone()) {
+                Ok(coercion) => expr = self.apply_coercion(coercion, expr),
+                Err(_) => {
+                    expr = typed_ast::Expr {
+                        ty: target,
+                        loc: expr.loc,
+                        kind: typed_ast::ExprKind::Err,
+                    };
+                }
+            }
+        }
+        expr
+    }
+    pub(super) fn check_expr_kind(
+        &self,
+        expr: &Expr,
+        expected_ty: Option<Type>,
+    ) -> typed_ast::Expr {
         let &Expr { loc, ref kind } = expr;
         let make_expr = |ty, kind, loc| typed_ast::Expr { ty, kind, loc };
-        let mut expr = match kind {
+        match kind {
             ExprKind::While(condition, body) => {
                 let condition = self.check_expr(condition, Some(Type::Bool));
                 let body = self.check_expr(body, Some(Type::Unit));
@@ -609,16 +613,12 @@ impl FunctionCtxt<'_> {
                 typed_ast::ExprKind::String(value.clone()),
                 loc,
             ),
-            ExprKind::Call(callee, args) => {
-                return self.check_call(loc, callee, args, expected_ty);
-            }
-            ExprKind::Panic => {
-                return typed_ast::Expr {
-                    loc,
-                    ty: Type::Never,
-                    kind: typed_ast::ExprKind::Panic,
-                };
-            }
+            ExprKind::Call(callee, args) => self.check_call(loc, callee, args, expected_ty),
+            ExprKind::Panic => typed_ast::Expr {
+                loc,
+                kind: typed_ast::ExprKind::Panic,
+                ty: Type::Never,
+            },
             ExprKind::AddressOf(place) => {
                 let place = self.check_place(
                     place,
@@ -693,32 +693,42 @@ impl FunctionCtxt<'_> {
             }
             ExprKind::Case(matched, case_arms) => {
                 let matched = self.check_expr(matched, None);
-                let mut prev_ty = None::<Type>;
-                let arms = case_arms
+                let mut arms = case_arms
                     .iter()
                     .map(|arm| {
                         let pattern = self.check_pattern(&arm.pattern, matched.ty.clone(), None);
-                        let body = self.check_expr(&arm.body, expected_ty.clone());
-                        if expected_ty.is_none() {
-                            if let Some(ref prev_ty) = prev_ty {
-                                self.root()
-                                    .unify(prev_ty.clone(), body.ty.clone(), body.loc);
-                            } else {
-                                prev_ty = Some(body.ty.clone());
-                            }
-                        }
+                        let body = self.check_expr_coerces_to(&arm.body, expected_ty.clone());
                         typed_ast::CaseArm { pattern, body }
                     })
-                    .collect();
-                let ty = expected_ty.or(prev_ty).unwrap_or_else(|| {
+                    .collect::<Vec<_>>();
+                let combined_ty = self.merge_ty(arms.iter().map(|arm| arm.body.ty.clone()));
+                let ty = if let Some(combined_ty) = combined_ty {
+                    arms = arms
+                        .into_iter()
+                        .map(|mut arm| {
+                            let Ok(coercion) = self.unify_or_coerce(
+                                arm.pattern.loc,
+                                combined_ty.clone(),
+                                arm.body.ty.clone(),
+                            ) else {
+                                return arm;
+                            };
+                            arm.body = self.apply_coercion(coercion, arm.body);
+                            arm
+                        })
+                        .collect();
+                    combined_ty
+                } else if arms.is_empty() {
+                    Type::Never
+                } else {
                     self.root().type_annotations_needed(loc);
                     Type::Unknown
-                });
-                return typed_ast::Expr {
+                };
+                typed_ast::Expr {
                     ty,
                     loc,
                     kind: typed_ast::ExprKind::Case(Box::new(matched), arms),
-                };
+                }
             }
             ExprKind::Assign(place, value) => {
                 let value = self.check_expr(value, None);
@@ -815,7 +825,10 @@ impl FunctionCtxt<'_> {
                     },
                 }
             }
-        };
+        }
+    }
+    pub(super) fn check_expr(&self, expr: &Expr, expected_ty: Option<Type>) -> typed_ast::Expr {
+        let mut expr = self.check_expr_kind(expr, expected_ty.clone());
         if let Some(expected) = expected_ty {
             expr.ty = self.root().unify(expected, expr.ty, expr.loc)
         };

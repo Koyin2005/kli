@@ -1,6 +1,6 @@
 use crate::{
     mir::{
-        StmtKind,
+        StmtKind, TerminatorKind,
         build::{Builder, expr::BuiltinResult},
     },
     typed_ast::{Expr, ExprKind},
@@ -63,6 +63,19 @@ impl Builder<'_> {
                         self.assign_to_temp(expr.loc, expr.ty.clone(), value);
                     }
                     BuiltinResult::Unit => (),
+                }
+            }
+            ExprKind::NeverToAny(value) => {
+                self.expr_stmt(value);
+                if !self.body.blocks[self.current_block]
+                    .terminator
+                    .as_ref()
+                    .is_some_and(|terminator| {
+                        matches!(terminator.kind, TerminatorKind::Unreachable | TerminatorKind::Panic | TerminatorKind::Return)
+                    })
+                {
+                    self.finish_block(expr.loc, TerminatorKind::Unreachable);
+                    self.goto_to_new_block(expr.loc);
                 }
             }
             //Evaluate

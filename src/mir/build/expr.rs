@@ -184,8 +184,8 @@ impl Builder<'_> {
                 }
                 self.expr_into_dest(dest, &block_body.expr);
             }
-            ExprKind::Panic => {
-                self.panic(expr.loc);
+            ExprKind::Panic | ExprKind::NeverToAny(_) => {
+                self.expr_stmt(expr);
             }
             ExprKind::Case(expr, arms) => {
                 self.build_match(dest, expr, arms);
@@ -485,7 +485,10 @@ impl Builder<'_> {
                     Operand::Load(Place::local(checked_result).with_field(FieldId::new(1)));
                 Rvalue::Use(result)
             }
-            ExprKind::Block(..) | ExprKind::Panic | ExprKind::Case(..) => {
+            ExprKind::Block(..)
+            | ExprKind::Panic
+            | ExprKind::Case(..)
+            | ExprKind::NeverToAny(_) => {
                 let temp = self.expr_into_temp(expr);
                 Rvalue::Use(Operand::Load(Place::local(temp)))
             }

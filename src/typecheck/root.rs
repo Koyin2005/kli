@@ -70,8 +70,11 @@ impl<'ctxt> RootCtxt<'ctxt> {
     pub(super) fn simplify_type(&self, ty: Type) -> Type {
         self.infer.borrow().simplify_type(ty)
     }
+    pub(super) fn try_unify(&self, ty1: Type, ty2: Type) -> Option<Type> {
+        self.infer.borrow_mut().unify_ty(ty1, ty2)
+    }
     pub(super) fn unify(&self, ty1: Type, ty2: Type, loc: SrcLoc) -> Type {
-        if let Some(ty) = self.infer.borrow_mut().unify_ty(ty1.clone(), ty2.clone()) {
+        if let Some(ty) = self.try_unify(ty1.clone(), ty2.clone()) {
             ty
         } else {
             let ty1 = self.simplify_type(ty1);
@@ -186,6 +189,13 @@ impl<'ctxt> RootCtxt<'ctxt> {
         Type::Unknown
     }
 }
+pub enum Coercion {
+    Equal(Type),
+    NeverToAny(Type),
+}
+pub enum CoercionKind {
+    NeverToAny(Type),
+}
 pub struct FunctionCtxt<'ctxt> {
     pub(super) id: DefId,
     root: &'ctxt RootCtxt<'ctxt>,
@@ -200,9 +210,58 @@ impl<'ctxt> FunctionCtxt<'ctxt> {
     pub fn ctxt(&self) -> CtxtRef<'_> {
         self.root.ctxt
     }
+    pub fn apply_coercion(&self, coercion: Coercion, expr: typed_ast::Expr) -> typed_ast::Expr {
+        match coercion {
+            Coercion::Equal(_) => expr,
+            Coercion::NeverToAny(ty) => typed_ast::Expr {
+                ty,
+                loc: expr.loc,
+                kind: typed_ast::ExprKind::NeverToAny(Box::new(expr)),
+            },
+        }
+    }
+    pub fn merge_ty(&self, tys: impl Iterator<Item = Type>) -> Option<Type> {
+        tys.into_iter().fold(None, |acc, ty| {
+            if let Some(combined_ty) = acc {
+                match self.root.try_unify(combined_ty.clone(), ty.clone()) {
+                    Some(ty) => Some(ty),
+                    None => match (combined_ty, ty) {
+                        (Type::Never, ty) | (ty, Type::Never) => Some(ty),
+                        (combined_ty, _) => Some(combined_ty),
+                    },
+                }
+            } else {
+                Some(ty)
+            }
+        })
+    }
+    pub fn unify_or_coerce(
+        &self,
+        loc: SrcLoc,
+        expected: Type,
+        ty: Type,
+    ) -> Result<Coercion, TypeError> {
+        match self
+            .root
+            .infer
+            .borrow_mut()
+            .unify_ty(expected.clone(), ty.clone())
+        {
+            Some(ty) => Ok(Coercion::Equal(ty)),
+            None => match (expected, ty) {
+                (ty, Type::Never) => Ok(Coercion::NeverToAny(ty)),
+                (expected, ty) => {
+                    self.ctxt()
+                        .diag()
+                        .add_diagnostic(format!("Cannot coerce '{}' to '{}'", ty, expected), loc);
+                    Err(TypeError)
+                }
+            },
+        }
+    }
     pub(super) fn check_binding(&self, binding: &res::LetBinding) -> LetBinding {
         let ty = binding.ty.as_ref().map(|ty| self.root().lower_type(ty));
-        let value = self.check_expr(&binding.value, ty);
+        let value = self.check_expr_coerces_to(&binding.value, ty.clone());
         let pattern = self.check_pattern(&binding.pattern, value.ty.clone(), None);
         LetBinding { pattern, value }
     }
@@ -295,7 +354,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
             })
             .collect::<Vec<_>>();
         let body = if let Some(body) = body {
-            let body = func_ctxt.check_expr(body, Some(return_type.clone()));
+            let body = func_ctxt.check_expr_coerces_to(body, Some(return_type.clone()));
             Some(body)
         } else {
             None

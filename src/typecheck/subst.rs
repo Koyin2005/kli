@@ -123,6 +123,9 @@ impl<'a> TypeSubst<'a> {
                     self.subst_generic_arg(arg);
                 }
             }
+            ExprKind::NeverToAny(expr) => {
+                self.subst_expr(expr);
+            }
             ExprKind::Bool(_)
             | ExprKind::Err
             | ExprKind::Unit

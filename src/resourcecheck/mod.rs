@@ -648,6 +648,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             | ExprKind::Int(_)
             | ExprKind::Const(..) => {}
             ExprKind::Function(..) => {}
+            ExprKind::NeverToAny(value) => self.check_expr(value),
             ExprKind::VariantInit(.., value) => {
                 self.check_expr(value);
             }

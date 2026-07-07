@@ -98,6 +98,7 @@ where
                 v.visit_expr(expr);
             }
         }
+        ExprKind::NeverToAny(value) => v.visit_expr(value),
         ExprKind::VariantInit(.., value) => v.visit_expr(value),
         ExprKind::Call(callee, args) => {
             v.visit_expr(callee);
