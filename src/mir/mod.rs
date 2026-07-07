@@ -294,14 +294,8 @@ impl BodySource {
         }
     }
     pub fn is_child_of(self, name: Symbol, ctxt: CtxtRef) -> bool {
-        let mut current = Some(self.def_id());
-        while let Some(id) = current {
-            if ctxt.ident(id).map(|ident| ident.symbol) == Some(name) {
-                return true;
-            }
-            current = ctxt.parent_of(id);
-        }
-        false
+        ctxt.self_with_anecstors(self.def_id())
+            .any(|id| ctxt.ident(id).map(|ident| ident.symbol) == Some(name))
     }
 }
 #[derive(Clone)]

@@ -310,6 +310,16 @@ pub struct Annotation {
     pub loc: SrcLoc,
     pub kind: AnnotationKind,
 }
+impl Annotation {
+    pub fn kind_str(&self) -> &'static str {
+        match self.kind {
+            AnnotationKind::Copy => "copy",
+            AnnotationKind::LangItem(_) => "lang_item",
+            AnnotationKind::Opaque => "opaque",
+            AnnotationKind::Unsafe => "unsafe",
+        }
+    }
+}
 #[derive(Debug)]
 pub struct Item {
     pub id: DefId,

@@ -125,7 +125,7 @@ impl Display for TokenKind {
             Self::Region => "region",
             Self::Type => "type",
             Self::Eof => "EOF",
-            Self::With => "with"
+            Self::With => "with",
         };
         f.write_str(txt)
     }

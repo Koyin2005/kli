@@ -175,7 +175,8 @@ pub struct GlobalContext {
     parents: HashMap<DefId, DefId>,
     nodes: IndexVec<DefId, Node>,
     builtins: Builtins,
-    std_lib: std::cell::Cell<Option<DefId>>,
+    std_lib: Cache<(), Option<DefId>>,
+    ty_cache: Cache<DefId, Scheme<Type>>,
 }
 impl GlobalContext {
     pub fn as_ref(&self) -> CtxtRef<'_> {
@@ -293,45 +294,46 @@ impl CtxtRef<'_> {
         })
     }
     pub fn type_of(self, id: DefId) -> Scheme<Type> {
-        let ty = match self.node(id) {
-            Node::Case(case_def) => {
-                let parent_id = self.expect_parent(id);
-                let type_def = self.expect_type(parent_id);
-                let name = type_def.name;
-                let variant_ty = Type::Named(
-                    parent_id,
-                    name.symbol,
-                    self.generics(parent_id).instantiate_identity(),
-                );
-                if let Some(ty) = case_def.field.map(|inner| {
-                    self.type_of(inner)
-                        .bind(&self.generics(parent_id).instantiate_identity())
-                }) {
-                    Type::new_function(vec![ty], variant_ty)
-                } else {
-                    variant_ty
+        self.0.ty_cache.compute(id, |id| {
+            Scheme::new(match self.node(id) {
+                Node::Case(case_def) => {
+                    let parent_id = self.expect_parent(id);
+                    let type_def = self.expect_type(parent_id);
+                    let name = type_def.name;
+                    let variant_ty = Type::Named(
+                        parent_id,
+                        name.symbol,
+                        self.generics(parent_id).instantiate_identity(),
+                    );
+                    if let Some(ty) = case_def.field.map(|inner| {
+                        self.type_of(inner)
+                            .bind(&self.generics(parent_id).instantiate_identity())
+                    }) {
+                        Type::new_function(vec![ty], variant_ty)
+                    } else {
+                        variant_ty
+                    }
                 }
-            }
-            Node::Item(item) => match &item.kind {
-                ItemKind::TypeDef(type_def) => Type::Named(
-                    id,
-                    type_def.name.symbol,
-                    self.generics(id).instantiate_identity(),
-                ),
-                ItemKind::Function(_) => {
-                    return self.signature_of(id).map(|signature| {
-                        Type::new_function(signature.params, signature.return_type)
-                    });
-                }
-                ItemKind::Module(module) => {
-                    unreachable!("cannot get type of module {}", module.name.symbol)
-                }
-            },
-            Node::CaseField(field) => Lower::new(self, id, None).lower_type(&field.ty),
-            Node::Field(field) => Lower::new(self, id, None).lower_type(&field.ty),
-            Node::Lambda(_) => unreachable!("Can't get the type of lambda"),
-        };
-        Scheme::new(ty)
+                Node::Item(item) => match &item.kind {
+                    ItemKind::TypeDef(type_def) => Type::Named(
+                        id,
+                        type_def.name.symbol,
+                        self.generics(id).instantiate_identity(),
+                    ),
+                    ItemKind::Function(_) => {
+                        return self.signature_of(id).map(|signature| {
+                            Type::new_function(signature.params, signature.return_type)
+                        });
+                    }
+                    ItemKind::Module(module) => {
+                        unreachable!("cannot get type of module {}", module.name.symbol)
+                    }
+                },
+                Node::CaseField(field) => Lower::new(self, id, None).lower_type(&field.ty),
+                Node::Field(field) => Lower::new(self, id, None).lower_type(&field.ty),
+                Node::Lambda(_) => unreachable!("Can't get the type of lambda"),
+            })
+        })
     }
     pub fn generics(self, id: DefId) -> Generics {
         self.0.generics.compute(id, |id| match self.node(id) {
@@ -351,6 +353,9 @@ impl CtxtRef<'_> {
             }
             Node::Lambda(_) => self.generics(self.expect_parent(id)),
         })
+    }
+    pub fn self_with_anecstors(self, id: DefId) -> impl Iterator<Item = DefId> {
+        std::iter::once(id).chain(self.ancestors(id))
     }
     pub fn ancestors(self, id: DefId) -> impl Iterator<Item = DefId> {
         struct Ancestors<'ctxt> {
@@ -453,20 +458,17 @@ impl CtxtRef<'_> {
         &self.0.builtins
     }
     pub fn std_lib_module(self) -> Option<DefId> {
-        if let Some(std_lib) = self.0.std_lib.get() {
-            return Some(std_lib);
-        }
-        let std_lib = self.top_level_items().find_map(|item| {
-            let ItemKind::Module(ref module) = item.kind else {
-                return None;
-            };
-            if module.name.symbol != Symbol::STD {
-                return None;
-            }
-            Some(item.id)
-        });
-        self.0.std_lib.set(std_lib);
-        std_lib
+        self.0.std_lib.compute((), |()| {
+            self.top_level_items().find_map(|item| {
+                let ItemKind::Module(ref module) = item.kind else {
+                    return None;
+                };
+                if module.name.symbol != Symbol::STD {
+                    return None;
+                }
+                Some(item.id)
+            })
+        })
     }
     pub fn same_module(&self, src: DefId, from: DefId) -> bool {
         let src_module = self.module_of(src);
@@ -478,18 +480,18 @@ impl CtxtRef<'_> {
             .iter()
             .any(|annotation| annotation.kind == AnnotationKind::Opaque)
     }
-    pub fn module_of(&self, mut id: DefId) -> DefId {
-        loop {
-            let node = self.node(id);
-            let Node::Item(item) = node else {
-                id = self.expect_parent(id);
-                continue;
-            };
-            match &item.kind {
-                ItemKind::Module(_) => break item.id,
-                _ => id = self.expect_parent(item.id),
-            }
-        }
+    pub fn module_of(&self, id: DefId) -> DefId {
+        self.self_with_anecstors(id)
+            .find(|&id| {
+                let Some(item) = self.node(id).item() else {
+                    return false;
+                };
+                let ItemKind::Module(_) = item.kind else {
+                    return false;
+                };
+                true
+            })
+            .unwrap_or(id)
     }
     pub fn lang_items(self) -> LangItems {
         self.0.lang_items.compute((), |()| LangItems::collect(self))
@@ -564,5 +566,6 @@ pub fn build_global_context(
         diag,
         builtins,
         std_lib: Default::default(),
+        ty_cache: Default::default(),
     }
 }

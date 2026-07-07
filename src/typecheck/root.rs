@@ -8,6 +8,7 @@ use crate::{
     collect::CtxtRef,
     def_ids::DefId,
     ident::Ident,
+    lang_items::LangItem,
     resolved_ast::{self as res, VarId},
     src_loc::SrcLoc,
     typecheck::{infer::TypeInfer, subst::TypeSubst},
@@ -364,9 +365,35 @@ impl<'ctxt> TypeCheck<'ctxt> {
             functions.insert(id, function);
         }
     }
+    fn check_annotations(&self) {
+        for item in self.ctxt.all_items() {
+            for annotation in item.annotations.iter() {
+                let valid = match annotation.kind {
+                    res::AnnotationKind::Copy => matches!(item.kind, res::ItemKind::TypeDef(_)),
+                    res::AnnotationKind::Unsafe => matches!(item.kind, res::ItemKind::Function(_)),
+                    res::AnnotationKind::LangItem(lang_item) => {
+                        self.ctxt.std_lib_module().is_none_or(|std_lib| {
+                            self.ctxt.ancestors(item.id).any(|parent| parent == std_lib)
+                        }) && match lang_item {
+                            LangItem::ArrayList => matches!(item.kind, res::ItemKind::TypeDef(_)),
+                            LangItem::Box => matches!(item.kind, res::ItemKind::TypeDef(_)),
+                        }
+                    }
+                    res::AnnotationKind::Opaque => matches!(item.kind, res::ItemKind::TypeDef(_)),
+                };
+                if !valid {
+                    self.ctxt.diag().add_diagnostic(
+                        format!("Cannot use '{}'", annotation.kind_str()),
+                        item.loc,
+                    );
+                }
+            }
+        }
+    }
     pub fn check(self) -> Result<typed_ast::Program, TypeError> {
         self.validate_main();
         self.validate_types_non_recursive();
+        self.check_annotations();
         let mut functions = BTreeMap::new();
         for item in self.ctxt.all_items() {
             let Some(function) = item.function_def() else {
