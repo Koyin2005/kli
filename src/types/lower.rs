@@ -151,6 +151,10 @@ impl<'a> Lower<'a> {
                 };
                 Type::pointer(ty)
             }
+            TypeName::Never => {
+                let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
+                Type::Never
+            }
             TypeName::Box => {
                 let id = self.ctxt.lang_items().expect(LangItem::Box);
                 let args = self.lower_generic_args(id, loc, args);

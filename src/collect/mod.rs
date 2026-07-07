@@ -230,7 +230,8 @@ impl CtxtRef<'_> {
                 | Type::Int
                 | Type::Imm(..)
                 | Type::Mut(..)
-                | Type::Function(..) => false,
+                | Type::Function(..)
+                | Type::Never => false,
                 Type::Record(fields) => fields
                     .iter()
                     .any(|field| is_ty_recursive(ctxt, &field.ty, seen_ids)),

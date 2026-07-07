@@ -6,7 +6,7 @@ use std::{
 use crate::{
     Symbol,
     ast::{IsResource, Mutable},
-    collect::CtxtRef,
+    collect::{CtxtRef, TypeDefKind},
     def_ids::DefId,
     define_id,
     index_vec::IndexVec,
@@ -179,6 +179,7 @@ pub enum Type {
     String,
     Char,
     Byte,
+    Never,
     Param(Symbol, usize),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
@@ -386,7 +387,8 @@ impl Type {
             | Type::Function(FunctionType {
                 resource: IsResource::Data,
                 ..
-            }) => false,
+            })
+            | Type::Never => false,
             Type::Array(ty, _) => ty.is_resource(ctxt),
             Type::Mut(..)
             | Type::Function(FunctionType {
@@ -414,6 +416,41 @@ impl Type {
     pub const fn no_op_visit<T>(&self) -> ControlFlow<T> {
         ControlFlow::Continue(())
     }
+    pub fn is_uninhabited(&self, ctxt: CtxtRef<'_>) -> bool {
+        match self {
+            Type::Infer(_)
+            | Type::Unknown
+            | Type::Unit
+            | Type::Int
+            | Type::Bool
+            | Type::String
+            | Type::Char
+            | Type::Byte
+            | Type::Param(..)
+            | Type::Function(..) => false,
+            Type::Never => true,
+            Type::Imm(_, ty) | Type::Mut(_, ty) => ty.is_uninhabited(ctxt),
+            Type::Record(fields) => fields.iter().any(|field| field.ty.is_uninhabited(ctxt)),
+            Type::RawPointer(_) => false,
+            Type::Array(ty, _) => ty.is_uninhabited(ctxt),
+            Type::Named(def_id, _, generic_args) => {
+                if ctxt.is_type_recursive(*def_id) {
+                    false
+                } else {
+                    match ctxt.type_def(*def_id).kind {
+                        TypeDefKind::Record(ref fields) => fields
+                            .iter()
+                            .any(|field| field.type_of(generic_args, ctxt).is_uninhabited(ctxt)),
+                        TypeDefKind::Variant(ref cases) => cases.iter().all(|case| {
+                            case.field.is_some_and(|field| {
+                                field.type_of(generic_args, ctxt).is_uninhabited(ctxt)
+                            })
+                        }),
+                    }
+                }
+            }
+        }
+    }
     pub fn visit<T>(
         &self,
         visit_ty: &mut impl FnMut(&Self) -> ControlFlow<T>,
@@ -429,7 +466,8 @@ impl Type {
             | Type::String
             | Type::Char
             | Type::Byte
-            | Type::Param(..) => ControlFlow::Continue(()),
+            | Type::Param(..)
+            | Type::Never => ControlFlow::Continue(()),
             Type::RawPointer(ty) | Type::Array(ty, _) => ty.visit(visit_ty, visit_region),
             &(Type::Imm(region, ref ty) | Type::Mut(region, ref ty)) => {
                 visit_region(region)?;
@@ -470,6 +508,7 @@ impl Display for Type {
             Type::RawPointer(ty) => {
                 write!(f, "ptr[{}]", ty)
             }
+            Type::Never => f.pad("never"),
             Type::Record(fields) => {
                 f.pad("{")?;
                 let mut first = true;
@@ -534,7 +573,8 @@ pub trait TypeMap {
             | Type::String
             | Type::Byte
             | Type::Infer(_)
-            | Type::Param(..) => Ok(ty),
+            | Type::Param(..)
+            | Type::Never => Ok(ty),
             Type::Array(ty, count) => Ok(Type::Array(Box::new(self.map_type(*ty)?), count)),
             Type::RawPointer(ty) => Ok(Type::RawPointer(Box::new(self.map_type(*ty)?))),
             Type::Imm(region, ty) => Ok(Type::Imm(

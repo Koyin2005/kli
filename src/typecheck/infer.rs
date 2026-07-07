@@ -119,7 +119,8 @@ impl TypeInfer {
             | (ty @ Type::Unknown, Type::Unknown)
             | (ty @ Type::String, Type::String)
             | (ty @ Type::Char, Type::Char)
-            | (ty @ Type::Byte, Type::Byte) => Some(ty),
+            | (ty @ Type::Byte, Type::Byte)
+            | (ty @ Type::Never, Type::Never) => Some(ty),
             (Type::Param(name1, index1), Type::Param(name2, index2)) if index1 == index2 => {
                 assert_eq!(name1, name2);
                 Some(Type::Param(name1, index1))
@@ -214,7 +215,8 @@ impl TypeInfer {
                 | Type::Record(..)
                 | Type::Unit
                 | Type::RawPointer(_)
-                | Type::Named(..),
+                | Type::Named(..)
+                | Type::Never,
                 _,
             ) => None,
         }

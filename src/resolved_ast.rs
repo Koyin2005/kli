@@ -220,6 +220,7 @@ pub enum TypeName {
     Box,
     ArrayList,
     Param(Symbol, usize),
+    Never,
 }
 #[derive(Debug)]
 pub enum TypeKind {

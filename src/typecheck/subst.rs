@@ -23,6 +23,7 @@ impl<'a> TypeSubst<'a> {
             | Type::Unknown
             | Type::Char
             | Type::Param(..)
+            | Type::Never
             | Type::Byte => (),
             Type::Array(ty, _) | Type::RawPointer(ty) => self.subst_type(ty),
             Type::Imm(region, ty) | Type::Mut(region, ty) => {

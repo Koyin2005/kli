@@ -145,6 +145,7 @@ fn split_constructors(
     }
     match ty {
         Type::Infer(_) | Type::Unknown => (),
+        Type::Never => (),
         Type::Int
         | Type::String
         | Type::Char

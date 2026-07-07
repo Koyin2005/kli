@@ -117,7 +117,8 @@ impl<'ctxt> RootCtxt<'ctxt> {
                 Type::Infer(_) => Err(ty),
                 ty => self.iterator_element(ty),
             },
-            Type::Bool
+            Type::Never
+            | Type::Bool
             | Type::Unknown
             | Type::Int
             | Type::Char

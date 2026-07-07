@@ -21,7 +21,7 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Cons
     match ty {
         Type::Bool => vec![Constructor::Bool(true), Constructor::Bool(false)],
         Type::Imm(..) | Type::Mut(..) => vec![Constructor::Ref],
-
+        Type::Never => Vec::new(),
         Type::Unit => vec![Constructor::Unit],
         Type::Char
         | Type::String
@@ -36,17 +36,31 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Cons
             vec![Constructor::Record]
         }
         Type::Infer(_) => unreachable!("Cannot have infer here"),
-        Type::Named(id, ..) => {
+        Type::Named(id, _, args) => {
             if !ctxt.same_module(*id, from) && ctxt.is_opaque(*id) {
                 return vec![Constructor::NonExhaustive];
             }
             match ctxt.type_def(*id).kind {
-                TypeDefKind::Record(_) => {
+                TypeDefKind::Record(ref fields) => {
+                    if fields
+                        .iter()
+                        .any(|field| field.type_of(args, ctxt).is_uninhabited(ctxt))
+                    {
+                        return vec![];
+                    }
                     vec![Constructor::Record]
                 }
                 TypeDefKind::Variant(ref cases) => cases
                     .iter()
-                    .map(|case| case.name)
+                    .filter_map(|case| {
+                        if let Some(field) = case.field
+                            && field.type_of(args, ctxt).is_uninhabited(ctxt)
+                        {
+                            None
+                        } else {
+                            Some(case.name)
+                        }
+                    })
                     .map(Constructor::Case)
                     .collect(),
             }
