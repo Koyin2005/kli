@@ -96,8 +96,7 @@ impl Resolve {
         let env = Scope::from_iter(builtins.into_iter().chain([
             (Symbol::intern("ptr"), Res::TypeAlias(TypeAlias::Ptr)),
             (Symbol::intern("byte"), Res::TypeAlias(TypeAlias::Byte)),
-            //FIXME : Make box Box instead
-            (Symbol::intern("box"), Res::TypeAlias(TypeAlias::Box)),
+            (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (
                 Symbol::intern("ArrayList"),
                 Res::TypeAlias(TypeAlias::ArrayList),
