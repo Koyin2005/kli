@@ -281,7 +281,7 @@ impl Rvalue {
                 *function.return_type
             }
             Rvalue::Binary(op, left_and_right) => match op {
-                BinaryOp::Overflow(_) => Type::tuple([Type::Bool, Type::Int].into()),
+                BinaryOp::Overflow(_) => Type::pair(Type::Bool, Type::Int),
                 BinaryOp::Unchecked(_) | BinaryOp::Wrapping(_) => Type::Int,
                 BinaryOp::Offset => {
                     let (left, _) = left_and_right.as_ref();
@@ -299,7 +299,7 @@ impl Rvalue {
                 BinaryOp::Lesser | BinaryOp::Greater => Type::Bool,
             },
             Rvalue::Allocate { ty, count: _ } => Type::pointer(ty.clone()),
-            Rvalue::DecodeUtf8(_, _) => Type::tuple([Type::Char, Type::Int].into()),
+            Rvalue::DecodeUtf8(_, _) => Type::pair(Type::Char, Type::Int),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 AggregateKind::Array(ty, count) => Type::Array(Box::new(ty.clone()), *count),
                 AggregateKind::Record { field_names } => Type::Record(

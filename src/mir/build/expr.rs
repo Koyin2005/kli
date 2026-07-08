@@ -480,7 +480,7 @@ impl Builder<'_> {
                 };
                 let checked_result = self.assign_to_temp(
                     expr.loc,
-                    Type::tuple(vec![Type::Bool, Type::Int]),
+                    Type::pair(Type::Bool, Type::Int),
                     Rvalue::Binary(
                         mir::BinaryOp::Overflow(overflow_op),
                         Box::new((left_operand, right_operand)),

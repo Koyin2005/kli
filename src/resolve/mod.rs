@@ -33,6 +33,7 @@ enum TypeAlias {
     Box,
     ArrayList,
     Never,
+    Pair
 }
 type Scope = HashMap<Symbol, Res>;
 
@@ -93,6 +94,7 @@ impl Resolve {
             (Symbol::intern("byte"), Res::TypeAlias(TypeAlias::Byte)),
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),
+            (Symbol::intern("Pair"), Res::TypeAlias(TypeAlias::Pair)),
             (
                 Symbol::intern("ArrayList"),
                 Res::TypeAlias(TypeAlias::ArrayList),
@@ -388,6 +390,7 @@ impl Resolve {
                 TypeAlias::Byte => Some(res::TypeName::Byte),
                 TypeAlias::ArrayList => Some(res::TypeName::ArrayList),
                 TypeAlias::Never => Some(res::TypeName::Never),
+                TypeAlias::Pair => Some(res::TypeName::Pair)
             },
             Ok(Res::TypeDef(id)) => Some(res::TypeName::UserDefined(self.def_id_for(id))),
             Ok(Res::VariantCase(..)) => {

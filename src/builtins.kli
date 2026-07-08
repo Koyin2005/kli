@@ -24,4 +24,4 @@ fun invalid_ptr[T]() ->  ptr[T];
 
 fun wrapping_add[T](x : T, y : T) -> T;
 
-fun overflowing_add[T](x : T, y : T) -> {first = bool,second = T};
+fun overflowing_add[T](x : T, y : T) -> Pair[bool, T];
