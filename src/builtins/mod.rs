@@ -14,7 +14,7 @@ pub enum Builtin {
     DropInPlace,
     InvalidPtr,
     WrappingAdd,
-    OverflowingAdd
+    OverflowingAdd,
 }
 impl Builtin {
     const _NO_REPEATS: () = {
@@ -48,7 +48,7 @@ impl Builtin {
         Builtin::DropInPlace,
         Builtin::InvalidPtr,
         Builtin::WrappingAdd,
-        Builtin::OverflowingAdd
+        Builtin::OverflowingAdd,
     ];
     pub const fn name(self) -> &'static str {
         match self {
@@ -62,7 +62,7 @@ impl Builtin {
             Builtin::DropInPlace => "drop_in_place",
             Builtin::InvalidPtr => "invalid_ptr",
             Builtin::WrappingAdd => "wrapping_add",
-            Builtin::OverflowingAdd => "overflowing_add"
+            Builtin::OverflowingAdd => "overflowing_add",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {

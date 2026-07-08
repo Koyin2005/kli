@@ -14,3 +14,22 @@ end
 fun min(x : int, y : int) -> int = case x < y of | true -> x | false -> y end
 
 fun max(x : int, y : int) -> int = case x > y of | true -> x | false -> y end
+
+fun is_zero(x : int) -> bool = 
+    x == 0
+
+fun is_negative(x : int) -> bool = 
+    x < 0
+
+fun is_positive(x : int) -> bool = 
+    x > 0
+
+
+
+fun as_bool(x : int) -> Option[bool] = 
+    case x of 
+    | 0 -> Option.Some(false)
+    | 1 -> Option.Some(true)
+    | _ -> Option.None
+    end
+

@@ -277,8 +277,14 @@ impl Type {
     pub fn pointer(ty: Self) -> Self {
         Self::RawPointer(Box::new(ty))
     }
-    pub fn pair(first : Type, second : Type) -> Self{
-        Self::record_named_fields([(Symbol::intern("first"),first),(Symbol::intern("second"),second)].into_iter())
+    pub fn pair(first: Type, second: Type) -> Self {
+        Self::record_named_fields(
+            [
+                (Symbol::intern("first"), first),
+                (Symbol::intern("second"), second),
+            ]
+            .into_iter(),
+        )
     }
     pub fn tuple(field_tys: Vec<Self>) -> Self {
         Self::Record(

@@ -167,11 +167,14 @@ impl<'a> Lower<'a> {
             }
             TypeName::Pair => {
                 let args = self.lower_generic_args_with(Generics::default(), 2, loc, args);
-                let into_type_arg = move | arg: GenericArg| -> Type{
-                    match arg{
+                let into_type_arg = move |arg: GenericArg| -> Type {
+                    match arg {
                         GenericArg::Type(ty) => ty,
                         GenericArg::Region(region) => {
-                            self.ctxt.diag().add_diagnostic(format!("Expected a 'type' but got region '{region}'"), loc);
+                            self.ctxt.diag().add_diagnostic(
+                                format!("Expected a 'type' but got region '{region}'"),
+                                loc,
+                            );
                             Type::Unknown
                         }
                     }
@@ -179,7 +182,7 @@ impl<'a> Lower<'a> {
                 let mut args = args.into_iter();
                 let first = args.next().map_or(Type::Unknown, into_type_arg);
                 let second = args.next().map_or(Type::Unknown, into_type_arg);
-                Type::pair(first,second)
+                Type::pair(first, second)
             }
         }
     }
