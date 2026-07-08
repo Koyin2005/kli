@@ -62,6 +62,7 @@ pub enum TokenKind {
     At,
     Type,
     AddrOf,
+    Import,
     Eof,
 }
 
@@ -123,6 +124,7 @@ impl Display for TokenKind {
             Self::Ident(name) => name,
             Self::Error => "{error}",
             Self::Region => "region",
+            Self::Import => "import",
             Self::Type => "type",
             Self::Eof => "EOF",
             Self::With => "with",

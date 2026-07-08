@@ -267,11 +267,7 @@ impl CtxtRef<'_> {
 
     pub fn span(self, id: DefId) -> SrcLoc {
         match self.node(id) {
-            Node::Item(item) => match &item.kind {
-                ItemKind::Function(function) => function.name.loc,
-                ItemKind::TypeDef(type_def) => type_def.name.loc,
-                ItemKind::Module(module) => module.name.loc,
-            },
+            Node::Item(item) => item.ident().loc,
             Node::Lambda(lambda) => lambda.loc,
             Node::Field(field_def) => field_def.name.loc,
             Node::Case(case_def) => case_def.name.loc,
@@ -285,11 +281,7 @@ impl CtxtRef<'_> {
     pub fn ident(self, id: DefId) -> Option<Ident> {
         self.0.idents.compute(id, |id| {
             Some(match self.node(id) {
-                Node::Item(item) => match &item.kind {
-                    ItemKind::Function(function) => function.name,
-                    ItemKind::Module(module) => module.name,
-                    ItemKind::TypeDef(type_def) => type_def.name,
-                },
+                Node::Item(item) => item.ident(),
                 Node::Case(case_def) => case_def.name,
                 Node::CaseField(field) => Ident {
                     symbol: Symbol::ZERO,
@@ -332,8 +324,8 @@ impl CtxtRef<'_> {
                             Type::new_function(signature.params, signature.return_type)
                         });
                     }
-                    ItemKind::Module(module) => {
-                        unreachable!("cannot get type of module {}", module.name.symbol)
+                    ItemKind::Module(_) | ItemKind::Import(_) => {
+                        unreachable!("cannot get type of {} {}",item.kind_str(), item.ident().symbol)
                     }
                 },
                 Node::CaseField(field) => Lower::new(self, id, None).lower_type(&field.ty),
@@ -349,7 +341,7 @@ impl CtxtRef<'_> {
                     .generics
                     .as_deref()
                     .map_or_else(Generics::new, lower_generics),
-                ItemKind::Module(_) => Generics::new(),
+                ItemKind::Module(_) | ItemKind::Import(_) => Generics::new(),
                 ItemKind::TypeDef(type_def) => type_def
                     .generics
                     .as_deref()

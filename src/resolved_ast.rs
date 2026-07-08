@@ -298,6 +298,7 @@ pub enum ItemKind {
     TypeDef(Box<TypeDef>),
     Function(Box<Function>),
     Module(Box<Module>),
+    Import(Ident)
 }
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum AnnotationKind {
@@ -334,6 +335,7 @@ impl Item {
             ItemKind::TypeDef(_) => "type def",
             ItemKind::Function(_) => "function def",
             ItemKind::Module(_) => "module def",
+            ItemKind::Import(_) => "import"
         }
     }
     pub fn ident(&self) -> Ident {
@@ -341,6 +343,7 @@ impl Item {
             ItemKind::Function(function) => function.name,
             ItemKind::Module(module) => module.name,
             ItemKind::TypeDef(type_def) => type_def.name,
+            ItemKind::Import(name) => *name
         }
     }
     #[track_caller]
