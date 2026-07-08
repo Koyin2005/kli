@@ -112,6 +112,9 @@ impl<'a> TypeSubst<'a> {
     }
     pub fn subst_expr(&mut self, expr: &mut Expr) {
         match &mut expr.kind {
+            ExprKind::Return(value) => {
+                self.subst_expr(value);
+            }
             ExprKind::Block(block, _) => {
                 for stmt in &mut block.stmts {
                     self.subst_stmt(stmt);

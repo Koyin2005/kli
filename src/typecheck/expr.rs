@@ -261,7 +261,7 @@ impl FunctionCtxt<'_> {
             })
             .collect::<Vec<_>>();
         TypeCheck::check_function(
-            &mut FunctionCtxt::new(root, id),
+            &mut FunctionCtxt::new(root, id,sig.return_type.clone()),
             captures
                 .iter()
                 .map(|capture| {
@@ -539,6 +539,10 @@ impl FunctionCtxt<'_> {
         let &Expr { loc, ref kind } = expr;
         let make_expr = |ty, kind, loc| typed_ast::Expr { ty, kind, loc };
         match kind {
+            ExprKind::Return(return_expr) => {
+                let value = self.check_expr_coerces_to(return_expr, Some(self.return_type.clone()));
+                make_expr(Type::Never,typed_ast::ExprKind::Return(Box::new(value)),loc)
+            }
             ExprKind::While(condition, body) => {
                 let condition = self.check_expr_coerces_to(condition, Some(Type::Bool));
                 let body = self.check_expr_coerces_to(body, Some(Type::Unit));

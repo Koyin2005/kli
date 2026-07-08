@@ -1,9 +1,7 @@
 use crate::{
     mir::{
-        StmtKind, TerminatorKind,
-        build::{Builder, expr::BuiltinResult},
-    },
-    typed_ast::{Expr, ExprKind},
+        Place, StmtKind, TerminatorKind, build::{Builder, expr::BuiltinResult},
+    }, typed_ast::{Expr, ExprKind},
 };
 
 impl Builder<'_> {
@@ -17,6 +15,10 @@ impl Builder<'_> {
             }
             ExprKind::Panic => {
                 self.panic(expr.loc);
+            }
+            ExprKind::Return(value) => {
+                self.expr_into_dest(Place::return_place(), value);
+                self.finish_block(expr.loc, TerminatorKind::Return);
             }
             ExprKind::Block(block_body, ..) => {
                 for stmt in block_body.stmts.iter() {

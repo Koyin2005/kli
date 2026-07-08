@@ -199,10 +199,11 @@ pub enum CoercionKind {
 pub struct FunctionCtxt<'ctxt> {
     pub(super) id: DefId,
     root: &'ctxt RootCtxt<'ctxt>,
+    pub(super) return_type : Type
 }
 impl<'ctxt> FunctionCtxt<'ctxt> {
-    pub fn new(root: &'ctxt RootCtxt<'ctxt>, id: DefId) -> Self {
-        Self { id, root }
+    pub fn new(root: &'ctxt RootCtxt<'ctxt>, id: DefId, ty : Type) -> Self {
+        Self { id, root , return_type:ty}
     }
     pub fn root(&self) -> &RootCtxt<'_> {
         self.root
@@ -404,10 +405,11 @@ impl<'ctxt> TypeCheck<'ctxt> {
         function: &res::Function,
     ) {
         let root_ctxt = RootCtxt::new(id, self.ctxt);
+        let sig = self.ctxt().signature_of(id).skip();
         Self::check_function(
-            &mut FunctionCtxt::new(&root_ctxt, id),
+            &mut FunctionCtxt::new(&root_ctxt, id,sig.return_type.clone()),
             Vec::new(),
-            self.ctxt().signature_of(id).skip(),
+            sig,
             &function.params,
             function.body.as_deref(),
         );

@@ -125,6 +125,7 @@ pub enum LogicalOp {
 }
 #[derive(Debug)]
 pub enum ExprKind {
+    Return(Box<Expr>),
     Record(Box<[RecordFieldInit]>),
     Block(BlockBody, Option<LocalRegionId>),
     String(Rc<str>),

@@ -530,6 +530,11 @@ impl Parser {
                     kind: ExprKind::While(Box::new(condition), Box::new(body)),
                 })
             }
+            TokenKind::Return => {
+                self.next_token();
+                let return_value = self.parse_expr()?;
+                Ok(Expr { loc, kind: ExprKind::Return(Box::new(return_value)) })
+            }
             TokenKind::Print => {
                 self.next_token();
                 let _ = self.expect(&TokenKind::LeftParen);

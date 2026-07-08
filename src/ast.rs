@@ -230,6 +230,7 @@ pub enum ExprKind {
     Record(RecordExpr),
     NamedRecord(InstancePath, Vec<FieldInit>),
     AddressOf(Box<Expr>),
+    Return(Box<Expr>)
 }
 #[derive(Debug, Clone)]
 pub struct Generics {

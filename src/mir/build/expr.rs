@@ -184,7 +184,7 @@ impl Builder<'_> {
                 }
                 self.expr_into_dest(dest, &block_body.expr);
             }
-            ExprKind::Panic | ExprKind::NeverToAny(_) => {
+            ExprKind::Panic | ExprKind::NeverToAny(_) | ExprKind::Return(_) => {
                 self.expr_stmt(expr);
             }
             ExprKind::Case(expr, arms) => {
@@ -551,7 +551,8 @@ impl Builder<'_> {
             | ExprKind::Panic
             | ExprKind::Case(..)
             | ExprKind::NeverToAny(_)
-            | ExprKind::Logic(..) => {
+            | ExprKind::Logic(..)
+            |ExprKind::Return(_) => {
                 let temp = self.expr_into_temp(expr);
                 Rvalue::Use(Operand::Load(Place::local(temp)))
             }
