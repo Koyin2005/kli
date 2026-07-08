@@ -7,6 +7,7 @@ import builtins.ptr_read
 import builtins.deallocate
 import builtins.offset
 import builtins.drop_in_place
+import std.ints
 
 @opaque
 @lang_item("array_list")
@@ -26,10 +27,7 @@ end
 
 
 fun with_capacity[T](cap : int) -> ArrayList[T] = do
-    let cap = case cap < 0 of 
-    | true -> 0
-    | false -> cap
-    end;
+    let cap = ints.max(cap,0);
     ArrayList {
         ptr = allocate(cap),
         len = 0,
@@ -78,11 +76,12 @@ fun pop[r,T](l : mut[r] ArrayList[T]) -> Option[T] = do
 end
 
 fun drop[T](l : ArrayList[T]) -> () = do
-    let mut l = l;
-    while l.len > 0 do
-        drop_in_place(l.ptr);
-        l.ptr = offset(l.ptr,1);
-        l.len = l.len - 1
+    let mut len = l.len;
+    let mut ptr = l.ptr;
+    while len > 0 do
+        drop_in_place(ptr);
+        ptr = offset(ptr,1);
+        len = len - 1
     end;
     deallocate(l.ptr)
 end

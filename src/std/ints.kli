@@ -1,1 +1,5 @@
 fun wrapping_add(x : int, y : int) -> int;
+
+fun min(x : int, y : int) -> int = case x < y of | true -> x | false -> y end
+
+fun max(x : int, y : int) -> int = case x > y of | true -> x | false -> y end
