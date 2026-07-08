@@ -1,0 +1,13 @@
+@copy
+type Ordering = 
+    | Lesser
+    | Equal
+    | Greater
+
+fun int_cmp(x : int, y : int) -> Ordering = 
+    case x < y of 
+    | true -> Ordering.Lesser,
+    | false -> case x > y of 
+        | true -> Ordering.Greater,
+        | false -> Ordering.Lesser
+    end
