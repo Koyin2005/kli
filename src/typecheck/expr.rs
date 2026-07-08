@@ -635,36 +635,29 @@ impl FunctionCtxt<'_> {
                 }
             }
             ExprKind::Binary(binary_op, left, right) => {
-                #[derive(Clone, Copy)]
-                enum OperandTypes {
-                    Ints,
-                    Scalars,
-                }
-                impl OperandTypes {
-                    fn expected_types(self) -> (Option<Type>, Option<Type>) {
-                        match self {
-                            Self::Ints => (Some(Type::Int), Some(Type::Int)),
-                            Self::Scalars => (None, None),
-                        }
-                    }
-                }
-                let (operands, result) = match binary_op {
+                let ((left_ty, right_ty), result) = match binary_op {
                     BinaryOp::Add | BinaryOp::Divide | BinaryOp::Multiply | BinaryOp::Subtract => {
-                        (OperandTypes::Ints, Type::Int)
+                        ((Some(Type::Int), Some(Type::Int)), Type::Int)
                     }
-                    BinaryOp::Equals => (OperandTypes::Scalars, Type::Bool),
-                    BinaryOp::Lesser | BinaryOp::Greater => (OperandTypes::Ints, Type::Bool),
+                    BinaryOp::Equals => ((None, None), Type::Bool),
+                    BinaryOp::Lesser | BinaryOp::Greater => {
+                        ((Some(Type::Int), Some(Type::Int)), Type::Bool)
+                    }
+                    BinaryOp::And => ((Some(Type::Bool), Some(Type::Bool)), Type::Bool),
                 };
-                let (left_ty, right_ty) = operands.expected_types();
                 let left = self.check_expr(left, left_ty);
                 let right = self.check_expr(right, right_ty);
-                match (operands, &left.ty, &right.ty) {
-                    (OperandTypes::Ints, Type::Int, Type::Int)
-                    | (OperandTypes::Scalars, Type::Bool, Type::Bool)
-                    | (OperandTypes::Scalars, Type::Int, Type::Int)
-                    | (OperandTypes::Scalars, Type::Byte, Type::Byte)
-                    | (OperandTypes::Scalars, Type::Char, Type::Char) => (),
-                    (OperandTypes::Scalars, Type::RawPointer(ty1), Type::RawPointer(ty2)) => {
+                match (binary_op, &left.ty, &right.ty) {
+                    (
+                        BinaryOp::Add | BinaryOp::Divide | BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Greater | BinaryOp::Lesser,
+                        Type::Int,
+                        Type::Int,
+                    )
+                    | (BinaryOp::And, Type::Bool, Type::Bool)
+                    | (BinaryOp::Equals, Type::Int, Type::Int)
+                    | (BinaryOp::Equals, Type::Byte, Type::Byte)
+                    | (BinaryOp::Equals, Type::Char, Type::Char) => (),
+                    (BinaryOp::Equals, Type::RawPointer(ty1), Type::RawPointer(ty2)) => {
                         let _ = self.root().unify((**ty1).clone(), (**ty2).clone(), loc);
                     }
                     (_, left, right) => {
@@ -676,10 +669,34 @@ impl FunctionCtxt<'_> {
                         );
                     }
                 }
+                fn binary_kind(
+                    op: typed_ast::BinaryOp,
+                    left: typed_ast::Expr,
+                    right: typed_ast::Expr,
+                ) -> typed_ast::ExprKind {
+                    typed_ast::ExprKind::Binary(op, Box::new(left), Box::new(right))
+                }
                 typed_ast::Expr {
                     loc,
                     ty: result,
-                    kind: typed_ast::ExprKind::Binary(*binary_op, Box::new(left), Box::new(right)),
+                    kind: match *binary_op {
+                        BinaryOp::Add => binary_kind(typed_ast::BinaryOp::Add, left, right),
+                        BinaryOp::Subtract => {
+                            binary_kind(typed_ast::BinaryOp::Subtract, left, right)
+                        }
+                        BinaryOp::Multiply => {
+                            binary_kind(typed_ast::BinaryOp::Multiply, left, right)
+                        }
+                        BinaryOp::Divide => binary_kind(typed_ast::BinaryOp::Divide, left, right),
+                        BinaryOp::Equals => binary_kind(typed_ast::BinaryOp::Equals, left, right),
+                        BinaryOp::Lesser => binary_kind(typed_ast::BinaryOp::Lesser, left, right),
+                        BinaryOp::Greater => binary_kind(typed_ast::BinaryOp::Greater, left, right),
+                        BinaryOp::And => typed_ast::ExprKind::Logic(
+                            typed_ast::LogicalOp::And,
+                            Box::new(left),
+                            Box::new(right),
+                        ),
+                    },
                 }
             }
             ExprKind::Lambda(lambda) => {

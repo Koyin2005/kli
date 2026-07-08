@@ -24,7 +24,7 @@ fun is_negative(x : int) -> bool =
 fun is_positive(x : int) -> bool = 
     x > 0
 
-
+fun contains_exclusive(x : int, start : int , end_ : int) -> bool = x > start and x < end_
 
 fun as_bool(x : int) -> Option[bool] = 
     case x of 

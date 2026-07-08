@@ -104,7 +104,9 @@ where
             v.visit_expr(callee);
             args.iter().for_each(|expr| v.visit_expr(expr));
         }
-        ExprKind::Binary(_, first, second) | ExprKind::While(first, second) => {
+        ExprKind::Binary(_, first, second)
+        | ExprKind::While(first, second)
+        | ExprKind::Logic(_, first, second) => {
             v.visit_expr(first);
             v.visit_expr(second)
         }

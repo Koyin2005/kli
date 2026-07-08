@@ -47,3 +47,6 @@ fun flat_map[T,U](o : Option[T], f : fun(T) => Option[U]) -> Option[U] =
     | .Some(x) -> f(x)
     | .None -> Option.None
     end
+
+fun take[r,T](o : mut[r] Option[T]) -> Option[T] = 
+    std.refs.swap(o,Option.None)

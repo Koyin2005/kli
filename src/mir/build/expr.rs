@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{BinaryOp, IsResource},
+    ast::IsResource,
     builtins::Builtin,
     index_vec::IndexVec,
     mir::{
@@ -9,7 +9,7 @@ use crate::{
         Operand, OverflowOp, Place, PointerCast, Rvalue, build::Builder,
     },
     src_loc::SrcLoc,
-    typed_ast::{self, Expr, ExprKind, FieldId, Pattern},
+    typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
     types::{FieldName, FunctionType, Type},
 };
 pub(super) enum BuiltinResult {
@@ -189,6 +189,38 @@ impl Builder<'_> {
             }
             ExprKind::Case(expr, arms) => {
                 self.build_match(dest, expr, arms);
+            }
+            ExprKind::Logic(op, left, right) => {
+                let left_operand = self.operand(left);
+                match op {
+                    LogicalOp::And => {
+                        let branch_block = self.current_block;
+
+                        let true_block_start = self.switch_to_new_block();
+                        self.expr_into_dest(dest.clone(), right);
+                        let true_block_end = self.current_block;
+
+                        let false_block = self.switch_to_new_block();
+                        self.assign(
+                            left.loc,
+                            dest,
+                            Rvalue::Use(Operand::Constant(Constant::bool(false))),
+                        );
+                        let merge_block = self.goto_to_new_block(right.loc);
+
+                        self.switch_to_block(true_block_end);
+                        self.finish_block_with_goto(right.loc, merge_block);
+
+                        self.switch_to_block(branch_block);
+                        self.finish_block_with_if(
+                            expr.loc,
+                            left_operand,
+                            true_block_start,
+                            false_block,
+                        );
+                        self.switch_to_block(merge_block);
+                    }
+                }
             }
             ExprKind::Record(_)
             | ExprKind::Function(..)
@@ -416,11 +448,11 @@ impl Builder<'_> {
                 _ => unreachable!("Can't call non function at {:?}", expr.loc),
             },
             ExprKind::Binary(binary_op, left, right) => {
-                let left_operand = self.operand(left);
-                let right_operand = self.operand(right);
-                let overflow_op = match binary_op {
-                    BinaryOp::Add => OverflowOp::Add,
+                let (left_operand, right_operand, overflow_op) = match binary_op {
+                    BinaryOp::Add => (self.operand(left), self.operand(right), OverflowOp::Add),
                     BinaryOp::Divide => {
+                        let left_operand = self.operand(left);
+                        let right_operand = self.operand(right);
                         //Division can fail in 2 ways
                         //Divide by zero
                         //Divide int min by -1
@@ -462,9 +494,19 @@ impl Builder<'_> {
                             right_operand,
                         );
                     }
-                    BinaryOp::Subtract => OverflowOp::Subtract,
-                    BinaryOp::Multiply => OverflowOp::Multiply,
+                    BinaryOp::Subtract => (
+                        self.operand(left),
+                        self.operand(right),
+                        OverflowOp::Subtract,
+                    ),
+                    BinaryOp::Multiply => (
+                        self.operand(left),
+                        self.operand(right),
+                        OverflowOp::Multiply,
+                    ),
                     BinaryOp::Equals => {
+                        let left_operand = self.operand(left);
+                        let right_operand = self.operand(right);
                         return Self::binary_op_rvalue(
                             mir::BinaryOp::Equals,
                             left_operand,
@@ -472,6 +514,8 @@ impl Builder<'_> {
                         );
                     }
                     BinaryOp::Lesser => {
+                        let left_operand = self.operand(left);
+                        let right_operand = self.operand(right);
                         return Self::binary_op_rvalue(
                             mir::BinaryOp::Lesser,
                             left_operand,
@@ -479,6 +523,8 @@ impl Builder<'_> {
                         );
                     }
                     BinaryOp::Greater => {
+                        let left_operand = self.operand(left);
+                        let right_operand = self.operand(right);
                         return Self::binary_op_rvalue(
                             mir::BinaryOp::Greater,
                             left_operand,
@@ -504,7 +550,8 @@ impl Builder<'_> {
             ExprKind::Block(..)
             | ExprKind::Panic
             | ExprKind::Case(..)
-            | ExprKind::NeverToAny(_) => {
+            | ExprKind::NeverToAny(_)
+            | ExprKind::Logic(..) => {
                 let temp = self.expr_into_temp(expr);
                 Rvalue::Use(Operand::Load(Place::local(temp)))
             }

@@ -680,7 +680,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                 }
             }
             ExprKind::Load(place) => self.check_place_use(place, PlaceUse::Read),
-            ExprKind::Binary(_, left, right) => {
+            ExprKind::Binary(_, left, right) | ExprKind::Logic(_, left, right) => {
                 self.check_expr(left);
                 self.check_expr(right);
             }

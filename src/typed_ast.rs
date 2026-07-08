@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, rc::Rc};
 
 use crate::{
-    ast::{BinaryOp, IsResource, Mutable},
+    ast::{IsResource, Mutable},
     builtins::Builtin,
     def_ids::DefId,
     define_id,
@@ -109,6 +109,21 @@ pub enum IteratorType {
     StringIter(Region, Mutable),
 }
 #[derive(Debug)]
+pub enum BinaryOp {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Equals,
+    Greater,
+    Lesser,
+}
+
+#[derive(Debug)]
+pub enum LogicalOp {
+    And,
+}
+#[derive(Debug)]
 pub enum ExprKind {
     Record(Box<[RecordFieldInit]>),
     Block(BlockBody, Option<LocalRegionId>),
@@ -127,6 +142,7 @@ pub enum ExprKind {
     Call(Box<Expr>, Vec<Expr>),
     Load(Place),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
+    Logic(LogicalOp, Box<Expr>, Box<Expr>),
     For {
         pattern: Box<Pattern>,
         iterator: Box<Expr>,

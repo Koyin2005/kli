@@ -145,6 +145,7 @@ impl Parser {
             TokenKind::DoubleEqual => Some((10, BinaryOp::Equals)),
             TokenKind::Lesser => Some((20, BinaryOp::Lesser)),
             TokenKind::Greater => Some((20, BinaryOp::Greater)),
+            TokenKind::And => Some((0, BinaryOp::And)),
             _ => None,
         }
     }

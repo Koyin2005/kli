@@ -135,7 +135,9 @@ impl<'a> TypeSubst<'a> {
             ExprKind::AddressOf(place) => {
                 self.subst_place(place);
             }
-            ExprKind::Binary(_, first, second) | ExprKind::While(first, second) => {
+            ExprKind::Binary(_, first, second)
+            | ExprKind::While(first, second)
+            | ExprKind::Logic(_, first, second) => {
                 self.subst_expr(first);
                 self.subst_expr(second);
             }

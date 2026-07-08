@@ -65,6 +65,7 @@ pub enum TokenKind {
     AddrOf,
     Import,
     Eof,
+    And,
 }
 
 impl Display for TokenKind {
@@ -130,6 +131,7 @@ impl Display for TokenKind {
             Self::Eof => "EOF",
             Self::With => "with",
             Self::As => "as",
+            Self::And => "and",
         };
         f.write_str(txt)
     }

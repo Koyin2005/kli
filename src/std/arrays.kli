@@ -48,18 +48,20 @@ fun len[r,T](l : imm[r] ArrayList[T]) -> int =
     l^.len
 
 @unsafe
+fun resize[r,T](l : mut[r] ArrayList[T], new_cap: int) -> () = do 
+    l^.ptr = reallocate(l^.ptr,new_cap);
+    l^.cap = new_cap
+end
+
+@unsafe
 fun grow[r,T](l : mut[r] ArrayList[T]) -> () = 
     do
         let new_cap = l^.cap * 2;
-        l^.ptr = reallocate(l^.ptr,new_cap);
-        l^.cap = new_cap
+        resize(l,new_cap)
     end
 
 fun push[r,T](l : mut[r] ArrayList[T], value : T) -> () = do
-    case l^.len == l^.cap of
-    | true -> do in r1 grow(borrow mut l^ in r1) end
-    | false -> () 
-    end;
+    do in r1 reserve(borrow mut l in r1,1) end;
     ptr_write(offset(l^.ptr,l^.len),value);
     l^.len = l^.len + 1
 end
@@ -74,6 +76,43 @@ fun pop[r,T](l : mut[r] ArrayList[T]) -> Option[T] = do
         end
     end
 end
+
+fun index_out_bounds() -> never = panic
+
+fun ptr_to[r,T](l : imm[r] ArrayList[T], index : int) -> ptr[T] = 
+    case ints.contains_exclusive(index,0,l^.len) of 
+    | true -> addr_of(l^.ptr^)
+    | false -> index_out_bounds()
+    end
+
+fun at_imm[r,T](l : imm[r] ArrayList[T], index : int) -> imm[r] T = 
+    case ints.contains_exclusive(index,0,l^.len) of 
+    | false -> index_out_bounds()
+    | true -> borrow l^.ptr^ in r
+    end
+
+
+fun at_mut[r,T](l : mut[r] ArrayList[T], index : int) -> mut[r] T = 
+    case ints.contains_exclusive(index,0,l^.len) of 
+    | false -> index_out_bounds()
+    | true -> borrow mut l^.ptr^ in r
+    end
+
+fun reserve[r,T](l : mut[r] ArrayList[T], count : int) -> () = do
+    let additional = ints.max(0,count);
+    case additional > 0 of 
+    | true -> do
+        let new_len = l^.len + count;
+        let new_cap = ints.max(new_len,l^.cap * 2);
+        case new_cap > l^.cap of
+        | true -> do in r1 resize(borrow mut l^ in r1,new_cap) end
+        | false -> () 
+        end
+    end
+    | false -> ()
+    end 
+end
+    
 
 fun drop[T](l : ArrayList[T]) -> () = do
     let mut len = l.len;

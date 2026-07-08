@@ -175,6 +175,7 @@ fn find_std_lib() -> FileEntry {
     let optional_file = include_str!("std/optional.kli");
     let phantom_file = include_str!("std/phantom.kli");
     let cmp_file = include_str!("std/cmp.kli");
+    let map_file = include_str!("std/maps.kli");
     fn file_from(name: &str, src: &str) -> (Symbol, FileEntry) {
         let name = Symbol::intern(name);
         (
@@ -196,6 +197,7 @@ fn find_std_lib() -> FileEntry {
             file_from("cmp", cmp_file),
             file_from("ints", int_file),
             file_from("io", io_file),
+            file_from("maps", map_file),
             file_from("optional", optional_file),
             file_from("phantom", phantom_file),
             file_from("refs", ref_file),

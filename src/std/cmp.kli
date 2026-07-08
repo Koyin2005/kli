@@ -6,8 +6,9 @@ type Ordering =
 
 fun int_cmp(x : int, y : int) -> Ordering = 
     case x < y of 
-    | true -> Ordering.Lesser,
+    | true -> Ordering.Lesser
     | false -> case x > y of 
-        | true -> Ordering.Greater,
-        | false -> Ordering.Lesser
+        | true -> Ordering.Greater
+        | false -> Ordering.Equal
+        end
     end
