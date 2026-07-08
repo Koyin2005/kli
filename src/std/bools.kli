@@ -3,3 +3,12 @@ fun not(x : bool) -> bool =
     | true -> false 
     | false -> true 
     end
+
+fun as_int(x : bool) -> int = 
+    case x of 
+    | true -> 1
+    | false -> 0
+    end
+
+fun as_byte(x : bool) -> byte = 
+    builtins.transmute(x)
