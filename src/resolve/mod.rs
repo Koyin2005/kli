@@ -40,7 +40,6 @@ type Scope = HashMap<Symbol, Res>;
 enum Res {
     LocalRegion(LocalRegionId),
     Param(usize),
-    Builtin(Builtin),
     Function(ModuleNodeId),
     Var(VarId),
     Module(ModuleId),
@@ -89,9 +88,7 @@ pub struct Resolve {
 }
 impl Resolve {
     pub fn new(config: Config) -> Self {
-        let builtins = Builtin::ALL_BUILTINS
-            .map(|builtin| (Symbol::intern(builtin.name()), Res::Builtin(builtin)));
-        let env = Scope::from_iter(builtins.into_iter().chain([
+        let env = Scope::from_iter([
             (Symbol::intern("ptr"), Res::TypeAlias(TypeAlias::Ptr)),
             (Symbol::intern("byte"), Res::TypeAlias(TypeAlias::Byte)),
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
@@ -100,7 +97,7 @@ impl Resolve {
                 Symbol::intern("ArrayList"),
                 Res::TypeAlias(TypeAlias::ArrayList),
             ),
-        ]));
+        ]);
         Self {
             config,
             parents: HashMap::new(),
@@ -145,10 +142,6 @@ impl Resolve {
     fn not_in_scope_error(&mut self, name: Symbol, loc: SrcLoc) {
         self.diag
             .add_diagnostic(format!("'{}' not in scope", name), loc);
-    }
-    fn builtin_not_found_error(&mut self, builtin: Builtin, loc: SrcLoc) {
-        self.diag
-            .add_diagnostic(format!("builtin '{}' not found", builtin.name()), loc);
     }
     fn cannot_use_as_error(&mut self, name: Symbol, expected: &str, loc: SrcLoc) {
         self.diag
@@ -261,7 +254,6 @@ impl Resolve {
                     Some(Res::Param(index)) => self.resolve_region_param(name, index),
                     Some(
                         Res::TypeAlias(_)
-                        | Res::Builtin(_)
                         | Res::Function(_)
                         | Res::Var(_)
                         | Res::Module(_)
@@ -403,8 +395,7 @@ impl Resolve {
                 None
             }
             Ok(
-                Res::Builtin(_)
-                | Res::Function(_)
+                Res::Function(_)
                 | Res::LocalRegion(_)
                 | Res::Var(_)
                 | Res::Module(_),
@@ -602,16 +593,6 @@ impl Resolve {
             }
         }
     }
-    fn resolve_builtin(&mut self, builtin: Builtin) -> Option<res::FunctionDefId> {
-        let builtin_module = self.builtin_module?;
-        let res = *self.modules[&builtin_module]
-            .env
-            .get(&Symbol::intern(builtin.name()))?;
-        match res {
-            Res::Function(id) => Some(res::FunctionDefId(self.def_id_for(id))),
-            _ => None,
-        }
-    }
     fn resolve_path(&mut self, path: &Path) -> Result<Res, NameResolutionError> {
         let head_seg = *path.head();
         let Some(head) = self.resolve_name(head_seg.symbol) else {
@@ -648,8 +629,7 @@ impl Resolve {
                         path.segments()[index..].to_vec(),
                     ));
                 }
-                Res::Builtin(_)
-                | Res::Function(_)
+                Res::Function(_)
                 | Res::Param(_)
                 | Res::LocalRegion(_)
                 | Res::TypeAlias(_)
@@ -701,15 +681,6 @@ impl Resolve {
                 res::ExprKind::Err
             }
             Ok(res) => match res {
-                Res::Builtin(builtin) => match self.resolve_builtin(builtin) {
-                    Some(id) => {
-                        res::ExprKind::Function(id, Box::new(self.resolve_generic_args(args)))
-                    }
-                    None => {
-                        self.builtin_not_found_error(builtin, loc);
-                        res::ExprKind::Err
-                    }
-                },
                 Res::Var(id) => {
                     let name = path.into_last().symbol;
                     self.error_on_generic_args("var", name, loc, args);
