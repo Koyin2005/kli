@@ -21,3 +21,7 @@ fun offset[T](p : ptr[T], offset: int) -> ptr[T];
 fun drop_in_place[T](p : ptr[T]) -> ();
 
 fun invalid_ptr[T]() ->  ptr[T];
+
+fun wrapping_add[T](x : T, y : T) -> T;
+
+fun overflowing_add[T](x : T, y : T) -> {first = bool,second = T};

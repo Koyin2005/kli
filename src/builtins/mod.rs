@@ -13,6 +13,8 @@ pub enum Builtin {
     Offset,
     DropInPlace,
     InvalidPtr,
+    WrappingAdd,
+    OverflowingAdd
 }
 impl Builtin {
     const _NO_REPEATS: () = {
@@ -34,7 +36,7 @@ impl Builtin {
             i += 1;
         }
     };
-    pub const COUNT: usize = 9;
+    pub const COUNT: usize = 11;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
         Builtin::Allocate,
         Builtin::Deallocate,
@@ -45,6 +47,8 @@ impl Builtin {
         Builtin::Offset,
         Builtin::DropInPlace,
         Builtin::InvalidPtr,
+        Builtin::WrappingAdd,
+        Builtin::OverflowingAdd
     ];
     pub const fn name(self) -> &'static str {
         match self {
@@ -57,6 +61,8 @@ impl Builtin {
             Builtin::Offset => "offset",
             Builtin::DropInPlace => "drop_in_place",
             Builtin::InvalidPtr => "invalid_ptr",
+            Builtin::WrappingAdd => "wrapping_add",
+            Builtin::OverflowingAdd => "overflowing_add"
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {

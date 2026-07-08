@@ -233,6 +233,14 @@ impl Builder<'_> {
             Builtin::InvalidPtr => {
                 BuiltinResult::Rvalue(Rvalue::DanglingPtr(ty.as_pointer().unwrap().clone()))
             }
+            Builtin::WrappingAdd => {
+                let [left,right] = operands.try_into().unwrap();
+                BuiltinResult::Rvalue(Self::binary_op_rvalue(mir::BinaryOp::Wrapping(OverflowOp::Add), left, right))
+            }
+            Builtin::OverflowingAdd => {
+                let [left,right] = operands.try_into().unwrap();
+                BuiltinResult::Rvalue(Self::binary_op_rvalue(mir::BinaryOp::Overflow(OverflowOp::Add), left, right))
+            }
             Builtin::DropInPlace => {
                 let [pointer] = operands.try_into().unwrap();
                 self.push_stmt(

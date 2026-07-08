@@ -1,6 +1,8 @@
-fun wrapping_add(x : int, y : int) -> int = do 
-    panic
-end
+import std.optional.Option
+
+fun wrapping_add(x : int, y : int) -> int = builtins.wrapping_add(x,y)
+
+fun overflowing_add(x : int, y : int) -> {first = bool, second = int} -> builtins.overflowing_add(x,y)
 
 fun min(x : int, y : int) -> int = case x < y of | true -> x | false -> y end
 
