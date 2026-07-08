@@ -1,4 +1,6 @@
-fun wrapping_add(x : int, y : int) -> int;
+fun wrapping_add(x : int, y : int) -> int = do 
+    panic
+end
 
 fun min(x : int, y : int) -> int = case x < y of | true -> x | false -> y end
 

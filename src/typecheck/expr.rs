@@ -138,7 +138,7 @@ impl FunctionCtxt<'_> {
             }
         };
         let pattern = self.check_pattern(pattern, element, None);
-        let body = self.check_expr(body, Some(Type::Unit));
+        let body = self.check_expr_coerces_to(body, Some(Type::Unit));
         let Some(iterator_type) = iterator_type else {
             return typed_ast::Expr {
                 ty: Type::Unit,
@@ -420,7 +420,7 @@ impl FunctionCtxt<'_> {
             .iter()
             .map(|stmt| self.check_stmt(stmt))
             .collect();
-        let expr = self.check_expr(&body.expr, expected_ty);
+        let expr = self.check_expr_coerces_to(&body.expr, expected_ty);
         let ty = expr.ty.clone();
         let body = typed_ast::BlockBody {
             stmts,
@@ -458,7 +458,7 @@ impl FunctionCtxt<'_> {
                     .get(&FieldName::Named(name.symbol))
                     .copied()
                     .map(FieldId::new);
-                let value = self.check_expr(
+                let value = self.check_expr_coerces_to(
                     value,
                     expected_fields
                         .as_ref()
@@ -540,8 +540,8 @@ impl FunctionCtxt<'_> {
         let make_expr = |ty, kind, loc| typed_ast::Expr { ty, kind, loc };
         match kind {
             ExprKind::While(condition, body) => {
-                let condition = self.check_expr(condition, Some(Type::Bool));
-                let body = self.check_expr(body, Some(Type::Unit));
+                let condition = self.check_expr_coerces_to(condition, Some(Type::Bool));
+                let body = self.check_expr_coerces_to(body, Some(Type::Unit));
                 typed_ast::Expr {
                     ty: Type::Unit,
                     loc,
@@ -729,8 +729,8 @@ impl FunctionCtxt<'_> {
                 }
             }
             ExprKind::Assign(place, value) => {
-                let value = self.check_expr(value, None);
-                let place = self.check_place(place, Some(value.ty.clone()));
+                let place = self.check_place(place, None);
+                let value = self.check_expr_coerces_to(value, Some(place.ty.clone()));
                 typed_ast::Expr {
                     loc,
                     ty: Type::Unit,
@@ -787,7 +787,7 @@ impl FunctionCtxt<'_> {
                                 field.name.loc,
                             );
                         }
-                        let value = self.check_expr(
+                        let value = self.check_expr_coerces_to(
                             &field.value,
                             field_info
                                 .as_ref()
