@@ -1122,9 +1122,7 @@ impl Resolve {
                         ast::ItemKind::Function(function) => {
                             this.declare_function(full_id, function);
                         }
-                        ast::ItemKind::Import(_) => {
-
-                        }
+                        ast::ItemKind::Import(..) => {}
                     }
                 }
                 for module in &module.child_modules {
@@ -1224,9 +1222,9 @@ impl Resolve {
                         ast::ItemKind::TypeDef(type_def) => res::ItemKind::TypeDef(Box::new(
                             this.resolve_type_def(node_id, type_def),
                         )),
-                        ast::ItemKind::Import(import) => {
-                            let name =import.last();
-                            match this.resolve_path(&import){
+                        ast::ItemKind::Import(import, alias) => {
+                            let name = alias.unwrap_or(import.last());
+                            match this.resolve_path(&import) {
                                 Ok(path) => this.declare_item(name, "import", path),
                                 Err(err) => this.path_res_error(&import, item.loc, err),
                             }

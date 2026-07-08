@@ -61,6 +61,7 @@ pub enum TokenKind {
     While,
     At,
     Type,
+    As,
     AddrOf,
     Import,
     Eof,
@@ -128,6 +129,7 @@ impl Display for TokenKind {
             Self::Type => "type",
             Self::Eof => "EOF",
             Self::With => "with",
+            Self::As => "as",
         };
         f.write_str(txt)
     }

@@ -346,7 +346,7 @@ pub struct Item {
 pub enum ItemKind {
     TypeDef(TypeDef),
     Function(Function),
-    Import(Path)
+    Import(Path, Option<Ident>),
 }
 #[derive(Debug)]
 pub struct TypeDef {

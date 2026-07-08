@@ -325,7 +325,11 @@ impl CtxtRef<'_> {
                         });
                     }
                     ItemKind::Module(_) | ItemKind::Import(_) => {
-                        unreachable!("cannot get type of {} {}",item.kind_str(), item.ident().symbol)
+                        unreachable!(
+                            "cannot get type of {} {}",
+                            item.kind_str(),
+                            item.ident().symbol
+                        )
                     }
                 },
                 Node::CaseField(field) => Lower::new(self, id, None).lower_type(&field.ty),

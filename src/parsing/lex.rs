@@ -189,6 +189,7 @@ impl<'s> Lexer<'s> {
                 "while" => TokenKind::While,
                 "with" => TokenKind::With,
                 "import" => TokenKind::Import,
+                "as" => TokenKind::As,
                 _ => TokenKind::Ident(src),
             },
         })

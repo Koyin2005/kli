@@ -411,7 +411,7 @@ impl Parser {
         let _ = self.expect(&TokenKind::RightParen);
         Ok(expr)
     }
-    fn parse_path(&mut self) -> Result<Path,ParseError>{
+    fn parse_path(&mut self) -> Result<Path, ParseError> {
         let Some(name) = self.match_ident() else {
             unreachable!("Should be an ident here")
         };
@@ -935,19 +935,20 @@ impl Parser {
     fn parse_item(&mut self) -> Result<Option<Item>, ParseError> {
         let annotations = self.parse_annotations()?;
         Ok(Some(match self.peek_token().kind {
-            TokenKind::Import => {
-                Item{
-                    id : self.next_node_id(),
-                    loc : self.current_loc(),
-                    annotations,
-                    kind : {
-                        self.next_token();
-                        let path = self.parse_path()?;
-                        
-                        ItemKind::Import(path)
-                    }
-                }
-            }
+            TokenKind::Import => Item {
+                id: self.next_node_id(),
+                loc: self.current_loc(),
+                annotations,
+                kind: {
+                    self.next_token();
+                    let path = self.parse_path()?;
+                    let alias = self
+                        .matches_token(&TokenKind::As)
+                        .then(|| self.expect_ident("import alias"))
+                        .transpose()?;
+                    ItemKind::Import(path, alias)
+                },
+            },
             TokenKind::Fun => Item {
                 id: self.next_node_id(),
                 loc: self.current_loc(),
@@ -974,7 +975,10 @@ impl Parser {
                     if matches!(
                         self.peek_token(),
                         Token {
-                            kind: TokenKind::Fun | TokenKind::Type | TokenKind::At | TokenKind::Import,
+                            kind: TokenKind::Fun
+                                | TokenKind::Type
+                                | TokenKind::At
+                                | TokenKind::Import,
                             ..
                         }
                     ) {
