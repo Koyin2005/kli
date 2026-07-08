@@ -9,6 +9,7 @@ use crate::{
     Symbol,
     builtins::Builtins,
     captures::{self, captures},
+    config::Config,
     def_ids::DefId,
     diagnostics::DiagnosticReporter,
     ident::Ident,
@@ -94,6 +95,7 @@ impl TypeDefInfo {
         };
         cases
     }
+    #[track_caller]
     pub fn fields(&self) -> &IndexVec<FieldId, Field> {
         let TypeDefKind::Record(fields) = &self.kind else {
             panic!("Expected a record type")
@@ -177,6 +179,7 @@ pub struct GlobalContext {
     builtins: Builtins,
     std_lib: Cache<(), Option<DefId>>,
     ty_cache: Cache<DefId, Scheme<Type>>,
+    config: Config,
 }
 impl GlobalContext {
     pub fn as_ref(&self) -> CtxtRef<'_> {
@@ -187,6 +190,9 @@ impl GlobalContext {
 pub struct CtxtRef<'a>(&'a GlobalContext);
 
 impl CtxtRef<'_> {
+    pub fn config(&self) -> &Config {
+        &self.0.config
+    }
     pub fn node(&self, id: DefId) -> &Node {
         &self.0.nodes[id]
     }
@@ -552,12 +558,14 @@ fn lower_type_def(ctxt: CtxtRef<'_>, type_def: &TypeDef) -> TypeDefInfo {
     }
 }
 pub fn build_global_context(
+    config: Config,
     nodes: IndexVec<DefId, Node>,
     builtins: Builtins,
     parents: HashMap<DefId, DefId>,
 ) -> GlobalContext {
     let diag = DiagnosticReporter::new();
     GlobalContext {
+        config,
         parents,
         lang_items: Default::default(),
         generics: Default::default(),

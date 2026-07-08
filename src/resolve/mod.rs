@@ -4,6 +4,7 @@ use std::rc::Rc;
 use crate::ast::{BorrowExpr, GenericArgs, ModuleId, NodeId, Path, StmtKind};
 use crate::builtins::{Builtin, Builtins};
 use crate::collect::{GlobalContext, build_global_context};
+use crate::config::Config;
 use crate::def_ids::DefId;
 use crate::diagnostics::DiagnosticReporter;
 use crate::ident::Ident;
@@ -68,6 +69,7 @@ enum TypeDefInfo {
 }
 
 pub struct Resolve {
+    config: Config,
     parents: HashMap<DefId, DefId>,
     modules: HashMap<ModuleId, ModuleInfo>,
     env: Scope,
@@ -85,13 +87,8 @@ pub struct Resolve {
     diag: DiagnosticReporter,
     nodes: IndexVec<DefId, Option<res::Node>>,
 }
-impl Default for Resolve {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 impl Resolve {
-    pub fn new() -> Self {
+    pub fn new(config: Config) -> Self {
         let builtins = Builtin::ALL_BUILTINS
             .map(|builtin| (Symbol::intern(builtin.name()), Res::Builtin(builtin)));
         let env = Scope::from_iter(builtins.into_iter().chain([
@@ -105,6 +102,7 @@ impl Resolve {
             ),
         ]));
         Self {
+            config,
             parents: HashMap::new(),
             item_id_to_def_id: HashMap::new(),
             modules: HashMap::new(),
@@ -1274,7 +1272,7 @@ impl Resolve {
                 builtins.insert(builtin, id);
             }
         }
-        let context = build_global_context(nodes, builtins, self.parents);
+        let context = build_global_context(self.config, nodes, builtins, self.parents);
         if !self.diag.report_all() {
             Ok(context)
         } else {

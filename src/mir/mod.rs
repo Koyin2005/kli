@@ -14,6 +14,7 @@ use crate::{
 };
 pub mod build;
 pub mod dump;
+pub mod passes;
 pub mod visitor;
 pub mod well_formed;
 define_id!(Local);
@@ -28,10 +29,52 @@ pub enum PlaceProjection {
     CaseDowncast(CaseId, Symbol),
     Deref,
 }
+impl PlaceProjection {
+    pub fn apply_projection_to_type(self, ty: Type, ctxt: CtxtRef<'_>) -> Type {
+        match self {
+            PlaceProjection::Deref => ty
+                .into_pointer_type(ctxt)
+                .ok()
+                .and_then(|(pointer, ty)| match pointer {
+                    PointerType::Raw | PointerType::Reference(..) => Some(ty),
+                    _ => None,
+                })
+                .expect("should be a pointer type"),
+            PlaceProjection::Field(field) => {
+                ty.field_info(field, ctxt)
+                    .expect("should be a record type")
+                    .0
+            }
+            PlaceProjection::Index(_) | PlaceProjection::ConstantIndex(_) => {
+                let Type::Array(ty, _) = ty else {
+                    unreachable!("Should be an array")
+                };
+                *ty
+            }
+            PlaceProjection::CaseDowncast(index, _) => {
+                let Type::Named(id, _, args) = ty else {
+                    unreachable!("Should be named")
+                };
+                ctxt.type_def(id)
+                    .case(index)
+                    .expect_field()
+                    .type_of(&args, ctxt)
+            }
+        }
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
 pub enum PlaceBase {
     Local(Local),
     ReturnPlace,
+}
+impl PlaceBase {
+    pub fn type_of(self, locals: &Locals, return_type: &Type) -> Type {
+        match self {
+            PlaceBase::Local(local) => locals[local].ty.clone(),
+            PlaceBase::ReturnPlace => return_type.clone(),
+        }
+    }
 }
 impl Display for PlaceBase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -79,6 +122,14 @@ impl Place {
         self.projections
             .push(PlaceProjection::CaseDowncast(index, name));
         self
+    }
+
+    pub fn type_of(&self, ctxt: CtxtRef<'_>, locals: &Locals, return_type: &Type) -> Type {
+        let mut ty = self.base.type_of(locals, return_type);
+        for projection in self.projections.iter() {
+            ty = projection.apply_projection_to_type(ty, ctxt);
+        }
+        ty
     }
 }
 #[derive(Clone, Debug)]
@@ -136,6 +187,14 @@ pub enum Operand {
     Load(Place),
     Constant(Constant),
 }
+impl Operand {
+    pub fn type_of(&self, ctxt: CtxtRef<'_>, locals: &Locals, return_type: &Type) -> Type {
+        match self {
+            Operand::Constant(constant) => (*constant.ty).clone(),
+            Operand::Load(place) => place.type_of(ctxt, locals, return_type),
+        }
+    }
+}
 #[derive(Clone, Debug)]
 pub enum AggregateKind {
     Record {
@@ -190,8 +249,91 @@ pub enum Rvalue {
     DanglingPtr(Type),
 }
 impl Rvalue {
+    pub fn can_remove_if_unused(&self) -> bool {
+        match self {
+            Self::Aggregate(..)
+            | Self::Binary(..)
+            | Self::Cast(..)
+            | Self::Use(_)
+            | Self::Ref(..)
+            | Self::RawPtrTo(_)
+            | Self::Len(_)
+            | Self::DanglingPtr(_)
+            | Self::Discriminant(_) => true,
+            Self::Allocate { .. } | Self::Call(..) | Self::DecodeUtf8(..) => false,
+        }
+    }
     pub fn pointer_cast(cast: PointerCast, operand: Operand) -> Self {
         Self::Cast(CastKind::PointerCast(cast), operand)
+    }
+
+    pub fn type_of(&self, ctxt: CtxtRef<'_>, locals: &Locals, return_type: &Type) -> Type {
+        match self {
+            Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),
+            Rvalue::Len(_) => Type::Int,
+            &Rvalue::Ref(mutable, region, ref place) => place
+                .type_of(ctxt, locals, return_type)
+                .reference(mutable, region),
+            Rvalue::Call(operand, _) => {
+                let Type::Function(function) = operand.type_of(ctxt, locals, return_type) else {
+                    unreachable!("Should be a function type")
+                };
+                *function.return_type
+            }
+            Rvalue::Binary(op, left_and_right) => match op {
+                BinaryOp::Overflow(_) => Type::tuple([Type::Bool, Type::Int].into()),
+                BinaryOp::Unchecked(_) | BinaryOp::Wrapping(_) => Type::Int,
+                BinaryOp::Offset => {
+                    let (left, _) = left_and_right.as_ref();
+                    let (PointerType::Raw, ty) = left
+                        .type_of(ctxt, locals, return_type)
+                        .into_pointer_type(ctxt)
+                        .unwrap()
+                    else {
+                        unreachable!("should be a raw pointer")
+                    };
+                    Type::pointer(ty)
+                }
+                BinaryOp::Divide | BinaryOp::BitwiseAnd => Type::Int,
+                BinaryOp::Equals => Type::Bool,
+                BinaryOp::Lesser | BinaryOp::Greater => Type::Bool,
+            },
+            Rvalue::Allocate { ty, count: _ } => Type::pointer(ty.clone()),
+            Rvalue::DecodeUtf8(_, _) => Type::tuple([Type::Char, Type::Int].into()),
+            Rvalue::Aggregate(aggregate, operands) => match aggregate {
+                AggregateKind::Array(ty, count) => Type::Array(Box::new(ty.clone()), *count),
+                AggregateKind::Record { field_names } => Type::Record(
+                    field_names
+                        .iter()
+                        .zip(operands)
+                        .map(|(&name, operand)| crate::types::RecordField {
+                            name,
+                            ty: operand.type_of(ctxt, locals, return_type),
+                        })
+                        .collect(),
+                ),
+                AggregateKind::Closure(params, return_type) => Type::function_type(
+                    crate::ast::IsResource::Resource,
+                    params.clone(),
+                    (**return_type).clone(),
+                ),
+                &AggregateKind::Variant(id, _, ref args)
+                | &AggregateKind::NamedRecord(id, ref args) => {
+                    let name = ctxt.type_def(id).name;
+                    Type::Named(id, name, args.clone())
+                }
+                AggregateKind::String => Type::String,
+            },
+            Rvalue::Cast(cast, _) => match cast {
+                CastKind::PointerCast(cast) => match cast {
+                    PointerCast::RawToRaw(to) => Type::pointer(to.clone()),
+                },
+                CastKind::Transmute(ty) => ty.clone(),
+            },
+            Rvalue::Discriminant(_) => Type::Int,
+            Rvalue::RawPtrTo(place) => Type::pointer(place.type_of(ctxt, locals, return_type)),
+            Rvalue::DanglingPtr(ty) => Type::pointer(ty.clone()),
+        }
     }
 }
 #[derive(Clone)]
@@ -214,6 +356,46 @@ pub enum AssertKind {
 pub struct Terminator {
     pub src_info: SrcLoc,
     pub kind: TerminatorKind,
+}
+impl Terminator {
+    pub fn successors(&self) -> impl Iterator<Item = BasicBlockId> {
+        let (single, multiple) = match &self.kind {
+            TerminatorKind::Goto(block) => (Some(*block), None),
+            TerminatorKind::Switch(_, switch_targets) => (
+                None,
+                Some(
+                    switch_targets
+                        .targets
+                        .iter()
+                        .map(|target| target.target)
+                        .chain(std::iter::once(switch_targets.otherwise)),
+                ),
+            ),
+            TerminatorKind::Unreachable => None.unzip(),
+            TerminatorKind::Return => None.unzip(),
+            TerminatorKind::Panic => None.unzip(),
+        };
+        single.into_iter().chain(multiple.into_iter().flatten())
+    }
+    pub fn successors_mut(&mut self) -> impl Iterator<Item = &mut BasicBlockId> {
+        let (single, multiple) = match &mut self.kind {
+            TerminatorKind::Goto(block) => (Some(block), None),
+            TerminatorKind::Switch(_, switch_targets) => (
+                None,
+                Some(
+                    switch_targets
+                        .targets
+                        .iter_mut()
+                        .map(|target| &mut target.target)
+                        .chain(std::iter::once(&mut switch_targets.otherwise)),
+                ),
+            ),
+            TerminatorKind::Unreachable => None.unzip(),
+            TerminatorKind::Return => None.unzip(),
+            TerminatorKind::Panic => None.unzip(),
+        };
+        single.into_iter().chain(multiple.into_iter().flatten())
+    }
 }
 #[derive(Clone)]
 pub enum TerminatorKind {
@@ -329,130 +511,6 @@ impl Body {
             })
             .map(Local::new)
     }
-    pub fn type_of_base(&self, base: &PlaceBase) -> Type {
-        match base {
-            PlaceBase::Local(local) => self.locals[*local].ty.clone(),
-            PlaceBase::ReturnPlace => self.return_type.clone(),
-        }
-    }
-    pub fn apply_projection_to_type(
-        &self,
-        ty: Type,
-        projection: &PlaceProjection,
-        ctxt: CtxtRef<'_>,
-    ) -> Type {
-        match projection {
-            PlaceProjection::Deref => ty
-                .into_pointer_type(ctxt)
-                .ok()
-                .and_then(|(pointer, ty)| match pointer {
-                    PointerType::Raw | PointerType::Reference(..) => Some(ty),
-                    _ => None,
-                })
-                .expect("should be a pointer type"),
-            &PlaceProjection::Field(field) => {
-                ty.field_info(field, ctxt)
-                    .expect("should be a record type")
-                    .0
-            }
-            PlaceProjection::Index(_) | PlaceProjection::ConstantIndex(_) => {
-                let Type::Array(ty, _) = ty else {
-                    unreachable!("Should be an array")
-                };
-                *ty
-            }
-            PlaceProjection::CaseDowncast(index, _) => {
-                let Type::Named(id, _, args) = ty else {
-                    unreachable!("Should be named")
-                };
-                ctxt.type_def(id)
-                    .case(*index)
-                    .expect_field()
-                    .type_of(&args, ctxt)
-            }
-        }
-    }
-    pub fn type_of_place(&self, place: &Place, ctxt: CtxtRef<'_>) -> Type {
-        let mut ty = self.type_of_base(&place.base);
-        for projection in place.projections.iter() {
-            ty = self.apply_projection_to_type(ty, projection, ctxt);
-        }
-        ty
-    }
-    pub fn type_of_operand(&self, operand: &Operand, ctxt: CtxtRef<'_>) -> Type {
-        match operand {
-            Operand::Constant(constant) => (*constant.ty).clone(),
-            Operand::Load(place) => self.type_of_place(place, ctxt),
-        }
-    }
-    pub fn type_of_rvalue(&self, rvalue: &Rvalue, ctxt: CtxtRef<'_>) -> Type {
-        match rvalue {
-            Rvalue::Use(operand) => self.type_of_operand(operand, ctxt),
-            Rvalue::Len(_) => Type::Int,
-            &Rvalue::Ref(mutable, region, ref place) => {
-                self.type_of_place(place, ctxt).reference(mutable, region)
-            }
-            Rvalue::Call(operand, _) => {
-                let Type::Function(function) = self.type_of_operand(operand, ctxt) else {
-                    unreachable!("Should be a function type")
-                };
-                *function.return_type
-            }
-            Rvalue::Binary(op, left_and_right) => match op {
-                BinaryOp::Overflow(_) => Type::tuple([Type::Bool, Type::Int].into()),
-                BinaryOp::Unchecked(_) | BinaryOp::Wrapping(_) => Type::Int,
-                BinaryOp::Offset => {
-                    let (left, _) = left_and_right.as_ref();
-                    let (PointerType::Raw, ty) = self
-                        .type_of_operand(left, ctxt)
-                        .into_pointer_type(ctxt)
-                        .unwrap()
-                    else {
-                        unreachable!("should be a raw pointer")
-                    };
-                    Type::pointer(ty)
-                }
-                BinaryOp::Divide | BinaryOp::BitwiseAnd => Type::Int,
-                BinaryOp::Equals => Type::Bool,
-                BinaryOp::Lesser | BinaryOp::Greater => Type::Bool,
-            },
-            Rvalue::Allocate { ty, count: _ } => Type::pointer(ty.clone()),
-            Rvalue::DecodeUtf8(_, _) => Type::tuple([Type::Char, Type::Int].into()),
-            Rvalue::Aggregate(aggregate, operands) => match aggregate {
-                AggregateKind::Array(ty, count) => Type::Array(Box::new(ty.clone()), *count),
-                AggregateKind::Record { field_names } => Type::Record(
-                    field_names
-                        .iter()
-                        .zip(operands)
-                        .map(|(&name, operand)| crate::types::RecordField {
-                            name,
-                            ty: self.type_of_operand(operand, ctxt),
-                        })
-                        .collect(),
-                ),
-                AggregateKind::Closure(params, return_type) => Type::function_type(
-                    crate::ast::IsResource::Resource,
-                    params.clone(),
-                    (**return_type).clone(),
-                ),
-                &AggregateKind::Variant(id, _, ref args)
-                | &AggregateKind::NamedRecord(id, ref args) => {
-                    let name = ctxt.type_def(id).name;
-                    Type::Named(id, name, args.clone())
-                }
-                AggregateKind::String => Type::String,
-            },
-            Rvalue::Cast(cast, _) => match cast {
-                CastKind::PointerCast(cast) => match cast {
-                    PointerCast::RawToRaw(to) => Type::pointer(to.clone()),
-                },
-                CastKind::Transmute(ty) => ty.clone(),
-            },
-            Rvalue::Discriminant(_) => Type::Int,
-            Rvalue::RawPtrTo(place) => Type::pointer(self.type_of_place(place, ctxt)),
-            Rvalue::DanglingPtr(ty) => Type::pointer(ty.clone()),
-        }
-    }
     pub fn src_info(&self, loc: Location) -> SrcLoc {
         match loc.stmt {
             Some(stmt) => self.blocks[loc.block].stmts[stmt].loc,
@@ -477,6 +535,11 @@ impl Context {
     }
     pub fn body_iter(&self) -> impl Iterator<Item = &Body> {
         self.body_sources.iter().map(|src| &self.bodies[src])
+    }
+    pub fn for_each_body_mut(&mut self, mut f: impl FnMut(&mut Body)) {
+        for src in self.body_sources.iter() {
+            f(self.bodies.get_mut(src).unwrap());
+        }
     }
     #[track_caller]
     pub fn expect_body(&self, src: BodySource) -> &Body {

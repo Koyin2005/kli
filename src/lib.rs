@@ -21,6 +21,7 @@ pub use ident::Symbol;
 pub mod arenas;
 mod builtins;
 mod captures;
+pub mod config;
 mod def_ids;
 mod lang_items;
 mod res_visitor;

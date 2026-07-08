@@ -67,16 +67,8 @@ impl Builder<'_> {
             }
             ExprKind::NeverToAny(value) => {
                 self.expr_stmt(value);
-                if !self.body.blocks[self.current_block]
-                    .terminator
-                    .as_ref()
-                    .is_some_and(|terminator| {
-                        matches!(terminator.kind, TerminatorKind::Unreachable | TerminatorKind::Panic | TerminatorKind::Return)
-                    })
-                {
-                    self.finish_block(expr.loc, TerminatorKind::Unreachable);
-                    self.goto_to_new_block(expr.loc);
-                }
+                self.finish_block(expr.loc, TerminatorKind::Unreachable);
+                self.switch_to_new_block();
             }
             //Evaluate
             ExprKind::Record(..)

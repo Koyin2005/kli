@@ -88,8 +88,11 @@ impl<I: Id, V> IndexVec<I, V> {
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut V> {
         self.0.iter_mut()
     }
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.0.len()
+    }
+    pub const fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
     pub fn into_iter_enumerated(self) -> impl Iterator<Item = (I, V)> {
         self.0.into_iter().enumerate().map(|(i, v)| (I::new(i), v))
@@ -106,11 +109,19 @@ impl<I: Id, V> IndexVec<I, V> {
     pub fn into_vec(self) -> Vec<V> {
         self.0
     }
-    pub fn as_slice(&self) -> &[V] {
-        &self.0
+    pub const fn as_slice(&self) -> &[V] {
+        self.0.as_slice()
     }
     pub fn extend(&mut self, iter: impl IntoIterator<Item = V>) {
         self.0.extend(iter);
+    }
+    pub fn retain(&mut self, mut f: impl FnMut(I, &V) -> bool) {
+        let mut i = I::new(0);
+        self.0.retain(|v| {
+            let keep = f(i, v);
+            i = i.next();
+            keep
+        });
     }
 }
 

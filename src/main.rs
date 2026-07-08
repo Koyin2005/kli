@@ -1,13 +1,10 @@
-use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    env,
-    path::Path,
-};
+use std::{collections::BTreeMap, path::Path};
 
 use kli::{
     Symbol,
     ast::{self, Module, ModuleId},
-    mir,
+    config::{Config, Feature, config},
+    mir::{self, passes::passes},
     monomorph::collect::{Instance, InstanceCollector, InstanceKind},
     parsing::parse::Parser,
     patterns::visit::PatternCheck,
@@ -213,51 +210,6 @@ fn find_builtins() -> FileEntry {
         },
     }
 }
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
-pub enum Feature {
-    NoStd,
-    OutputMir,
-    OutputInstances,
-}
-struct Config {
-    path: String,
-    features: HashMap<Feature, HashSet<Symbol>>,
-}
-struct ConfigError;
-fn config() -> Result<Config, ConfigError> {
-    let mut args = env::args().skip(1).collect::<Vec<_>>();
-    if args.is_empty() {
-        eprintln!("Invalid format");
-        eprintln!("Expected 'program_path' and features ");
-        return Err(ConfigError);
-    }
-    let path = args.remove(0);
-    let arg_src = args
-        .into_iter()
-        .fold(String::from(""), |mut output, current| {
-            output.push_str(&current);
-            output.push(' ');
-            output
-        });
-    let features = arg_src
-        .split("--")
-        .filter_map(|src| {
-            if src.is_empty() {
-                return None;
-            }
-            let mut pieces = src.split_whitespace();
-            let name = pieces.next()?;
-            let feature = match name {
-                "no-std" => Feature::NoStd,
-                "output-mir" => Feature::OutputMir,
-                "output-instances" => Feature::OutputInstances,
-                _ => return None,
-            };
-            Some((feature, pieces.map(Symbol::intern).collect()))
-        })
-        .collect();
-    Ok(Config { path, features })
-}
 fn build_file_tree(config: &Config) -> Result<Files, FileError> {
     let path = &config.path;
     let include_std = !config.features.contains_key(&Feature::NoStd);
@@ -290,7 +242,7 @@ fn main() {
     let Some(modules) = parse_all_modules(file_tree) else {
         return;
     };
-    let Ok(context) = Resolve::new().resolve(modules) else {
+    let Ok(context) = Resolve::new(config).resolve(modules) else {
         return;
     };
     let ctxt = context.as_ref();
@@ -317,20 +269,15 @@ fn main() {
         }
         mir::build::Builder::build_from_function(ctxt, &mut mir_context, id, function);
     }
-    if let Some(children) = config.features.get(&Feature::OutputMir) {
-        for body in mir_context.body_iter() {
-            if !children
-                .iter()
-                .any(|child| body.src.is_child_of(*child, ctxt))
-            {
-                continue;
-            }
-            mir::dump::MirDump::new(std::io::stdout(), ctxt)
-                .write_body(body)
-                .unwrap();
-        }
+    for pass in passes(ctxt.config()) {
+        mir_context.for_each_body_mut(|body| {
+            pass.run(ctxt, body);
+        });
     }
-    if config.features.contains_key(&Feature::OutputInstances)
+    if ctxt
+        .config()
+        .features
+        .contains_key(&Feature::OutputInstances)
         && let Some((main, _)) = ctxt.main_function()
     {
         let instances = InstanceCollector::new(&mir_context)

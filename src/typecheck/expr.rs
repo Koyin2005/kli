@@ -549,9 +549,7 @@ impl FunctionCtxt<'_> {
                 }
             }
             ExprKind::Record(fields) => self.check_record(loc, fields, expected_ty.clone()),
-            ExprKind::Block(block, region) => {
-                return self.check_block(loc, block, *region, expected_ty);
-            }
+            ExprKind::Block(block, region) => self.check_block(loc, block, *region, expected_ty),
             ExprKind::Annotate(expr, ty) => self.check_expr(expr, Some(self.root().lower_type(ty))),
             ExprKind::Err => typed_ast::Expr {
                 loc,
@@ -596,11 +594,11 @@ impl FunctionCtxt<'_> {
             }
             ExprKind::Var(_) | ExprKind::Deref(_) | ExprKind::Field(..) => {
                 let place = self.check_place(expr, expected_ty);
-                return typed_ast::Expr {
+                typed_ast::Expr {
                     ty: place.ty.clone(),
                     loc,
                     kind: typed_ast::ExprKind::Load(place),
-                };
+                }
             }
             ExprKind::Print(arg) => {
                 let arg = arg.as_ref().map(|arg| Box::new(self.check_expr(arg, None)));
@@ -687,7 +685,7 @@ impl FunctionCtxt<'_> {
             ExprKind::Lambda(lambda) => {
                 self.check_lambda(loc, lambda.id, lambda, expected_ty.clone())
             }
-            ExprKind::Borrow(borrow) => return self.check_borrow(loc, borrow, expected_ty),
+            ExprKind::Borrow(borrow) => self.check_borrow(loc, borrow, expected_ty),
             ExprKind::For(for_expr) => {
                 self.check_for_loop(loc, &for_expr.pattern, &for_expr.iterator, &for_expr.body)
             }
