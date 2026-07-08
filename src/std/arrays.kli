@@ -1,3 +1,4 @@
+import std.optional.Option
 @opaque
 @lang_item("array_list")
 type ArrayList[T] = {
@@ -56,13 +57,13 @@ fun push[r,T](l : mut[r] ArrayList[T], value : T) -> () = do
     l^.len = l^.len + 1
 end
 
-fun pop[r,T](l : mut[r] ArrayList[T]) -> std.optional.Option[T] = do
+fun pop[r,T](l : mut[r] ArrayList[T]) -> Option[T] = do
     case l^.len == 0 of 
-    | true -> std.optional.Option.None
+    | true -> Option.None
     | false -> do
         let value = ptr_read(offset(l^.ptr,l^.len));
         l^.len = l^.len - 1;
-        std.optional.Option.Some(value)
+        Option.Some(value)
         end
     end
 end

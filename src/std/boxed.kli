@@ -1,3 +1,4 @@
+import std.refs
 @opaque
 @lang_item("box")
 type Box[T] = {
@@ -23,15 +24,15 @@ fun dealloc[T](b : Box[T]) -> T = do
 end
 
 fun deref[r,T](x : imm[r] Box[T]) -> imm[r] T = do
-    let ptr_to_box : ptr[Box[T]] = std.refs.ref_into_raw(x);
+    let ptr_to_box : ptr[Box[T]] = refs.ref_into_raw(x);
     let inner_ptr : ptr[T] = ptr_to_box^.inner;
-    std.refs.ref_from_raw(inner_ptr)
+    refs.ref_from_raw(inner_ptr)
 end
 
 fun deref_mut[r,T](x : mut[r] Box[T]) -> mut[r] T = do
-    let ptr_to_box : ptr[Box[T]] = std.refs.ref_into_raw_mut(x);
+    let ptr_to_box : ptr[Box[T]] = refs.ref_into_raw_mut(x);
     let inner_ptr : ptr[T] = ptr_to_box^.inner;
-    std.refs.ref_from_raw_mut(inner_ptr)
+    refs.ref_from_raw_mut(inner_ptr)
 end
 
 fun drop[T](b : Box[T]) -> () = do 
