@@ -1,3 +1,7 @@
+import builtins.transmute
+import builtins.ptr_write
+import builtins.ptr_read
+
 fun replace[r,T](m : mut[r] T, f : fun(T) => T) -> mut[r] T = do
     let p = ref_into_raw_mut(m);
     let tmp = ptr_read(p);

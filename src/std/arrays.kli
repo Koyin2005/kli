@@ -1,4 +1,13 @@
 import std.optional.Option
+import builtins.invalid_ptr
+import builtins.allocate
+import builtins.memcopy
+import builtins.ptr_write
+import builtins.ptr_read
+import builtins.deallocate
+import builtins.offset
+import builtins.drop_in_place
+
 @opaque
 @lang_item("array_list")
 type ArrayList[T] = {

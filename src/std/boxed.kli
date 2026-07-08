@@ -1,4 +1,10 @@
 import std.refs
+import builtins.allocate
+import builtins.ptr_write
+import builtins.ptr_read
+import builtins.deallocate
+import builtins.drop_in_place
+
 @opaque
 @lang_item("box")
 type Box[T] = {
