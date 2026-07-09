@@ -215,8 +215,8 @@ fn find_builtins() -> FileEntry {
     }
 }
 fn build_file_tree(config: &Config) -> Result<Files, FileError> {
-    let path = &config.path;
-    let include_std = !config.features.contains_key(&Feature::NoStd);
+    let path = config.path();
+    let include_std = !config.has_feature(Feature::NoStd);
     let file_tree = {
         let mut file_tree = find_all_src_files(Path::new(path))?;
         file_tree.files.insert(Symbol::BUILTINS, find_builtins());
@@ -278,10 +278,7 @@ fn main() {
             pass.run(ctxt, body);
         });
     }
-    if ctxt
-        .config()
-        .features
-        .contains_key(&Feature::OutputInstances)
+    if ctxt.config().has_feature(Feature::OutputInstances)
         && let Some((main, _)) = ctxt.main_function()
     {
         let instances = InstanceCollector::new(&mir_context)

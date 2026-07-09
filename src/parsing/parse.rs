@@ -22,17 +22,17 @@ pub struct Parser {
     tokens: Peekable<IntoIter<Token>>,
     eof_token: Token,
     node_id: NodeId,
-    errored_lex : bool
+    errored_lex: bool,
 }
 impl Parser {
     pub fn new(file: Symbol, src: &str) -> Self {
-        let (error,tokens, eof_token) = Lexer::new(file, src).lex();
+        let (error, tokens, eof_token) = Lexer::new(file, src).lex();
         Self {
             diag: DiagnosticReporter::new(),
             tokens: tokens.into_iter().peekable(),
             eof_token,
             node_id: NodeId::FIRST_ID,
-            errored_lex:error
+            errored_lex: error,
         }
     }
     fn next_node_id(&mut self) -> NodeId {

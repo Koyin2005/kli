@@ -10,9 +10,7 @@ pub trait Visit {
     fn super_visit_stmt(&mut self, loc: Location, stmt: &Stmt) {
         match &stmt.kind {
             StmtKind::Noop => (),
-            StmtKind::Deallocate(operand) => {
-                self.visit_operand(loc, operand)
-            }
+            StmtKind::Deallocate(operand) => self.visit_operand(loc, operand),
             StmtKind::Assign(place, rvalue) => {
                 self.visit_place(PlaceCtxt::Write, loc, place);
                 self.visit_rvalue(loc, rvalue);
@@ -41,8 +39,9 @@ pub trait Visit {
             | TerminatorKind::Panic
             | TerminatorKind::Return
             | TerminatorKind::Unreachable => (),
-            TerminatorKind::Switch(operand, _)|
-            TerminatorKind::Assert(operand,..) => self.visit_operand(loc, operand),
+            TerminatorKind::Switch(operand, _) | TerminatorKind::Assert(operand, ..) => {
+                self.visit_operand(loc, operand)
+            }
         }
     }
     fn super_visit_block(&mut self, id: BasicBlockId, info: &BasicBlock) {
@@ -160,10 +159,8 @@ pub trait Visit {
 pub trait MutVisit {
     fn super_visit_stmt(&mut self, loc: Location, stmt: &mut Stmt) {
         match &mut stmt.kind {
-            StmtKind::Noop => (), 
-            StmtKind::Deallocate(operand) => {
-                self.visit_operand(loc, operand)
-            }
+            StmtKind::Noop => (),
+            StmtKind::Deallocate(operand) => self.visit_operand(loc, operand),
             StmtKind::Assign(place, rvalue) => {
                 self.visit_place(loc, place);
                 self.visit_rvalue(loc, rvalue);
@@ -192,8 +189,9 @@ pub trait MutVisit {
             | TerminatorKind::Panic
             | TerminatorKind::Return
             | TerminatorKind::Unreachable => (),
-            TerminatorKind::Switch(operand, _)|
-            TerminatorKind::Assert(operand, ..) => self.visit_operand(loc, operand),
+            TerminatorKind::Switch(operand, _) | TerminatorKind::Assert(operand, ..) => {
+                self.visit_operand(loc, operand)
+            }
         }
     }
     fn super_visit_block(&mut self, id: BasicBlockId, info: &mut BasicBlock) {

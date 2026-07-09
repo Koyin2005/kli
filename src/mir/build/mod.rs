@@ -46,9 +46,14 @@ impl<'ctxt> Builder<'ctxt> {
     pub(super) fn new_local_from_info(&mut self, info: LocalInfo) -> Local {
         self.body.locals.push(info)
     }
-    pub(super) fn finish_assert_to_new_block(&mut self, loc: SrcLoc, operand: Operand, assert_kind: AssertKind) {
+    pub(super) fn finish_assert_to_new_block(
+        &mut self,
+        loc: SrcLoc,
+        operand: Operand,
+        assert_kind: AssertKind,
+    ) {
         let new_block = self.new_block();
-        self.finish_block(loc, TerminatorKind::Assert(operand, assert_kind,new_block));
+        self.finish_block(loc, TerminatorKind::Assert(operand, assert_kind, new_block));
         self.switch_to_block(new_block);
     }
     pub(super) fn new_temp(&mut self, ty: Type) -> Local {

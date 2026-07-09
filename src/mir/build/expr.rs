@@ -542,7 +542,11 @@ impl Builder<'_> {
                 );
                 let overflow =
                     Operand::Load(Place::local(checked_result).with_field(FieldId::new(0)));
-                self.finish_assert_to_new_block(expr.loc, overflow, mir::AssertKind::Overflow(overflow_op));
+                self.finish_assert_to_new_block(
+                    expr.loc,
+                    overflow,
+                    mir::AssertKind::Overflow(overflow_op),
+                );
                 let result =
                     Operand::Load(Place::local(checked_result).with_field(FieldId::new(1)));
                 Rvalue::Use(result)

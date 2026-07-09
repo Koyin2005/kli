@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::{
-    CtxtRef,
+    CtxtRef, Symbol,
     config::{Config, Feature},
     index_vec::IndexVec,
     mir::{
@@ -26,10 +26,16 @@ pub trait MirPass {
 }
 
 pub(super) fn should_dump(ctxt: CtxtRef<'_>, src: BodySource) -> bool {
-    let Some(children) = ctxt.config().features.get(&Feature::OutputMir) else {
+    let Some(paths) = ctxt.config().arguments_for(Feature::OutputMir) else {
         return false;
     };
-    children.iter().any(|child| src.is_child_of(*child, ctxt))
+    let body_src = src.def_id();
+    paths.iter().any(|path| {
+        let Some(id) = ctxt.def_id_for_path(path.to_string().split(".").map(Symbol::intern)) else {
+            return false;
+        };
+        ctxt.self_with_anecstors(body_src).any(|src| src == id)
+    })
 }
 pub struct DumpMir;
 impl MirPass for DumpMir {
@@ -45,7 +51,7 @@ impl MirPass for DumpMir {
 pub fn passes(config: &Config) -> Box<[&'static dyn MirPass]> {
     let mut passes = vec![];
     passes.push(&RemoveZst as &_);
-    if config.features.contains_key(&Feature::Optimise) {
+    if config.has_feature(Feature::Optimise) {
         passes.push(&SimplifyCfg as &_);
         passes.push(&ConstProp as &_);
         passes.push(&RemoveUnreachable as &_);
@@ -54,7 +60,7 @@ pub fn passes(config: &Config) -> Box<[&'static dyn MirPass]> {
         passes.push(&SimplifyCfg as &_);
         passes.push(&RemoveUnreachable as &_);
     }
-    if config.features.contains_key(&Feature::OutputMir) {
+    if config.has_feature(Feature::OutputMir) {
         passes.push(&DumpMir as &_);
     }
     passes.into_boxed_slice()

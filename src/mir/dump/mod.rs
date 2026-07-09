@@ -331,7 +331,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 }
                 TerminatorKind::Goto(block) => write!(self.output, "goto bb{}", block.0)?,
                 TerminatorKind::Panic => write!(self.output, "panic")?,
-                TerminatorKind::Assert(operand, kind,block) => {
+                TerminatorKind::Assert(operand, kind, block) => {
                     write!(self.output, "assert(!")?;
                     self.write_operand(operand)?;
                     write!(self.output, ", ")?;
@@ -344,7 +344,7 @@ impl<'ctxt> MirDump<'ctxt> {
                         }
                         AssertKind::DivideByZero => write!(self.output, "\"Divide by zero\"")?,
                     }
-                    write!(self.output, ") -> bb{}",block.0)?
+                    write!(self.output, ") -> bb{}", block.0)?
                 }
             }
         }

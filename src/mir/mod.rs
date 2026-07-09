@@ -395,7 +395,7 @@ impl Terminator {
     }
     pub fn successors_mut(&mut self) -> impl Iterator<Item = &mut BasicBlockId> {
         let (single, multiple) = match &mut self.kind {
-            TerminatorKind::Goto(block) | TerminatorKind::Assert(..,block) => (Some(block), None),
+            TerminatorKind::Goto(block) | TerminatorKind::Assert(.., block) => (Some(block), None),
             TerminatorKind::Switch(_, switch_targets) => (
                 None,
                 Some(
@@ -415,7 +415,7 @@ impl Terminator {
 }
 #[derive(Clone)]
 pub enum TerminatorKind {
-    Assert(Operand,AssertKind,BasicBlockId),
+    Assert(Operand, AssertKind, BasicBlockId),
     Switch(Operand, SwitchTargets),
     Unreachable,
     Return,

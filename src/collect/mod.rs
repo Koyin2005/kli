@@ -338,6 +338,36 @@ impl CtxtRef<'_> {
             })
         })
     }
+    pub fn def_id_for_path(self, mut path: impl Iterator<Item = Symbol>) -> Option<DefId> {
+        let mut item = {
+            let top_level_tem_name = path.next()?;
+            self.top_level_items()
+                .find(|item| item.ident().symbol == top_level_tem_name)?
+        };
+        let mut current_item = item.id;
+        loop {
+            let Some(current) = path.next() else {
+                break Some(current_item);
+            };
+            match &item.kind {
+                ItemKind::Function(_) | ItemKind::Import(_) | ItemKind::TypeDef(_) => {
+                    if item.ident().symbol == current {
+                        current_item = item.id;
+                    } else {
+                        break None;
+                    }
+                }
+                ItemKind::Module(module) => {
+                    let &next_item = module.items.iter().find(|&&item_id| {
+                        self.ident(item_id)
+                            .is_some_and(|ident| ident.symbol == current)
+                    })?;
+                    item = self.expect_item(next_item);
+                    current_item = item.id;
+                }
+            }
+        }
+    }
     pub fn generics(self, id: DefId) -> Generics {
         self.0.generics.compute(id, |id| match self.node(id) {
             Node::Item(item) => match &item.kind {

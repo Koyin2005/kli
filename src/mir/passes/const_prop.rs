@@ -184,8 +184,8 @@ impl MutVisit for Constifier<'_> {
                 };
                 terminator.kind = TerminatorKind::Goto(target);
             }
-            
-            TerminatorKind::Assert(operand, _,block) => {
+
+            TerminatorKind::Assert(operand, _, block) => {
                 self.make_constant(operand);
                 if let Some(constant) = self.eval_operand(operand)
                     && let Some(0) = constant.value.as_scalar()

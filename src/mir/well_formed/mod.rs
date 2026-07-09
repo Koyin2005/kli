@@ -1,7 +1,15 @@
 use crate::{
-    ast::IsResource, collect::{CtxtRef, TypeDefKind}, diagnostics::emit_fatal_diagnostic, mir::{
-        BinaryOp, Body, CastKind, CopyNonOverlapping, DropInPlace, Location, PointerCast, Stmt, StmtKind, TerminatorKind, visitor::{PlaceCtxt, Visit},
-    }, src_loc::SrcLoc, types::{FunctionType, PointerType, Type}, unsafety,
+    ast::IsResource,
+    collect::{CtxtRef, TypeDefKind},
+    diagnostics::emit_fatal_diagnostic,
+    mir::{
+        BinaryOp, Body, CastKind, CopyNonOverlapping, DropInPlace, Location, PointerCast, Stmt,
+        StmtKind, TerminatorKind,
+        visitor::{PlaceCtxt, Visit},
+    },
+    src_loc::SrcLoc,
+    types::{FunctionType, PointerType, Type},
+    unsafety,
 };
 pub struct WellFormed<'ctxt> {
     ctxt: CtxtRef<'ctxt>,
@@ -355,8 +363,8 @@ impl Visit for WellFormed<'_> {
     }
     fn visit_terminator(&mut self, loc: Location, terminator: &super::Terminator) {
         self.super_visit_terminator(loc, terminator);
-        match &terminator.kind{
-        TerminatorKind::Assert(operand, ..) => {
+        match &terminator.kind {
+            TerminatorKind::Assert(operand, ..) => {
                 let condition_ty =
                     operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
                 self.assert(
@@ -364,8 +372,8 @@ impl Visit for WellFormed<'_> {
                     || format!("Can only assert on bools not {}", condition_ty),
                     terminator.src_info,
                 );
-            },
-            _ => ()
+            }
+            _ => (),
         }
     }
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt) {

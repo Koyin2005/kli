@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     env,
+    fmt::Display,
 };
 
 use crate::Symbol;
@@ -12,9 +13,42 @@ pub enum Feature {
     OutputInstances,
     Optimise,
 }
+impl Display for Feature {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.pad(match self {
+            Self::NoStd => "no-std",
+            Self::Optimise => "optimise",
+            Self::OutputInstances => "output-instances",
+            Self::OutputMir => "output-mir",
+        })
+    }
+}
+pub struct FeatureArgSet {
+    args: Vec<Symbol>,
+    seen: HashSet<Symbol>,
+}
+impl FeatureArgSet {
+    pub fn has_arg(&self, name: Symbol) -> bool {
+        self.seen.contains(&name)
+    }
+    pub fn iter(&self) -> impl Iterator<Item = Symbol> {
+        self.args.iter().copied()
+    }
+}
 pub struct Config {
-    pub path: String,
-    pub features: HashMap<Feature, HashSet<Symbol>>,
+    path: String,
+    features: HashMap<Feature, FeatureArgSet>,
+}
+impl Config {
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+    pub fn arguments_for(&self, feature: Feature) -> Option<&FeatureArgSet> {
+        self.features.get(&feature)
+    }
+    pub fn has_feature(&self, feature: Feature) -> bool {
+        self.features.contains_key(&feature)
+    }
 }
 pub struct ConfigError;
 pub fn config() -> Result<Config, ConfigError> {
@@ -47,7 +81,14 @@ pub fn config() -> Result<Config, ConfigError> {
                 "optimise" => Feature::Optimise,
                 _ => return None,
             };
-            Some((feature, pieces.map(Symbol::intern).collect()))
+            let args = pieces.map(Symbol::intern).collect::<Vec<_>>();
+            Some((
+                feature,
+                FeatureArgSet {
+                    seen: args.iter().copied().collect(),
+                    args,
+                },
+            ))
         })
         .collect();
     Ok(Config { path, features })

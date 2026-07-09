@@ -237,7 +237,7 @@ impl<'s> Lexer<'s> {
             }
         }
     }
-    pub fn lex(mut self) -> (bool,Vec<Token>, Token) {
+    pub fn lex(mut self) -> (bool, Vec<Token>, Token) {
         let mut tokens = Vec::new();
         while let Some(token) = self.next_token() {
             tokens.push(token);
@@ -247,6 +247,6 @@ impl<'s> Lexer<'s> {
             kind: TokenKind::Eof,
         };
         let error = self.diag.report_all();
-        (error,tokens, eof_token)
+        (error, tokens, eof_token)
     }
 }
