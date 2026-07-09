@@ -181,6 +181,14 @@ pub enum ConstantValue {
 impl ConstantValue {
     pub const MAX_INT: i64 = i64::MAX;
     pub const MIN_INT: i64 = i64::MIN;
+
+    pub fn as_scalar(&self) -> Option<i128> {
+        match *self {
+            Self::Bool(value) => Some(value as i128),
+            Self::Int(value) => Some(value as i128),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub enum Operand {
@@ -346,6 +354,14 @@ pub struct SwitchTargets {
     pub targets: Vec<SwitchTarget>,
     pub otherwise: BasicBlockId,
 }
+impl SwitchTargets {
+    pub fn branch_for_value(&self, value: i128) -> BasicBlockId {
+        self.targets
+            .iter()
+            .find_map(|target| (target.value == value).then_some(target.target))
+            .unwrap_or(self.otherwise)
+    }
+}
 #[derive(Clone)]
 pub enum AssertKind {
     Overflow(OverflowOp),
@@ -360,7 +376,7 @@ pub struct Terminator {
 impl Terminator {
     pub fn successors(&self) -> impl Iterator<Item = BasicBlockId> {
         let (single, multiple) = match &self.kind {
-            TerminatorKind::Goto(block) => (Some(*block), None),
+            TerminatorKind::Goto(block) | TerminatorKind::Assert(.., block) => (Some(*block), None),
             TerminatorKind::Switch(_, switch_targets) => (
                 None,
                 Some(
@@ -379,7 +395,7 @@ impl Terminator {
     }
     pub fn successors_mut(&mut self) -> impl Iterator<Item = &mut BasicBlockId> {
         let (single, multiple) = match &mut self.kind {
-            TerminatorKind::Goto(block) => (Some(block), None),
+            TerminatorKind::Goto(block) | TerminatorKind::Assert(..,block) => (Some(block), None),
             TerminatorKind::Switch(_, switch_targets) => (
                 None,
                 Some(
@@ -399,6 +415,7 @@ impl Terminator {
 }
 #[derive(Clone)]
 pub enum TerminatorKind {
+    Assert(Operand,AssertKind,BasicBlockId),
     Switch(Operand, SwitchTargets),
     Unreachable,
     Return,
@@ -431,7 +448,6 @@ pub struct DropInPlace {
 pub enum StmtKind {
     Noop,
     Assign(Place, Box<Rvalue>),
-    Assert(Operand, AssertKind),
     Print(Option<Operand>),
     Deallocate(Operand),
     CopyNonOverlapping(Box<CopyNonOverlapping>),

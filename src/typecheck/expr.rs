@@ -261,7 +261,7 @@ impl FunctionCtxt<'_> {
             })
             .collect::<Vec<_>>();
         TypeCheck::check_function(
-            &mut FunctionCtxt::new(root, id,sig.return_type.clone()),
+            &mut FunctionCtxt::new(root, id, sig.return_type.clone()),
             captures
                 .iter()
                 .map(|capture| {
@@ -541,7 +541,11 @@ impl FunctionCtxt<'_> {
         match kind {
             ExprKind::Return(return_expr) => {
                 let value = self.check_expr_coerces_to(return_expr, Some(self.return_type.clone()));
-                make_expr(Type::Never,typed_ast::ExprKind::Return(Box::new(value)),loc)
+                make_expr(
+                    Type::Never,
+                    typed_ast::ExprKind::Return(Box::new(value)),
+                    loc,
+                )
             }
             ExprKind::While(condition, body) => {
                 let condition = self.check_expr_coerces_to(condition, Some(Type::Bool));
@@ -653,7 +657,12 @@ impl FunctionCtxt<'_> {
                 let right = self.check_expr(right, right_ty);
                 match (binary_op, &left.ty, &right.ty) {
                     (
-                        BinaryOp::Add | BinaryOp::Divide | BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Greater | BinaryOp::Lesser,
+                        BinaryOp::Add
+                        | BinaryOp::Divide
+                        | BinaryOp::Subtract
+                        | BinaryOp::Multiply
+                        | BinaryOp::Greater
+                        | BinaryOp::Lesser,
                         Type::Int,
                         Type::Int,
                     )

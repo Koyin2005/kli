@@ -735,7 +735,9 @@ impl Resolve {
             ast::ExprKind::String(value) => res::ExprKind::String(value.into()),
             ast::ExprKind::Number(value) => res::ExprKind::Int(value as i64),
             ast::ExprKind::Bool(value) => res::ExprKind::Bool(value),
-            ast::ExprKind::Return(value) => res::ExprKind::Return(Box::new(self.resolve_expr(*value))),
+            ast::ExprKind::Return(value) => {
+                res::ExprKind::Return(Box::new(self.resolve_expr(*value)))
+            }
             ast::ExprKind::Print(arg) => {
                 res::ExprKind::Print(arg.map(|arg| Box::new(self.resolve_expr(*arg))))
             }

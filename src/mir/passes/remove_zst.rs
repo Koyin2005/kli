@@ -66,10 +66,7 @@ impl MirPass for RemoveZst {
                     StmtKind::Assign(place, rvalue) => {
                         rvalue.can_remove_if_unused().then_some(place)
                     }
-                    StmtKind::Noop | StmtKind::Assert(..) | StmtKind::Print(..) => None,
-                    StmtKind::Deallocate(_) => None,
-                    StmtKind::CopyNonOverlapping(_) => None,
-                    StmtKind::DropInPlace(_) => None,
+                    _ => None,
                 };
                 if let Some(place) = place
                     && RemoveZst::is_zst(&place.type_of(self.0, self.1, self.2), self.0)

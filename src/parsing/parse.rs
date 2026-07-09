@@ -22,15 +22,17 @@ pub struct Parser {
     tokens: Peekable<IntoIter<Token>>,
     eof_token: Token,
     node_id: NodeId,
+    errored_lex : bool
 }
 impl Parser {
     pub fn new(file: Symbol, src: &str) -> Self {
-        let (tokens, eof_token) = Lexer::new(file, src).lex();
+        let (error,tokens, eof_token) = Lexer::new(file, src).lex();
         Self {
             diag: DiagnosticReporter::new(),
             tokens: tokens.into_iter().peekable(),
             eof_token,
             node_id: NodeId::FIRST_ID,
+            errored_lex:error
         }
     }
     fn next_node_id(&mut self) -> NodeId {
@@ -533,7 +535,10 @@ impl Parser {
             TokenKind::Return => {
                 self.next_token();
                 let return_value = self.parse_expr()?;
-                Ok(Expr { loc, kind: ExprKind::Return(Box::new(return_value)) })
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::Return(Box::new(return_value)),
+                })
             }
             TokenKind::Print => {
                 self.next_token();
@@ -1005,7 +1010,7 @@ impl Parser {
                 }
             }
         }
-        if self.diag.report_all() {
+        if self.diag.report_all() || self.errored_lex {
             return Err(ParseError);
         }
         Ok(Module {

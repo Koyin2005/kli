@@ -461,7 +461,7 @@ impl Builder<'_> {
                             right_operand.clone(),
                             Operand::Constant(Constant::int(0)),
                         );
-                        self.assert(
+                        self.finish_assert_to_new_block(
                             expr.loc,
                             Operand::Load(Place::local(is_zero)),
                             mir::AssertKind::DivideByZero,
@@ -483,7 +483,7 @@ impl Builder<'_> {
                             Operand::Load(Place::local(is_left_min)),
                             Operand::Load(Place::local(is_right_neg_1)),
                         );
-                        self.assert(
+                        self.finish_assert_to_new_block(
                             expr.loc,
                             Operand::Load(Place::local(overflow)),
                             mir::AssertKind::DivideOverflow,
@@ -542,7 +542,7 @@ impl Builder<'_> {
                 );
                 let overflow =
                     Operand::Load(Place::local(checked_result).with_field(FieldId::new(0)));
-                self.assert(expr.loc, overflow, mir::AssertKind::Overflow(overflow_op));
+                self.finish_assert_to_new_block(expr.loc, overflow, mir::AssertKind::Overflow(overflow_op));
                 let result =
                     Operand::Load(Place::local(checked_result).with_field(FieldId::new(1)));
                 Rvalue::Use(result)
@@ -552,7 +552,7 @@ impl Builder<'_> {
             | ExprKind::Case(..)
             | ExprKind::NeverToAny(_)
             | ExprKind::Logic(..)
-            |ExprKind::Return(_) => {
+            | ExprKind::Return(_) => {
                 let temp = self.expr_into_temp(expr);
                 Rvalue::Use(Operand::Load(Place::local(temp)))
             }

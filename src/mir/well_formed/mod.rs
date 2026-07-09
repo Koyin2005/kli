@@ -1,14 +1,7 @@
 use crate::{
-    ast::IsResource,
-    collect::{CtxtRef, TypeDefKind},
-    diagnostics::emit_fatal_diagnostic,
-    mir::{
-        BinaryOp, Body, CastKind, CopyNonOverlapping, DropInPlace, Location, PointerCast, Stmt,
-        StmtKind, visitor::Visit,
-    },
-    src_loc::SrcLoc,
-    types::{FunctionType, PointerType, Type},
-    unsafety,
+    ast::IsResource, collect::{CtxtRef, TypeDefKind}, diagnostics::emit_fatal_diagnostic, mir::{
+        BinaryOp, Body, CastKind, CopyNonOverlapping, DropInPlace, Location, PointerCast, Stmt, StmtKind, TerminatorKind, visitor::{PlaceCtxt, Visit},
+    }, src_loc::SrcLoc, types::{FunctionType, PointerType, Type}, unsafety,
 };
 pub struct WellFormed<'ctxt> {
     ctxt: CtxtRef<'ctxt>,
@@ -39,7 +32,7 @@ impl<'ctxt> WellFormed<'ctxt> {
     }
 }
 impl Visit for WellFormed<'_> {
-    fn visit_place(&mut self, loc: Location, place: &super::Place) {
+    fn visit_place(&mut self, _: PlaceCtxt, loc: Location, place: &super::Place) {
         let mut ty = place
             .base
             .type_of(&self.body.locals, &self.body.return_type);
@@ -360,6 +353,21 @@ impl Visit for WellFormed<'_> {
             }
         }
     }
+    fn visit_terminator(&mut self, loc: Location, terminator: &super::Terminator) {
+        self.super_visit_terminator(loc, terminator);
+        match &terminator.kind{
+        TerminatorKind::Assert(operand, ..) => {
+                let condition_ty =
+                    operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
+                self.assert(
+                    condition_ty == Type::Bool,
+                    || format!("Can only assert on bools not {}", condition_ty),
+                    terminator.src_info,
+                );
+            },
+            _ => ()
+        }
+    }
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt) {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
@@ -414,15 +422,6 @@ impl Visit for WellFormed<'_> {
                 );
             }
             StmtKind::Noop => (),
-            StmtKind::Assert(operand, _) => {
-                let condition_ty =
-                    operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                self.assert(
-                    condition_ty == Type::Bool,
-                    || format!("Can only assert on bools not {}", condition_ty),
-                    stmt.loc,
-                );
-            }
             StmtKind::Print(operand) => {
                 if let Some(operand) = operand {
                     let ty = operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);

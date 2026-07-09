@@ -61,7 +61,7 @@ fun grow[r,T](l : mut[r] ArrayList[T]) -> () =
     end
 
 fun push[r,T](l : mut[r] ArrayList[T], value : T) -> () = do
-    do in r1 reserve(borrow mut l in r1,1) end;
+    do in r1 reserve(borrow mut l^ in r1,1) end;
     ptr_write(offset(l^.ptr,l^.len),value);
     l^.len = l^.len + 1
 end

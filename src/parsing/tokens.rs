@@ -133,7 +133,7 @@ impl Display for TokenKind {
             Self::With => "with",
             Self::As => "as",
             Self::And => "and",
-            Self::Return => "return"
+            Self::Return => "return",
         };
         f.write_str(txt)
     }

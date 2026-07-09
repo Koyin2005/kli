@@ -1,8 +1,9 @@
-use std::collections::{HashSet, VecDeque};
-
 use crate::{
     index_vec::IndexVec,
-    mir::{BasicBlockId, passes::MirPass},
+    mir::{
+        BasicBlockId,
+        passes::{MirPass, reachable},
+    },
 };
 
 pub struct RemoveUnreachable;
@@ -11,17 +12,7 @@ impl MirPass for RemoveUnreachable {
         "remove-unreachable"
     }
     fn run(&self, _ctxt: crate::CtxtRef<'_>, body: &mut crate::mir::Body) {
-        let mut stack = VecDeque::from([BasicBlockId::ENTRY]);
-        let mut seen = HashSet::new();
-        while let Some(current) = stack.pop_front() {
-            if !seen.insert(current) {
-                continue;
-            }
-            for successor in body.blocks[current].expect_terminator().successors() {
-                stack.push_back(successor);
-            }
-        }
-
+        let seen = reachable(&body.blocks);
         let mut next_block_id = BasicBlockId::ENTRY;
         let block_map = body
             .blocks

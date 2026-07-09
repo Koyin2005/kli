@@ -62,7 +62,22 @@ impl<I: Id, V> IndexVec<I, V> {
     pub const fn new() -> Self {
         Self(Vec::new(), PhantomData)
     }
-
+    pub fn new_from(count: usize, value: V) -> Self
+    where
+        V: Clone,
+    {
+        if count == 0 {
+            return Self::new();
+        } else if count == 1 {
+            let mut v = Vec::with_capacity(1);
+            v.push(value);
+            return Self(v, PhantomData);
+        }
+        Self(
+            Vec::from_iter(std::iter::repeat_n(value, count)),
+            PhantomData,
+        )
+    }
     pub fn push(&mut self, value: V) -> I {
         let index = I::new(self.0.len());
         self.0.push(value);
@@ -100,7 +115,7 @@ impl<I: Id, V> IndexVec<I, V> {
     pub fn iter_enumerated(&self) -> impl Iterator<Item = (I, &V)> {
         self.0.iter().enumerate().map(|(i, v)| (I::new(i), v))
     }
-    pub fn indices(&self) -> impl Iterator<Item = I> {
+    pub fn indices(&self) -> impl Iterator<Item = I> + use<I, V> {
         (0..self.len()).map(Id::new)
     }
     pub fn iter_mut_enumerated(&mut self) -> impl Iterator<Item = (I, &mut V)> {

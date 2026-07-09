@@ -13,9 +13,8 @@ use crate::{
     index_vec::IndexVec,
     resolved_ast::{LocalRegionId, Var, VarId},
     src_loc::SrcLoc,
-    typed_ast::{
-        Expr, ExprKind, FieldId, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind,
-    },
+    typed_ast::{Expr, ExprKind, FieldId, Function, Pattern, PatternKind, Place, PlaceKind},
+    typed_ast_visitor::{Visitor, walk_expr},
     types::{Region, Type},
 };
 
@@ -592,17 +591,6 @@ impl<'ctxt> ResourceCheck<'ctxt> {
         };
         self.check_move_place_use(loc, ty, place, place_use);
     }
-    fn check_stmt(&mut self, stmt: &Stmt) {
-        match &stmt.kind {
-            StmtKind::Expr(expr) => {
-                self.check_expr(expr);
-            }
-            StmtKind::Let(let_binding) => {
-                self.check_pattern(&let_binding.pattern, false);
-                self.check_expr(&let_binding.value);
-            }
-        }
-    }
     fn in_loop_body(&mut self, in_body: impl FnOnce(&mut Self)) {
         let new_loop = self.loops + 1;
         let old_loop = std::mem::replace(&mut self.loops, new_loop);
@@ -611,23 +599,19 @@ impl<'ctxt> ResourceCheck<'ctxt> {
     }
     fn check_expr(&mut self, expr: &Expr) {
         match &expr.kind {
-            ExprKind::While(condition, body) => {
+            ExprKind::While(..) => {
                 self.in_loop_body(|this| {
-                    this.check_expr(condition);
-                    this.check_expr(body)
+                    walk_expr(this, expr);
                 });
             }
-            ExprKind::Block(body, region) => {
+            ExprKind::Block(_, region) => {
                 self.in_drop_scope(|this| {
-                    for stmt in &body.stmts {
-                        this.check_stmt(stmt);
-                    }
-                    this.check_expr(&body.expr);
+                    walk_expr(this, expr);
                     if let Some(region) = region {
                         this.expired_regions.insert(*region);
-                        if this.ty_is_expired(&body.expr.ty) {
+                        if this.ty_is_expired(&expr.ty) {
                             this.err.add_diagnostic(
-                                format!("Cannot let '{}' escape", body.expr.ty),
+                                format!("Cannot let '{}' escape", expr.ty),
                                 expr.loc,
                             );
                         }
@@ -640,18 +624,6 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     }
                 });
             }
-            ExprKind::Bool(_)
-            | ExprKind::Err
-            | ExprKind::Panic
-            | ExprKind::Unit
-            | ExprKind::String(_)
-            | ExprKind::Int(_)
-            | ExprKind::Const(..) => {}
-            ExprKind::Function(..) => {}
-            ExprKind::NeverToAny(value) | ExprKind::Return(value) => self.check_expr(value),
-            ExprKind::VariantInit(.., value) => {
-                self.check_expr(value);
-            }
             ExprKind::Print(value) => {
                 if let Some(value) = value {
                     self.check_expr(value);
@@ -663,27 +635,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     }
                 }
             }
-            ExprKind::Call(callee, args) => {
-                self.check_expr(callee);
-                for arg in args {
-                    self.check_expr(arg);
-                }
-            }
-            ExprKind::BuiltinCall(.., args) => {
-                for arg in args {
-                    self.check_expr(arg);
-                }
-            }
-            ExprKind::Record(fields) | ExprKind::NamedRecord(.., fields) => {
-                for field in fields {
-                    self.check_expr(&field.value);
-                }
-            }
             ExprKind::Load(place) => self.check_place_use(place, PlaceUse::Read),
-            ExprKind::Binary(_, left, right) | ExprKind::Logic(_, left, right) => {
-                self.check_expr(left);
-                self.check_expr(right);
-            }
             ExprKind::Assign(place, value) => {
                 self.check_expr(value);
                 self.check_place_mutable(place);
@@ -846,6 +798,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             ExprKind::AddressOf(place) => {
                 self.check_place_use(place, PlaceUse::Write);
             }
+            _ => walk_expr(self, expr),
         }
     }
     pub fn check_function(mut self, id: DefId, function: &Function) -> bool {
@@ -866,5 +819,14 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             }
         });
         self.err.report_all()
+    }
+}
+
+impl Visitor for ResourceCheck<'_> {
+    fn visit_pattern(&mut self, pattern: &Pattern) {
+        self.check_pattern(pattern, false);
+    }
+    fn visit_expr(&mut self, expr: &Expr) {
+        self.check_expr(expr);
     }
 }

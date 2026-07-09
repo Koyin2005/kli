@@ -2,16 +2,19 @@ use crate::mir::{
     BasicBlock, BasicBlockId, Body, Constant, CopyNonOverlapping, DropInPlace, Local, Location,
     Operand, Place, PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
 };
-
+pub enum PlaceCtxt {
+    Read,
+    Write,
+}
 pub trait Visit {
     fn super_visit_stmt(&mut self, loc: Location, stmt: &Stmt) {
         match &stmt.kind {
             StmtKind::Noop => (),
-            StmtKind::Assert(operand, _) | StmtKind::Deallocate(operand) => {
+            StmtKind::Deallocate(operand) => {
                 self.visit_operand(loc, operand)
             }
             StmtKind::Assign(place, rvalue) => {
-                self.visit_place(loc, place);
+                self.visit_place(PlaceCtxt::Write, loc, place);
                 self.visit_rvalue(loc, rvalue);
             }
             StmtKind::Print(operand) => {
@@ -38,7 +41,8 @@ pub trait Visit {
             | TerminatorKind::Panic
             | TerminatorKind::Return
             | TerminatorKind::Unreachable => (),
-            TerminatorKind::Switch(operand, _) => self.visit_operand(loc, operand),
+            TerminatorKind::Switch(operand, _)|
+            TerminatorKind::Assert(operand,..) => self.visit_operand(loc, operand),
         }
     }
     fn super_visit_block(&mut self, id: BasicBlockId, info: &BasicBlock) {
@@ -62,8 +66,8 @@ pub trait Visit {
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue) {
         match rvalue {
             Rvalue::DanglingPtr(_) => (),
-            Rvalue::Discriminant(place) => self.visit_place(loc, place),
-            Rvalue::Len(place) => self.visit_place(loc, place),
+            Rvalue::Discriminant(place) => self.visit_place(PlaceCtxt::Read, loc, place),
+            Rvalue::Len(place) => self.visit_place(PlaceCtxt::Read, loc, place),
             Rvalue::Use(operand) => self.visit_operand(loc, operand),
             Rvalue::Aggregate(_, fields) => {
                 for field in fields {
@@ -82,7 +86,7 @@ pub trait Visit {
                 self.visit_operand(loc, right);
             }
             Rvalue::Ref(_, _, place) | Rvalue::RawPtrTo(place) => {
-                self.visit_place(loc, place);
+                self.visit_place(PlaceCtxt::Read, loc, place);
             }
             Rvalue::Allocate { ty: _, count } => {
                 self.visit_operand(loc, count);
@@ -99,14 +103,14 @@ pub trait Visit {
     fn super_visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
         match projection {
             PlaceProjection::ConstantIndex(_) | PlaceProjection::Field(_) => (),
-            PlaceProjection::Index(local) => self.visit_local(loc, local),
+            PlaceProjection::Index(local) => self.visit_local(PlaceCtxt::Read, loc, local),
             PlaceProjection::Deref | PlaceProjection::CaseDowncast(..) => (),
         }
     }
-    fn super_visit_local(&mut self, _loc: Location, _local: Local) {}
-    fn super_visit_place(&mut self, loc: Location, place: &Place) {
+    fn super_visit_local(&mut self, _: PlaceCtxt, _loc: Location, _local: Local) {}
+    fn super_visit_place(&mut self, ctxt: PlaceCtxt, loc: Location, place: &Place) {
         if let PlaceBase::Local(local) = place.base {
-            self.visit_local(loc, local);
+            self.visit_local(ctxt, loc, local);
         }
         for projection in place.projections.iter() {
             self.visit_projection(loc, *projection);
@@ -114,7 +118,7 @@ pub trait Visit {
     }
     fn super_visit_operand(&mut self, loc: Location, operand: &Operand) {
         match operand {
-            Operand::Load(place) => self.visit_place(loc, place),
+            Operand::Load(place) => self.visit_place(PlaceCtxt::Read, loc, place),
             Operand::Constant(constant) => self.visit_constant(loc, constant),
         }
     }
@@ -125,11 +129,11 @@ pub trait Visit {
     fn visit_operand(&mut self, loc: Location, operand: &Operand) {
         self.super_visit_operand(loc, operand);
     }
-    fn visit_local(&mut self, loc: Location, local: Local) {
-        self.super_visit_local(loc, local);
+    fn visit_local(&mut self, ctxt: PlaceCtxt, loc: Location, local: Local) {
+        self.super_visit_local(ctxt, loc, local);
     }
-    fn visit_place(&mut self, loc: Location, place: &Place) {
-        self.super_visit_place(loc, place);
+    fn visit_place(&mut self, ctxt: PlaceCtxt, loc: Location, place: &Place) {
+        self.super_visit_place(ctxt, loc, place);
     }
     fn visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
         self.super_visit_projection(loc, projection);
@@ -156,8 +160,8 @@ pub trait Visit {
 pub trait MutVisit {
     fn super_visit_stmt(&mut self, loc: Location, stmt: &mut Stmt) {
         match &mut stmt.kind {
-            StmtKind::Noop => (),
-            StmtKind::Assert(operand, _) | StmtKind::Deallocate(operand) => {
+            StmtKind::Noop => (), 
+            StmtKind::Deallocate(operand) => {
                 self.visit_operand(loc, operand)
             }
             StmtKind::Assign(place, rvalue) => {
@@ -188,7 +192,8 @@ pub trait MutVisit {
             | TerminatorKind::Panic
             | TerminatorKind::Return
             | TerminatorKind::Unreachable => (),
-            TerminatorKind::Switch(operand, _) => self.visit_operand(loc, operand),
+            TerminatorKind::Switch(operand, _)|
+            TerminatorKind::Assert(operand, ..) => self.visit_operand(loc, operand),
         }
     }
     fn super_visit_block(&mut self, id: BasicBlockId, info: &mut BasicBlock) {
@@ -246,20 +251,20 @@ pub trait MutVisit {
             }
         }
     }
-    fn super_visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
+    fn super_visit_projection(&mut self, loc: Location, projection: &mut PlaceProjection) {
         match projection {
             PlaceProjection::ConstantIndex(_) | PlaceProjection::Field(_) => (),
             PlaceProjection::Index(local) => self.visit_local(loc, local),
             PlaceProjection::Deref | PlaceProjection::CaseDowncast(..) => (),
         }
     }
-    fn super_visit_local(&mut self, _loc: Location, _local: Local) {}
-    fn super_visit_place(&mut self, loc: Location, place: &Place) {
-        if let PlaceBase::Local(local) = place.base {
+    fn super_visit_local(&mut self, _loc: Location, _local: &mut Local) {}
+    fn super_visit_place(&mut self, loc: Location, place: &mut Place) {
+        if let PlaceBase::Local(local) = &mut place.base {
             self.visit_local(loc, local);
         }
-        for projection in place.projections.iter() {
-            self.visit_projection(loc, *projection);
+        for projection in place.projections.iter_mut() {
+            self.visit_projection(loc, projection);
         }
     }
     fn super_visit_operand(&mut self, loc: Location, operand: &mut Operand) {
@@ -275,13 +280,13 @@ pub trait MutVisit {
     fn visit_operand(&mut self, loc: Location, operand: &mut Operand) {
         self.super_visit_operand(loc, operand);
     }
-    fn visit_local(&mut self, loc: Location, local: Local) {
+    fn visit_local(&mut self, loc: Location, local: &mut Local) {
         self.super_visit_local(loc, local);
     }
     fn visit_place(&mut self, loc: Location, place: &mut Place) {
         self.super_visit_place(loc, place);
     }
-    fn visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
+    fn visit_projection(&mut self, loc: Location, projection: &mut PlaceProjection) {
         self.super_visit_projection(loc, projection);
     }
     fn visit_constant(&mut self, loc: Location, constant: &mut Constant) {

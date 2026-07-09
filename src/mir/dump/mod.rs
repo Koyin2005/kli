@@ -309,21 +309,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     self.write_rvalue(value)?;
                     writeln!(self.output)?;
                 }
-                StmtKind::Assert(operand, kind) => {
-                    write!(self.output, "assert(!")?;
-                    self.write_operand(operand)?;
-                    write!(self.output, ", ")?;
-                    match kind {
-                        AssertKind::Overflow(op) => {
-                            write!(self.output, "\"Overflow in computing {op:?}\"")?
-                        }
-                        AssertKind::DivideOverflow => {
-                            write!(self.output, "\"Overflow in computing division\"")?
-                        }
-                        AssertKind::DivideByZero => write!(self.output, "\"Divide by zero\"")?,
-                    }
-                    writeln!(self.output, ")")?
-                }
             }
         }
         write!(self.output, "  ")?;
@@ -346,6 +331,21 @@ impl<'ctxt> MirDump<'ctxt> {
                 }
                 TerminatorKind::Goto(block) => write!(self.output, "goto bb{}", block.0)?,
                 TerminatorKind::Panic => write!(self.output, "panic")?,
+                TerminatorKind::Assert(operand, kind,block) => {
+                    write!(self.output, "assert(!")?;
+                    self.write_operand(operand)?;
+                    write!(self.output, ", ")?;
+                    match kind {
+                        AssertKind::Overflow(op) => {
+                            write!(self.output, "\"Overflow in computing {op:?}\"")?
+                        }
+                        AssertKind::DivideOverflow => {
+                            write!(self.output, "\"Overflow in computing division\"")?
+                        }
+                        AssertKind::DivideByZero => write!(self.output, "\"Divide by zero\"")?,
+                    }
+                    write!(self.output, ") -> bb{}",block.0)?
+                }
             }
         }
         writeln!(self.output)
