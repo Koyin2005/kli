@@ -502,6 +502,17 @@ impl CtxtRef<'_> {
             node: self.node(id),
         }
     }
+    pub fn display_path_for(&self, id: DefId) -> impl std::fmt::Display {
+        std::fmt::from_fn(move |f|{
+            let mut id = id;
+            let mut output = self.display(id).to_string();
+            while let Some(parent) = self.parent_of(id) {
+                output = format!("{}.{}",self.display(parent),output);
+                id = parent;
+            }
+            f.write_str(&output)
+        })
+    }
     pub fn diag(&self) -> &DiagnosticReporter {
         &self.0.diag
     }

@@ -265,7 +265,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     write!(
                         self.output,
                         "{}{}",
-                        self.ctxt.display(*id),
+                        self.ctxt.display_path_for(*id),
                         display_generic_args(args)
                     )
                 }

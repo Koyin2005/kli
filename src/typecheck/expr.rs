@@ -792,17 +792,17 @@ impl FunctionCtxt<'_> {
                         (Err(ty), GenericArgs::new())
                     }
                 };
-                let field_info = if let Ok((id, _)) = info {
-                    if !self.ctxt().same_module(id, self.id) && !self.ctxt().is_opaque(self.id) {
+                let field_info = if let Ok((ty_id, _)) = info {
+                    if !self.ctxt().same_module(ty_id, self.id) && self.ctxt().is_opaque(ty_id) {
                         self.ctxt().diag().add_diagnostic(
                             format!(
                                 "Cannot construct '{}' in this scope",
-                                self.ctxt().display(id)
+                                self.ctxt().display(ty_id)
                             ),
                             loc,
                         );
                     }
-                    let ty_def = self.root().ctxt().type_def(id);
+                    let ty_def = self.root().ctxt().type_def(ty_id);
                     match ty_def.kind {
                         TypeDefKind::Record(fields) => fields,
                         TypeDefKind::Variant(_) => {
