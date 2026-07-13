@@ -49,10 +49,10 @@ impl Visit for WellFormed<'_> {
             match proj {
                 super::PlaceProjection::CaseDowncast(index, _) => {
                     ty = if let Type::Named(id, _, ref args) = ty {
-                            self.ctxt
-                                .type_def(id)
-                                .case(*index)
-                                .payload_type(args, self.ctxt)
+                        self.ctxt
+                            .type_def(id)
+                            .case(*index)
+                            .payload_type(args, self.ctxt)
                     } else {
                         emit_fatal_diagnostic(loc, format!("Cannot get inner value of '{}'", ty))
                     };

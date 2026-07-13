@@ -166,8 +166,7 @@ impl Constant {
         let Type::Int = *self.ty else {
             return None;
         };
-        self.value
-            .as_scalar()
+        self.value.as_scalar()
     }
     pub fn bool(value: bool) -> Self {
         Self {

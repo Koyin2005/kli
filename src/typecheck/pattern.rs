@@ -6,7 +6,7 @@ use crate::{
     resolved_ast::{Pattern, PatternField, PatternKind, Var},
     typecheck::root::FunctionCtxt,
     typed_ast::{self, FieldId},
-    types::{FieldName, RecordField, Region, Type},
+    types::{self, FieldName, Region, Type},
 };
 impl FunctionCtxt<'_> {
     pub fn check_pattern(
@@ -140,11 +140,23 @@ impl FunctionCtxt<'_> {
                 }
             }
             PatternKind::Record(ref pat_fields) => {
-                let expected_fields = match root.simplify_type(expected_type) {
-                    Type::Record(fields) => Some(fields),
+                let (ty, expected_fields) = match root.simplify_type(expected_type) {
+                    Type::Record(fields) => (Type::Record(fields.clone()), Some(fields)),
+                    Type::Named(id, name, args)
+                        if let TypeDefKind::Record(fields) = self.ctxt().type_def(id).kind =>
+                    {
+                        let fields = fields
+                            .into_iter()
+                            .map(|field| types::RecordField {
+                                name: FieldName::Named(field.name),
+                                ty: field.type_of(&args, self.ctxt()),
+                            })
+                            .collect();
+                        (Type::Named(id, name, args), Some(fields))
+                    }
                     ref ty => {
                         root.expect_ty_error("record", ty, pattern.loc);
-                        None
+                        (Type::Unknown, None)
                     }
                 };
                 let field_names = expected_fields
@@ -198,24 +210,6 @@ impl FunctionCtxt<'_> {
                         })
                     })
                     .collect::<Vec<_>>();
-                let record_fields = if let Some(fields) = expected_fields {
-                    let _ = root.check_missing_fields(
-                        pattern.loc,
-                        seen_fields,
-                        fields.iter().map(|field| field.name),
-                    );
-                    fields
-                } else {
-                    fields
-                        .iter()
-                        .zip(pat_fields)
-                        .map(|(field, pat_field)| RecordField {
-                            name: FieldName::Named(pat_field.name.symbol),
-                            ty: field.pattern.ty.clone(),
-                        })
-                        .collect()
-                };
-                let ty = Type::Record(record_fields);
                 typed_ast::Pattern {
                     ty,
                     loc,
