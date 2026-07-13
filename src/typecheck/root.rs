@@ -196,6 +196,7 @@ pub enum Coercion {
 pub enum CoercionKind {
     NeverToAny(Type),
 }
+pub struct VisibilityError;
 pub struct FunctionCtxt<'ctxt> {
     pub(super) id: DefId,
     root: &'ctxt RootCtxt<'ctxt>,

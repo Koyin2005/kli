@@ -210,6 +210,21 @@ impl FunctionCtxt<'_> {
                         })
                     })
                     .collect::<Vec<_>>();
+
+                let _ = self.root().check_missing_fields(
+                    pattern.loc,
+                    seen_fields,
+                    expected_fields.iter().flatten().map(|field| field.name),
+                );
+                if let Type::Named(id, _, _) = ty
+                    && let type_def = self.ctxt().type_def(id)
+                {
+                    let ty_fields = type_def.fields();
+                    for field in &fields {
+                        let _ = self
+                            .check_field_visibility(ty_fields[field.index].id, field.pattern.loc);
+                    }
+                }
                 typed_ast::Pattern {
                     ty,
                     loc,
