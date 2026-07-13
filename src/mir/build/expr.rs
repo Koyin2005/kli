@@ -5,8 +5,8 @@ use crate::{
     builtins::Builtin,
     index_vec::IndexVec,
     mir::{
-        self, AggregateKind, Constant, ConstantValue, CopyNonOverlapping, DropInPlace, Local,
-        Operand, OverflowOp, Place, PointerCast, Rvalue, build::Builder,
+        self, AggregateKind, ConstValue, Constant, CopyNonOverlapping, DropInPlace, Local, Operand,
+        OverflowOp, Place, PointerCast, Rvalue, build::Builder,
     },
     src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
@@ -34,7 +34,7 @@ impl Builder<'_> {
                 let ty = expr.ty.clone();
                 Some(Constant {
                     ty: Box::new(ty),
-                    value: ConstantValue::NamedConst(id, generic_args.clone()),
+                    value: ConstValue::Named(id, generic_args.clone()),
                 })
             }
             ExprKind::Lambda(ref lambda) if lambda.is_resource == IsResource::Data => {
@@ -44,7 +44,14 @@ impl Builder<'_> {
                 let ty = expr.ty.clone();
                 Some(Constant {
                     ty: Box::new(ty),
-                    value: ConstantValue::NamedConst(id, args.clone()),
+                    value: ConstValue::Named(id, args.clone()),
+                })
+            }
+            ExprKind::VariantInit(_, case, _, None) => {
+                let ty = expr.ty.clone();
+                Some(Constant {
+                    ty: Box::new(ty),
+                    value: ConstValue::Variant(case, None),
                 })
             }
             _ => None,
@@ -347,7 +354,8 @@ impl Builder<'_> {
             | ExprKind::Bool(_)
             | ExprKind::Load(_)
             | ExprKind::Function(..)
-            | ExprKind::Const(..) => {
+            | ExprKind::Const(..)
+            | ExprKind::VariantInit(.., None) => {
                 let operand = self
                     .as_operand(expr)
                     .unwrap_or_else(|| unreachable!("should be an constant operand '{:?}' ", expr));
@@ -423,7 +431,7 @@ impl Builder<'_> {
                     .into(),
                 )
             }
-            &ExprKind::VariantInit(id, index, ref args, ref value) => Rvalue::Aggregate(
+            &ExprKind::VariantInit(id, index, ref args, Some(ref value)) => Rvalue::Aggregate(
                 AggregateKind::Variant(id, index, args.clone()),
                 [self.operand(value)].into(),
             ),
@@ -469,7 +477,7 @@ impl Builder<'_> {
                         let is_left_min = self.assign_equals(
                             expr.loc,
                             left_operand.clone(),
-                            Operand::Constant(Constant::int(ConstantValue::MIN_INT)),
+                            Operand::Constant(Constant::int(ConstValue::MIN_INT)),
                         );
                         let is_right_neg_1 = self.assign_equals(
                             expr.loc,

@@ -2,10 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::{
     index_vec::IndexVec,
-    mir::{
-        BasicBlock, BasicBlockId, Operand, StmtKind, TerminatorKind,
-        passes::{MirPass, predecessors},
-    },
+    mir::{BasicBlock, BasicBlockId, Operand, StmtKind, TerminatorKind, passes::MirPass},
 };
 
 pub struct SimplifyCfg;
@@ -15,47 +12,48 @@ impl MirPass for SimplifyCfg {
         "simplify-cfg"
     }
     fn run(&self, _: crate::CtxtRef<'_>, body: &mut crate::mir::Body) {
-        for block in body.blocks.iter_mut() {
+        for block in body.block_info.blocks_mut() {
             Self::remove_noops(block);
         }
         let mut modified = true;
         while modified {
             modified = false;
-            for block in body.blocks.indices() {
-                let targets = match body.blocks[block].expect_terminator().kind {
+            for block in body.block_info.blocks().indices() {
+                let targets = match body.block_info.blocks()[block].expect_terminator().kind {
                     TerminatorKind::Goto(target) => {
-                        if predecessors(&body.blocks, target).len() != 1 {
+                        if body.block_info.predecessors()[target].len() != 1 {
                             continue;
                         }
-                        Self::steal(&mut body.blocks, target, block);
+                        Self::steal(body.block_info.blocks_mut(), target, block);
                         modified = true;
                         continue;
                     }
                     TerminatorKind::Switch(ref operand, ref targets) => {
                         if let Operand::Constant(constant) = operand
                             && let Some(value) = constant.value.as_scalar()
-                            && let target = targets.branch_for_value(value)
-                            && predecessors(&body.blocks, target).len() == 1
+                            && let target = targets.branch_for_value(value as i128)
+                            && body.block_info.predecessors()[target].len() == 1
                         {
-                            Self::steal(&mut body.blocks, target, block);
+                            Self::steal(body.block_info.blocks_mut(), target, block);
                             modified = true;
                             continue;
                         }
-                        body.blocks[block]
+                        body.block_info.blocks()[block]
                             .expect_terminator()
                             .successors()
                             .filter_map(|succ| {
-                                if predecessors(&body.blocks, succ).len() > 1 {
+                                if body.block_info.predecessors()[succ].len() > 1 {
                                     return None;
                                 }
-                                if !body.blocks[succ].stmts.iter().all(|stmt| match stmt.kind {
-                                    StmtKind::Noop => true,
-                                    _ => false,
-                                }) {
+                                if !body.block_info.blocks()[succ]
+                                    .stmts
+                                    .iter()
+                                    .all(|stmt| matches!(stmt.kind, StmtKind::Noop))
+                                {
                                     return None;
                                 }
                                 let TerminatorKind::Goto(target) =
-                                    body.blocks[succ].expect_terminator().kind
+                                    body.block_info.blocks()[succ].expect_terminator().kind
                                 else {
                                     return None;
                                 };
@@ -65,17 +63,19 @@ impl MirPass for SimplifyCfg {
                     }
                     _ => continue,
                 };
-                for block in body.blocks[block].expect_terminator_mut().successors_mut() {
-                    *block = if let Some(target) = targets.get(block) {
-                        modified = true;
-                        *target
-                    } else {
-                        continue;
-                    };
+                if let Some(ref mut terminator) = body.block_info.blocks_mut()[block].terminator {
+                    for block in terminator.successors_mut() {
+                        *block = if let Some(target) = targets.get(block) {
+                            modified = true;
+                            *target
+                        } else {
+                            continue;
+                        };
+                    }
                 }
             }
         }
-        for block in body.blocks.iter_mut() {
+        for block in body.block_info.blocks_mut_dont_dirty().iter_mut() {
             Self::remove_noops(block);
         }
     }

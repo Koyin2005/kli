@@ -4,7 +4,7 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         Local, LocalKind,
-        passes::MirPass,
+        passes::{MirPass, optimisation_enabled},
         visitor::{PlaceCtxt, Visit},
     },
 };
@@ -43,6 +43,9 @@ impl MirPass for RemoveUnusedLocals {
             })
             .collect::<IndexVec<Local, _>>();
         body.locals.retain(|local, _| local_map[local].is_some());
+    }
+    fn enabled(&self, ctxt: crate::CtxtRef<'_>) -> bool {
+        optimisation_enabled(ctxt)
     }
 }
 

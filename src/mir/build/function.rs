@@ -3,9 +3,8 @@ use crate::{
     collect::CtxtRef,
     def_ids::DefId,
     mir::{
-        BodySource, CastKind, Constant, ConstantValue, Context, Local, LocalKind, Operand, Place,
-        PointerCast, Rvalue, TerminatorKind, build::Builder, visitor::Visit,
-        well_formed::WellFormed,
+        BodySource, CastKind, Constant, Context, Local, LocalKind, Operand, Place, PointerCast,
+        Rvalue, TerminatorKind, build::Builder, visitor::Visit, well_formed::WellFormed,
     },
     src_loc::SrcLoc,
     typed_ast::{self, FieldId, Lambda},
@@ -77,7 +76,7 @@ impl Builder<'_> {
         };
         Constant {
             ty: Box::new(ty),
-            value: crate::mir::ConstantValue::NamedConst(lambda.id, args),
+            value: crate::mir::ConstValue::Named(lambda.id, args),
         }
     }
 
@@ -100,7 +99,7 @@ impl Builder<'_> {
                     .collect(),
                 *lambda.return_type.clone(),
             )),
-            value: ConstantValue::ClosureShim(id, args),
+            value: crate::mir::ConstValue::ClosureShim(id, args),
         };
         if mir_context
             .bodies

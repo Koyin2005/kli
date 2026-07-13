@@ -153,7 +153,9 @@ impl<'a> TypeSubst<'a> {
                 for arg in args {
                     self.subst_generic_arg(arg);
                 }
-                self.subst_expr(expr)
+                if let Some(expr) = expr {
+                    self.subst_expr(expr)
+                }
             }
             ExprKind::Call(callee, args) => {
                 self.subst_expr(callee);

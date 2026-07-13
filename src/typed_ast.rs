@@ -136,7 +136,7 @@ pub enum ExprKind {
     Panic,
     NeverToAny(Box<Expr>),
     BuiltinCall(Builtin, GenericArgs, Box<[Expr]>),
-    VariantInit(DefId, CaseId, GenericArgs, Box<Expr>),
+    VariantInit(DefId, CaseId, GenericArgs, Option<Box<Expr>>),
     Function(DefId, GenericArgs),
     Const(DefId, GenericArgs),
     Print(Option<Box<Expr>>),

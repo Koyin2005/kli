@@ -77,23 +77,33 @@ pub struct TypeDefInfo {
     pub kind: TypeDefKind,
 }
 impl TypeDefInfo {
+    pub fn case_value(&self, case: CaseId) -> u32 {
+        _ = self;
+        case.into_usize() as u32
+    }
     #[track_caller]
-    pub fn case_with_id(&self, id: DefId) -> &Case {
-        self.cases()
-            .iter()
-            .find(|&&case| case.id == id)
+    pub fn case_with_id(&self, id: DefId) -> (CaseId, &Case) {
+        self.expect_cases()
+            .iter_enumerated()
+            .find_map(|(case_id, case)| (case.id == id).then_some((case_id, case)))
             .expect("unknown case")
     }
     #[track_caller]
     pub fn case(&self, index: CaseId) -> &Case {
-        &self.cases()[index]
+        &self.expect_cases()[index]
     }
     #[track_caller]
-    pub fn cases(&self) -> &IndexVec<CaseId, Case> {
+    pub fn expect_cases(&self) -> &IndexVec<CaseId, Case> {
         let TypeDefKind::Variant(cases) = &self.kind else {
             panic!("Expected a variant type")
         };
         cases
+    }
+    pub fn cases(&self) -> Option<&IndexVec<CaseId, Case>> {
+        let TypeDefKind::Variant(cases) = &self.kind else {
+            return None;
+        };
+        Some(cases)
     }
     #[track_caller]
     pub fn fields(&self) -> &IndexVec<FieldId, Field> {
@@ -113,6 +123,7 @@ impl TypeDefInfo {
             .chain(case_iter.into_iter().flatten())
     }
 }
+
 #[derive(Debug, Clone, Default)]
 pub struct Generics {
     params: Vec<GenericParam>,

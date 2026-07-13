@@ -1,9 +1,6 @@
 use crate::{
     index_vec::IndexVec,
-    mir::{
-        BasicBlockId,
-        passes::{MirPass, reachable},
-    },
+    mir::{BasicBlockId, passes::MirPass, traversal::reachable},
 };
 
 pub struct RemoveUnreachable;
@@ -12,10 +9,11 @@ impl MirPass for RemoveUnreachable {
         "remove-unreachable"
     }
     fn run(&self, _ctxt: crate::CtxtRef<'_>, body: &mut crate::mir::Body) {
-        let seen = reachable(&body.blocks);
+        let seen = reachable(&body.block_info);
         let mut next_block_id = BasicBlockId::ENTRY;
         let block_map = body
-            .blocks
+            .block_info
+            .blocks()
             .indices()
             .map(|id| {
                 let next_block = next_block_id.next();
@@ -26,7 +24,7 @@ impl MirPass for RemoveUnreachable {
                 }
             })
             .collect::<IndexVec<BasicBlockId, _>>();
-        for (_, block) in body.blocks.iter_mut_enumerated() {
+        for block in body.block_info.blocks_mut_dont_dirty() {
             block
                 .expect_terminator_mut()
                 .successors_mut()
@@ -37,6 +35,8 @@ impl MirPass for RemoveUnreachable {
                     *block = id;
                 });
         }
-        body.blocks.retain(|id, _| block_map[id].is_some());
+        body.block_info
+            .blocks_mut()
+            .retain(|id, _| block_map[id].is_some());
     }
 }

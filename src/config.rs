@@ -12,6 +12,7 @@ pub enum Feature {
     OutputMir,
     OutputInstances,
     Optimise,
+    WithMirPass,
 }
 impl Display for Feature {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -20,6 +21,7 @@ impl Display for Feature {
             Self::Optimise => "optimise",
             Self::OutputInstances => "output-instances",
             Self::OutputMir => "output-mir",
+            Self::WithMirPass => "with-mir-pass",
         })
     }
 }
@@ -79,6 +81,7 @@ pub fn config() -> Result<Config, ConfigError> {
                 "output-mir" => Feature::OutputMir,
                 "output-instances" => Feature::OutputInstances,
                 "optimise" => Feature::Optimise,
+                "with-mir-pass" => Feature::WithMirPass,
                 _ => return None,
             };
             let args = pieces.map(Symbol::intern).collect::<Vec<_>>();

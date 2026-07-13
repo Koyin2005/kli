@@ -69,9 +69,7 @@ impl<I: Id, V> IndexVec<I, V> {
         if count == 0 {
             return Self::new();
         } else if count == 1 {
-            let mut v = Vec::with_capacity(1);
-            v.push(value);
-            return Self(v, PhantomData);
+            return Self(vec![value], PhantomData);
         }
         Self(
             Vec::from_iter(std::iter::repeat_n(value, count)),

@@ -1,19 +1,26 @@
-use crate::mir::{
-    BasicBlock, BasicBlockId, Body, Constant, CopyNonOverlapping, DropInPlace, Local, Location,
-    Operand, Place, PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
+use crate::{
+    ast::Mutable,
+    mir::{
+        BasicBlock, BasicBlockId, Body, Constant, CopyNonOverlapping, DropInPlace, Local, Location,
+        Operand, Place, PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind, Terminator,
+        TerminatorKind,
+    },
 };
 pub enum PlaceCtxt {
     Read,
     Write,
 }
 pub trait Visit {
+    fn visit_assign(&mut self, loc: Location, place: &Place, rvalue: &Rvalue) {
+        self.visit_place(PlaceCtxt::Write, loc, place);
+        self.visit_rvalue(loc, rvalue);
+    }
     fn super_visit_stmt(&mut self, loc: Location, stmt: &Stmt) {
         match &stmt.kind {
             StmtKind::Noop => (),
             StmtKind::Deallocate(operand) => self.visit_operand(loc, operand),
             StmtKind::Assign(place, rvalue) => {
-                self.visit_place(PlaceCtxt::Write, loc, place);
-                self.visit_rvalue(loc, rvalue);
+                self.visit_assign(loc, place, rvalue);
             }
             StmtKind::Print(operand) => {
                 if let Some(operand) = operand {
@@ -84,8 +91,18 @@ pub trait Visit {
                 self.visit_operand(loc, left);
                 self.visit_operand(loc, right);
             }
-            Rvalue::Ref(_, _, place) | Rvalue::RawPtrTo(place) => {
-                self.visit_place(PlaceCtxt::Read, loc, place);
+            Rvalue::Ref(mutable, _, place) => {
+                self.visit_place(
+                    match mutable {
+                        Mutable::Immutable => PlaceCtxt::Read,
+                        Mutable::Mutable => PlaceCtxt::Write,
+                    },
+                    loc,
+                    place,
+                );
+            }
+            Rvalue::RawPtrTo(place) => {
+                self.visit_place(PlaceCtxt::Write, loc, place);
             }
             Rvalue::Allocate { ty: _, count } => {
                 self.visit_operand(loc, count);
@@ -150,20 +167,23 @@ pub trait Visit {
         self.super_visit_block(id, block)
     }
     fn visit_body(&mut self, body: &Body) {
-        for (id, block) in body.blocks.iter_enumerated() {
+        for (id, block) in body.block_info.blocks().iter_enumerated() {
             self.visit_block(id, block);
         }
     }
 }
 
 pub trait MutVisit {
+    fn visit_assign(&mut self, loc: Location, place: &mut Place, rvalue: &mut Rvalue) {
+        self.visit_place(loc, place);
+        self.visit_rvalue(loc, rvalue);
+    }
     fn super_visit_stmt(&mut self, loc: Location, stmt: &mut Stmt) {
         match &mut stmt.kind {
             StmtKind::Noop => (),
             StmtKind::Deallocate(operand) => self.visit_operand(loc, operand),
             StmtKind::Assign(place, rvalue) => {
-                self.visit_place(loc, place);
-                self.visit_rvalue(loc, rvalue);
+                self.visit_assign(loc, place, rvalue);
             }
             StmtKind::Print(operand) => {
                 if let Some(operand) = operand {
@@ -300,7 +320,16 @@ pub trait MutVisit {
         self.super_visit_block(id, block)
     }
     fn visit_body(&mut self, body: &mut Body) {
-        for (id, block) in body.blocks.iter_mut_enumerated() {
+        for (id, block) in body.block_info.blocks_mut().iter_mut_enumerated() {
+            self.visit_block(id, block);
+        }
+    }
+    fn visit_body_no_invalidate(&mut self, body: &mut Body) {
+        for (id, block) in body
+            .block_info
+            .blocks_mut_dont_dirty()
+            .iter_mut_enumerated()
+        {
             self.visit_block(id, block);
         }
     }

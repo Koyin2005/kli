@@ -4,7 +4,7 @@ use crate::{
     mir::{
         AssertKind, BasicBlock, BasicBlockId, BinaryOp, Body, BodySource, Context, Local,
         LocalInfo, LocalKind, Locals, Operand, Place, Rvalue, Stmt, StmtKind, SwitchTarget,
-        SwitchTargets, Terminator, TerminatorKind,
+        SwitchTargets, Terminator, TerminatorKind, basic_blocks::BasicBlocks,
     },
     resolved_ast::Var,
     src_loc::SrcLoc,
@@ -33,7 +33,7 @@ impl<'ctxt> Builder<'ctxt> {
             body: Body {
                 src: source,
                 locals: Locals::default(),
-                blocks: IndexVec::from_iter([BasicBlock::default()]),
+                block_info: BasicBlocks::new(IndexVec::new_from(1, BasicBlock::default())),
                 return_type,
             },
             current_block: BasicBlockId::ENTRY,
@@ -69,7 +69,10 @@ impl<'ctxt> Builder<'ctxt> {
         })
     }
     pub(super) fn new_block(&mut self) -> BasicBlockId {
-        self.body.blocks.push(BasicBlock::default())
+        self.body
+            .block_info
+            .blocks_mut()
+            .push(BasicBlock::default())
     }
     pub(super) fn switch_to_block(&mut self, block: BasicBlockId) {
         self.current_block = block;
@@ -88,7 +91,7 @@ impl<'ctxt> Builder<'ctxt> {
         block
     }
     pub(super) fn finish_block(&mut self, loc: SrcLoc, terminator: TerminatorKind) {
-        self.body.blocks[self.current_block].terminator = Some(Terminator {
+        self.body.block_info.blocks_mut()[self.current_block].terminator = Some(Terminator {
             src_info: loc,
             kind: terminator,
         });
@@ -136,7 +139,7 @@ impl<'ctxt> Builder<'ctxt> {
         self.finish_block(loc, TerminatorKind::Goto(block));
     }
     pub(super) fn push_stmt(&mut self, loc: SrcLoc, kind: StmtKind) {
-        self.body.blocks[self.current_block]
+        self.body.block_info.blocks_mut()[self.current_block]
             .stmts
             .push(Stmt { loc, kind });
     }

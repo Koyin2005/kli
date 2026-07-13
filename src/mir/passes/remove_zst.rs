@@ -78,7 +78,11 @@ impl MirPass for RemoveZst {
             }
         }
         let mut visit = RemoveZstVisit(ctxt, &body.locals, &body.return_type);
-        for (id, block) in body.blocks.iter_mut_enumerated() {
+        for (id, block) in body
+            .block_info
+            .blocks_mut_dont_dirty()
+            .iter_mut_enumerated()
+        {
             visit.visit_block(id, block);
         }
     }

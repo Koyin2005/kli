@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, path::Path};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::Path,
+};
 
 use kli::{
     Symbol,
@@ -273,7 +276,27 @@ fn main() {
         }
         mir::build::Builder::build_from_function(ctxt, &mut mir_context, id, function);
     }
-    for pass in passes(ctxt.config()) {
+    let pass_args = ctxt
+        .config()
+        .arguments_for(Feature::WithMirPass)
+        .map(|args| args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>())
+        .unwrap_or_default();
+    let run_pass = pass_args
+        .iter()
+        .map(|name| {
+            let name_no_negate = name.strip_prefix("!");
+            (
+                name_no_negate.unwrap_or(name.as_str()),
+                name.strip_prefix("!").is_none(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    for pass in passes() {
+        let overidde = run_pass.get(pass.name()).copied();
+        let should_run = overidde.unwrap_or_else(|| pass.enabled(ctxt));
+        if !should_run {
+            continue;
+        }
         mir_context.for_each_body_mut(|body| {
             pass.run(ctxt, body);
         });

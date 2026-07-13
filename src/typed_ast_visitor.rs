@@ -99,7 +99,11 @@ where
             }
         }
         ExprKind::NeverToAny(value) | ExprKind::Return(value) => v.visit_expr(value),
-        ExprKind::VariantInit(.., value) => v.visit_expr(value),
+        ExprKind::VariantInit(.., value) => {
+            if let Some(value) = value {
+                v.visit_expr(value)
+            }
+        }
         ExprKind::Call(callee, args) => {
             v.visit_expr(callee);
             args.iter().for_each(|expr| v.visit_expr(expr));

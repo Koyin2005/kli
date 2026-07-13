@@ -292,7 +292,8 @@ impl Visit for WellFormed<'_> {
                         Type::Int,
                         Type::Int,
                     ) => (),
-                    (BinaryOp::Offset, Type::RawPointer(_), Type::Int) => (),
+                    (BinaryOp::BitwiseAnd, Type::Bool, Type::Bool)
+                    | (BinaryOp::Offset, Type::RawPointer(_), Type::Int) => (),
                     (BinaryOp::Equals, left, right) => self.assert(
                         left == right,
                         || format!("Cannot equate '{}' and '{}'", left, right),
@@ -363,17 +364,14 @@ impl Visit for WellFormed<'_> {
     }
     fn visit_terminator(&mut self, loc: Location, terminator: &super::Terminator) {
         self.super_visit_terminator(loc, terminator);
-        match &terminator.kind {
-            TerminatorKind::Assert(operand, ..) => {
-                let condition_ty =
-                    operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                self.assert(
-                    condition_ty == Type::Bool,
-                    || format!("Can only assert on bools not {}", condition_ty),
-                    terminator.src_info,
-                );
-            }
-            _ => (),
+        if let TerminatorKind::Assert(operand, ..) = &terminator.kind {
+            let condition_ty =
+                operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
+            self.assert(
+                condition_ty == Type::Bool,
+                || format!("Can only assert on bools not {}", condition_ty),
+                terminator.src_info,
+            );
         }
     }
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt) {

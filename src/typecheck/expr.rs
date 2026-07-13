@@ -362,7 +362,7 @@ impl FunctionCtxt<'_> {
             && let root = self.root()
             && let ctxt = root.ctxt()
             && let ty_id = ctxt.expect_parent(*variant_id)
-            && let cases = ctxt.type_def(ty_id).cases()
+            && let cases = ctxt.type_def(ty_id).expect_cases()
             && let (index, case_def) = cases
                 .iter_enumerated()
                 .find_map(|(index, case)| (case.id == *variant_id).then_some((index, case)))
@@ -384,7 +384,12 @@ impl FunctionCtxt<'_> {
             typed_ast::Expr {
                 ty,
                 loc,
-                kind: typed_ast::ExprKind::VariantInit(ty_id, index, generic_args, Box::new(arg)),
+                kind: typed_ast::ExprKind::VariantInit(
+                    ty_id,
+                    index,
+                    generic_args,
+                    Some(Box::new(arg)),
+                ),
             }
         } else {
             let callee = self.check_expr(callee, None);
@@ -594,10 +599,20 @@ impl FunctionCtxt<'_> {
             &ExprKind::VariantCase(case_id, ref args) => {
                 let args = self.root().lower_generic_args_for(case_id, loc, args);
                 let ty = self.root().ctxt().type_of(case_id).bind(&args);
-                typed_ast::Expr {
-                    ty,
-                    loc,
-                    kind: typed_ast::ExprKind::Const(case_id, args),
+                if matches!(ty, Type::Function(..)) {
+                    typed_ast::Expr {
+                        ty,
+                        loc,
+                        kind: typed_ast::ExprKind::Const(case_id, args),
+                    }
+                } else {
+                    let ty_id = self.ctxt().expect_parent(case_id);
+                    let (case_id, _) = self.ctxt().type_def(ty_id).case_with_id(case_id);
+                    typed_ast::Expr {
+                        ty,
+                        loc,
+                        kind: typed_ast::ExprKind::VariantInit(ty_id, case_id, args, None),
+                    }
                 }
             }
             ExprKind::Var(_) | ExprKind::Deref(_) | ExprKind::Field(..) => {

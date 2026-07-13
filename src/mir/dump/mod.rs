@@ -1,9 +1,9 @@
 use crate::{
     Symbol,
-    collect::CtxtRef,
+    collect::{CtxtRef, TypeDefKind},
     mir::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, CastKind,
-        ConstantValue, CopyNonOverlapping, DropInPlace, LocalKind, Operand, Place, PlaceProjection,
+        ConstValue, CopyNonOverlapping, DropInPlace, LocalKind, Operand, Place, PlaceProjection,
         Rvalue, StmtKind, TerminatorKind,
     },
     typed_ast::FieldId,
@@ -241,31 +241,107 @@ impl<'ctxt> MirDump<'ctxt> {
         }
         Ok(())
     }
+    fn write_constant(&mut self, ty: &types::Type, value: &ConstValue) -> std::io::Result<()> {
+        match ty {
+            types::Type::Infer(_)
+            | types::Type::Param(..)
+            | types::Type::Unknown
+            | types::Type::String
+            | types::Type::Char => write!(self.output, "unknown of '{}'", ty),
+            types::Type::Int | types::Type::Byte => value
+                .as_scalar()
+                .map(|value| write!(self.output, "{}", value))
+                .unwrap_or_else(|| write!(self.output, "unknown of '{}'", ty)),
+            types::Type::Bool => value
+                .as_scalar()
+                .and_then(|value| bool::try_from(value).ok())
+                .map_or(Ok(()), |value| write!(self.output, "{}", value)),
+            ty @ (types::Type::Never | types::Type::Unit) => write!(self.output, "{ty}"),
+            types::Type::Imm(..) | types::Type::Mut(..) | types::Type::RawPointer(_) => {
+                write!(self.output, "unknown of '{}'", ty)
+            }
+            types::Type::Function(_) => match value {
+                ConstValue::Named(id, args) => {
+                    write!(
+                        self.output,
+                        "{}{}",
+                        self.ctxt.display(*id),
+                        display_generic_args(args)
+                    )
+                }
+                ConstValue::ClosureShim(id, args) => {
+                    write!(
+                        self.output,
+                        "closure_shim {}{}",
+                        self.ctxt.display(*id),
+                        display_generic_args(args)
+                    )
+                }
+                _ => unreachable!("only values of function type"),
+            },
+            types::Type::Record(fields) => {
+                let ConstValue::Record(field_consts) = value else {
+                    unreachable!("should be a record")
+                };
+                let mut first = true;
+                write!(self.output, "{{")?;
+                for (value, field) in field_consts.iter().zip(fields) {
+                    if !first {
+                        write!(self.output, ",")?;
+                    }
+                    write!(self.output, "{} = ", field.name)?;
+                    self.write_constant(&value.ty, &value.value)?;
+                    first = false;
+                }
+                write!(self.output, "}}")
+            }
+            types::Type::Array(..) => unimplemented!(),
+
+            types::Type::Named(def_id, name, args) => match self.ctxt.type_def(*def_id).kind {
+                TypeDefKind::Record(fields) => match value {
+                    ConstValue::Record(values) => {
+                        let mut first = true;
+                        write!(self.output, "{name}{}{{", display_generic_args(args))?;
+                        for (value, field) in values.iter().zip(fields) {
+                            if !first {
+                                write!(self.output, ",")?;
+                            }
+                            write!(self.output, "{} = ", field.name)?;
+                            self.write_constant(&value.ty, &value.value)?;
+                            first = false;
+                        }
+                        write!(self.output, "}}")
+                    }
+                    _ => write!(self.output, "unknown value of {ty}"),
+                },
+                TypeDefKind::Variant(cases) => match value {
+                    ConstValue::Variant(case, inner) => {
+                        let name = cases[*case].name;
+                        write!(self.output, "{name}{}", display_generic_args(args))?;
+                        if let Some(inner) = inner {
+                            write!(self.output, "(")?;
+                            self.write_constant(&inner.ty, &inner.value)?;
+                            write!(self.output, ")")?;
+                        } else {
+                            write!(self.output, "")?;
+                        }
+                        Ok(())
+                    }
+                    _ => write!(self.output, "unknown of '{}'", ty),
+                },
+            },
+        }
+    }
     fn write_operand(&mut self, operand: &Operand) -> std::io::Result<()> {
         match operand {
             Operand::Load(place) => {
                 write!(self.output, "load ")?;
                 self.write_place(place)
             }
-            Operand::Constant(constant) => match constant.value {
-                ConstantValue::Int(value) => write!(self.output, "{}", value),
-                ConstantValue::Bool(value) => write!(self.output, "{}", value),
-                ConstantValue::ZeroSized => write!(self.output, "{}", constant.ty),
-                ConstantValue::NamedConst(id, ref args) => {
-                    write!(self.output, "{}", self.ctxt.display(id))?;
-                    if !args.is_empty() {
-                        write!(self.output, "{}", display_generic_args(args))?;
-                    }
-                    Ok(())
-                }
-                ConstantValue::ClosureShim(id, ref args) => {
-                    write!(self.output, "closure shim ({})", self.ctxt.display(id))?;
-                    if !args.is_empty() {
-                        write!(self.output, "{}", display_generic_args(args))?;
-                    }
-                    Ok(())
-                }
-            },
+            Operand::Constant(constant) => {
+                write!(self.output, "const ")?;
+                self.write_constant(&constant.ty, &constant.value)
+            }
         }
     }
     fn write_block(&mut self, id: BasicBlockId, block: &BasicBlock) -> std::io::Result<()> {
@@ -352,7 +428,7 @@ impl<'ctxt> MirDump<'ctxt> {
     }
     pub fn write_body(mut self, body: &Body) -> std::io::Result<()> {
         self.write_header(body)?;
-        for (id, block) in body.blocks.iter_enumerated() {
+        for (id, block) in body.block_info.blocks().iter_enumerated() {
             self.write_block(id, block)?;
         }
         writeln!(self.output, "end\n")?;

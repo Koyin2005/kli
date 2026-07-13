@@ -1,12 +1,9 @@
 use std::collections::HashSet;
 
-use crate::{
-    index_vec::IndexVec,
-    mir::{
-        Local, LocalKind, PlaceBase, StmtKind,
-        passes::MirPass,
-        visitor::{MutVisit, PlaceCtxt, Visit},
-    },
+use crate::mir::{
+    Local, LocalKind, PlaceBase, StmtKind,
+    passes::{MirPass, optimisation_enabled},
+    visitor::{MutVisit, PlaceCtxt, Visit},
 };
 
 pub struct DeadStoreElim;
@@ -27,23 +24,13 @@ impl MirPass for DeadStoreElim {
             )),
         };
         finder.visit_body(body);
-
-        let mut next_local = Local::new(0);
-        let local_map = body
-            .locals
-            .indices()
-            .map(|local| {
-                let new_local = next_local.next();
-                if finder.locals.contains(&local) {
-                    next_local = new_local;
-                    Some(new_local)
-                } else {
-                    None
-                }
-            })
-            .collect::<IndexVec<Local, _>>();
-        LocalReplacer { locals: &local_map }.visit_body(body);
-        body.locals.retain(|local, _| local_map[local].is_some());
+        LocalReplacer {
+            locals: &finder.locals,
+        }
+        .visit_body(body);
+    }
+    fn enabled(&self, ctxt: crate::CtxtRef<'_>) -> bool {
+        optimisation_enabled(ctxt)
     }
 }
 
@@ -59,20 +46,15 @@ impl Visit for LocalFinder {
 }
 
 struct LocalReplacer<'a> {
-    locals: &'a IndexVec<Local, Option<Local>>,
+    locals: &'a HashSet<Local>,
 }
 impl MutVisit for LocalReplacer<'_> {
-    fn visit_local(&mut self, _: crate::mir::Location, local: &mut Local) {
-        if let Some(new_local) = self.locals[*local] {
-            *local = new_local;
-        }
-    }
     fn visit_stmt(&mut self, loc: crate::mir::Location, stmt: &mut crate::mir::Stmt) {
         if let StmtKind::Assign(place, rvalue) = &mut stmt.kind
             && let PlaceBase::Local(local) = place.base
             && place.projections.is_empty()
             && rvalue.can_remove_if_unused()
-            && self.locals[local].is_none()
+            && !self.locals.contains(&local)
         {
             stmt.kind = StmtKind::Noop;
         }

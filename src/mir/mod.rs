@@ -7,14 +7,17 @@ use crate::{
     def_ids::DefId,
     define_id,
     index_vec::IndexVec,
+    mir::basic_blocks::BasicBlocks,
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
     typed_ast::FieldId,
     types::{CaseId, FieldName, GenericArg, GenericArgs, PointerType, Region, Type},
 };
+pub mod basic_blocks;
 pub mod build;
 pub mod dump;
 pub mod passes;
+pub mod traversal;
 pub mod visitor;
 pub mod well_formed;
 define_id!(Local);
@@ -42,7 +45,7 @@ impl PlaceProjection {
                 .expect("should be a pointer type"),
             PlaceProjection::Field(field) => {
                 ty.field_info(field, ctxt)
-                    .expect("should be a record type")
+                    .unwrap_or_else(|| panic!("should be a record type but got '{ty}'"))
                     .0
             }
             PlaceProjection::Index(_) | PlaceProjection::ConstantIndex(_) => {
@@ -63,7 +66,7 @@ impl PlaceProjection {
         }
     }
 }
-#[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Copy, PartialOrd, Ord)]
 pub enum PlaceBase {
     Local(Local),
     ReturnPlace,
@@ -90,6 +93,9 @@ pub struct Place {
     pub projections: Vec<PlaceProjection>,
 }
 impl Place {
+    pub fn as_base_only(&self) -> Option<PlaceBase> {
+        self.projections.is_empty().then_some(self.base)
+    }
     pub fn local(local: Local) -> Self {
         Self {
             base: PlaceBase::Local(local),
@@ -132,62 +138,66 @@ impl Place {
         ty
     }
 }
-#[derive(Clone, Debug)]
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum ConstValue {
+    ZeroSized,
+    Named(DefId, Vec<GenericArg>),
+    ClosureShim(DefId, Vec<GenericArg>),
+    Scalar(i64),
+    Variant(CaseId, Option<Box<Constant>>),
+    Record(Box<[Constant]>),
+}
+impl ConstValue {
+    pub const MIN_INT: i64 = i64::MIN;
+    fn as_scalar(&self) -> Option<i64> {
+        match self {
+            Self::Scalar(value) => Some(*value),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Constant {
     pub ty: Box<Type>,
 
-    pub value: ConstantValue,
+    pub value: ConstValue,
 }
 impl Constant {
+    pub fn as_int(&self) -> Option<i64> {
+        let Type::Int = *self.ty else {
+            return None;
+        };
+        self.value
+            .as_scalar()
+            .and_then(|value| value.try_into().ok())
+    }
     pub fn bool(value: bool) -> Self {
         Self {
             ty: Box::new(Type::Bool),
-            value: ConstantValue::Bool(value),
+            value: ConstValue::Scalar(value as i64),
         }
     }
     pub fn byte(value: u8) -> Self {
         Self {
             ty: Box::new(Type::Byte),
-            value: ConstantValue::Int(value as i64),
+            value: ConstValue::Scalar(value as i64),
         }
     }
     pub fn int(value: i64) -> Self {
         Self {
             ty: Box::new(Type::Int),
-            value: ConstantValue::Int(value),
+            value: ConstValue::Scalar(value),
         }
     }
     pub fn zero_sized(ty: Type) -> Self {
         Self {
             ty: Box::new(ty),
-            value: ConstantValue::ZeroSized,
+            value: ConstValue::ZeroSized,
         }
     }
     pub fn unit() -> Self {
-        Self {
-            ty: Box::new(Type::Unit),
-            value: ConstantValue::ZeroSized,
-        }
-    }
-}
-#[derive(Clone, Debug)]
-pub enum ConstantValue {
-    Int(i64),
-    Bool(bool),
-    NamedConst(DefId, Vec<GenericArg>),
-    ClosureShim(DefId, Vec<GenericArg>),
-    ZeroSized,
-}
-impl ConstantValue {
-    pub const MAX_INT: i64 = i64::MAX;
-    pub const MIN_INT: i64 = i64::MIN;
-
-    pub fn as_scalar(&self) -> Option<i128> {
-        match *self {
-            Self::Bool(value) => Some(value as i128),
-            Self::Int(value) => Some(value as i128),
-            _ => None,
-        }
+        Self::zero_sized(Type::Unit)
     }
 }
 #[derive(Clone, Debug)]
@@ -302,7 +312,8 @@ impl Rvalue {
                     };
                     Type::pointer(ty)
                 }
-                BinaryOp::Divide | BinaryOp::BitwiseAnd => Type::Int,
+                BinaryOp::BitwiseAnd => Type::Bool,
+                BinaryOp::Divide => Type::Int,
                 BinaryOp::Equals => Type::Bool,
                 BinaryOp::Lesser | BinaryOp::Greater => Type::Bool,
             },
@@ -354,12 +365,54 @@ pub struct SwitchTargets {
     pub targets: Vec<SwitchTarget>,
     pub otherwise: BasicBlockId,
 }
+pub struct TargetIterator<'a> {
+    targets: std::slice::Iter<'a, SwitchTarget>,
+    otherwise: Option<BasicBlockId>,
+}
+impl TargetIterator<'_> {
+    fn len(&self) -> usize {
+        self.targets.as_slice().len() + self.otherwise.is_some() as usize
+    }
+}
+impl Iterator for TargetIterator<'_> {
+    type Item = BasicBlockId;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(current) = self.targets.next() {
+            return Some(current.target);
+        }
+        self.otherwise.take()
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+}
+impl ExactSizeIterator for TargetIterator<'_> {
+    fn len(&self) -> usize {
+        self.len()
+    }
+}
+impl DoubleEndedIterator for TargetIterator<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if let Some(value) = self.otherwise.take() {
+            return Some(value);
+        }
+        self.targets.next_back().map(|target| target.target)
+    }
+}
+
 impl SwitchTargets {
     pub fn branch_for_value(&self, value: i128) -> BasicBlockId {
         self.targets
             .iter()
             .find_map(|target| (target.value == value).then_some(target.target))
             .unwrap_or(self.otherwise)
+    }
+    pub fn succesors_iter(&self) -> TargetIterator<'_> {
+        TargetIterator {
+            targets: self.targets.iter(),
+            otherwise: Some(self.otherwise),
+        }
     }
 }
 #[derive(Clone)]
@@ -368,30 +421,60 @@ pub enum AssertKind {
     DivideOverflow,
     DivideByZero,
 }
+
+pub struct Successors<'a>(SuccessorsIter<'a>);
+enum SuccessorsIter<'a> {
+    Switch(TargetIterator<'a>),
+    Single(Option<BasicBlockId>),
+    Leaf,
+}
+impl Iterator for Successors<'_> {
+    type Item = BasicBlockId;
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.0 {
+            SuccessorsIter::Leaf => None,
+            SuccessorsIter::Single(block) => block.take(),
+            SuccessorsIter::Switch(targets) => targets.next(),
+        }
+    }
+}
+impl DoubleEndedIterator for Successors<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        match &mut self.0 {
+            SuccessorsIter::Leaf => None,
+            SuccessorsIter::Single(block) => block.take(),
+            SuccessorsIter::Switch(targets) => targets.next_back(),
+        }
+    }
+}
+impl ExactSizeIterator for Successors<'_> {
+    fn len(&self) -> usize {
+        match &self.0 {
+            SuccessorsIter::Leaf => 0,
+            SuccessorsIter::Switch(targets) => targets.len(),
+            SuccessorsIter::Single(target) => target.is_some() as usize,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Terminator {
     pub src_info: SrcLoc,
     pub kind: TerminatorKind,
 }
 impl Terminator {
-    pub fn successors(&self) -> impl Iterator<Item = BasicBlockId> {
-        let (single, multiple) = match &self.kind {
-            TerminatorKind::Goto(block) | TerminatorKind::Assert(.., block) => (Some(*block), None),
-            TerminatorKind::Switch(_, switch_targets) => (
-                None,
-                Some(
-                    switch_targets
-                        .targets
-                        .iter()
-                        .map(|target| target.target)
-                        .chain(std::iter::once(switch_targets.otherwise)),
-                ),
-            ),
-            TerminatorKind::Unreachable => None.unzip(),
-            TerminatorKind::Return => None.unzip(),
-            TerminatorKind::Panic => None.unzip(),
-        };
-        single.into_iter().chain(multiple.into_iter().flatten())
+    pub fn successors(&self) -> Successors<'_> {
+        Successors(match self.kind {
+            TerminatorKind::Assert(.., block) | TerminatorKind::Goto(block) => {
+                SuccessorsIter::Single(Some(block))
+            }
+            TerminatorKind::Return | TerminatorKind::Panic | TerminatorKind::Unreachable => {
+                SuccessorsIter::Leaf
+            }
+            TerminatorKind::Switch(_, ref targets) => {
+                SuccessorsIter::Switch(targets.succesors_iter())
+            }
+        })
     }
     pub fn successors_mut(&mut self) -> impl Iterator<Item = &mut BasicBlockId> {
         let (single, multiple) = match &mut self.kind {
@@ -423,10 +506,30 @@ pub enum TerminatorKind {
     Panic,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Location {
     pub block: BasicBlockId,
     pub stmt: Option<StmtId>,
+}
+impl Location {
+    pub fn stmt(block: BasicBlockId, stmt: StmtId) -> Self {
+        Self {
+            block,
+            stmt: Some(stmt),
+        }
+    }
+    pub fn terminator(block: BasicBlockId) -> Self {
+        Self { block, stmt: None }
+    }
+}
+impl std::fmt::Debug for Location {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "bb{}-", self.block.0)?;
+        match self.stmt {
+            Some(value) => write!(f, "stmt{}", value.0),
+            None => write!(f, "term"),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -513,9 +616,14 @@ pub struct Body {
     pub src: BodySource,
     pub return_type: Type,
     pub locals: Locals,
-    pub blocks: IndexVec<BasicBlockId, BasicBlock>,
+    pub block_info: BasicBlocks,
 }
 impl Body {
+    pub fn params_iter(&self) -> impl Iterator<Item = Local> {
+        self.locals
+            .iter_enumerated()
+            .filter_map(|(local, info)| matches!(info.kind, LocalKind::Param(_)).then_some(local))
+    }
     pub fn local_for_var(&self, var_id: VarId) -> Option<Local> {
         self.locals
             .iter()
@@ -529,8 +637,12 @@ impl Body {
     }
     pub fn src_info(&self, loc: Location) -> SrcLoc {
         match loc.stmt {
-            Some(stmt) => self.blocks[loc.block].stmts[stmt].loc,
-            None => self.blocks[loc.block].expect_terminator().src_info,
+            Some(stmt) => self.block_info.blocks()[loc.block].stmts[stmt].loc,
+            None => {
+                self.block_info.blocks()[loc.block]
+                    .expect_terminator()
+                    .src_info
+            }
         }
     }
 }
