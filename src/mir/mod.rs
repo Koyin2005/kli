@@ -58,10 +58,8 @@ impl PlaceProjection {
                 let Type::Named(id, _, args) = ty else {
                     unreachable!("Should be named")
                 };
-                ctxt.type_def(id)
-                    .case(index)
-                    .expect_field()
-                    .type_of(&args, ctxt)
+
+                ctxt.type_def(id).case(index).payload_type(&args, ctxt)
             }
         }
     }
@@ -170,7 +168,6 @@ impl Constant {
         };
         self.value
             .as_scalar()
-            .and_then(|value| value.try_into().ok())
     }
     pub fn bool(value: bool) -> Self {
         Self {

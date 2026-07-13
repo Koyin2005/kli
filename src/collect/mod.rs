@@ -67,6 +67,13 @@ impl Case {
     pub fn expect_field(self) -> Field {
         self.field.expect("should have a field")
     }
+    pub fn payload_type(self, args: GenericArgsRef<'_>, ctxt: CtxtRef<'_>) -> Type {
+        Type::tuple(
+            self.field
+                .into_iter()
+                .map(|field| field.type_of(args, ctxt)),
+        )
+    }
 }
 pub enum TypeDefKind {
     Record(IndexVec<FieldId, Field>),

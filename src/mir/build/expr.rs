@@ -132,8 +132,8 @@ impl Builder<'_> {
                 self.expr_into_dest(place, value);
             }
             _ => {
-                let place = Place::local(self.expr_into_temp(value));
-                self.assign_place_to_pattern(pattern, place);
+                let local = self.expr_into_temp(value);
+                self.assign_place_to_pattern(pattern, Place::local(local));
             }
         }
     }
@@ -166,7 +166,9 @@ impl Builder<'_> {
                 if let Some(inner) = inner {
                     self.assign_place_to_pattern(
                         inner,
-                        place.with_case_downcast(*index, self.ctxt.expect_ident(*id).symbol),
+                        place
+                            .with_case_downcast(*index, self.ctxt.expect_ident(*id).symbol)
+                            .with_field(FieldId::new(0)),
                     );
                 }
             }

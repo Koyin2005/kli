@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::{
     mir::{BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind, build::Builder},
     src_loc::SrcLoc,
-    typed_ast::{CaseArm, Expr, Pattern, PatternKind},
+    typed_ast::{CaseArm, Expr, FieldId, Pattern, PatternKind},
     types::{CaseId, Type},
 };
 
@@ -129,10 +129,14 @@ impl Builder<'_> {
                         place: place.clone(),
                         case: TestCase::Variant(*index),
                     }];
-                    tests.extend(self.match_tests(
-                        place.with_case_downcast(*index, self.ctxt.expect_ident(*id).symbol),
-                        inner,
-                    ));
+                    tests.extend(
+                        self.match_tests(
+                            place
+                                .with_case_downcast(*index, self.ctxt.expect_ident(*id).symbol)
+                                .with_field(FieldId::new(0)),
+                            inner,
+                        ),
+                    );
                     tests
                 } else {
                     vec![MatchTest {

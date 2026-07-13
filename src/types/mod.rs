@@ -286,7 +286,7 @@ impl Type {
             .into_iter(),
         )
     }
-    pub fn tuple(field_tys: Vec<Self>) -> Self {
+    pub fn tuple(field_tys: impl IntoIterator<Item = Self>) -> Self {
         Self::Record(
             field_tys
                 .into_iter()
