@@ -1,0 +1,14 @@
+import std.arrays
+@opaque
+type String = {
+    array : arrays.ArrayList[byte]
+}
+
+fun new() -> String = String { array = arrays.new()}
+
+fun with_capacity(cap : int) -> String = String { array = arrays.with_capacity(cap)}
+
+fun push_char[r](s : mut[r] String, c : char) -> () = panic
+
+@unsafe
+fun from_utf8_unchecked(v : arrays.ArrayList[byte]) -> String = String {array = v}
