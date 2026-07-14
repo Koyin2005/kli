@@ -414,19 +414,24 @@ impl Parser {
                 kind: ExprKind::Unit,
             });
         }
-        let expr = {
-            let mut expr = self.parse_expr()?;
-            if self.matches_token(&TokenKind::Colon) {
-                let ty = self.parse_type()?;
-                expr = Expr {
-                    loc,
-                    kind: ExprKind::Annotate(Box::new(expr), Box::new(ty)),
-                };
-            };
-            expr
-        };
-        let _ = self.expect(&TokenKind::RightParen);
-        Ok(expr)
+        let expr = self.parse_expr()?;
+        if self.matches_token(&TokenKind::Colon) {
+            let ty = self.parse_type()?;
+            self.expect(&TokenKind::RightParen)?;
+            return Ok(Expr {
+                loc,
+                kind: ExprKind::Annotate(Box::new(expr), Box::new(ty)),
+            });
+        } else if self.matches_token(&TokenKind::RightParen) {
+            return Ok(expr);
+        } else if !self.match_coma() {
+            self.expect(&TokenKind::RightParen)?;
+        }
+        let mut exprs = vec![expr];
+        exprs.extend(self.delimited_by(&TokenKind::RightParen, |this|{
+            this.parse_expr()
+        })?);
+        Ok(Expr { loc, kind: ExprKind::Tuple(exprs) })
     }
     fn parse_path(&mut self) -> Result<Path, ParseError> {
         let Some(name) = self.match_ident() else {

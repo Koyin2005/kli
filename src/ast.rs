@@ -229,6 +229,7 @@ pub enum ExprKind {
     Bool(bool),
     Number(u64),
     Record(RecordExpr),
+    Tuple(Vec<Expr>),
     NamedRecord(InstancePath, Vec<FieldInit>),
     AddressOf(Box<Expr>),
     Return(Box<Expr>),

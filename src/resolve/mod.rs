@@ -182,6 +182,7 @@ impl Resolve {
                     self.declare_in_exprs(arg);
                 }
             }
+            ast::ExprKind::Tuple(fields) => for field in fields { self.declare_in_exprs(field)},
             ast::ExprKind::Borrow(borrow_expr) => self.declare_in_exprs(&borrow_expr.expr),
             ast::ExprKind::Case(expr, case_arms) => {
                 self.declare_in_exprs(expr);
@@ -735,6 +736,7 @@ impl Resolve {
                     region,
                 )
             }),
+            ast::ExprKind::Tuple(fields) => todo!("Tuple"),
             ast::ExprKind::While(condition, body) => {
                 let condition = self.resolve_expr(*condition);
                 let body = self.resolve_expr(*body);
