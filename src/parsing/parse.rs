@@ -48,6 +48,9 @@ impl Parser {
     fn next_token(&mut self) -> Token {
         self.tokens.next().unwrap_or_else(|| self.eof_token.clone())
     }
+    fn advance(&mut self) {
+        let _ = self.tokens.next();
+    }
     fn check_token(&mut self, kind: &TokenKind) -> bool {
         &self.peek_token().kind == kind
     }
@@ -73,7 +76,7 @@ impl Parser {
     }
     fn matches_token(&mut self, kind: &TokenKind) -> bool {
         if self.check_token(kind) {
-            self.next_token();
+            self.advance();
             true
         } else {
             false
@@ -108,7 +111,7 @@ impl Parser {
     fn expect(&mut self, kind: &TokenKind) -> Result<(), ParseError> {
         let token = self.peek_token();
         if token.kind == *kind {
-            self.next_token();
+            self.advance();
             Ok(())
         } else {
             let loc = token.loc;
@@ -159,7 +162,7 @@ impl Parser {
                     loc,
                     kind: TokenKind::Static,
                 }) => {
-                    self.next_token();
+                    self.advance();
                     Ok(Region::Static(loc))
                 }
                 _ => Err({
@@ -187,7 +190,7 @@ impl Parser {
         let loc = self.current_loc();
         match self.peek_token().kind {
             TokenKind::LeftParen => {
-                self.next_token();
+                self.advance();
                 if self.matches_token(&TokenKind::RightParen) {
                     return Ok(Pattern {
                         loc,
@@ -199,14 +202,14 @@ impl Parser {
                 Ok(pattern)
             }
             TokenKind::Number(number) => {
-                self.next_token();
+                self.advance();
                 Ok(Pattern {
                     loc,
                     kind: PatternKind::Int(number),
                 })
             }
             TokenKind::Ref => {
-                self.next_token();
+                self.advance();
                 let pattern = self.parse_pattern()?;
                 Ok(Pattern {
                     loc,
@@ -214,7 +217,7 @@ impl Parser {
                 })
             }
             TokenKind::Borrow => {
-                self.next_token();
+                self.advance();
                 let mutable = if self.matches_token(&TokenKind::Mut) {
                     Mutable::Mutable
                 } else {
@@ -224,25 +227,25 @@ impl Parser {
             }
             TokenKind::Ident(_) => self.parse_pattern_ident(None, loc, Mutable::Immutable),
             TokenKind::Mut => {
-                self.next_token();
+                self.advance();
                 self.parse_pattern_ident(None, loc, Mutable::Mutable)
             }
             TokenKind::True => {
-                self.next_token();
+                self.advance();
                 Ok(Pattern {
                     loc,
                     kind: PatternKind::Bool(true),
                 })
             }
             TokenKind::False => {
-                self.next_token();
+                self.advance();
                 Ok(Pattern {
                     loc,
                     kind: PatternKind::Bool(false),
                 })
             }
             TokenKind::LeftBrace => {
-                self.next_token();
+                self.advance();
                 let fields = self.delimited_by(&TokenKind::RightBrace, |this| {
                     let name = this.expect_ident("field name")?;
                     let _ = this.expect(&TokenKind::Equal);
@@ -255,7 +258,7 @@ impl Parser {
                 })
             }
             TokenKind::Dot => {
-                self.next_token();
+                self.advance();
                 let name = self.expect_ident("variant name")?;
                 let pattern = if self.matches_token(&TokenKind::LeftParen) {
                     let pattern = self.parse_pattern()?;
@@ -327,7 +330,7 @@ impl Parser {
         })
     }
     fn parse_case_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
-        self.next_token();
+        self.advance();
         let matchee = self.parse_expr()?;
         let _ = self.expect(&TokenKind::Of);
         let mut arms = Vec::new();
@@ -351,7 +354,7 @@ impl Parser {
         }
     }
     fn parse_let_binding(&mut self) -> Result<LetBinding, ParseError> {
-        self.next_token();
+        self.advance();
         let pattern = self.parse_pattern()?;
         let ty = if self.matches_token(&TokenKind::Colon) {
             Some(self.parse_type()?)
@@ -375,7 +378,7 @@ impl Parser {
         })
     }
     fn parse_record_expr_fields(&mut self) -> Result<Vec<FieldInit>, ParseError> {
-        self.next_token();
+        self.advance();
         let fields = self.delimited_by(&TokenKind::RightBrace, |this| {
             let name = this.expect_ident("field name")?;
             let _ = this.expect(&TokenKind::Equal);
@@ -392,9 +395,8 @@ impl Parser {
         })
     }
     fn parse_paren_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
-        self.next_token();
-        if self.check_token(&TokenKind::RightParen) {
-            self.next_token();
+        self.advance();
+        if self.matches_token(&TokenKind::RightParen) {
             return Ok(Expr {
                 loc,
                 kind: ExprKind::Unit,
@@ -444,21 +446,21 @@ impl Parser {
         let loc = self.current_loc();
         match self.peek_token().kind {
             TokenKind::Number(num) => {
-                self.next_token();
+                self.advance();
                 Ok(Expr {
                     loc,
                     kind: ExprKind::Number(num),
                 })
             }
             TokenKind::True => {
-                self.next_token();
+                self.advance();
                 Ok(Expr {
                     loc,
                     kind: ExprKind::Bool(true),
                 })
             }
             TokenKind::False => {
-                self.next_token();
+                self.advance();
                 Ok(Expr {
                     loc,
                     kind: ExprKind::Bool(false),
@@ -466,7 +468,7 @@ impl Parser {
             }
             TokenKind::LeftParen => self.parse_paren_expr(loc),
             TokenKind::For => {
-                self.next_token();
+                self.advance();
                 let pattern = self.parse_pattern()?;
                 let _ = self.expect(&TokenKind::In);
                 let iterator = self.parse_expr()?;
@@ -480,7 +482,7 @@ impl Parser {
                 })
             }
             TokenKind::Borrow => {
-                self.next_token();
+                self.advance();
                 let mutable = if self.matches_token(&TokenKind::Mut) {
                     Mutable::Mutable
                 } else {
@@ -499,7 +501,7 @@ impl Parser {
                 })
             }
             TokenKind::AddrOf => {
-                self.next_token();
+                self.advance();
                 let expr = self.parse_paren_expr(loc)?;
                 Ok(Expr {
                     loc,
@@ -521,7 +523,7 @@ impl Parser {
                 })
             }
             TokenKind::While => {
-                self.next_token();
+                self.advance();
                 let condition = self.parse_expr()?;
                 let body = {
                     let loc = self.current_loc();
@@ -533,7 +535,7 @@ impl Parser {
                 })
             }
             TokenKind::Return => {
-                self.next_token();
+                self.advance();
                 let return_value = self.parse_expr()?;
                 Ok(Expr {
                     loc,
@@ -541,7 +543,7 @@ impl Parser {
                 })
             }
             TokenKind::Print => {
-                self.next_token();
+                self.advance();
                 let _ = self.expect(&TokenKind::LeftParen);
                 let expr = if self.check_token(&TokenKind::RightParen) {
                     None
@@ -557,7 +559,7 @@ impl Parser {
                 })
             }
             TokenKind::Panic => {
-                self.next_token();
+                self.advance();
                 Ok(Expr {
                     loc,
                     kind: ExprKind::Panic,
@@ -579,7 +581,7 @@ impl Parser {
                 })
             }
             TokenKind::Fun => {
-                self.next_token();
+                self.advance();
                 let _ = self.expect(&TokenKind::LeftParen);
                 let mut params = Vec::new();
                 while let Some(name) = self.match_ident() {
@@ -621,7 +623,7 @@ impl Parser {
         loop {
             expr = match self.peek_token().kind {
                 TokenKind::LeftParen => {
-                    self.next_token();
+                    self.advance();
                     let mut args = Vec::new();
                     while self.check_is_not_token(&TokenKind::RightParen) {
                         args.push(self.parse_expr()?);
@@ -636,14 +638,14 @@ impl Parser {
                     }
                 }
                 TokenKind::Caret => {
-                    self.next_token();
+                    self.advance();
                     Expr {
                         loc: expr.loc,
                         kind: ExprKind::Deref(Box::new(expr)),
                     }
                 }
                 TokenKind::Dot => {
-                    self.next_token();
+                    self.advance();
                     let name = self.expect_ident("field name")?;
                     Expr {
                         loc: expr.loc,
@@ -659,7 +661,7 @@ impl Parser {
         while let Some((curr_bp, op)) = self.binary_op()
             && curr_bp >= min_bp
         {
-            self.next_token();
+            self.advance();
             let rhs = self.parse_expr_binding_power(curr_bp)?;
             expr = Expr {
                 loc: expr.loc,
@@ -744,7 +746,7 @@ impl Parser {
         let loc = self.current_loc();
         match self.peek_token().kind {
             TokenKind::Mut => {
-                self.next_token();
+                self.advance();
                 let _ = self.expect(&TokenKind::LeftBracket);
                 let region = self.parse_region()?;
                 let _ = self.expect(&TokenKind::RightBracket);
@@ -755,7 +757,7 @@ impl Parser {
                 })
             }
             TokenKind::Imm => {
-                self.next_token();
+                self.advance();
                 let _ = self.expect(&TokenKind::LeftBracket);
                 let region = self.parse_region()?;
                 let _ = self.expect(&TokenKind::RightBracket);
@@ -766,28 +768,28 @@ impl Parser {
                 })
             }
             TokenKind::Int => {
-                self.next_token();
+                self.advance();
                 Ok(Type {
                     loc,
                     kind: TypeKind::Int,
                 })
             }
             TokenKind::Bool => {
-                self.next_token();
+                self.advance();
                 Ok(Type {
                     loc,
                     kind: TypeKind::Bool,
                 })
             }
             TokenKind::String => {
-                self.next_token();
+                self.advance();
                 Ok(Type {
                     loc,
                     kind: TypeKind::String,
                 })
             }
             TokenKind::LeftParen => {
-                self.next_token();
+                self.advance();
                 if self.matches_token(&TokenKind::RightParen) {
                     Ok(Type {
                         loc,
@@ -814,7 +816,7 @@ impl Parser {
                 })
             }
             TokenKind::Char => {
-                self.next_token();
+                self.advance();
                 Ok(Type {
                     loc,
                     kind: TypeKind::Char,
@@ -898,7 +900,7 @@ impl Parser {
         })
     }
     fn parse_case_def(&mut self) -> Result<CaseDef, ParseError> {
-        self.next_token();
+        self.advance();
         let name = self.expect_ident("variant name")?;
         let ty = if self.matches_token(&TokenKind::LeftParen) {
             let ty = self.parse_type()?;
@@ -917,7 +919,7 @@ impl Parser {
         })
     }
     fn parse_type_def(&mut self) -> Result<TypeDef, ParseError> {
-        self.next_token();
+        self.advance();
         let name = self.expect_ident("type name")?;
         let generics = self.parse_optional_generics()?;
         self.expect(&TokenKind::Equal)?;
@@ -951,7 +953,7 @@ impl Parser {
                 loc: self.current_loc(),
                 annotations,
                 kind: {
-                    self.next_token();
+                    self.advance();
                     let path = self.parse_path()?;
                     let alias = self
                         .matches_token(&TokenKind::As)
@@ -982,7 +984,7 @@ impl Parser {
         while !self.is_eof() {
             match &self.peek_token().kind {
                 _ if recovery => {
-                    self.next_token();
+                    self.advance();
                     if matches!(
                         self.peek_token(),
                         Token {
