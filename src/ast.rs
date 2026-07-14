@@ -99,6 +99,7 @@ pub enum PatternKind {
     Case(Ident, Option<Box<Pattern>>),
     Int(u64),
     Record(Vec<PatternField>),
+    Tuple(Vec<Pattern>),
     Unit,
 }
 #[derive(Debug)]

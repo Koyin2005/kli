@@ -198,8 +198,16 @@ impl Parser {
                     });
                 }
                 let pattern = self.parse_pattern()?;
-                self.expect(&TokenKind::RightParen)?;
-                Ok(pattern)
+                if self.matches_token(&TokenKind::RightParen){
+                    return Ok(pattern);
+                }
+                if !self.match_coma(){
+                    self.expect(&TokenKind::RightParen)?;
+                }
+                let fields = self.delimited_by(&TokenKind::RightParen, |this|{
+                    this.parse_pattern()
+                })?;
+                Ok(Pattern { loc, kind: PatternKind::Tuple(fields) })
             }
             TokenKind::Number(number) => {
                 self.advance();
