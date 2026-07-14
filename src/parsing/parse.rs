@@ -799,6 +799,8 @@ impl Parser {
                     let ty = self.parse_type()?;
                     if self.matches_token(&TokenKind::RightParen) {
                         return Ok(ty);
+                    } else if !self.match_coma() {
+                        self.expect(&TokenKind::RightParen)?;
                     }
                     let mut fields = vec![ty];
                     fields.extend(

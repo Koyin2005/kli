@@ -281,25 +281,10 @@ impl Type {
         Self::RawPointer(Box::new(ty))
     }
     pub fn pair(first: Type, second: Type) -> Self {
-        Self::record_named_fields(
-            [
-                (Symbol::intern("first"), first),
-                (Symbol::intern("second"), second),
-            ]
-            .into_iter(),
-        )
+        Self::tuple([first,second])
     }
     pub fn tuple(field_tys: impl IntoIterator<Item = Self>) -> Self {
-        Self::Record(
-            field_tys
-                .into_iter()
-                .enumerate()
-                .map(|(i, field)| RecordField {
-                    name: FieldName::Index(FieldId::new(i)),
-                    ty: field,
-                })
-                .collect(),
-        )
+        Self::Tuple(field_tys.into_iter().collect())
     }
     pub fn is_reference(&self) -> bool {
         matches!(self, Self::Imm(..) | Self::Mut(..))
