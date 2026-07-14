@@ -64,6 +64,7 @@ impl Pat {
                     &Type::Named(id, ..) => &mut move |i| {
                         crate::types::FieldName::Named(ctxt.type_def(id).fields()[i].name)
                     },
+                    Type::Tuple(_) => &mut |i| crate::types::FieldName::Index(i),
                     _ => unreachable!("should be a record"),
                 };
                 f.write_str("{")?;
@@ -182,7 +183,7 @@ fn split_constructors(
                 missing.push(Constructor::Ref);
             }
         }
-        Type::Record(_) => {
+        Type::Record(_) | Type::Tuple(_) => {
             if seen_constructors.contains(&Constructor::Record) {
                 seen.push(Constructor::Record);
             } else {

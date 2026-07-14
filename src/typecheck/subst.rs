@@ -45,6 +45,11 @@ impl<'a> TypeSubst<'a> {
                     self.subst_type(&mut field.ty);
                 }
             }
+            Type::Tuple(fields) => {
+                for field in fields {
+                    self.subst_type(field);
+                }
+            }
             Type::Infer(var) => *ty = self.infer.simplify_type(Type::Infer(*var)),
             Type::Named(_, _, args) => {
                 for arg in args {

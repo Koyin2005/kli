@@ -184,6 +184,7 @@ pub enum Type {
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
     Function(FunctionType),
+    Tuple(Box<[Type]>),
     Record(IndexVec<FieldId, RecordField>),
     RawPointer(Box<Type>),
     Array(Box<Type>, u64),
@@ -213,9 +214,11 @@ impl Type {
     pub fn field_info(&self, field_id: FieldId, ctxt: CtxtRef<'_>) -> Option<(Type, FieldName)> {
         match self {
             Self::Record(fields) => fields
-                .iter_enumerated()
-                .find(|(id, _)| *id == field_id)
-                .map(|(_, field)| (field.ty.clone(), field.name)),
+                .get(field_id)
+                .map(|field| (field.ty.clone(), field.name)),
+            Self::Tuple(fields) => fields
+                .get(field_id.into_usize())
+                .map(|ty| (ty.clone(), FieldName::Index(field_id))),
             Self::Function(FunctionType {
                 resource: IsResource::Resource,
                 params,
@@ -407,6 +410,7 @@ impl Type {
             | Type::String
             | Type::Param(..) => true,
             Type::Record(fields) => fields.iter().any(|field| field.ty.is_resource(ctxt)),
+            Type::Tuple(fields) => fields.iter().any(|field| field.is_resource(ctxt)),
             Type::Infer(_) => unreachable!("Cannot 'infer' its a resource"),
             &Type::Named(id, _, ref args) => {
                 let is_copy = ctxt
@@ -440,6 +444,7 @@ impl Type {
             Type::Never => true,
             Type::Imm(_, ty) | Type::Mut(_, ty) => ty.is_uninhabited(ctxt),
             Type::Record(fields) => fields.iter().any(|field| field.ty.is_uninhabited(ctxt)),
+            Type::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
             Type::RawPointer(_) => false,
             Type::Array(ty, _) => ty.is_uninhabited(ctxt),
             Type::Named(def_id, _, generic_args) => {
@@ -494,6 +499,12 @@ impl Type {
                 }
                 ControlFlow::Continue(())
             }
+            Type::Tuple(fields) => {
+                for field in fields {
+                    visit_ty(field)?;
+                }
+                ControlFlow::Continue(())
+            }
             Type::Named(.., generic_args) => {
                 for arg in generic_args {
                     match arg {
@@ -529,6 +540,18 @@ impl Display for Type {
                     first = false;
                 }
                 f.pad("}")
+            }
+            Type::Tuple(fields) => {
+                f.pad("(")?;
+                let mut first = true;
+                for field in fields {
+                    if !first {
+                        f.pad(", ")?;
+                    }
+                    write!(f, "{}", field)?;
+                    first = false;
+                }
+                f.pad(")")
             }
             Type::Char => f.pad("char"),
             Type::Bool => f.pad("bool"),
@@ -597,6 +620,12 @@ pub trait TypeMap {
             Type::Function(function_type) => {
                 Ok(Type::Function(self.map_function_type(function_type)?))
             }
+            Type::Tuple(fields) => Ok(Type::Tuple(
+                fields
+                    .into_iter()
+                    .map(|field| self.map_type(field))
+                    .collect::<Result<_, _>>()?,
+            )),
             Type::Record(fields) => Ok(Type::Record(
                 fields
                     .into_iter()

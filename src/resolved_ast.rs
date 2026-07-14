@@ -233,7 +233,7 @@ pub enum TypeKind {
     Named(TypeName, Box<GenericArgs>),
     Unknown,
     Record(Box<[RecordFieldType]>),
-    Tuple(Vec<Type>)
+    Tuple(Vec<Type>),
 }
 #[derive(Debug)]
 pub struct Type {

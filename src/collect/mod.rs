@@ -259,6 +259,9 @@ impl CtxtRef<'_> {
                 Type::Record(fields) => fields
                     .iter()
                     .any(|field| is_ty_recursive(ctxt, &field.ty, seen_ids)),
+                Type::Tuple(fields) => fields
+                    .iter()
+                    .any(|field| is_ty_recursive(ctxt, field, seen_ids)),
                 Type::Named(id, _, args) => {
                     if !seen_ids.insert(*id) {
                         return true;

@@ -51,8 +51,10 @@ pub trait Visitor {
                     self.visit_type(&field.ty);
                 }
             }
-            TypeKind::Tuple(fields) => for field in fields{
-                self.visit_type(field);
+            TypeKind::Tuple(fields) => {
+                for field in fields {
+                    self.visit_type(field);
+                }
             }
         }
     }

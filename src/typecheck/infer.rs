@@ -149,6 +149,14 @@ impl TypeInfer {
                     .collect::<Option<IndexVec<_, _>>>()
                     .map(Type::Record)
             }
+            (Type::Tuple(fields1), Type::Tuple(fields2)) if fields1.len() == fields2.len() => {
+                fields1
+                    .into_iter()
+                    .zip(fields2)
+                    .map(|(field1, field2)| self.unify_ty(field1, field2))
+                    .collect::<Option<_>>()
+                    .map(Type::Tuple)
+            }
             (Type::Imm(region1, ty1), Type::Imm(region2, ty2)) => self
                 .unify_ty(*ty1, *ty2)
                 .and_then(|ty| {
@@ -216,7 +224,8 @@ impl TypeInfer {
                 | Type::Unit
                 | Type::RawPointer(_)
                 | Type::Named(..)
-                | Type::Never,
+                | Type::Never
+                | Type::Tuple(_),
                 _,
             ) => None,
         }

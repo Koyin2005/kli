@@ -24,6 +24,7 @@ impl RemoveZst {
             Type::Infer(_) => false,
             Type::Unknown => false,
             Type::Record(fields) => fields.iter().all(|field| Self::is_zst(&field.ty, ctxt)),
+            Type::Tuple(fields) => fields.iter().all(|field| Self::is_zst(field, ctxt)),
             Type::Named(def_id, _, generic_args) => {
                 if ctxt.is_type_recursive(*def_id) {
                     return false;

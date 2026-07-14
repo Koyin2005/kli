@@ -279,17 +279,23 @@ impl<'ctxt> MirDump<'ctxt> {
                 }
                 _ => unreachable!("only values of function type"),
             },
-            types::Type::Record(fields) => {
+            types::Type::Record(_) | types::Type::Tuple(_) => {
                 let ConstValue::Record(field_consts) = value else {
                     unreachable!("should be a record")
                 };
+                let field_name = |ty: &types::Type, field_index: FieldId| match ty {
+                    types::Type::Record(fields) => fields[field_index].name,
+                    types::Type::Tuple(_) => types::FieldName::Index(field_index),
+                    _ => unreachable!(),
+                };
                 let mut first = true;
                 write!(self.output, "{{")?;
-                for (value, field) in field_consts.iter().zip(fields) {
+                for (i, value) in field_consts.iter().enumerate() {
+                    let i = FieldId::new(i);
                     if !first {
                         write!(self.output, ",")?;
                     }
-                    write!(self.output, "{} = ", field.name)?;
+                    write!(self.output, "{} = ", field_name(ty, i))?;
                     self.write_constant(&value.ty, &value.value)?;
                     first = false;
                 }

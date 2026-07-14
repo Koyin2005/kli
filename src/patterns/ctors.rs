@@ -32,7 +32,7 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Cons
         | Type::RawPointer(..)
         | Type::Byte
         | Type::Array(..) => vec![Constructor::NonExhaustive],
-        Type::Record(_) => {
+        Type::Record(_) | Type::Tuple(_) => {
             vec![Constructor::Record]
         }
         Type::Infer(_) => unreachable!("Cannot have infer here"),

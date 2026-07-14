@@ -271,7 +271,7 @@ pub enum TypeKind {
     Function(FunctionType),
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
-    Tuple(Vec<Type>)
+    Tuple(Vec<Type>),
 }
 #[derive(Debug)]
 pub struct Type {
