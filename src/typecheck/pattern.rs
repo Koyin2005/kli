@@ -297,7 +297,7 @@ impl FunctionCtxt<'_> {
                             );
                         }
                         (
-                            Some((mutable, region)),
+                            Some((borrow, region)),
                             Type::reference(expected_type.clone(), borrow, region),
                         )
                     }

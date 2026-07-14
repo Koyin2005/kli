@@ -703,7 +703,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     (Mutable::Mutable, _) | (Mutable::Immutable, Mutable::Immutable) => (),
                     (Mutable::Immutable, Mutable::Mutable) => {
                         self.err
-                            .add_diagnostic("Cannot borrow  as mut".to_string(), place.loc);
+                            .add_diagnostic("Cannot borrow as mut".to_string(), place.loc);
                     }
                 }
 
