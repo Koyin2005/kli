@@ -281,7 +281,7 @@ impl Type {
         Self::RawPointer(Box::new(ty))
     }
     pub fn pair(first: Type, second: Type) -> Self {
-        Self::tuple([first,second])
+        Self::tuple([first, second])
     }
     pub fn tuple(field_tys: impl IntoIterator<Item = Self>) -> Self {
         Self::Tuple(field_tys.into_iter().collect())

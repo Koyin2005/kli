@@ -90,6 +90,7 @@ pub fn fields_of(ty: &Type, constructor: Constructor, ctxt: CtxtRef<'_>) -> Vec<
                 .iter()
                 .map(|&field_def| field_def.type_of(args, ctxt))
                 .collect(),
+            Type::Tuple(fields) => fields.to_vec(),
             _ => unreachable!("should be a record type"),
         },
         Constructor::Case(name) => {

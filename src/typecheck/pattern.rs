@@ -36,27 +36,43 @@ impl FunctionCtxt<'_> {
                 }
             }
             PatternKind::Tuple(ref fields) => {
-                let expected_fields = match expected_type{
+                let expected_fields = match expected_type {
                     Type::Tuple(field_tys) => field_tys,
-                    _ => return typed_ast::Pattern { ty: Type::Unknown, loc, kind: typed_ast::PatternKind::Err }
+                    _ => {
+                        return typed_ast::Pattern {
+                            ty: Type::Unknown,
+                            loc,
+                            kind: typed_ast::PatternKind::Err,
+                        };
+                    }
                 };
-                if expected_fields.len() != fields.len(){
-                    self.ctxt().diag().add_diagnostic(format!("Expected '{}' fields but got '{}'",expected_fields.len(),fields.len()), pattern.loc);
+                if expected_fields.len() != fields.len() {
+                    self.ctxt().diag().add_diagnostic(
+                        format!(
+                            "Expected '{}' fields but got '{}'",
+                            expected_fields.len(),
+                            fields.len()
+                        ),
+                        pattern.loc,
+                    );
                 }
                 let fields = {
                     let mut pat_fields = Vec::new();
-                    for (i,field) in fields.iter().enumerate(){
+                    for (i, field) in fields.iter().enumerate() {
                         let ty = expected_fields.get(i).cloned().unwrap_or(Type::Unknown);
-                        pat_fields.push( typed_ast::PatternField{
-                            index:FieldId::new(i),
-                            pattern:self.check_pattern(field, ty, binding_mode)
+                        pat_fields.push(typed_ast::PatternField {
+                            index: FieldId::new(i),
+                            pattern: self.check_pattern(field, ty, binding_mode),
                         });
                     }
                     pat_fields
                 };
-                typed_ast::Pattern { ty: Type::Tuple(expected_fields), loc, kind: typed_ast::PatternKind::Record(fields) }
-
-            },
+                typed_ast::Pattern {
+                    ty: Type::Tuple(expected_fields),
+                    loc,
+                    kind: typed_ast::PatternKind::Record(fields),
+                }
+            }
             PatternKind::Case(name, ref inner) => {
                 let (id, ty_name, args) = match expected_type {
                     Type::Named(id, ty_name, args) => (id, ty_name, args),

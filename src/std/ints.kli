@@ -6,8 +6,8 @@ fun overflowing_add(x : int, y : int) -> Pair[bool,int] = builtins.overflowing_a
 
 fun checked_add(x : int, y : int) -> Option[int] = do 
     case builtins.overflowing_add(x,y) of 
-    | {first = false, second = _} -> Option.None
-    | {first = true, second = res} -> Option.Some(res)
+    | (false,_) -> Option.None
+    | (true,res) -> Option.Some(res)
     end
 end
 
