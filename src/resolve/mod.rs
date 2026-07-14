@@ -433,6 +433,7 @@ impl Resolve {
                     .collect();
                 res::TypeKind::Record(fields)
             }
+            ast::TypeKind::Tuple(fields) => res::TypeKind::Tuple(fields.into_iter().map(|field| self.resolve_type(field)).collect()),
             ast::TypeKind::Function(ast::FunctionType {
                 resource,
                 params,

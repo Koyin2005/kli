@@ -188,6 +188,7 @@ impl<'a> Lower<'a> {
     }
     pub fn lower_type(&self, ty: &res::Type) -> Type {
         match &ty.kind {
+            res::TypeKind::Tuple(fields) => Type::tuple(fields.iter().map(|field| self.lower_type(field))),
             res::TypeKind::Ptr(pointee) => Type::pointer(self.lower_type(pointee)),
             res::TypeKind::Record(fields) => Type::Record({
                 let mut seen_fields = HashSet::new();

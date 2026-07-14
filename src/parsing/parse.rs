@@ -797,8 +797,14 @@ impl Parser {
                     })
                 } else {
                     let ty = self.parse_type()?;
-                    let _ = self.expect(&TokenKind::RightParen);
-                    Ok(ty)
+                    if self.matches_token(&TokenKind::RightParen){
+                        return Ok(ty);
+                    }
+                    let mut fields = vec![ty];
+                    fields.extend(self.delimited_by(&TokenKind::RightParen, |this|{
+                        this.parse_type()
+                    })?);
+                    Ok(Type { loc, kind: TypeKind::Tuple(fields) })
                 }
             }
             TokenKind::Ident(_) => {

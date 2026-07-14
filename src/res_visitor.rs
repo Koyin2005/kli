@@ -51,6 +51,9 @@ pub trait Visitor {
                     self.visit_type(&field.ty);
                 }
             }
+            TypeKind::Tuple(fields) => for field in fields{
+                self.visit_type(field);
+            }
         }
     }
     fn super_visit_stmt(&mut self, stmt: &Stmt) {
