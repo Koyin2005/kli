@@ -232,6 +232,11 @@ impl<'a> TypeSubst<'a> {
                     self.subst_expr(&mut field.value);
                 }
             }
+            ExprKind::Tuple(fields) => {
+                for field in fields {
+                    self.subst_expr(field);
+                }
+            }
             ExprKind::NamedRecord(_, args, fields) => {
                 self.subst_generic_args(args);
                 for field in fields {

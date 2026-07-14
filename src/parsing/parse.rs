@@ -428,10 +428,11 @@ impl Parser {
             self.expect(&TokenKind::RightParen)?;
         }
         let mut exprs = vec![expr];
-        exprs.extend(self.delimited_by(&TokenKind::RightParen, |this|{
-            this.parse_expr()
-        })?);
-        Ok(Expr { loc, kind: ExprKind::Tuple(exprs) })
+        exprs.extend(self.delimited_by(&TokenKind::RightParen, |this| this.parse_expr())?);
+        Ok(Expr {
+            loc,
+            kind: ExprKind::Tuple(exprs),
+        })
     }
     fn parse_path(&mut self) -> Result<Path, ParseError> {
         let Some(name) = self.match_ident() else {

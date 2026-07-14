@@ -561,6 +561,26 @@ impl FunctionCtxt<'_> {
                     kind: typed_ast::ExprKind::While(Box::new(condition), Box::new(body)),
                 }
             }
+            ExprKind::Tuple(fields) => {
+                let expected_fields = expected_ty
+                    .as_ref()
+                    .and_then(|ty| match ty {
+                        Type::Tuple(fields) => Some(&**fields),
+                        _ => None,
+                    })
+                    .unwrap_or(&[]);
+                let fields = fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, field)| self.check_expr(field, expected_fields.get(i).cloned()))
+                    .collect::<Box<[_]>>();
+
+                typed_ast::Expr {
+                    ty: Type::tuple(fields.iter().map(|field| field.ty.clone())),
+                    loc,
+                    kind: typed_ast::ExprKind::Tuple(fields),
+                }
+            }
             ExprKind::Record(fields) => self.check_record(loc, fields, expected_ty.clone()),
             ExprKind::Block(block, region) => self.check_block(loc, block, *region, expected_ty),
             ExprKind::Annotate(expr, ty) => self.check_expr(expr, Some(self.root().lower_type(ty))),

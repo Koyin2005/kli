@@ -240,6 +240,7 @@ impl Visit for WellFormed<'_> {
                         loc,
                     );
                 }
+                super::AggregateKind::Tuple => (),
             },
             super::Rvalue::Use(_) => (),
             super::Rvalue::RawPtrTo(_) => {}

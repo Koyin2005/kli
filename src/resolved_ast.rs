@@ -130,6 +130,7 @@ pub enum ExprKind {
     Field(Box<Expr>, Ident),
     NamedRecord(TypeName, Box<GenericArgs>, Box<[FieldInit]>),
     While(Box<Expr>, Box<Expr>),
+    Tuple(Vec<Expr>),
     Return(Box<Expr>),
 }
 #[derive(Debug, Clone, Copy)]

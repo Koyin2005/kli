@@ -250,7 +250,8 @@ impl Builder<'_> {
             | ExprKind::Const(..)
             | ExprKind::AddressOf(..)
             | ExprKind::NamedRecord(..)
-            | ExprKind::While(..) => {
+            | ExprKind::While(..)
+            | ExprKind::Tuple(..) => {
                 let rvalue = self.build_rvalue(expr);
                 self.assign(expr.loc, dest, rvalue);
             }
@@ -393,6 +394,10 @@ impl Builder<'_> {
                 let field_names = rec_fields.iter().map(|field| field.name).collect();
                 Rvalue::Aggregate(AggregateKind::Record { field_names }, fields)
             }
+            ExprKind::Tuple(fields) => Rvalue::Aggregate(
+                AggregateKind::Tuple,
+                fields.iter().map(|field| self.operand(field)).collect(),
+            ),
             ExprKind::String(value) => {
                 let len = value.len().try_into().unwrap();
                 let array_ty = Type::Array(Box::new(Type::Byte), len);

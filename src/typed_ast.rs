@@ -159,6 +159,7 @@ pub enum ExprKind {
     Assign(Box<Place>, Box<Expr>),
     Lambda(Box<Lambda>),
     AddressOf(Box<Place>),
+    Tuple(Box<[Expr]>),
     NamedRecord(DefId, GenericArgs, Box<[RecordFieldInit]>),
     While(Box<Expr>, Box<Expr>),
 }

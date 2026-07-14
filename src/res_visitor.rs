@@ -148,6 +148,11 @@ pub trait Visitor {
                     self.visit_expr(&field.value);
                 }
             }
+            ExprKind::Tuple(fields) => {
+                for field in fields {
+                    self.visit_expr(field);
+                }
+            }
             ExprKind::VariantCase(_, generic_args) => self.visit_generic_args(generic_args),
             ExprKind::AddressOf(place) => self.visit_expr(place),
         }

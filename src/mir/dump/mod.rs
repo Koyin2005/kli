@@ -122,7 +122,9 @@ impl<'ctxt> MirDump<'ctxt> {
             }
             Rvalue::Aggregate(kind, fields) => {
                 let name = match kind {
-                    AggregateKind::Array(..) | AggregateKind::Record { .. } => "".to_string(),
+                    AggregateKind::Array(..)
+                    | AggregateKind::Record { .. }
+                    | AggregateKind::Tuple => "".to_string(),
                     AggregateKind::Closure(params, return_type) => {
                         let mut first = true;
                         let mut output = "Closure((".to_string();
@@ -150,7 +152,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 };
                 let (open_bracket, close_bracket) = match kind {
                     AggregateKind::Array(_, _) => ('[', ']'),
-                    AggregateKind::Variant(..) => ('(', ')'),
+                    AggregateKind::Variant(..) | AggregateKind::Tuple => ('(', ')'),
                     _ => ('{', '}'),
                 };
                 let ctxt = self.ctxt;
@@ -164,6 +166,7 @@ impl<'ctxt> MirDump<'ctxt> {
                         }
                         .to_string(),
                     ),
+                    AggregateKind::Tuple => None,
                     AggregateKind::Array(..) => None,
                     AggregateKind::Record { field_names } => Some(field_names[i].to_string()),
                     AggregateKind::Closure(..) => Some(match i {
@@ -284,8 +287,8 @@ impl<'ctxt> MirDump<'ctxt> {
                     unreachable!("should be a record")
                 };
                 let field_name = |ty: &types::Type, field_index: FieldId| match ty {
-                    types::Type::Record(fields) => fields[field_index].name,
-                    types::Type::Tuple(_) => types::FieldName::Index(field_index),
+                    types::Type::Record(fields) => Some(fields[field_index].name),
+                    types::Type::Tuple(_) => None,
                     _ => unreachable!(),
                 };
                 let mut first = true;
@@ -295,7 +298,9 @@ impl<'ctxt> MirDump<'ctxt> {
                     if !first {
                         write!(self.output, ",")?;
                     }
-                    write!(self.output, "{} = ", field_name(ty, i))?;
+                    if let Some(name) = field_name(ty, i) {
+                        write!(self.output, "{} = ", name)?;
+                    }
                     self.write_constant(&value.ty, &value.value)?;
                     first = false;
                 }

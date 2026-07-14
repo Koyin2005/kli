@@ -45,7 +45,7 @@ impl PlaceProjection {
                 .expect("should be a pointer type"),
             PlaceProjection::Field(field) => {
                 ty.field_info(field, ctxt)
-                    .unwrap_or_else(|| panic!("should be a record type but got '{ty}'"))
+                    .unwrap_or_else(|| panic!("should be a type with fields but got '{ty}'"))
                     .0
             }
             PlaceProjection::Index(_) | PlaceProjection::ConstantIndex(_) => {
@@ -214,6 +214,7 @@ pub enum AggregateKind {
     Record {
         field_names: IndexVec<FieldId, FieldName>,
     },
+    Tuple,
     Closure(Vec<Type>, Box<Type>),
     NamedRecord(DefId, GenericArgs),
     Variant(DefId, CaseId, GenericArgs),
@@ -338,6 +339,12 @@ impl Rvalue {
                     Type::Named(id, name, args.clone())
                 }
                 AggregateKind::String => Type::String,
+                AggregateKind::Tuple => Type::Tuple(
+                    operands
+                        .iter()
+                        .map(|operand| operand.type_of(ctxt, locals, return_type))
+                        .collect(),
+                ),
             },
             Rvalue::Cast(cast, _) => match cast {
                 CastKind::PointerCast(cast) => match cast {

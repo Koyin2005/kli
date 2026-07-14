@@ -92,7 +92,8 @@ impl Builder<'_> {
             | ExprKind::VariantInit(..)
             | ExprKind::AddressOf(..)
             | ExprKind::NamedRecord(..)
-            | ExprKind::Logic(..) => {
+            | ExprKind::Logic(..)
+            | ExprKind::Tuple(..) => {
                 self.expr_into_temp(expr);
             }
         }
