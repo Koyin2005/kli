@@ -1,5 +1,6 @@
 import std.arrays
 @opaque
+@lang_item("string")
 type String = {
     array : arrays.ArrayList[byte]
 }
