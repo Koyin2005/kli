@@ -131,10 +131,6 @@ impl<'a> Lower<'a> {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::Int
             }
-            TypeName::String => {
-                let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                Type::String
-            }
             TypeName::Char => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::Char
@@ -155,13 +151,13 @@ impl<'a> Lower<'a> {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::Never
             }
-            TypeName::Box => {
-                let id = self.ctxt.lang_items().expect(LangItem::Box);
-                let args = self.lower_generic_args(id, loc, args);
-                Type::Named(id, self.ctxt.expect_ident(id).symbol, args)
-            }
-            TypeName::ArrayList => {
-                let id = self.ctxt.lang_items().expect(LangItem::ArrayList);
+            TypeName::Box | TypeName::ArrayList | TypeName::String => {
+                let id = self.ctxt.lang_items().expect(match name {
+                    TypeName::String => LangItem::String,
+                    TypeName::ArrayList => LangItem::ArrayList,
+                    TypeName::Box => LangItem::Box,
+                    _ => unreachable!(),
+                });
                 let args = self.lower_generic_args(id, loc, args);
                 Type::Named(id, self.ctxt.expect_ident(id).symbol, args)
             }

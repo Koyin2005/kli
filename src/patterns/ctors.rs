@@ -24,7 +24,6 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Cons
         Type::Never => Vec::new(),
         Type::Unit => vec![Constructor::Unit],
         Type::Char
-        | Type::String
         | Type::Unknown
         | Type::Param(..)
         | Type::Int

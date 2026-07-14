@@ -104,10 +104,8 @@ impl<'ctxt> RootCtxt<'ctxt> {
             mutable: crate::ast::Mutable,
             pointee: Type,
         ) -> Result<(IteratorType, Type), Type> {
-            match this.simplify_type(pointee) {
-                Type::String => Ok((IteratorType::StringIter(region, mutable), Type::Char)),
-                pointee => Err(Type::reference(pointee, mutable, region)),
-            }
+            let pointee = this.simplify_type(pointee);
+            Err(Type::reference(pointee, mutable, region))
         }
         match ty {
             Type::Imm(region, pointee) => {
@@ -429,8 +427,12 @@ impl<'ctxt> TypeCheck<'ctxt> {
                         self.ctxt.std_lib_module().is_none_or(|std_lib| {
                             self.ctxt.ancestors(item.id).any(|parent| parent == std_lib)
                         }) && match lang_item {
-                            LangItem::ArrayList | LangItem::String => matches!(item.kind, res::ItemKind::TypeDef(_)),
-                            LangItem::Box => matches!(item.kind, res::ItemKind::TypeDef(_)),
+                            LangItem::ArrayList | LangItem::String | LangItem::Box => {
+                                matches!(item.kind, res::ItemKind::TypeDef(_))
+                            }
+                            LangItem::ArrayListFromRaw => {
+                                matches!(item.kind, res::ItemKind::Function(_))
+                            }
                         }
                     }
                     res::AnnotationKind::Opaque => matches!(item.kind, res::ItemKind::TypeDef(_)),

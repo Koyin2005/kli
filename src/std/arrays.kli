@@ -36,6 +36,15 @@ fun with_capacity[T](cap : int) -> ArrayList[T] = do
 end
 
 @unsafe
+@lang_item("array_list_from_raw")
+fun from_raw_parts[T](ptr : ptr[T], cap : int, len : int) -> ArrayList[T] = 
+    ArrayList {
+        ptr = ptr,
+        cap = cap,
+        len = len
+    }
+
+@unsafe
 fun reallocate[T](p : ptr[T], new_len : int) -> ptr[T] = 
     do
         let new_ptr = allocate(new_len);

@@ -14,7 +14,6 @@ impl RemoveZst {
             Type::Bool
             | Type::Char
             | Type::Int
-            | Type::String
             | Type::Byte
             | Type::Param(..)
             | Type::Function(..)

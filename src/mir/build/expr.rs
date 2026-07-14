@@ -10,7 +10,7 @@ use crate::{
     },
     src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
-    types::{FieldName, FunctionType, Type},
+    types::{FieldName, FunctionType, GenericArg, Type},
 };
 pub(super) enum BuiltinResult {
     Rvalue(Rvalue),
@@ -260,6 +260,62 @@ impl Builder<'_> {
     fn binary_op_rvalue(op: mir::BinaryOp, left: Operand, right: Operand) -> Rvalue {
         Rvalue::Binary(op, Box::new((left, right)))
     }
+    fn build_array_list_literal(
+        &mut self,
+        len: usize,
+        loc: SrcLoc,
+        element_ty: Type,
+        operands: impl FnOnce(&mut Self) -> IndexVec<FieldId, Operand>,
+    ) -> (Type, Rvalue) {
+        let len_u64 = len.try_into().unwrap();
+        let array_ty = Type::Array(Box::new(element_ty.clone()), len_u64);
+        let bytes = self.assign_to_temp(
+            loc,
+            Type::pointer(array_ty.clone()),
+            Rvalue::Allocate {
+                ty: array_ty.clone(),
+                count: Operand::Constant(Constant::int(1)),
+            },
+        );
+        let operands = operands(self);
+        self.assign(
+            loc,
+            Place::local(bytes).with_deref(),
+            Rvalue::Aggregate(AggregateKind::Array(Type::Byte, len_u64), operands),
+        );
+        let ptr = self.assign_to_temp(
+            loc,
+            Type::pointer(element_ty.clone()),
+            Rvalue::pointer_cast(
+                PointerCast::RawToRaw(element_ty.clone()),
+                Operand::Load(Place::local(bytes)),
+            ),
+        );
+        let id = self
+            .ctxt
+            .lang_items()
+            .expect(crate::lang_items::LangItem::ArrayListFromRaw);
+        let args = vec![GenericArg::Type(element_ty)];
+
+        let ty_id = self
+            .ctxt
+            .lang_items()
+            .expect(crate::lang_items::LangItem::ArrayList);
+        (self.ctxt.type_of(ty_id).bind(&args), {
+            let ty = self.ctxt.type_of(id).bind(&args);
+            Rvalue::Call(
+                Operand::Constant(Constant {
+                    ty: Box::new(ty),
+                    value: ConstValue::Named(id, args),
+                }),
+                vec![
+                    Operand::Load(Place::local(ptr)),
+                    Operand::Constant(Constant::int(len.try_into().unwrap())),
+                    Operand::Constant(Constant::int(len.try_into().unwrap())),
+                ],
+            )
+        })
+    }
     pub(super) fn builtin_call(
         &mut self,
         loc: SrcLoc,
@@ -399,43 +455,17 @@ impl Builder<'_> {
                 fields.iter().map(|field| self.operand(field)).collect(),
             ),
             ExprKind::String(value) => {
-                let len = value.len().try_into().unwrap();
-                let array_ty = Type::Array(Box::new(Type::Byte), len);
-                let bytes = self.assign_to_temp(
-                    expr.loc,
-                    Type::pointer(array_ty.clone()),
-                    Rvalue::Allocate {
-                        ty: array_ty.clone(),
-                        count: Operand::Constant(Constant::int(1)),
-                    },
-                );
-                self.assign(
-                    expr.loc,
-                    Place::local(bytes).with_deref(),
-                    Rvalue::Aggregate(
-                        AggregateKind::Array(Type::Byte, len),
+                let (ty, array) =
+                    self.build_array_list_literal(value.len(), expr.loc, Type::Byte, |_| {
                         value
                             .bytes()
                             .map(|b| Operand::Constant(Constant::byte(b)))
-                            .collect(),
-                    ),
-                );
-                let ptr = self.assign_to_temp(
-                    expr.loc,
-                    Type::pointer(Type::Byte),
-                    Rvalue::pointer_cast(
-                        PointerCast::RawToRaw(Type::Byte),
-                        Operand::Load(Place::local(bytes)),
-                    ),
-                );
-                Rvalue::Aggregate(
-                    AggregateKind::String,
-                    [
-                        Operand::Load(Place::local(ptr)),
-                        Operand::Constant(Constant::int(value.len().try_into().unwrap())),
-                        Operand::Constant(Constant::int(value.len().try_into().unwrap())),
-                    ]
-                    .into(),
+                            .collect()
+                    });
+                let byte_array = self.assign_to_temp(expr.loc, ty, array);
+                Rvalue::Cast(
+                    mir::CastKind::Transmute(Type::string(self.ctxt)),
+                    Operand::Load(Place::local(byte_array)),
                 )
             }
             &ExprKind::VariantInit(id, index, ref args, Some(ref value)) => Rvalue::Aggregate(

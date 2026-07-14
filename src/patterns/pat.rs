@@ -151,7 +151,6 @@ fn split_constructors(
         Type::Infer(_) | Type::Unknown => (),
         Type::Never => (),
         Type::Int
-        | Type::String
         | Type::Char
         | Type::Byte
         | Type::Param(..)

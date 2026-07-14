@@ -3,14 +3,16 @@ use crate::{CtxtRef, def_ids::DefId, resolved_ast::AnnotationKind};
 pub enum LangItem {
     Box,
     ArrayList,
-    String
+    String,
+    ArrayListFromRaw,
 }
 impl LangItem {
     pub const fn name(&self) -> &'static str {
         match self {
             Self::Box => "box",
             Self::ArrayList => "array_list",
-            Self::String => "string"
+            Self::String => "string",
+            Self::ArrayListFromRaw => "array_list_from_raw",
         }
     }
     pub fn with_name(name: &str) -> Option<Self> {
@@ -18,8 +20,13 @@ impl LangItem {
             .into_iter()
             .find(|&item| item.name() == name)
     }
-    pub const COUNT: usize = 3;
-    pub const ALL_LANG_ITEMS: [LangItem; Self::COUNT] = [LangItem::Box, LangItem::ArrayList,LangItem::String];
+    pub const COUNT: usize = 4;
+    pub const ALL_LANG_ITEMS: [LangItem; Self::COUNT] = [
+        LangItem::Box,
+        LangItem::ArrayList,
+        LangItem::String,
+        LangItem::ArrayListFromRaw,
+    ];
 }
 #[derive(Clone, Copy)]
 pub struct LangItems([Option<DefId>; LangItem::COUNT]);

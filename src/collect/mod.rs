@@ -245,7 +245,6 @@ impl CtxtRef<'_> {
                 Type::Bool
                 | Type::Byte
                 | Type::Char
-                | Type::String
                 | Type::Unit
                 | Type::Unknown
                 | Type::Infer(_)

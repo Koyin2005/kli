@@ -2,6 +2,7 @@ use crate::{
     CtxtRef,
     builtins::Builtin,
     def_ids::DefId,
+    lang_items::LangItem,
     resolved_ast::AnnotationKind,
     typed_ast::{ExprKind, Function, PlaceKind},
     typed_ast_visitor::{Visitor, walk_expr},
@@ -10,7 +11,16 @@ use crate::{
 
 pub fn transmutable(ctxt: CtxtRef<'_>, from: &Type, to: &Type) -> bool {
     match (from, to) {
+        (from, to) if from == to => true,
         (Type::Byte, Type::Bool) | (Type::Bool, Type::Byte) => true,
+        (&Type::Named(id, _, _), &Type::Named(id2, _, _))
+            if let lang_items = ctxt.lang_items()
+                && let Some(string_id) = lang_items.get(LangItem::String)
+                && let Some(list_id) = lang_items.get(LangItem::ArrayList)
+                && ((id == string_id && id2 == list_id) | (id == list_id && id2 == string_id)) =>
+        {
+            true
+        }
         _ => from.pointer_kind(ctxt).is_some() && to.pointer_kind(ctxt).is_some(),
     }
 }

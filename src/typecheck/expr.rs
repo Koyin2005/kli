@@ -650,7 +650,7 @@ impl FunctionCtxt<'_> {
             ExprKind::Unit => make_expr(Type::Unit, typed_ast::ExprKind::Unit, loc),
             ExprKind::Int(value) => make_expr(Type::Int, typed_ast::ExprKind::Int(*value), loc),
             ExprKind::String(value) => make_expr(
-                Type::String,
+                Type::string(self.ctxt()),
                 typed_ast::ExprKind::String(value.clone()),
                 loc,
             ),

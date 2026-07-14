@@ -176,7 +176,6 @@ pub enum Type {
     Unit,
     Int,
     Bool,
-    String,
     Char,
     Byte,
     Never,
@@ -191,6 +190,11 @@ pub enum Type {
     Named(DefId, Symbol, GenericArgs),
 }
 impl Type {
+    pub fn string(ctxt: CtxtRef<'_>) -> Self {
+        let id = ctxt.lang_items().expect(LangItem::String);
+        let name = ctxt.expect_ident(id).symbol;
+        Type::Named(id, name, GenericArgs::new())
+    }
     pub fn closure_env(fields: impl Iterator<Item = Capture>) -> Self {
         Self::record_named_fields(fields.map(|capture| (capture.var.0, capture.ty)))
     }
@@ -240,19 +244,6 @@ impl Type {
                     ),
                     FieldName::Named(Symbol::intern("code")),
                 )),
-                _ => None,
-            },
-            Self::String => match field_id {
-                id if id == FieldId::FIRST_FIELD => Some((
-                    Type::pointer(Type::Byte),
-                    FieldName::Named(Symbol::intern("ptr")),
-                )),
-                id if id == FieldId::new(1) => {
-                    Some((Type::Int, FieldName::Named(Symbol::intern("cap"))))
-                }
-                id if id == FieldId::new(2) => {
-                    Some((Type::Int, FieldName::Named(Symbol::intern("len"))))
-                }
                 _ => None,
             },
             &Self::Named(id, _, ref args) => ctxt
@@ -392,7 +383,6 @@ impl Type {
                 resource: IsResource::Resource,
                 ..
             })
-            | Type::String
             | Type::Param(..) => true,
             Type::Record(fields) => fields.iter().any(|field| field.ty.is_resource(ctxt)),
             Type::Tuple(fields) => fields.iter().any(|field| field.is_resource(ctxt)),
@@ -421,7 +411,6 @@ impl Type {
             | Type::Unit
             | Type::Int
             | Type::Bool
-            | Type::String
             | Type::Char
             | Type::Byte
             | Type::Param(..)
@@ -462,7 +451,6 @@ impl Type {
             | Type::Infer(_)
             | Type::Unknown
             | Type::Bool
-            | Type::String
             | Type::Char
             | Type::Byte
             | Type::Param(..)
@@ -543,7 +531,6 @@ impl Display for Type {
             Type::Int => f.pad("int"),
             Type::Unit => f.pad("()"),
             Type::Unknown => f.pad("{unknown}"),
-            Type::String => f.pad("string"),
             Type::Infer(_) => f.pad("_"),
             &Type::Param(name, _) => write!(f, "{}", name),
             Type::Imm(region, ty) => {
@@ -587,7 +574,6 @@ pub trait TypeMap {
             | Type::Int
             | Type::Unit
             | Type::Unknown
-            | Type::String
             | Type::Byte
             | Type::Infer(_)
             | Type::Param(..)

@@ -31,7 +31,7 @@ pub trait Visitor {
             }
             crate::resolved_ast::PatternKind::Tuple(pattern_fields) => {
                 for field in pattern_fields {
-                    self.visit_pattern(&field);
+                    self.visit_pattern(field);
                 }
             }
         }

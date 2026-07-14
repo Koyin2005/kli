@@ -140,7 +140,6 @@ impl<'ctxt> MirDump<'ctxt> {
                         output.push(')');
                         output
                     }
-                    AggregateKind::String => "string".to_string(),
                     AggregateKind::Variant(id, index, args) => {
                         let name = self.ctxt.type_def(*id).case(*index).name;
                         format!("{}{}", name, display_generic_args(args))
@@ -157,15 +156,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 };
                 let ctxt = self.ctxt;
                 let field_name = move |i: FieldId| match kind {
-                    AggregateKind::String => Some(
-                        match i {
-                            types::LIST_PTR_FIELD => "ptr",
-                            types::LIST_CAPICITY_FIELD => "cap",
-                            types::LIST_LEN_FIELD => "len",
-                            _ => unreachable!("Should only have 3 fields"),
-                        }
-                        .to_string(),
-                    ),
                     AggregateKind::Tuple => None,
                     AggregateKind::Array(..) => None,
                     AggregateKind::Record { field_names } => Some(field_names[i].to_string()),
@@ -245,12 +235,27 @@ impl<'ctxt> MirDump<'ctxt> {
         Ok(())
     }
     fn write_constant(&mut self, ty: &types::Type, value: &ConstValue) -> std::io::Result<()> {
+        if let ConstValue::Named(id, args) | ConstValue::ClosureShim(id, args) = value {
+            return write!(
+                self.output,
+                "{}{}",
+                self.ctxt.display_path_for(*id),
+                display_generic_args(args)
+            );
+        }
         match ty {
-            types::Type::Infer(_)
-            | types::Type::Param(..)
-            | types::Type::Unknown
-            | types::Type::String
-            | types::Type::Char => write!(self.output, "unknown of '{}'", ty),
+            types::Type::Infer(_) | types::Type::Param(..) | types::Type::Unknown => {
+                write!(self.output, "unknown of '{}'", ty)
+            }
+            types::Type::Char => {
+                let &ConstValue::Scalar(value) = value else {
+                    unreachable!("can only be a scalar for char")
+                };
+                let Some(char) = value.try_into().ok().and_then(char::from_u32) else {
+                    unreachable!("Scalar constant should be char")
+                };
+                write!(self.output, "'{char}'")
+            }
             types::Type::Int | types::Type::Byte => value
                 .as_scalar()
                 .map(|value| write!(self.output, "{}", value))

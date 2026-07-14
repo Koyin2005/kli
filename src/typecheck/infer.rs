@@ -117,7 +117,6 @@ impl TypeInfer {
             | (ty @ Type::Bool, Type::Bool)
             | (ty @ Type::Unit, Type::Unit)
             | (ty @ Type::Unknown, Type::Unknown)
-            | (ty @ Type::String, Type::String)
             | (ty @ Type::Char, Type::Char)
             | (ty @ Type::Byte, Type::Byte)
             | (ty @ Type::Never, Type::Never) => Some(ty),
@@ -211,7 +210,6 @@ impl TypeInfer {
             (
                 Type::Int
                 | Type::Bool
-                | Type::String
                 | Type::Unknown
                 | Type::Char
                 | Type::Param(..)

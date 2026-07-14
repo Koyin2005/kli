@@ -219,7 +219,6 @@ pub enum AggregateKind {
     NamedRecord(DefId, GenericArgs),
     Variant(DefId, CaseId, GenericArgs),
     Array(Type, u64),
-    String,
 }
 #[derive(Debug, Clone, Copy)]
 pub enum OverflowOp {
@@ -338,7 +337,6 @@ impl Rvalue {
                     let name = ctxt.type_def(id).name;
                     Type::Named(id, name, args.clone())
                 }
-                AggregateKind::String => Type::String,
                 AggregateKind::Tuple => Type::Tuple(
                     operands
                         .iter()
