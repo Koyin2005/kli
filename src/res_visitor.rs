@@ -29,6 +29,11 @@ pub trait Visitor {
                     self.visit_pattern(&field.pattern);
                 }
             }
+            crate::resolved_ast::PatternKind::Tuple(pattern_fields) => {
+                for field in pattern_fields {
+                    self.visit_pattern(&field);
+                }
+            }
         }
     }
     fn super_visit_type(&mut self, ty: &Type) {

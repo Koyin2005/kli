@@ -541,7 +541,9 @@ impl Resolve {
         let loc = pattern.loc;
         let kind = match pattern.kind {
             ast::PatternKind::Unit => res::PatternKind::Unit,
-            ast::PatternKind::Tuple(fields) => todo!("Handle pattern fields"),
+            ast::PatternKind::Tuple(fields) => res::PatternKind::Tuple(fields.into_iter().map(|field|{
+                self.resolve_pattern(field)
+            }).collect()),
             ast::PatternKind::Int(value) => res::PatternKind::Int(match value.try_into() {
                 Ok(number) => number,
                 Err(_) => {

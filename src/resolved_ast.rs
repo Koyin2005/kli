@@ -159,6 +159,7 @@ pub enum PatternKind {
     Case(Ident, Option<Box<Pattern>>),
     Binding(Option<Mutable>, Mutable, Ident, VarId),
     Record(Box<[PatternField]>),
+    Tuple(Box<[Pattern]>),
     Unit,
 }
 #[derive(Debug)]
