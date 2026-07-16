@@ -427,7 +427,10 @@ impl<'ctxt> TypeCheck<'ctxt> {
                         self.ctxt.std_lib_module().is_none_or(|std_lib| {
                             self.ctxt.ancestors(item.id).any(|parent| parent == std_lib)
                         }) && match lang_item {
-                            LangItem::ArrayList | LangItem::String | LangItem::Box => {
+                            LangItem::ArrayList
+                            | LangItem::String
+                            | LangItem::Box
+                            | LangItem::Slice => {
                                 matches!(item.kind, res::ItemKind::TypeDef(_))
                             }
                             LangItem::ArrayListFromRaw => {

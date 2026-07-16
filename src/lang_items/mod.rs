@@ -4,6 +4,7 @@ pub enum LangItem {
     Box,
     ArrayList,
     String,
+    Slice,
     ArrayListFromRaw,
 }
 impl LangItem {
@@ -13,6 +14,7 @@ impl LangItem {
             Self::ArrayList => "array_list",
             Self::String => "string",
             Self::ArrayListFromRaw => "array_list_from_raw",
+            Self::Slice => "slice",
         }
     }
     pub fn with_name(name: &str) -> Option<Self> {
@@ -20,12 +22,13 @@ impl LangItem {
             .into_iter()
             .find(|&item| item.name() == name)
     }
-    pub const COUNT: usize = 4;
+    pub const COUNT: usize = 5;
     pub const ALL_LANG_ITEMS: [LangItem; Self::COUNT] = [
         LangItem::Box,
         LangItem::ArrayList,
         LangItem::String,
         LangItem::ArrayListFromRaw,
+        LangItem::Slice,
     ];
 }
 #[derive(Clone, Copy)]
