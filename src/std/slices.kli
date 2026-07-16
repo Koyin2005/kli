@@ -66,26 +66,30 @@ end
 
 fun iter[region r,T](s : Slice[r,T]) -> SliceIter[r,T] = 
     SliceIter{
-        start_ptr = s.ptr,
-        index = 0u,
+        ptr = s.ptr,
         len = s.len
     }
 
 @opaque
 type SliceIter[region r,T] = {
-    start_ptr : ptr[T],
-    index : uint,
+    ptr : ptr[T],
     len : uint
 }
 
 fun iter_next[region r,T](iter : mut[r] SliceIter[r,T]) -> Option[imm[r] T] = 
-    case iter^.index == iter^.len of 
+do
+    let len = iter^.len;
+    case len == 0u of 
     | true -> Option.None
     | false -> 
         do
-            let mut index = iter^.index;
-            let r : imm[r] T = builtins.transmute(offset(iter^.start_ptr,std.ints.uint_to_int(index)));
-            iter^.index = index + 1u;
+            let ptr = iter^.ptr;
+            let r : imm[r] T = transmute(ptr);
+            let ptr = offset(ptr,1);
+            let len = len - 1u;
+            iter^.ptr = ptr;
+            iter^.len = len;
             Option.Some(r)
         end
     end 
+end
