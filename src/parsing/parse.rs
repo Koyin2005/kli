@@ -3,10 +3,11 @@ use std::{iter::Peekable, vec::IntoIter};
 use crate::{
     ast::{
         Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, CaseDef, CaseType,
-        Expr, ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, Generics,
-        InstancePath, IsResource, Item, ItemKind, Lambda, LetBinding, Module, ModuleId, Mutable,
-        NodeId, Param, Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField,
-        RecordType, Region, Stmt, StmtKind, Type, TypeDef, TypeDefKind, TypeKind,
+        Expr, ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, GenericParam,
+        GenericParamKind, Generics, InstancePath, IsResource, Item, ItemKind, Lambda, LetBinding,
+        Module, ModuleId, Mutable, NodeId, Param, Path, Pattern, PatternField, PatternKind,
+        RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeDef, TypeDefKind,
+        TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::{Ident, Symbol},
@@ -719,15 +720,17 @@ impl Parser {
     }
     fn parse_optional_generics(&mut self) -> Result<Option<Generics>, ParseError> {
         if let Some(Token { loc, .. }) = self.match_token(&TokenKind::LeftBracket) {
-            let mut names = Vec::new();
-            while let Some(name) = self.match_ident() {
-                names.push(name);
-                if !self.match_coma() {
-                    break;
-                }
-            }
-            let _ = self.expect(&TokenKind::RightBracket);
-            Ok(Some(Generics { loc, names }))
+            let params = self.delimited_by(&TokenKind::RightBracket, |this| {
+                let kind = if this.matches_token(&TokenKind::Region) {
+                    GenericParamKind::Region
+                } else {
+                    GenericParamKind::Type
+                };
+
+                let name = this.expect_ident("generic param name")?;
+                Ok(GenericParam { name, kind })
+            })?;
+            Ok(Some(Generics { loc, params }))
         } else {
             Ok(None)
         }

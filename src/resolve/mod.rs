@@ -237,11 +237,7 @@ impl Resolve {
             .is_some_and(|kind| *kind == res::GenericKind::Region)
     }
     fn resolve_region_param(&mut self, name: Ident, index: usize) -> res::RegionKind {
-        if self
-            .generic_kinds
-            .insert(name.symbol, res::GenericKind::Region)
-            .is_some_and(|kind| kind != res::GenericKind::Region)
-        {
+        if self.generic_kinds[&name.symbol] != res::GenericKind::Region {
             self.diag.add_diagnostic(
                 format!("Generic kind mismatch for '{}'", name.symbol),
                 name.loc,
@@ -278,14 +274,6 @@ impl Resolve {
                 kind: res::RegionKind::Static,
             },
         }
-    }
-    fn get_generic_kind(&self, name: Symbol) -> Option<GenericKind> {
-        self.generic_kinds.get(&name).copied().or_else(|| {
-            self.prev_kinds
-                .iter()
-                .rev()
-                .find_map(|kinds| kinds.get(&name).copied())
-        })
     }
     fn error_on_generic_args(
         &mut self,
@@ -344,19 +332,38 @@ impl Resolve {
         f: impl FnOnce(&mut Self) -> T,
     ) -> (res::Generics, T) {
         let names = generics
-            .names
-            .into_iter()
-            .inspect(|param| {
-                self.declare_param(param.symbol);
+            .params
+            .iter()
+            .map(|param| {
+                self.declare_param(param.name.symbol);
+                param.name
             })
             .collect::<Vec<_>>();
-        let old_kinds = std::mem::take(&mut self.generic_kinds);
+        let old_kinds = std::mem::replace(
+            &mut self.generic_kinds,
+            generics
+                .params
+                .iter()
+                .map(|param| {
+                    (
+                        param.name.symbol,
+                        match param.kind {
+                            ast::GenericParamKind::Region => res::GenericKind::Region,
+                            ast::GenericParamKind::Type => res::GenericKind::Type,
+                        },
+                    )
+                })
+                .collect(),
+        );
         self.prev_kinds.push(old_kinds);
         let value = f(self);
-        let kinds = names
-            .iter()
-            .map(|name| name.symbol)
-            .map(|name| self.get_generic_kind(name).unwrap_or(GenericKind::Type))
+        let kinds = generics
+            .params
+            .into_iter()
+            .map(|param| match param.kind {
+                ast::GenericParamKind::Region => res::GenericKind::Region,
+                ast::GenericParamKind::Type => res::GenericKind::Type,
+            })
             .collect();
         if let Some(old_kinds) = self.prev_kinds.pop() {
             self.generic_kinds = old_kinds;
@@ -378,11 +385,7 @@ impl Resolve {
                 None
             }
             Ok(Res::Param(index)) => {
-                if self
-                    .generic_kinds
-                    .insert(name.symbol, res::GenericKind::Type)
-                    .is_some_and(|kind| kind != res::GenericKind::Type)
-                {
+                if self.generic_kinds[&path.last().symbol] != res::GenericKind::Type {
                     self.diag.add_diagnostic(
                         format!("Generic kind mismatch for '{}'", name.symbol),
                         name.loc,

@@ -234,10 +234,20 @@ pub enum ExprKind {
     AddressOf(Box<Expr>),
     Return(Box<Expr>),
 }
+#[derive(Debug, Clone, Copy)]
+pub struct GenericParam {
+    pub kind: GenericParamKind,
+    pub name: Ident,
+}
+#[derive(Debug, Clone, Copy)]
+pub enum GenericParamKind {
+    Region,
+    Type,
+}
 #[derive(Debug, Clone)]
 pub struct Generics {
     pub loc: SrcLoc,
-    pub names: Vec<Ident>,
+    pub params: Vec<GenericParam>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
