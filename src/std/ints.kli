@@ -11,6 +11,10 @@ fun checked_add(x : int, y : int) -> Option[int] = do
     end
 end
 
+fun int_to_uint(x : int) -> uint = builtins.transmute(x)
+
+fun uint_to_int(x : uint) -> int = builtins.transmute(x)
+
 fun min(x : int, y : int) -> int = case x < y of | true -> x | false -> y end
 
 fun max(x : int, y : int) -> int = case x > y of | true -> x | false -> y end
