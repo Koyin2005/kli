@@ -12,7 +12,7 @@ use crate::{
 pub fn transmutable(ctxt: CtxtRef<'_>, from: &Type, to: &Type) -> bool {
     match (from, to) {
         (from, to) if from == to => true,
-        (Type::Int(_),Type::Int(_)) => true,
+        (Type::Int(_), Type::Int(_)) => true,
         (Type::Byte, Type::Bool) | (Type::Bool, Type::Byte) => true,
         (&Type::Named(id, _, _), &Type::Named(id2, _, _))
             if let lang_items = ctxt.lang_items()

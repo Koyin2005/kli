@@ -82,7 +82,7 @@ fun grow[region r,T](l : mut[r] ArrayList[T]) -> () =
 
 fun push[region r,T](l : mut[r] ArrayList[T], value : T) -> () = do
     do in r1 reserve(borrow mut l^ in r1,1u) end;
-    ptr_write(offset(l^.ptr,l^.len),value);
+    ptr_write(offset(l^.ptr,ints.uint_to_int(l^.len)),value);
     l^.len = l^.len + 1u
 end
 
@@ -90,7 +90,7 @@ fun pop[region r,T](l : mut[r] ArrayList[T]) -> Option[T] = do
     case l^.len == 0u of 
     | true -> Option.None
     | false -> do
-        let value = ptr_read(offset(l^.ptr,l^.len));
+        let value = ptr_read(offset(l^.ptr,ints.uint_to_int(l^.len)));
         l^.len = l^.len - 1u;
         Option.Some(value)
         end
@@ -141,7 +141,7 @@ fun drop[T](l : ArrayList[T]) -> () = do
     let mut ptr = l.ptr;
     while len > 0u do
         drop_in_place(ptr);
-        ptr = offset(ptr,1u);
+        ptr = offset(ptr,1);
         len = len - 1u
     end;
     deallocate(l.ptr)

@@ -15,7 +15,7 @@ fun ptr_write[T](p : ptr[T], value : T) -> ();
 @unsafe
 fun memcopy[T](dst : ptr[T], src : ptr[T], count : uint) -> ();
 
-fun offset[T](p : ptr[T], offset: uint) -> ptr[T];
+fun offset[T](p : ptr[T], offset: int) -> ptr[T];
 
 @unsafe
 fun drop_in_place[T](p : ptr[T]) -> ();

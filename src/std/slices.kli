@@ -25,9 +25,12 @@ fun from_ref[region r,T]( ref_value : imm[r] T) -> Slice[r,T] =
 fun len[region r,T](slice : Slice[r,T]) -> uint = 
     slice.len
 
+@unsafe
+fun get_unchecked[region r,T](slice : Slice[r,T], index: uint) -> imm[r] T = transmute(offset(slice.ptr,std.ints.uint_to_int(index)))
+
 fun get[region r,T](slice : Slice[r,T], index: uint) -> Option[imm[r] T] = 
     case index < slice.len of
-    | true -> Option.Some(transmute(offset(slice.ptr,index)))
+    | true -> Option.Some(get_unchecked(slice,index))
     | false -> Option.None
     end
 
@@ -36,7 +39,7 @@ fun index_out_bounds() -> never =
 
 fun expect[region r,T](slice : Slice[r,T], index: uint) -> imm[r] T = 
     case index < slice.len of
-    | true -> transmute(offset(slice.ptr,index))
+    | true -> transmute(get_unchecked(slice,index))
     | false -> index_out_bounds()
     end
 
@@ -55,8 +58,33 @@ fun split_at[region r,T](slice : Slice[r,T], index : uint) -> Option[(Slice[r,T]
     let left_len = index;
     let left = from_raw_parts(left_ptr,left_len);
 
-    let right_ptr = offset(slice.ptr,index);
+    let right_ptr = offset(slice.ptr,std.ints.uint_to_int(index));
     let right_len = slice.len - index;
     let right = from_raw_parts(right_ptr,right_len);
     Option.Some((left,right))
 end
+
+fun iter[region r,T](s : Slice[r,T]) -> SliceIter[r,T] = 
+    SliceIter{
+        start_ptr = s.ptr,
+        index = 0u,
+        len = s.len
+    }
+
+@opaque
+type SliceIter[region r,T] = {
+    start_ptr : ptr[T],
+    index : uint,
+}
+
+fun iter_next[region r,T](iter : mut[r] SliceIter[r,T]) -> Option[imm[r] T] = 
+    case iter^.index == iter^.len of 
+    | true -> Option.None
+    | false -> 
+        do
+            let mut index = iter^.index;
+            let r : imm[r] T = builtins.transmute(offset(iter^.start_ptr,std.ints.uint_to_int(index)));
+            iter^.index = index + 1u;
+            Option.Some(r)
+        end
+    end 

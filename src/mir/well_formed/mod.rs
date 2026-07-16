@@ -269,7 +269,7 @@ impl Visit for WellFormed<'_> {
                         right,
                     ) if left == right && left.is_integer() && right.is_integer() => (),
                     (BinaryOp::BitwiseAnd, Type::Bool, Type::Bool)
-                    | (BinaryOp::Offset, Type::RawPointer(_), Type::UINT) => (),
+                    | (BinaryOp::Offset, Type::RawPointer(_), Type::INT) => (),
                     (BinaryOp::Equals, left, right) => self.assert(
                         left == right,
                         || format!("Cannot equate '{}' and '{}'", left, right),
