@@ -11,14 +11,14 @@ fun value_or[T](o: Option[T], default : T) -> T =
     | .None -> default
     end
 
-fun as_ref[r,T](o : imm[r] Option[T]) -> Option[imm[r] T] = 
+fun as_ref[region r,T](o : imm[r] Option[T]) -> Option[imm[r] T] = 
     case o of 
     | ref .Some(borrow x) -> Option.Some(x)
     | ref .None -> Option.None
     end
 
 
-fun as_mut[r,T](o : mut[r] Option[T]) -> Option[mut[r] T] = 
+fun as_mut[region r,T](o : mut[r] Option[T]) -> Option[mut[r] T] = 
     case o of 
     | ref .Some(borrow mut x) -> Option.Some(x)
     | ref .None -> Option.None
@@ -48,5 +48,5 @@ fun flat_map[T,U](o : Option[T], f : fun(T) => Option[U]) -> Option[U] =
     | .None -> Option.None
     end
 
-fun take[r,T](o : mut[r] Option[T]) -> Option[T] = 
+fun take[region r,T](o : mut[r] Option[T]) -> Option[T] = 
     std.refs.swap(o,Option.None)

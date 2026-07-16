@@ -2,14 +2,14 @@ import builtins.transmute
 import builtins.ptr_write
 import builtins.ptr_read
 
-fun replace[r,T](m : mut[r] T, f : fun(T) => T) -> mut[r] T = do
+fun replace[region r,T](m : mut[r] T, f : fun(T) => T) -> mut[r] T = do
     let p = ref_into_raw_mut(m);
     let tmp = ptr_read(p);
     ptr_write(p,f(tmp));
     ref_from_raw_mut(p)
 end
 
-fun swap[r,T](m : mut[r] T, value : T) -> T = do
+fun swap[region r,T](m : mut[r] T, value : T) -> T = do
     let p = ref_into_raw_mut(m);
     let tmp = ptr_read(p);
     ptr_write(p,value);
@@ -17,15 +17,15 @@ fun swap[r,T](m : mut[r] T, value : T) -> T = do
 end
 
 
-fun freeze[r,T](r : mut[r] T) -> imm[r] T = transmute(r)
+fun freeze[region r,T](r : mut[r] T) -> imm[r] T = transmute(r)
 
 
-fun ref_into_raw[r,T](r : imm[r] T) -> ptr[T] = transmute(r)
-fun ref_into_raw_mut[r,T](r : mut[r] T) -> ptr[T] = transmute(r)
+fun ref_into_raw[region r,T](r : imm[r] T) -> ptr[T] = transmute(r)
+fun ref_into_raw_mut[region r,T](r : mut[r] T) -> ptr[T] = transmute(r)
 
 
 @unsafe
-fun ref_from_raw[r,T](p : ptr[T]) -> imm[r] T = transmute(p)
+fun ref_from_raw[region r,T](p : ptr[T]) -> imm[r] T = transmute(p)
 
 @unsafe
-fun ref_from_raw_mut[r,T](p : ptr[T]) -> mut[r] T = transmute(p)
+fun ref_from_raw_mut[region r,T](p : ptr[T]) -> mut[r] T = transmute(p)

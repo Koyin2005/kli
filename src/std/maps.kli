@@ -16,8 +16,8 @@ type HashMap[K,V] = {
     buckets : ArrayList[Entry[K,V]]
 }
 
-fun hash[r,K](key : imm[r] K) -> int;
-fun equal[r,K](first : imm[r] K, second : imm[r] K) -> bool;
+fun hash[region r,K](key : imm[r] K) -> int;
+fun equal[region r,K](first : imm[r] K, second : imm[r] K) -> bool;
 
 fun new[K,V]() -> HashMap[K,V] = do
     HashMap {

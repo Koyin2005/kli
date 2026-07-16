@@ -1,4 +1,5 @@
 import std.arrays
+import std.slices.Slice
 @opaque
 @lang_item("string")
 type String = {
@@ -9,7 +10,7 @@ fun new() -> String = String { array = arrays.new()}
 
 fun with_capacity(cap : int) -> String = String { array = arrays.with_capacity(cap)}
 
-fun push_char[r](s : mut[r] String, c : char) -> () = panic
+fun push_char[region r](s : mut[r] String, c : char) -> () = panic
 
 @unsafe
 fun from_utf8_unchecked(v : arrays.ArrayList[byte]) -> String = String {array = v}

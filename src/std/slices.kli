@@ -6,28 +6,26 @@ import std.optional.Option
 @lang_item("slice")
 @copy
 @opaque
-type Slice[r,T] = {
+type Slice[region r,T] = {
     ptr : ptr[T],
-    len : int,
-    phantom : phantom.Phantom[imm[r] T]
+    len : int
 }
 
 
 @unsafe
-fun from_raw_parts[r,T](ptr : ptr[T], len : int) -> Slice[r,T] = 
+fun from_raw_parts[region r,T](ptr : ptr[T], len : int) -> Slice[r,T] = 
     Slice{
         ptr = ptr,
-        len = len,
-        phantom = phantom.new()
+        len = len
     }
 
-fun from_ref[r,T]( ref_value : imm[r] T) -> Slice[r,T] = 
+fun from_ref[region r,T]( ref_value : imm[r] T) -> Slice[r,T] = 
     from_raw_parts(transmute(ref_value),1)
 
-fun len[r,T](slice : Slice[r,T]) -> int = 
+fun len[region r,T](slice : Slice[r,T]) -> int = 
     slice.len
 
-fun get[r,T](slice : Slice[r,T], index: int) -> Option[imm[r] T] = 
+fun get[region r,T](slice : Slice[r,T], index: int) -> Option[imm[r] T] = 
     case index > 0 and index < slice.len of
     | true -> Option.Some(transmute(offset(slice.ptr,index)))
     | false -> Option.None
@@ -36,13 +34,13 @@ fun get[r,T](slice : Slice[r,T], index: int) -> Option[imm[r] T] =
 fun index_out_bounds() -> never = 
     panic
 
-fun expect[r,T](slice : Slice[r,T], index: int) -> imm[r] T = 
+fun expect[region r,T](slice : Slice[r,T], index: int) -> imm[r] T = 
     case index > 0 and index < slice.len of
     | true -> transmute(offset(slice.ptr,index))
     | false -> index_out_bounds()
     end
 
-fun split_at[r,T](slice : Slice[r,T], index : int) -> Option[(Slice[r,T],Slice[r,T])] = do
+fun split_at[region r,T](slice : Slice[r,T], index : int) -> Option[(Slice[r,T],Slice[r,T])] = do
     case index < 0  of 
     | true -> return Option.None
     | false -> ()
