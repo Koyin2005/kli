@@ -76,7 +76,7 @@ type SliceIter[region r,T] = {
     len : uint
 }
 
-fun iter_next[region r,T](iter : mut[r] SliceIter[r,T]) -> Option[imm[r] T] = 
+fun iter_next[region r,region r1,T](iter : mut[r] SliceIter[r1,T]) -> Option[imm[r] T] = 
 do
     let len = iter^.len;
     case len == 0u of 
@@ -84,7 +84,7 @@ do
     | false -> 
         do
             let ptr = iter^.ptr;
-            let r : imm[r] T = transmute(ptr);
+            let r : imm[r] T = borrow ptr^ in r;
             let ptr = offset(ptr,1);
             let len = len - 1u;
             iter^.ptr = ptr;
