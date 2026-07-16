@@ -110,10 +110,6 @@ pub trait Visit {
             Rvalue::Cast(_, operand) => {
                 self.visit_operand(loc, operand);
             }
-            Rvalue::DecodeUtf8(operand1, operand2) => {
-                self.visit_operand(loc, operand1);
-                self.visit_operand(loc, operand2);
-            }
         }
     }
     fn super_visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
@@ -262,10 +258,6 @@ pub trait MutVisit {
             }
             Rvalue::Cast(_, operand) => {
                 self.visit_operand(loc, operand);
-            }
-            Rvalue::DecodeUtf8(operand1, operand2) => {
-                self.visit_operand(loc, operand1);
-                self.visit_operand(loc, operand2);
             }
         }
     }

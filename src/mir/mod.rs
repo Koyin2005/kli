@@ -264,7 +264,6 @@ pub enum Rvalue {
     RawPtrTo(Place),
     Allocate { ty: Type, count: Operand },
     Cast(CastKind, Operand),
-    DecodeUtf8(Operand, Operand),
     Len(Place),
     Discriminant(Place),
     DanglingPtr(Type),
@@ -281,7 +280,7 @@ impl Rvalue {
             | Self::Len(_)
             | Self::DanglingPtr(_)
             | Self::Discriminant(_) => true,
-            Self::Allocate { .. } | Self::Call(..) | Self::DecodeUtf8(..) => false,
+            Self::Allocate { .. } | Self::Call(..) => false,
         }
     }
     pub fn pointer_cast(cast: PointerCast, operand: Operand) -> Self {
@@ -326,7 +325,6 @@ impl Rvalue {
                 BinaryOp::Lesser | BinaryOp::Greater => Type::Bool,
             },
             Rvalue::Allocate { ty, count: _ } => Type::pointer(ty.clone()),
-            Rvalue::DecodeUtf8(_, _) => Type::pair(Type::Char, Type::UINT),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 AggregateKind::Array(ty, count) => Type::Array(Box::new(ty.clone()), *count),
                 AggregateKind::Record { field_names } => Type::Record(

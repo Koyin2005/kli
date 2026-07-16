@@ -314,20 +314,6 @@ impl Visit for WellFormed<'_> {
                     );
                 }
             },
-            super::Rvalue::DecodeUtf8(ptr, index) => {
-                let byte_ptr = ptr.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                let index = index.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                self.assert(
-                    byte_ptr == Type::pointer(Type::Byte),
-                    || "First operand for decode should be a byte pointer".to_string(),
-                    loc,
-                );
-                self.assert(
-                    index == Type::UINT,
-                    || "Second operand should be an index".to_string(),
-                    loc,
-                );
-            }
             super::Rvalue::Len(place) => {
                 let ty = place.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
                 self.assert(

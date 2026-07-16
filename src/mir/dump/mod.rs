@@ -219,13 +219,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(pointer)?;
                 write!(self.output, ")")?;
             }
-            Rvalue::DecodeUtf8(ptr, index) => {
-                write!(self.output, "decode_utf8(")?;
-                self.write_operand(ptr)?;
-                write!(self.output, ",")?;
-                self.write_operand(index)?;
-                write!(self.output, ")")?;
-            }
             Rvalue::RawPtrTo(place) => {
                 write!(self.output, "raw_ptr_to(")?;
                 self.write_place(place)?;
