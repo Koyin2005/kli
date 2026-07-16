@@ -75,6 +75,7 @@ fun iter[region r,T](s : Slice[r,T]) -> SliceIter[r,T] =
 type SliceIter[region r,T] = {
     start_ptr : ptr[T],
     index : uint,
+    len : uint
 }
 
 fun iter_next[region r,T](iter : mut[r] SliceIter[r,T]) -> Option[imm[r] T] = 
