@@ -5,6 +5,7 @@ use crate::{
     collect::TypeDefKind,
     def_ids::DefId,
     index_vec::IndexVec,
+    lang_items::LangItem,
     resolved_ast::{
         BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, FunctionDefId, Lambda, LocalRegionId,
         Pattern, Var,
@@ -12,7 +13,10 @@ use crate::{
     src_loc::SrcLoc,
     typecheck::root::{FunctionCtxt, TypeCheck},
     typed_ast::{self, Capture, FieldId, RecordFieldInit},
-    types::{FieldName, FunctionSig, FunctionType, GenericArgs, PointerType, RecordField, Type},
+    types::{
+        FieldName, FunctionSig, FunctionType, GenericArg, GenericArgs, PointerType, RecordField,
+        Region, Type,
+    },
 };
 
 impl FunctionCtxt<'_> {
@@ -294,6 +298,45 @@ impl FunctionCtxt<'_> {
             })),
         }
     }
+    fn check_call_sig(
+        &self,
+        callee_loc: SrcLoc,
+        args: &[Expr],
+        params: Vec<Type>,
+        return_type: Option<Type>,
+    ) -> (Type, Vec<typed_ast::Expr>) {
+        if params.len() != args.len() {
+            self.root().ctxt().diag().add_diagnostic(
+                format!(
+                    "Expected '{}' arguments but got '{}'",
+                    params.len(),
+                    args.len()
+                ),
+                callee_loc,
+            );
+        }
+
+        let arg_map = |(arg, expected_ty)| self.check_expr(arg, expected_ty);
+        let args = if args.len() > params.len() {
+            let diff = args.len() - params.len();
+            args.iter()
+                .zip(
+                    params
+                        .into_iter()
+                        .map(Some)
+                        .chain(std::iter::repeat_n(None, diff)),
+                )
+                .map(arg_map)
+                .collect::<Vec<_>>()
+        } else {
+            args.iter()
+                .zip(params.into_iter().map(Some))
+                .map(arg_map)
+                .collect::<Vec<_>>()
+        };
+        let ty = return_type.unwrap_or(Type::Unknown);
+        (ty, args)
+    }
     fn check_call(
         &self,
         loc: SrcLoc,
@@ -301,45 +344,6 @@ impl FunctionCtxt<'_> {
         args: &[Expr],
         ty_hint: Option<Type>,
     ) -> typed_ast::Expr {
-        fn check_call_sig(
-            this: &FunctionCtxt,
-            callee_loc: SrcLoc,
-            args: &[Expr],
-            params: Vec<Type>,
-            return_type: Option<Type>,
-        ) -> (Type, Vec<typed_ast::Expr>) {
-            if params.len() != args.len() {
-                this.root().ctxt().diag().add_diagnostic(
-                    format!(
-                        "Expected '{}' arguments but got '{}'",
-                        params.len(),
-                        args.len()
-                    ),
-                    callee_loc,
-                );
-            }
-
-            let arg_map = |(arg, expected_ty)| this.check_expr(arg, expected_ty);
-            let args = if args.len() > params.len() {
-                let diff = args.len() - params.len();
-                args.iter()
-                    .zip(
-                        params
-                            .into_iter()
-                            .map(Some)
-                            .chain(std::iter::repeat_n(None, diff)),
-                    )
-                    .map(arg_map)
-                    .collect::<Vec<_>>()
-            } else {
-                args.iter()
-                    .zip(params.into_iter().map(Some))
-                    .map(arg_map)
-                    .collect::<Vec<_>>()
-            };
-            let ty = return_type.unwrap_or(Type::Unknown);
-            (ty, args)
-        }
         if let ExprKind::Function(id, generic_args) = &callee.kind
             && let Some(builtin) = self.root().ctxt().builtins().builtin_for(id.0)
         {
@@ -348,7 +352,7 @@ impl FunctionCtxt<'_> {
                 params,
                 return_type,
             } = self.root().ctxt().signature_of(id.0).bind(&generic_args);
-            let (ty, args) = check_call_sig(self, callee.loc, args, params, Some(return_type));
+            let (ty, args) = self.check_call_sig(callee.loc, args, params, Some(return_type));
             typed_ast::Expr {
                 ty,
                 loc,
@@ -379,7 +383,7 @@ impl FunctionCtxt<'_> {
             else {
                 unreachable!("Should be a function")
             };
-            let (ty, args) = check_call_sig(self, callee.loc, args, params, Some(*return_type));
+            let (ty, args) = self.check_call_sig(callee.loc, args, params, Some(*return_type));
             let [arg] = args.try_into().unwrap();
             typed_ast::Expr {
                 ty,
@@ -405,7 +409,7 @@ impl FunctionCtxt<'_> {
                     (Vec::new(), ty_hint)
                 }
             };
-            let (ty, args) = check_call_sig(self, callee.loc, args, params, return_type);
+            let (ty, args) = self.check_call_sig(callee.loc, args, params, return_type);
             typed_ast::Expr {
                 ty,
                 loc,
@@ -649,11 +653,25 @@ impl FunctionCtxt<'_> {
             }
             ExprKind::Unit => make_expr(Type::Unit, typed_ast::ExprKind::Unit, loc),
             ExprKind::Int(value) => make_expr(Type::Int, typed_ast::ExprKind::Int(*value), loc),
-            ExprKind::String(value) => make_expr(
-                Type::string(self.ctxt()),
-                typed_ast::ExprKind::String(value.clone()),
-                loc,
-            ),
+            ExprKind::String(value) => {
+                let string_literal = make_expr(
+                    Type::static_string_slice(self.ctxt()),
+                    typed_ast::ExprKind::String(value.clone()),
+                    loc,
+                );
+                let from_slice_id = self.ctxt().lang_items().expect(LangItem::StringFromSlice);
+                let generic_args = vec![GenericArg::Region(Region::Static)];
+                let from_slice_function = make_expr(
+                    self.ctxt().type_of(from_slice_id).bind(&generic_args),
+                    typed_ast::ExprKind::Function(from_slice_id, generic_args),
+                    loc,
+                );
+                make_expr(
+                    Type::string(self.ctxt()),
+                    typed_ast::ExprKind::Call(Box::new(from_slice_function), vec![string_literal]),
+                    loc,
+                )
+            }
             ExprKind::Call(callee, args) => self.check_call(loc, callee, args, expected_ty),
             ExprKind::Panic => typed_ast::Expr {
                 loc,

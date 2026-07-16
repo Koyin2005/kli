@@ -434,7 +434,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
                             | LangItem::StringSlice => {
                                 matches!(item.kind, res::ItemKind::TypeDef(_))
                             }
-                            LangItem::ArrayListFromRaw => {
+                            LangItem::ArrayListFromRaw | LangItem::StringFromSlice => {
                                 matches!(item.kind, res::ItemKind::Function(_))
                             }
                         }

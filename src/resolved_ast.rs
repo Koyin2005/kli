@@ -76,6 +76,14 @@ pub enum GenericArg {
     Type(Type),
     Region(Region),
 }
+impl GenericArg {
+    pub fn loc(&self) -> SrcLoc {
+        match self {
+            Self::Type(ty) => ty.loc,
+            Self::Region(region) => region.loc,
+        }
+    }
+}
 #[derive(Debug)]
 pub struct GenericArgs {
     pub loc: Option<SrcLoc>,

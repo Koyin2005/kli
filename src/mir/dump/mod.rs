@@ -242,6 +242,8 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.ctxt.display_path_for(*id),
                 display_generic_args(args)
             );
+        } else if let ConstValue::String(string) = value {
+            return write!(self.output, "\"{string}\"");
         }
         match ty {
             types::Type::Infer(_) | types::Type::Param(..) | types::Type::Unknown => {

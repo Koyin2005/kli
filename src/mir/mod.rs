@@ -145,6 +145,7 @@ pub enum ConstValue {
     Scalar(i64),
     Variant(CaseId, Option<Box<Constant>>),
     Record(Box<[Constant]>),
+    String(Symbol),
 }
 impl ConstValue {
     pub const MIN_INT: i64 = i64::MIN;

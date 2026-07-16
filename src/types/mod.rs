@@ -195,6 +195,15 @@ impl Type {
         let name = ctxt.expect_ident(id).symbol;
         Type::Named(id, name, GenericArgs::new())
     }
+    pub fn static_string_slice(ctxt: CtxtRef<'_>) -> Self {
+        let id = ctxt.lang_items().expect(LangItem::StringSlice);
+        let name = ctxt.expect_ident(id).symbol;
+        Type::Named(
+            id,
+            name,
+            GenericArgs::from_iter(std::iter::once(GenericArg::Region(Region::Static))),
+        )
+    }
     pub fn closure_env(fields: impl Iterator<Item = Capture>) -> Self {
         Self::record_named_fields(fields.map(|capture| (capture.var.0, capture.ty)))
     }

@@ -63,19 +63,43 @@ impl<'a> Lower<'a> {
                     loc,
                 );
             }
-            let remaining = args.len().abs_diff(arg_count);
-            args.iter()
-                .map(|arg| match arg {
-                    res::GenericArg::Region(region) => {
-                        GenericArg::Region(self.lower_region(region))
-                    }
-                    res::GenericArg::Type(ty) => GenericArg::Type(self.lower_type(ty)),
-                })
-                .chain(std::iter::repeat_n(
-                    GenericArg::Type(Type::Unknown),
-                    remaining,
-                ))
-                .collect()
+            let mut args_iter = args.iter();
+            let mut kind_iter = generics.kinds();
+            let mut args = GenericArgs::new();
+            loop {
+                let arg = match (args_iter.next(), kind_iter.next()) {
+                    (None, None) => break,
+                    (Some(arg), Some(kind)) => match (arg, kind) {
+                        (res::GenericArg::Type(ty), GenericKind::Type) => {
+                            GenericArg::Type(self.lower_type(ty))
+                        }
+                        (res::GenericArg::Region(region), GenericKind::Region) => {
+                            GenericArg::Region(self.lower_region(region))
+                        }
+                        (_, kind @ (GenericKind::Region | GenericKind::Type)) => {
+                            self.ctxt
+                                .diag()
+                                .add_diagnostic(format!("Generic kind mismatch"), arg.loc());
+                            match kind {
+                                GenericKind::Region => GenericArg::Region(Region::Unknown),
+                                GenericKind::Type => GenericArg::Type(Type::Unknown),
+                            }
+                        }
+                    },
+                    (Some(arg), None) => match arg {
+                        res::GenericArg::Region(region) => {
+                            GenericArg::Region(self.lower_region(region))
+                        }
+                        res::GenericArg::Type(ty) => GenericArg::Type(self.lower_type(ty)),
+                    },
+                    (None, Some(kind)) => match kind {
+                        GenericKind::Region => GenericArg::Region(Region::Unknown),
+                        GenericKind::Type => GenericArg::Type(Type::Unknown),
+                    },
+                };
+                args.push(arg);
+            }
+            args
         } else if let Some(infer) = self.infer {
             generics.instantiate(&mut infer.borrow_mut(), loc)
         } else if arg_count > 0 {
