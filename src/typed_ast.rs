@@ -104,10 +104,7 @@ pub struct RecordFieldInit {
     pub value: Expr,
 }
 #[derive(Debug)]
-pub enum IteratorType {
-    ArrayListRef(Region, Mutable, Type),
-    StringIter(Region, Mutable),
-}
+pub enum IteratorType {}
 #[derive(Debug)]
 pub enum BinaryOp {
     Add,

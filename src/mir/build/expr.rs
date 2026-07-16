@@ -87,13 +87,6 @@ impl Builder<'_> {
             Place::local(self.expr_into_temp(expr))
         }
     }
-    pub(super) fn len_operand(&mut self, loc: SrcLoc, _: &Type, place: Place) -> Operand {
-        Operand::Load(Place::local(self.assign_to_temp(
-            loc,
-            Type::UINT,
-            Rvalue::Len(place),
-        )))
-    }
     fn operand_as_place(&mut self, loc: SrcLoc, ty: Type, operand: Operand) -> Place {
         match operand {
             Operand::Load(place) => place,

@@ -1,9 +1,6 @@
 use crate::{
     typecheck::infer::TypeInfer,
-    typed_ast::{
-        Expr, ExprKind, Function, IteratorType, Pattern, PatternKind, Place, PlaceKind, Stmt,
-        StmtKind,
-    },
+    typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
     types::{FunctionType, GenericArg, Region, Type},
 };
 
@@ -170,25 +167,7 @@ impl<'a> TypeSubst<'a> {
             ExprKind::Load(place) => {
                 self.subst_place(place);
             }
-            ExprKind::For {
-                pattern,
-                iterator,
-                body,
-                iterator_type,
-            } => {
-                match iterator_type {
-                    IteratorType::ArrayListRef(region, _, ty) => {
-                        self.subst_region(region);
-                        self.subst_type(ty);
-                    }
-                    IteratorType::StringIter(region, _) => {
-                        self.subst_region(region);
-                    }
-                }
-                self.subst_pattern(pattern);
-                self.subst_expr(iterator);
-                self.subst_expr(body);
-            }
+            ExprKind::For { iterator_type, .. } => match *iterator_type {},
             ExprKind::Assign(place, expr) => {
                 self.subst_place(place);
                 self.subst_expr(expr);
