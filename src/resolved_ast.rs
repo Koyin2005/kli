@@ -117,7 +117,7 @@ pub enum ExprKind {
     Unit,
     Err,
     Annotate(Box<Expr>, Box<Type>),
-    Int(i64),
+    Int(IntegerLiteral),
     Bool(bool),
     String(Rc<str>),
     Var(Var),
@@ -160,9 +160,22 @@ pub struct PatternField {
     pub name: Ident,
     pub pattern: Pattern,
 }
+#[derive(Debug, Clone, Copy)]
+pub enum IntegerLiteral {
+    Signed(i64),
+    Unsigned(u64),
+}
+impl IntegerLiteral {
+    pub fn as_i128(self) -> i128 {
+        match self {
+            Self::Signed(value) => value.into(),
+            Self::Unsigned(value) => value.into(),
+        }
+    }
+}
 #[derive(Debug)]
 pub enum PatternKind {
-    Int(i64),
+    Int(IntegerLiteral),
     Bool(bool),
     Ref(Box<Pattern>),
     Case(Ident, Option<Box<Pattern>>),
@@ -222,6 +235,7 @@ pub struct FunctionType {
 pub enum TypeName {
     Unit,
     Int,
+    Uint,
     Bool,
     String,
     Char,

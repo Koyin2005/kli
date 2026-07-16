@@ -17,7 +17,7 @@ fun box_into_raw[T](b : Box[T]) -> ptr[T] = b.inner
 fun box_from_raw[T](p : ptr[T]) -> Box[T] = Box { inner = p}
 
 fun alloc[T](value : T) -> Box[T] = do
-    let ptr = allocate[T](1);
+    let ptr = allocate[T](1u);
     ptr_write(ptr,value);
     box_from_raw(ptr)
 end

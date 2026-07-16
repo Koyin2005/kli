@@ -164,7 +164,7 @@ impl Resolve {
             ast::ExprKind::Unit
             | ast::ExprKind::String(_)
             | ast::ExprKind::Bool(_)
-            | ast::ExprKind::Number(_)
+            | ast::ExprKind::Number(..)
             | ast::ExprKind::Panic
             | ast::ExprKind::Path(..) => (),
             ast::ExprKind::Annotate(expr, _)
@@ -423,6 +423,9 @@ impl Resolve {
             ast::TypeKind::Int => {
                 res::TypeKind::Named(res::TypeName::Int, Box::new(res::GenericArgs::NONE))
             }
+            ast::TypeKind::Uint => {
+                res::TypeKind::Named(res::TypeName::Uint, Box::new(res::GenericArgs::NONE))
+            }
             ast::TypeKind::Unit => {
                 res::TypeKind::Named(res::TypeName::Unit, Box::new(res::GenericArgs::NONE))
             }
@@ -545,6 +548,23 @@ impl Resolve {
                 .expect("There should be a pushed scope"),
         )
     }
+    fn resolve_int_lit(
+        &mut self,
+        loc: SrcLoc,
+        value: u64,
+        kind: ast::NumberKind,
+    ) -> res::IntegerLiteral {
+        match kind {
+            ast::NumberKind::Signed => res::IntegerLiteral::Signed(match value.try_into() {
+                Ok(number) => number,
+                Err(_) => {
+                    self.diag.add_diagnostic("Invalid integer".to_string(), loc);
+                    0
+                }
+            }),
+            ast::NumberKind::Unsigned => res::IntegerLiteral::Unsigned(value),
+        }
+    }
     fn resolve_pattern(&mut self, pattern: ast::Pattern) -> res::Pattern {
         let loc = pattern.loc;
         let kind = match pattern.kind {
@@ -555,13 +575,9 @@ impl Resolve {
                     .map(|field| self.resolve_pattern(field))
                     .collect(),
             ),
-            ast::PatternKind::Int(value) => res::PatternKind::Int(match value.try_into() {
-                Ok(number) => number,
-                Err(_) => {
-                    self.diag.add_diagnostic("Invalid integer".to_string(), loc);
-                    0
-                }
-            }),
+            ast::PatternKind::Int(value, kind) => {
+                res::PatternKind::Int(self.resolve_int_lit(loc, value, kind))
+            }
             ast::PatternKind::Bool(value) => res::PatternKind::Bool(value),
             ast::PatternKind::Binding(borrow, mutable, name) => {
                 let var = self.declare_var(name.symbol);
@@ -759,7 +775,9 @@ impl Resolve {
             }
             ast::ExprKind::Unit => res::ExprKind::Unit,
             ast::ExprKind::String(value) => res::ExprKind::String(value.into()),
-            ast::ExprKind::Number(value) => res::ExprKind::Int(value as i64),
+            ast::ExprKind::Number(value, kind) => {
+                res::ExprKind::Int(self.resolve_int_lit(loc, value, kind))
+            }
             ast::ExprKind::Bool(value) => res::ExprKind::Bool(value),
             ast::ExprKind::Return(value) => {
                 res::ExprKind::Return(Box::new(self.resolve_expr(*value)))

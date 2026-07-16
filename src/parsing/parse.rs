@@ -5,15 +5,15 @@ use crate::{
         Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, CaseDef, CaseType,
         Expr, ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, GenericParam,
         GenericParamKind, Generics, InstancePath, IsResource, Item, ItemKind, Lambda, LetBinding,
-        Module, ModuleId, Mutable, NodeId, Param, Path, Pattern, PatternField, PatternKind,
-        RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeDef, TypeDefKind,
-        TypeKind,
+        Module, ModuleId, Mutable, NodeId, NumberKind, Param, Path, Pattern, PatternField,
+        PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeDef,
+        TypeDefKind, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::{Ident, Symbol},
     parsing::{
         lex::Lexer,
-        tokens::{Token, TokenKind},
+        tokens::{self, Token, TokenKind},
     },
     src_loc::SrcLoc,
 };
@@ -214,11 +214,17 @@ impl Parser {
                     kind: PatternKind::Tuple(fields),
                 })
             }
-            TokenKind::Number(number) => {
+            TokenKind::Number(number, kind) => {
                 self.advance();
                 Ok(Pattern {
                     loc,
-                    kind: PatternKind::Int(number),
+                    kind: PatternKind::Int(
+                        number,
+                        match kind {
+                            tokens::NumberKind::Signed => NumberKind::Signed,
+                            tokens::NumberKind::Unsigned => NumberKind::Unsigned,
+                        },
+                    ),
                 })
             }
             TokenKind::Ref => {
@@ -464,11 +470,17 @@ impl Parser {
     fn parse_expr_prefix(&mut self) -> Result<Expr, ParseError> {
         let loc = self.current_loc();
         match self.peek_token().kind {
-            TokenKind::Number(num) => {
+            TokenKind::Number(num, kind) => {
                 self.advance();
                 Ok(Expr {
                     loc,
-                    kind: ExprKind::Number(num),
+                    kind: ExprKind::Number(
+                        num,
+                        match kind {
+                            tokens::NumberKind::Signed => NumberKind::Signed,
+                            tokens::NumberKind::Unsigned => NumberKind::Unsigned,
+                        },
+                    ),
                 })
             }
             TokenKind::True => {
@@ -793,6 +805,13 @@ impl Parser {
                 Ok(Type {
                     loc,
                     kind: TypeKind::Int,
+                })
+            }
+            TokenKind::Uint => {
+                self.advance();
+                Ok(Type {
+                    loc,
+                    kind: TypeKind::Uint,
                 })
             }
             TokenKind::Bool => {

@@ -265,11 +265,11 @@ impl Visit for WellFormed<'_> {
                         | BinaryOp::Wrapping(_)
                         | BinaryOp::Lesser
                         | BinaryOp::Greater,
-                        Type::Int,
-                        Type::Int,
-                    ) => (),
+                        left,
+                        right,
+                    ) if left == right && left.is_integer() && right.is_integer() => (),
                     (BinaryOp::BitwiseAnd, Type::Bool, Type::Bool)
-                    | (BinaryOp::Offset, Type::RawPointer(_), Type::Int) => (),
+                    | (BinaryOp::Offset, Type::RawPointer(_), Type::UINT) => (),
                     (BinaryOp::Equals, left, right) => self.assert(
                         left == right,
                         || format!("Cannot equate '{}' and '{}'", left, right),
@@ -323,7 +323,7 @@ impl Visit for WellFormed<'_> {
                     loc,
                 );
                 self.assert(
-                    index == Type::Int,
+                    index == Type::UINT,
                     || "Second operand should be an index".to_string(),
                     loc,
                 );
@@ -374,7 +374,7 @@ impl Visit for WellFormed<'_> {
                     stmt.loc,
                 );
                 self.assert(
-                    count_ty == Type::Int,
+                    count_ty == Type::UINT,
                     || format!("count should be int not '{}'", count_ty),
                     stmt.loc,
                 );

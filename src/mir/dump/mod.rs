@@ -258,7 +258,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 };
                 write!(self.output, "'{char}'")
             }
-            types::Type::Int | types::Type::Byte => value
+            types::Type::Int(_) | types::Type::Byte => value
                 .as_scalar()
                 .map(|value| write!(self.output, "{}", value))
                 .unwrap_or_else(|| write!(self.output, "unknown of '{}'", ty)),

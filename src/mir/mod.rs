@@ -11,7 +11,7 @@ use crate::{
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
     typed_ast::FieldId,
-    types::{CaseId, FieldName, GenericArg, GenericArgs, PointerType, Region, Type},
+    types::{CaseId, FieldName, GenericArg, GenericArgs, IntegerKind, PointerType, Region, Type},
 };
 pub mod basic_blocks;
 pub mod build;
@@ -142,14 +142,14 @@ pub enum ConstValue {
     ZeroSized,
     Named(DefId, Vec<GenericArg>),
     ClosureShim(DefId, Vec<GenericArg>),
-    Scalar(i64),
+    Scalar(i128),
     Variant(CaseId, Option<Box<Constant>>),
     Record(Box<[Constant]>),
     String(Symbol),
 }
 impl ConstValue {
     pub const MIN_INT: i64 = i64::MIN;
-    fn as_scalar(&self) -> Option<i64> {
+    fn as_scalar(&self) -> Option<i128> {
         match self {
             Self::Scalar(value) => Some(*value),
             _ => None,
@@ -163,28 +163,34 @@ pub struct Constant {
     pub value: ConstValue,
 }
 impl Constant {
-    pub fn as_int(&self) -> Option<i64> {
-        let Type::Int = *self.ty else {
-            return None;
-        };
-        self.value.as_scalar()
+    pub fn zero(kind: IntegerKind) -> Self {
+        match kind {
+            IntegerKind::Signed => Self::int(0),
+            IntegerKind::Unsigned => Self::uint(0),
+        }
     }
     pub fn bool(value: bool) -> Self {
         Self {
             ty: Box::new(Type::Bool),
-            value: ConstValue::Scalar(value as i64),
+            value: ConstValue::Scalar(value as i128),
         }
     }
     pub fn byte(value: u8) -> Self {
         Self {
             ty: Box::new(Type::Byte),
-            value: ConstValue::Scalar(value as i64),
+            value: ConstValue::Scalar(value as i128),
         }
     }
     pub fn int(value: i64) -> Self {
         Self {
-            ty: Box::new(Type::Int),
-            value: ConstValue::Scalar(value),
+            ty: Box::new(Type::Int(IntegerKind::Signed)),
+            value: ConstValue::Scalar(value as i128),
+        }
+    }
+    pub fn uint(value: u64) -> Self {
+        Self {
+            ty: Box::new(Type::Int(IntegerKind::Unsigned)),
+            value: ConstValue::Scalar(value as i128),
         }
     }
     pub fn zero_sized(ty: Type) -> Self {
@@ -285,7 +291,7 @@ impl Rvalue {
     pub fn type_of(&self, ctxt: CtxtRef<'_>, locals: &Locals, return_type: &Type) -> Type {
         match self {
             Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),
-            Rvalue::Len(_) => Type::Int,
+            Rvalue::Len(_) => Type::UINT,
             &Rvalue::Ref(mutable, region, ref place) => place
                 .type_of(ctxt, locals, return_type)
                 .reference(mutable, region),
@@ -296,8 +302,13 @@ impl Rvalue {
                 *function.return_type
             }
             Rvalue::Binary(op, left_and_right) => match op {
-                BinaryOp::Overflow(_) => Type::pair(Type::Bool, Type::Int),
-                BinaryOp::Unchecked(_) | BinaryOp::Wrapping(_) => Type::Int,
+                BinaryOp::Overflow(_) => Type::pair(
+                    Type::Bool,
+                    left_and_right.0.type_of(ctxt, locals, return_type),
+                ),
+                BinaryOp::Unchecked(_) | BinaryOp::Wrapping(_) => {
+                    left_and_right.0.type_of(ctxt, locals, return_type)
+                }
                 BinaryOp::Offset => {
                     let (left, _) = left_and_right.as_ref();
                     let (PointerType::Raw, ty) = left
@@ -310,12 +321,12 @@ impl Rvalue {
                     Type::pointer(ty)
                 }
                 BinaryOp::BitwiseAnd => Type::Bool,
-                BinaryOp::Divide => Type::Int,
+                BinaryOp::Divide => left_and_right.0.type_of(ctxt, locals, return_type),
                 BinaryOp::Equals => Type::Bool,
                 BinaryOp::Lesser | BinaryOp::Greater => Type::Bool,
             },
             Rvalue::Allocate { ty, count: _ } => Type::pointer(ty.clone()),
-            Rvalue::DecodeUtf8(_, _) => Type::pair(Type::Char, Type::Int),
+            Rvalue::DecodeUtf8(_, _) => Type::pair(Type::Char, Type::UINT),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 AggregateKind::Array(ty, count) => Type::Array(Box::new(ty.clone()), *count),
                 AggregateKind::Record { field_names } => Type::Record(
@@ -351,7 +362,7 @@ impl Rvalue {
                 },
                 CastKind::Transmute(ty) => ty.clone(),
             },
-            Rvalue::Discriminant(_) => Type::Int,
+            Rvalue::Discriminant(_) => Type::UINT,
             Rvalue::RawPtrTo(place) => Type::pointer(place.type_of(ctxt, locals, return_type)),
             Rvalue::DanglingPtr(ty) => Type::pointer(ty.clone()),
         }

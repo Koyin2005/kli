@@ -17,7 +17,7 @@ impl<'a> TypeSubst<'a> {
     pub fn subst_type(&mut self, ty: &mut Type) {
         match ty {
             Type::Bool
-            | Type::Int
+            | Type::Int(_)
             | Type::Unit
             | Type::Unknown
             | Type::Char

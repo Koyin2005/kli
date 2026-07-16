@@ -14,41 +14,41 @@ import std.slices
 @lang_item("array_list")
 type ArrayList[T] = {
     ptr : ptr[T],
-    len : int,
-    cap : int
+    len : uint,
+    cap : uint
 }
 
 fun new[T]() -> ArrayList[T] = do
     ArrayList {
         ptr = invalid_ptr(),
-        len = 0,
-        cap = 0
+        len = 0u,
+        cap = 0u
     }
 end
 
 
-fun with_capacity[T](cap : int) -> ArrayList[T] = do
-    let cap = ints.max(cap,0);
+fun with_capacity[T](cap : uint) -> ArrayList[T] = do
+    let cap = ints.umax(cap,0u);
     ArrayList {
         ptr = allocate(cap),
-        len = 0,
+        len = 0u,
         cap = cap
     }
 end
 
 fun from_slice[region r,T](s : slices.Slice[r,T], clone : fun(imm[r] T) -> T) -> ArrayList[T] = do
-    let mut i = 0;
+    let mut i = 0u;
     let mut l = with_capacity(slices.len(s));
     while i < slices.len(s) do 
         do in r push(borrow mut l in r,clone(slices.expect(s,i))) end;
-        i = i + 1
+        i = i + 1u
     end;
     l
 end
 
 @unsafe
 @lang_item("array_list_from_raw")
-fun from_raw_parts[T](ptr : ptr[T], cap : int, len : int) -> ArrayList[T] = 
+fun from_raw_parts[T](ptr : ptr[T], cap : uint, len : uint) -> ArrayList[T] = 
     ArrayList {
         ptr = ptr,
         cap = cap,
@@ -56,7 +56,7 @@ fun from_raw_parts[T](ptr : ptr[T], cap : int, len : int) -> ArrayList[T] =
     }
 
 @unsafe
-fun reallocate[T](p : ptr[T], new_len : int) -> ptr[T] = 
+fun reallocate[T](p : ptr[T], new_len : uint) -> ptr[T] = 
     do
         let new_ptr = allocate(new_len);
         memcopy(new_ptr,p,new_len);
@@ -64,11 +64,11 @@ fun reallocate[T](p : ptr[T], new_len : int) -> ptr[T] =
         new_ptr
     end
 
-fun len[region r,T](l : imm[r] ArrayList[T]) -> int = 
+fun len[region r,T](l : imm[r] ArrayList[T]) -> uint = 
     l^.len
 
 @unsafe
-fun resize[region r,T](l : mut[r] ArrayList[T], new_cap: int) -> () = do 
+fun resize[region r,T](l : mut[r] ArrayList[T], new_cap: uint) -> () = do 
     l^.ptr = reallocate(l^.ptr,new_cap);
     l^.cap = new_cap
 end
@@ -76,22 +76,22 @@ end
 @unsafe
 fun grow[region r,T](l : mut[r] ArrayList[T]) -> () = 
     do
-        let new_cap = l^.cap * 2;
+        let new_cap = l^.cap * 2u;
         resize(l,new_cap)
     end
 
 fun push[region r,T](l : mut[r] ArrayList[T], value : T) -> () = do
-    do in r1 reserve(borrow mut l^ in r1,1) end;
+    do in r1 reserve(borrow mut l^ in r1,1u) end;
     ptr_write(offset(l^.ptr,l^.len),value);
-    l^.len = l^.len + 1
+    l^.len = l^.len + 1u
 end
 
 fun pop[region r,T](l : mut[r] ArrayList[T]) -> Option[T] = do
-    case l^.len == 0 of 
+    case l^.len == 0u of 
     | true -> Option.None
     | false -> do
         let value = ptr_read(offset(l^.ptr,l^.len));
-        l^.len = l^.len - 1;
+        l^.len = l^.len - 1u;
         Option.Some(value)
         end
     end
@@ -99,31 +99,31 @@ end
 
 fun index_out_bounds() -> never = panic
 
-fun ptr_to[region r,T](l : imm[r] ArrayList[T], index : int) -> ptr[T] = 
-    case ints.contains_exclusive(index,0,l^.len) of 
+fun ptr_to[region r,T](l : imm[r] ArrayList[T], index : uint) -> ptr[T] = 
+    case index < l^.len of 
     | true -> addr_of(l^.ptr^)
     | false -> index_out_bounds()
     end
 
-fun at_imm[region r,T](l : imm[r] ArrayList[T], index : int) -> imm[r] T = 
-    case ints.contains_exclusive(index,0,l^.len) of 
+fun at_imm[region r,T](l : imm[r] ArrayList[T], index : uint) -> imm[r] T = 
+    case index < l^.len of 
     | false -> index_out_bounds()
     | true -> borrow l^.ptr^ in r
     end
 
 
-fun at_mut[region r,T](l : mut[r] ArrayList[T], index : int) -> mut[r] T = 
-    case ints.contains_exclusive(index,0,l^.len) of 
+fun at_mut[region r,T](l : mut[r] ArrayList[T], index : uint) -> mut[r] T = 
+    case index < l^.len  of 
     | false -> index_out_bounds()
     | true -> borrow mut l^.ptr^ in r
     end
 
-fun reserve[region r,T](l : mut[r] ArrayList[T], count : int) -> () = do
-    let additional = ints.max(0,count);
-    case additional > 0 of 
+fun reserve[region r,T](l : mut[r] ArrayList[T], count : uint) -> () = do
+    let additional = ints.umax(0u,count);
+    case additional > 0u of 
     | true -> do
         let new_len = l^.len + count;
-        let new_cap = ints.max(new_len,l^.cap * 2);
+        let new_cap = ints.umax(new_len,l^.cap * 2u);
         case new_cap > l^.cap of
         | true -> do in r1 resize(borrow mut l^ in r1,new_cap) end
         | false -> () 
@@ -139,10 +139,10 @@ fun as_slice[region r,T](l : imm[r] ArrayList[T]) -> slices.Slice[r,T] =
 fun drop[T](l : ArrayList[T]) -> () = do
     let mut len = l.len;
     let mut ptr = l.ptr;
-    while len > 0 do
+    while len > 0u do
         drop_in_place(ptr);
-        ptr = offset(ptr,1);
-        len = len - 1
+        ptr = offset(ptr,1u);
+        len = len - 1u
     end;
     deallocate(l.ptr)
 end

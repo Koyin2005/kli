@@ -9,6 +9,7 @@ use crate::{
         self, AggregateKind, ConstValue, Constant, CopyNonOverlapping, DropInPlace, Local, Operand,
         OverflowOp, Place, PointerCast, Rvalue, build::Builder,
     },
+    resolved_ast::IntegerLiteral,
     src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
     types::{FieldName, FunctionType, Type},
@@ -29,7 +30,10 @@ impl Builder<'_> {
     fn as_constant(&mut self, expr: &Expr) -> Option<Constant> {
         match expr.kind {
             ExprKind::Bool(value) => Some(Constant::bool(value)),
-            ExprKind::Int(value) => Some(Constant::int(value)),
+            ExprKind::Int(value) => Some(match value {
+                IntegerLiteral::Signed(value) => Constant::int(value),
+                IntegerLiteral::Unsigned(value) => Constant::uint(value),
+            }),
             ExprKind::Unit => Some(Constant::unit()),
             ExprKind::String(ref value) => Some(Constant {
                 ty: Box::new(expr.ty.clone()),
@@ -86,7 +90,7 @@ impl Builder<'_> {
     pub(super) fn len_operand(&mut self, loc: SrcLoc, _: &Type, place: Place) -> Operand {
         Operand::Load(Place::local(self.assign_to_temp(
             loc,
-            Type::Int,
+            Type::UINT,
             Rvalue::Len(place),
         )))
     }
@@ -515,7 +519,7 @@ impl Builder<'_> {
                 };
                 let checked_result = self.assign_to_temp(
                     expr.loc,
-                    Type::pair(Type::Bool, Type::Int),
+                    Type::pair(Type::Bool, expr.ty.clone()),
                     Rvalue::Binary(
                         mir::BinaryOp::Overflow(overflow_op),
                         Box::new((left_operand, right_operand)),

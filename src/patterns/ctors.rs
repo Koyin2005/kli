@@ -7,7 +7,7 @@ use crate::{
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Constructor {
     Bool(bool),
-    Int(i64),
+    Int(i128),
     Wildcard,
     Record,
     Ref,
@@ -26,7 +26,7 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Cons
         Type::Char
         | Type::Unknown
         | Type::Param(..)
-        | Type::Int
+        | Type::Int(_)
         | Type::Function(..)
         | Type::RawPointer(..)
         | Type::Byte

@@ -15,6 +15,11 @@ fun min(x : int, y : int) -> int = case x < y of | true -> x | false -> y end
 
 fun max(x : int, y : int) -> int = case x > y of | true -> x | false -> y end
 
+
+fun umin(x : uint, y : uint) -> uint = case x < y of | true -> x | false -> y end
+
+fun umax(x : uint, y : uint) -> uint = case x > y of | true -> x | false -> y end
+
 fun is_zero(x : int) -> bool = 
     x == 0
 

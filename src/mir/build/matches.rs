@@ -19,7 +19,7 @@ enum Test {
 }
 #[derive(Debug, Clone)]
 enum MatchBranch {
-    IntSwitch(Place, Vec<(i64, MatchBranch)>, Box<MatchBranch>),
+    IntSwitch(Place, Vec<(i128, MatchBranch)>, Box<MatchBranch>),
     VariantSwitch(Place, Vec<(CaseId, MatchBranch)>, Box<MatchBranch>),
     If {
         place: Place,
@@ -33,7 +33,7 @@ enum MatchBranch {
 enum TestCase {
     True,
     False,
-    Equals(i64),
+    Equals(i128),
     Variant(CaseId),
 }
 type TestMatrix = Vec<(usize, Vec<MatchTest>)>;
@@ -148,7 +148,7 @@ impl Builder<'_> {
             PatternKind::Int(value) => {
                 vec![MatchTest {
                     place,
-                    case: TestCase::Equals(*value),
+                    case: TestCase::Equals(value.as_i128()),
                 }]
             }
             PatternKind::Bool(value) => vec![MatchTest {
@@ -185,7 +185,7 @@ impl Builder<'_> {
                         let block = self.switch_to_new_block();
                         self.lower_tree(loc, arm, info, end_blocks);
                         SwitchTarget {
-                            value: value.into(),
+                            value,
                             target: block,
                         }
                     })
@@ -217,7 +217,8 @@ impl Builder<'_> {
                 self.lower_tree(loc, *otherwise_branch, info, end_blocks);
 
                 self.switch_to_block(start_block);
-                let disrciminant = self.assign_to_temp(loc, Type::Int, Rvalue::Discriminant(place));
+                let disrciminant =
+                    self.assign_to_temp(loc, Type::UINT, Rvalue::Discriminant(place));
                 self.finish_block_with_switch_targets(
                     loc,
                     Operand::Load(Place::local(disrciminant)),

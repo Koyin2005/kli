@@ -8,7 +8,7 @@ type String = {
 
 fun new() -> String = String { array = arrays.new()}
 
-fun with_capacity(cap : int) -> String = String { array = arrays.with_capacity(cap)}
+fun with_capacity(cap : uint) -> String = String { array = arrays.with_capacity(cap)}
 
 fun push_char[region r](s : mut[r] String, c : char) -> () = panic
 

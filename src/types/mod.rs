@@ -169,12 +169,18 @@ pub struct RecordField {
     pub name: FieldName,
     pub ty: Type,
 }
+#[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
+pub enum IntegerKind {
+    Signed,
+    Unsigned,
+}
+
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub enum Type {
     Infer(usize),
     Unknown,
     Unit,
-    Int,
+    Int(IntegerKind),
     Bool,
     Char,
     Byte,
@@ -190,6 +196,21 @@ pub enum Type {
     Named(DefId, Symbol, GenericArgs),
 }
 impl Type {
+    pub const UINT: Self = Self::Int(IntegerKind::Unsigned);
+    pub const INT: Self = Self::Int(IntegerKind::Signed);
+    pub fn is_bool(&self) -> bool {
+        matches!(self, Self::Bool)
+    }
+    pub fn is_integer(&self) -> bool {
+        matches!(self, Self::Int(_))
+    }
+
+    pub const fn is_builtin_scalar(&self) -> bool {
+        matches!(
+            self,
+            Self::Int(_) | Self::Bool | Self::Byte | Self::Char | Self::RawPointer(_)
+        )
+    }
     pub fn string(ctxt: CtxtRef<'_>) -> Self {
         let id = ctxt.lang_items().expect(LangItem::String);
         let name = ctxt.expect_ident(id).symbol;
@@ -376,7 +397,7 @@ impl Type {
             Type::Bool
             | Type::Unit
             | Type::Unknown
-            | Type::Int
+            | Type::Int(_)
             | Type::Imm(..)
             | Type::Char
             | Type::Byte
@@ -418,7 +439,7 @@ impl Type {
             Type::Infer(_)
             | Type::Unknown
             | Type::Unit
-            | Type::Int
+            | Type::Int(_)
             | Type::Bool
             | Type::Char
             | Type::Byte
@@ -455,7 +476,7 @@ impl Type {
     ) -> ControlFlow<T> {
         visit_ty(self)?;
         match self {
-            Type::Int
+            Type::Int(_)
             | Type::Unit
             | Type::Infer(_)
             | Type::Unknown
@@ -537,7 +558,10 @@ impl Display for Type {
             }
             Type::Char => f.pad("char"),
             Type::Bool => f.pad("bool"),
-            Type::Int => f.pad("int"),
+            Type::Int(kind) => match kind {
+                IntegerKind::Signed => f.pad("int"),
+                IntegerKind::Unsigned => f.pad("uint"),
+            },
             Type::Unit => f.pad("()"),
             Type::Unknown => f.pad("{unknown}"),
             Type::Infer(_) => f.pad("_"),
@@ -580,7 +604,7 @@ pub trait TypeMap {
         match ty {
             Type::Bool
             | Type::Char
-            | Type::Int
+            | Type::Int(_)
             | Type::Unit
             | Type::Unknown
             | Type::Byte

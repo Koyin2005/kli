@@ -6,7 +6,7 @@ use crate::{
     def_ids::DefId,
     define_id,
     ident::Ident,
-    resolved_ast::{LocalRegionId, Var, VarId},
+    resolved_ast::{IntegerLiteral, LocalRegionId, Var, VarId},
     src_loc::SrcLoc,
     types::{CaseId, GenericArgs, GenericKind, Region, Type},
 };
@@ -26,7 +26,7 @@ pub struct Pattern {
 pub enum PatternKind {
     Err,
     Unit,
-    Int(i64),
+    Int(IntegerLiteral),
     Bool(bool),
     Ref(Box<Pattern>),
     Case(DefId, GenericArgs, CaseId, Option<Box<Pattern>>),
@@ -130,7 +130,7 @@ pub enum ExprKind {
     Block(BlockBody, Option<LocalRegionId>),
     String(Rc<str>),
     Bool(bool),
-    Int(i64),
+    Int(IntegerLiteral),
     Unit,
     Err,
     Panic,

@@ -13,7 +13,7 @@ impl RemoveZst {
             Type::Array(ty, _) => Self::is_zst(ty, ctxt),
             Type::Bool
             | Type::Char
-            | Type::Int
+            | Type::Int(_)
             | Type::Byte
             | Type::Param(..)
             | Type::Function(..)

@@ -7,8 +7,8 @@ use crate::{
     index_vec::IndexVec,
     lang_items::LangItem,
     resolved_ast::{
-        BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, FunctionDefId, Lambda, LocalRegionId,
-        Pattern, Var,
+        BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, FunctionDefId, IntegerLiteral, Lambda,
+        LocalRegionId, Pattern, Var,
     },
     src_loc::SrcLoc,
     typecheck::root::{FunctionCtxt, TypeCheck},
@@ -652,7 +652,14 @@ impl FunctionCtxt<'_> {
                 make_expr(Type::Unit, typed_ast::ExprKind::Print(arg), loc)
             }
             ExprKind::Unit => make_expr(Type::Unit, typed_ast::ExprKind::Unit, loc),
-            ExprKind::Int(value) => make_expr(Type::Int, typed_ast::ExprKind::Int(*value), loc),
+            ExprKind::Int(value) => make_expr(
+                match value {
+                    IntegerLiteral::Signed(_) => Type::INT,
+                    IntegerLiteral::Unsigned(_) => Type::UINT,
+                },
+                typed_ast::ExprKind::Int(*value),
+                loc,
+            ),
             ExprKind::String(value) => {
                 let string_literal = make_expr(
                     Type::static_string_slice(self.ctxt()),
@@ -696,45 +703,28 @@ impl FunctionCtxt<'_> {
                 }
             }
             ExprKind::Binary(binary_op, left, right) => {
-                let ((left_ty, right_ty), result) = match binary_op {
+                let (left_ty, right_ty) = match binary_op {
                     BinaryOp::Add | BinaryOp::Divide | BinaryOp::Multiply | BinaryOp::Subtract => {
-                        ((Some(Type::Int), Some(Type::Int)), Type::Int)
+                        (None, None)
                     }
-                    BinaryOp::Equals => ((None, None), Type::Bool),
-                    BinaryOp::Lesser | BinaryOp::Greater => {
-                        ((Some(Type::Int), Some(Type::Int)), Type::Bool)
-                    }
-                    BinaryOp::And => ((Some(Type::Bool), Some(Type::Bool)), Type::Bool),
+                    BinaryOp::Equals => (None, None),
+                    BinaryOp::Lesser | BinaryOp::Greater => (None, None),
+                    BinaryOp::And => (Some(Type::Bool), Some(Type::Bool)),
                 };
                 let left = self.check_expr(left, left_ty);
                 let right = self.check_expr(right, right_ty);
-                match (binary_op, &left.ty, &right.ty) {
-                    (
-                        BinaryOp::Add
-                        | BinaryOp::Divide
-                        | BinaryOp::Subtract
-                        | BinaryOp::Multiply
-                        | BinaryOp::Greater
-                        | BinaryOp::Lesser,
-                        Type::Int,
-                        Type::Int,
-                    )
-                    | (BinaryOp::And, Type::Bool, Type::Bool)
-                    | (BinaryOp::Equals, Type::Int, Type::Int)
-                    | (BinaryOp::Equals, Type::Byte, Type::Byte)
-                    | (BinaryOp::Equals, Type::Char, Type::Char) => (),
-                    (BinaryOp::Equals, Type::RawPointer(ty1), Type::RawPointer(ty2)) => {
-                        let _ = self.root().unify((**ty1).clone(), (**ty2).clone(), loc);
+                let result_ty = match binary_op {
+                    BinaryOp::Add | BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Divide => {
+                        (left.ty == right.ty && left.ty.is_integer()).then(|| right.ty.clone())
                     }
-                    (_, left, right) => {
-                        self.ctxt().diag().add_diagnostic(
-                            format!(
-                                "'{left}' and '{right}' are invalid operands for '{binary_op}'"
-                            ),
-                            loc,
-                        );
+                    BinaryOp::Equals => {
+                        (left.ty == right.ty && left.ty.is_builtin_scalar()).then_some(Type::Bool)
                     }
-                }
+                    BinaryOp::Lesser | BinaryOp::Greater => {
+                        (left.ty == right.ty && left.ty.is_integer()).then_some(Type::Bool)
+                    }
+                    BinaryOp::And => Some(Type::Bool),
+                };
                 fn binary_kind(
                     op: typed_ast::BinaryOp,
                     left: typed_ast::Expr,
@@ -742,6 +732,16 @@ impl FunctionCtxt<'_> {
                 ) -> typed_ast::ExprKind {
                     typed_ast::ExprKind::Binary(op, Box::new(left), Box::new(right))
                 }
+                let result = result_ty.unwrap_or_else(|| {
+                    self.ctxt().diag().add_diagnostic(
+                        format!(
+                            "invalid operands '{}' and '{}' for '{binary_op}'",
+                            left.ty, right.ty
+                        ),
+                        expr.loc,
+                    );
+                    Type::Unknown
+                });
                 typed_ast::Expr {
                     loc,
                     ty: result,

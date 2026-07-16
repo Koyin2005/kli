@@ -7,6 +7,11 @@ pub struct Token {
     pub loc: SrcLoc,
     pub kind: TokenKind,
 }
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum NumberKind {
+    Unsigned,
+    Signed,
+}
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TokenKind {
     With,
@@ -30,7 +35,7 @@ pub enum TokenKind {
     LeftBracket,
     RightBracket,
     Pipe,
-    Number(u64),
+    Number(u64, NumberKind),
     Semi,
     Colon,
     Fun,
@@ -39,6 +44,7 @@ pub enum TokenKind {
     Borrow,
     Ident(String),
     Int,
+    Uint,
     Bool,
     String,
     StringLiteral(String),
@@ -116,10 +122,20 @@ impl Display for TokenKind {
             Self::Borrow => "borrow",
             Self::In => "in",
             Self::Int => "int",
+            Self::Uint => "uint",
             Self::String => "string",
             Self::Imm => "imm",
             Self::Ref => "ref",
-            Self::Number(number) => return write!(f, "{number}"),
+            Self::Number(number, sign) => {
+                return write!(
+                    f,
+                    "{number}{}",
+                    match sign {
+                        NumberKind::Signed => "",
+                        NumberKind::Unsigned => "u",
+                    }
+                );
+            }
             Self::Mut => "mut",
             Self::Let => "let",
             Self::Case => "case",

@@ -35,8 +35,8 @@ impl Builder<'_> {
                 let place = self.place(iterator);
                 let current_index = self.assign_to_temp(
                     iterator.loc,
-                    Type::Int,
-                    Rvalue::Use(Operand::Constant(Constant::int(0))),
+                    Type::UINT,
+                    Rvalue::Use(Operand::Constant(Constant::uint(0))),
                 );
                 self.goto_to_new_block(iterator.loc);
 
@@ -90,7 +90,7 @@ impl Builder<'_> {
                         mir::BinaryOp::Unchecked(OverflowOp::Add),
                         Box::new((
                             Operand::Load(Place::local(current_index)),
-                            Operand::Constant(Constant::int(1)),
+                            Operand::Constant(Constant::uint(1)),
                         )),
                     ),
                 );
@@ -130,8 +130,8 @@ impl Builder<'_> {
                 let byte_ptr = string_ref.clone().with_deref().with_field(LIST_PTR_FIELD);
                 let current_index = self.assign_to_temp(
                     iterator.loc,
-                    Type::Int,
-                    Rvalue::Use(Operand::Constant(Constant::int(0))),
+                    Type::UINT,
+                    Rvalue::Use(Operand::Constant(Constant::uint(0))),
                 );
                 self.goto_to_new_block(iterator.loc);
 
@@ -153,7 +153,7 @@ impl Builder<'_> {
                 let body_block = self.current_block;
                 let result = self.assign_to_temp(
                     iterator.loc,
-                    Type::pair(Type::Char, Type::Int),
+                    Type::pair(Type::Char, Type::UINT),
                     Rvalue::DecodeUtf8(
                         Operand::Load(byte_ptr),
                         Operand::Load(Place::local(current_index)),

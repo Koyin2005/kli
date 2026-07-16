@@ -3,7 +3,7 @@ use std::{iter::Peekable, num::IntErrorKind, str::Chars};
 use crate::{
     diagnostics::DiagnosticReporter,
     ident::Symbol,
-    parsing::tokens::{Token, TokenKind},
+    parsing::tokens::{NumberKind, Token, TokenKind},
     src_loc::SrcLoc,
 };
 
@@ -116,8 +116,13 @@ impl<'s> Lexer<'s> {
         while let Some(c) = self.match_char_with(|c| char::is_digit(c, 10)) {
             src.push(c);
         }
+        let sign = if self.match_char('u').is_some() {
+            NumberKind::Unsigned
+        } else {
+            NumberKind::Signed
+        };
         match src.parse::<u64>() {
-            Ok(n) => Some(self.new_token(TokenKind::Number(n))),
+            Ok(n) => Some(self.new_token(TokenKind::Number(n, sign))),
             Err(e) => match e.kind() {
                 IntErrorKind::PosOverflow => {
                     let loc = self.current_loc();
@@ -125,7 +130,7 @@ impl<'s> Lexer<'s> {
                         .add_diagnostic("Integer too large".to_string(), loc);
                     Some(Token {
                         loc,
-                        kind: TokenKind::Number(u64::MAX),
+                        kind: TokenKind::Number(u64::MAX, sign),
                     })
                 }
                 _ => None,
@@ -171,6 +176,7 @@ impl<'s> Lexer<'s> {
                 "for" => TokenKind::For,
                 "panic" => TokenKind::Panic,
                 "int" => TokenKind::Int,
+                "uint" => TokenKind::Uint,
                 "string" => TokenKind::String,
                 "bool" => TokenKind::Bool,
                 "let" => TokenKind::Let,

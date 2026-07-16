@@ -1,7 +1,9 @@
 use crate::{
     index_vec::IndexVec,
     src_loc::SrcLoc,
-    types::{FunctionType, GenericArg, GenericArgs, RecordField, Region, Type, TypeMap},
+    types::{
+        FunctionType, GenericArg, GenericArgs, IntegerKind, RecordField, Region, Type, TypeMap,
+    },
 };
 #[derive(Debug)]
 pub struct TypeVarInfo {
@@ -113,7 +115,8 @@ impl TypeInfer {
     }
     pub fn unify_ty(&mut self, ty1: Type, ty2: Type) -> Option<Type> {
         match (ty1, ty2) {
-            (ty @ Type::Int, Type::Int)
+            (ty @ Type::Int(IntegerKind::Signed), Type::Int(IntegerKind::Signed))
+            | (ty @ Type::Int(IntegerKind::Unsigned), Type::Int(IntegerKind::Unsigned))
             | (ty @ Type::Bool, Type::Bool)
             | (ty @ Type::Unit, Type::Unit)
             | (ty @ Type::Unknown, Type::Unknown)
@@ -208,7 +211,7 @@ impl TypeInfer {
             },
             //This will fail to compile if new variants are not matched
             (
-                Type::Int
+                Type::Int(IntegerKind::Signed | IntegerKind::Unsigned)
                 | Type::Bool
                 | Type::Unknown
                 | Type::Char

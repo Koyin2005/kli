@@ -10,7 +10,7 @@ pub fn pattern_to_pat(ctxt: CtxtRef<'_>, pattern: &Pattern) -> Pat {
     match &pattern.kind {
         PatternKind::Int(value) => Pat {
             ty,
-            constructor: Constructor::Int(*value),
+            constructor: Constructor::Int(value.as_i128()),
             fields: Vec::new(),
         },
         PatternKind::Unit => Pat {

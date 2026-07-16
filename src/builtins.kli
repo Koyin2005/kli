@@ -1,4 +1,4 @@
-fun allocate[T](count : int) -> ptr[T];
+fun allocate[T](count : uint) -> ptr[T];
 
 @unsafe
 fun deallocate[T](p : ptr[T]) -> (); 
@@ -13,9 +13,9 @@ fun ptr_read[T](p : ptr[T]) -> T;
 fun ptr_write[T](p : ptr[T], value : T) -> ();
 
 @unsafe
-fun memcopy[T](dst : ptr[T], src : ptr[T], count : int) -> ();
+fun memcopy[T](dst : ptr[T], src : ptr[T], count : uint) -> ();
 
-fun offset[T](p : ptr[T], offset: int) -> ptr[T];
+fun offset[T](p : ptr[T], offset: uint) -> ptr[T];
 
 @unsafe
 fun drop_in_place[T](p : ptr[T]) -> ();

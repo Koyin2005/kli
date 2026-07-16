@@ -8,7 +8,8 @@ use crate::resolved_ast::{self as res, TypeName};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
 use crate::types::{
-    FieldName, FunctionType, GenericArg, GenericArgs, GenericKind, RecordField, Region, Type,
+    FieldName, FunctionType, GenericArg, GenericArgs, GenericKind, IntegerKind, RecordField,
+    Region, Type,
 };
 pub struct Lower<'a> {
     ctxt: CtxtRef<'a>,
@@ -79,7 +80,7 @@ impl<'a> Lower<'a> {
                         (_, kind @ (GenericKind::Region | GenericKind::Type)) => {
                             self.ctxt
                                 .diag()
-                                .add_diagnostic(format!("Generic kind mismatch"), arg.loc());
+                                .add_diagnostic("Generic kind mismatch".to_string(), arg.loc());
                             match kind {
                                 GenericKind::Region => GenericArg::Region(Region::Unknown),
                                 GenericKind::Type => GenericArg::Type(Type::Unknown),
@@ -153,7 +154,11 @@ impl<'a> Lower<'a> {
             }
             TypeName::Int => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                Type::Int
+                Type::Int(IntegerKind::Signed)
+            }
+            TypeName::Uint => {
+                let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
+                Type::Int(IntegerKind::Unsigned)
             }
             TypeName::Char => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);

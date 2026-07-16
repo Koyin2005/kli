@@ -31,7 +31,7 @@ impl MirPass for SimplifyCfg {
                     TerminatorKind::Switch(ref operand, ref targets) => {
                         if let Operand::Constant(constant) = operand
                             && let Some(value) = constant.value.as_scalar()
-                            && let target = targets.branch_for_value(value as i128)
+                            && let target = targets.branch_for_value(value)
                             && body.block_info.predecessors()[target].len() == 1
                         {
                             Self::steal(body.block_info.blocks_mut(), target, block);
