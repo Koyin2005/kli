@@ -14,3 +14,18 @@ fun push_char[region r](s : mut[r] String, c : char) -> () = panic
 
 @unsafe
 fun from_utf8_unchecked(v : arrays.ArrayList[byte]) -> String = String {array = v}
+
+@opaque
+@lang_item("string_slice")
+type StringSlice[region r] = {
+    value : Slice[r,byte]
+}
+
+@unsafe
+fun from_utf8_slice_unchecked[region r](v : Slice[r,byte]) -> StringSlice[r] = 
+    StringSlice{
+        value = v
+    }
+
+fun from_slice[r](s : StringSlice[r]) -> String = 
+    from_utf8_unchecked(arrays.from_slice(s.value,fun(x) -> x^))

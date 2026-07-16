@@ -36,6 +36,16 @@ fun with_capacity[T](cap : int) -> ArrayList[T] = do
     }
 end
 
+fun from_slice[region r,T](s : slices.Slice[r,T], clone : fun(imm[r] T) -> T) -> ArrayList[T] = do
+    let mut i = 0;
+    let mut l = with_capacity(slices.len(s));
+    while i < slices.len(s) do 
+        do in r push(borrow mut l in r,clone(slices.expect(s,i))) end;
+        i = i + 1
+    end;
+    l
+end
+
 @unsafe
 @lang_item("array_list_from_raw")
 fun from_raw_parts[T](ptr : ptr[T], cap : int, len : int) -> ArrayList[T] = 
