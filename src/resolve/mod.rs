@@ -1262,15 +1262,12 @@ impl Resolve {
             }
             ast::ImportTreeTail::Children(sub_trees) => (
                 tree.current,
-                if sub_trees.is_empty() {
-                    match self.resolve_path(&path) {
-                        Ok(path) => {
-                            self.declare_item(tree.current, "import alias", path);
-                        }
-                        Err(err) => self.path_res_error(&path, head.loc, err),
+                if let Some(sub_trees) = sub_trees {
+                    if sub_trees.is_empty()
+                        && let Err(err) = self.resolve_path(&path)
+                    {
+                        self.path_res_error(&path, head.loc, err)
                     }
-                    Box::new([])
-                } else {
                     sub_trees
                         .into_iter()
                         .map(|tree| {
@@ -1278,6 +1275,14 @@ impl Resolve {
                             self.resolve_import_tree(head, path, tree)
                         })
                         .collect()
+                } else {
+                    match self.resolve_path(&path) {
+                        Ok(path) => {
+                            self.declare_item(tree.current, "import alias", path);
+                        }
+                        Err(err) => self.path_res_error(&path, head.loc, err),
+                    }
+                    Box::new([])
                 },
             ),
         };

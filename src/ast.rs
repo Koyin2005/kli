@@ -376,7 +376,7 @@ pub struct Item {
 }
 #[derive(Debug)]
 pub enum ImportTreeTail {
-    Children(Vec<ImportTree>),
+    Children(Option<Vec<ImportTree>>),
     Alias(Ident),
 }
 #[derive(Debug)]

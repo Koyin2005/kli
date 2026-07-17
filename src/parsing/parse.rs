@@ -1011,14 +1011,14 @@ impl Parser {
         let name = self.expect_ident("import path")?;
         let tail = if self.matches_token(&TokenKind::Dot) {
             ImportTreeTail::Children(if self.matches_token(&TokenKind::LeftParen) {
-                self.delimited_by(&TokenKind::RightParen, Self::parse_import_tree)?
+                Some(self.delimited_by(&TokenKind::RightParen, Self::parse_import_tree)?)
             } else {
-                vec![self.parse_import_tree()?]
+                Some(vec![self.parse_import_tree()?])
             })
         } else if self.matches_token(&TokenKind::As) {
             ImportTreeTail::Alias(self.expect_ident("import alias")?)
         } else {
-            ImportTreeTail::Children(Vec::new())
+            ImportTreeTail::Children(None)
         };
         Ok(ImportTree {
             current: name,
