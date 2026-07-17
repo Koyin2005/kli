@@ -548,6 +548,13 @@ impl FunctionCtxt<'_> {
         let &Expr { loc, ref kind } = expr;
         let make_expr = |ty, kind, loc| typed_ast::Expr { ty, kind, loc };
         match kind {
+            ExprKind::Unsafe(expr) => {
+                let expr = self.check_expr_coerces_to(expr, expected_ty.clone());
+                make_expr(expr.ty.clone(),
+            typed_ast::ExprKind::Unsafe(Box::new(expr)),
+        loc
+        )  
+            },
             ExprKind::Return(return_expr) => {
                 let value = self.check_expr_coerces_to(return_expr, Some(self.return_type.clone()));
                 make_expr(

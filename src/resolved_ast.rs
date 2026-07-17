@@ -113,6 +113,7 @@ pub struct ForExpr {
 }
 #[derive(Debug)]
 pub enum ExprKind {
+    Unsafe(Box<Expr>),
     Block(Box<BlockBody>, Option<LocalRegionId>),
     Unit,
     Err,

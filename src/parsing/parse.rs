@@ -334,8 +334,8 @@ impl Parser {
             stmts.push(stmt);
         }
     }
-    fn parse_block_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
-        self.expect(&TokenKind::Do)?;
+    fn parse_block_expr_tail(&mut self, loc: SrcLoc) -> Result<Expr,ParseError>{
+
         let region = if self.matches_token(&TokenKind::In) {
             Some(self.expect_ident("region name")?)
         } else {
@@ -347,6 +347,10 @@ impl Parser {
             loc,
             kind: ExprKind::Block(body, region),
         })
+    }
+    fn parse_block_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
+            self.expect(&TokenKind::Do)?;
+            self.parse_block_expr_tail(loc)
     }
     fn parse_case_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.advance();
@@ -511,6 +515,11 @@ impl Parser {
                     loc,
                     kind: ExprKind::For(Box::new(pattern), Box::new(iterator), Box::new(body)),
                 })
+            }
+            TokenKind::Unsafe => {
+                self.advance();
+                let expr = self.parse_block_expr_tail(loc)?;
+                Ok(Expr { loc, kind: ExprKind::Unsafe(Box::new(expr)) })
             }
             TokenKind::Borrow => {
                 self.advance();
@@ -893,7 +902,11 @@ impl Parser {
         let mut annotations = Vec::new();
         while let Some(token) = self.match_token(&TokenKind::At) {
             let loc = token.loc;
-            let name = self.expect_ident("annotation name")?;
+            let name = if let Some(token) = self.match_token(&TokenKind::Unsafe) {
+                Ident { symbol: Symbol::intern("unsafe"), loc:token.loc }
+            } else {
+                self.expect_ident("annotation name")?
+            };
             let mut fields = Vec::new();
             if self.matches_token(&TokenKind::LeftParen) {
                 fields = self.delimited_by(&TokenKind::RightParen, |this| {

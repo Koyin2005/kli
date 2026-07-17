@@ -98,7 +98,7 @@ where
                 v.visit_expr(expr);
             }
         }
-        ExprKind::NeverToAny(value) | ExprKind::Return(value) => v.visit_expr(value),
+        ExprKind::NeverToAny(value) | ExprKind::Unsafe(value) | ExprKind::Return(value) => v.visit_expr(value),
         ExprKind::VariantInit(.., value) => {
             if let Some(value) = value {
                 v.visit_expr(value)

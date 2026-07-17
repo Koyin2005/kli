@@ -29,6 +29,9 @@ impl Builder<'_> {
                 }
                 self.expr_stmt(&block_body.expr);
             }
+            ExprKind::Unsafe(expr) => {
+                self.expr_stmt(expr);
+            }
             ExprKind::Print(value) => {
                 let stmt = StmtKind::Print(value.as_ref().map(|expr| self.operand(expr)));
                 self.push_stmt(expr.loc, stmt);

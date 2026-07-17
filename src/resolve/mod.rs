@@ -168,6 +168,7 @@ impl Resolve {
             | ast::ExprKind::Panic
             | ast::ExprKind::Path(..) => (),
             ast::ExprKind::Annotate(expr, _)
+            | ast::ExprKind::Unsafe(expr)
             | ast::ExprKind::Deref(expr)
             | ast::ExprKind::AddressOf(expr)
             | ast::ExprKind::Field(expr, _) => self.declare_in_exprs(expr),
@@ -745,6 +746,10 @@ impl Resolve {
     fn resolve_expr(&mut self, expr: ast::Expr) -> res::Expr {
         let loc = expr.loc;
         let kind = match expr.kind {
+            ast::ExprKind::Unsafe(expr) => {
+                let expr = self.resolve_expr(*expr);
+                res::ExprKind::Unsafe(Box::new(expr))
+            },
             ast::ExprKind::Block(block, region) => self.in_scope(|this| {
                 let region = region.map(|region| this.declare_region(region.symbol));
                 res::ExprKind::Block(

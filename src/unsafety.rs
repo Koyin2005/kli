@@ -35,6 +35,7 @@ pub fn is_unsafe(ctxt: CtxtRef, id: DefId) -> bool {
 }
 pub struct SafetyCheck<'ctxt> {
     ctxt: CtxtRef<'ctxt>,
+    in_unsafe_block : bool
 }
 impl<'ctxt> SafetyCheck<'ctxt> {
     pub fn check(
@@ -42,16 +43,10 @@ impl<'ctxt> SafetyCheck<'ctxt> {
         id: DefId,
         function: &Function,
     ) -> Result<(), SafetyCheckError> {
-        if ctxt
-            .std_lib_module()
-            .is_some_and(|std| ctxt.ancestors(id).any(|id| id == std))
-        {
-            return Ok(());
-        }
         if is_unsafe(ctxt, id) {
             return Ok(());
         }
-        let mut this = Self { ctxt };
+        let mut this = Self { ctxt,in_unsafe_block:false };
         if let Some(body) = function.body.as_ref() {
             this.visit_expr(body);
         }
@@ -64,7 +59,17 @@ impl<'ctxt> SafetyCheck<'ctxt> {
 }
 impl Visitor for SafetyCheck<'_> {
     fn visit_expr(&mut self, expr: &crate::typed_ast::Expr) {
+        if self.in_unsafe_block{
+            return;
+        }
         let cause = match expr.kind {
+            ExprKind::Unsafe(ref expr) => {
+                let was_in_unsafe_block = self.in_unsafe_block;
+                self.in_unsafe_block = true;
+                self.visit_expr(expr);
+                self.in_unsafe_block = was_in_unsafe_block;
+                return;
+            }
             ExprKind::BuiltinCall(builtin, ref args, _) => {
                 if let Builtin::Transmute = builtin
                     && let Some(
