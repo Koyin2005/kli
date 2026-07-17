@@ -47,6 +47,7 @@ enum Res {
     TypeAlias(TypeAlias),
     TypeDef(ModuleNodeId),
     VariantCase(ModuleNodeId),
+    Unknown,
 }
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 struct ModuleNodeId(ModuleId, NodeId);
@@ -257,6 +258,7 @@ impl Resolve {
                     }
                     Some(Res::LocalRegion(region)) => res::RegionKind::Local(name.symbol, region),
                     Some(Res::Param(index)) => self.resolve_region_param(name, index),
+                    Some(Res::Unknown) => res::RegionKind::Unknown,
                     Some(
                         Res::TypeAlias(_)
                         | Res::Function(_)
@@ -394,6 +396,7 @@ impl Resolve {
                 }
                 Some(res::TypeName::Param(name.symbol, index))
             }
+            Ok(Res::Unknown) => None,
             Ok(Res::TypeAlias(alias)) => match alias {
                 TypeAlias::Ptr => Some(res::TypeName::Ptr),
                 TypeAlias::Box => Some(res::TypeName::Box),
@@ -624,6 +627,49 @@ impl Resolve {
             }
         }
     }
+    fn resolve_sub_path(
+        &mut self,
+        res: Res,
+        segment: Ident,
+        head: Ident,
+    ) -> Result<Res, NameResolutionError> {
+        Ok(match res {
+            Res::Unknown => Res::Unknown,
+            Res::Module(module) => {
+                let env = &self.modules[&module].env;
+                if let Some(&res) = env.get(&segment.symbol) {
+                    res
+                } else {
+                    return Err(NameResolutionError::NotInScope);
+                }
+            }
+            Res::TypeDef(id) => {
+                let type_def = &self.type_defs[&id];
+                let (cases, case_map) = match type_def {
+                    TypeDefInfo::Record { .. } => {
+                        return Err(NameResolutionError::NotInScope);
+                    }
+                    TypeDefInfo::Variant { cases, case_map } => (cases, case_map),
+                };
+                let Some(&case) = case_map.get(&segment.symbol) else {
+                    return Err(NameResolutionError::NotInScope);
+                };
+                Res::VariantCase(ModuleNodeId(id.0, cases[case].id))
+            }
+            Res::Var(var) => {
+                return Err(NameResolutionError::VariableField(
+                    head.loc,
+                    res::Var(head.symbol, var),
+                    Vec::new(),
+                ));
+            }
+            Res::Function(_)
+            | Res::Param(_)
+            | Res::LocalRegion(_)
+            | Res::TypeAlias(_)
+            | Res::VariantCase(..) => return Err(NameResolutionError::InvalidPathStart),
+        })
+    }
     fn resolve_path(&mut self, path: &Path) -> Result<Res, NameResolutionError> {
         let head_seg = *path.head();
         let Some(head) = self.resolve_name(head_seg.symbol) else {
@@ -631,41 +677,15 @@ impl Resolve {
         };
         let mut curr = head;
         for (index, &segment) in path.segments_iter().into_iter().enumerate().skip(1) {
-            curr = match curr {
-                Res::Module(module) => {
-                    let env = &self.modules[&module].env;
-                    if let Some(&res) = env.get(&segment.symbol) {
-                        res
-                    } else {
-                        return Err(NameResolutionError::NotInScope);
+            curr = self
+                .resolve_sub_path(curr, segment, head_seg)
+                .map_err(|mut err| {
+                    if let NameResolutionError::VariableField(_, _, fields) = &mut err {
+                        *fields = path.segments()[index..].to_vec()
                     }
-                }
-                Res::TypeDef(id) => {
-                    let type_def = &self.type_defs[&id];
-                    let (cases, case_map) = match type_def {
-                        TypeDefInfo::Record { .. } => {
-                            return Err(NameResolutionError::NotInScope);
-                        }
-                        TypeDefInfo::Variant { cases, case_map } => (cases, case_map),
-                    };
-                    let Some(&case) = case_map.get(&segment.symbol) else {
-                        return Err(NameResolutionError::NotInScope);
-                    };
-                    Res::VariantCase(ModuleNodeId(id.0, cases[case].id))
-                }
-                Res::Var(var) => {
-                    return Err(NameResolutionError::VariableField(
-                        head_seg.loc,
-                        res::Var(head_seg.symbol, var),
-                        path.segments()[index..].to_vec(),
-                    ));
-                }
-                Res::Function(_)
-                | Res::Param(_)
-                | Res::LocalRegion(_)
-                | Res::TypeAlias(_)
-                | Res::VariantCase(..) => return Err(NameResolutionError::InvalidPathStart),
-            }
+
+                    err
+                })?;
         }
         Ok(curr)
     }
@@ -712,6 +732,7 @@ impl Resolve {
                 res::ExprKind::Err
             }
             Ok(res) => match res {
+                Res::Unknown => res::ExprKind::Err,
                 Res::Var(id) => {
                     let name = path.into_last().symbol;
                     self.error_on_generic_args("var", name, loc, args);
@@ -1218,6 +1239,57 @@ impl Resolve {
             })
             .collect()
     }
+    fn resolve_import_tree(
+        &mut self,
+        head: Ident,
+        path: Path,
+        tree: ast::ImportTree,
+    ) -> res::ImportTree {
+        let (name, children): (_, Box<[_]>) = match tree.tail {
+            ast::ImportTreeTail::Alias(name) => {
+                let res = self.resolve_path(&path).unwrap_or_else(|err| {
+                    self.path_res_error(&path, head.loc, err);
+                    Res::Unknown
+                });
+                self.declare_item(name, "import alias", res);
+                (
+                    name,
+                    Box::new([res::ImportTree {
+                        name,
+                        children: Box::new([]),
+                    }]),
+                )
+            }
+            ast::ImportTreeTail::Children(sub_trees) => (
+                tree.current,
+                if sub_trees.is_empty() {
+                    match self.resolve_path(&path) {
+                        Ok(path) => {
+                            self.declare_item(tree.current, "import alias", path);
+                        }
+                        Err(err) => self.path_res_error(&path, head.loc, err),
+                    }
+                    Box::new([])
+                } else {
+                    sub_trees
+                        .into_iter()
+                        .map(|tree| {
+                            let path = path.clone().with_extra_segment(tree.current);
+                            self.resolve_import_tree(head, path, tree)
+                        })
+                        .collect()
+                },
+            ),
+        };
+        res::ImportTree { name, children }
+    }
+    fn resolve_import(&mut self, import: ast::Import) -> res::ImportTree {
+        self.resolve_import_tree(
+            import.tree.current,
+            Path::new(vec![import.tree.current]),
+            import.tree,
+        )
+    }
     fn resolve_module(&mut self, module: ast::Module) {
         self.resolve_in_module_scope(module.id, |this| {
             let mut mod_items = Vec::with_capacity(module.items.len() + module.child_modules.len());
@@ -1237,13 +1309,9 @@ impl Resolve {
                         ast::ItemKind::TypeDef(type_def) => res::ItemKind::TypeDef(Box::new(
                             this.resolve_type_def(node_id, type_def),
                         )),
-                        ast::ItemKind::Import(import, alias) => {
-                            let name = alias.unwrap_or(import.last());
-                            match this.resolve_path(&import) {
-                                Ok(path) => this.declare_item(name, "import", path),
-                                Err(err) => this.path_res_error(&import, item.loc, err),
-                            }
-                            res::ItemKind::Import(name)
+                        ast::ItemKind::Import(import) => {
+                            let import = this.resolve_import(import);
+                            res::ItemKind::Import(Box::new(import))
                         }
                     },
                 };

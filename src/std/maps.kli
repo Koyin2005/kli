@@ -1,7 +1,4 @@
-import std.arrays.new as array_new
 import std.arrays.ArrayList
-import std.optional.Option
-import std.optional.take
 
 import std.arrays
 

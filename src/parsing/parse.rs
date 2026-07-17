@@ -4,10 +4,10 @@ use crate::{
     ast::{
         Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, CaseDef, CaseType,
         Expr, ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, GenericParam,
-        GenericParamKind, Generics, InstancePath, IntLit, IsResource, Item, ItemKind, Lambda,
-        LetBinding, Module, ModuleId, Mutable, NodeId, NumberKind, Param, Path, Pattern,
-        PatternField, PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind,
-        Type, TypeDef, TypeDefKind, TypeKind,
+        GenericParamKind, Generics, Import, ImportTree, ImportTreeTail, InstancePath, IntLit,
+        IsResource, Item, ItemKind, Lambda, LetBinding, Module, ModuleId, Mutable, NodeId,
+        NumberKind, Param, Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField,
+        RecordType, Region, Stmt, StmtKind, Type, TypeDef, TypeDefKind, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::{Ident, Symbol},
@@ -452,17 +452,6 @@ impl Parser {
             loc,
             kind: ExprKind::Tuple(exprs),
         })
-    }
-    fn parse_path(&mut self) -> Result<Path, ParseError> {
-        let Some(name) = self.match_ident() else {
-            unreachable!("Should be an ident here")
-        };
-        let mut path = vec![name];
-        while self.matches_token(&TokenKind::Dot) {
-            let name = self.expect_ident("field name or sub path")?;
-            path.push(name);
-        }
-        Ok(Path::new(path))
     }
     fn parse_path_with_generics(&mut self) -> Result<InstancePath, ParseError> {
         let Some(name) = self.match_ident() else {
@@ -1018,6 +1007,29 @@ impl Parser {
             kind,
         })
     }
+    fn parse_import_tree(&mut self) -> Result<ImportTree, ParseError> {
+        let name = self.expect_ident("import path")?;
+        let tail = if self.matches_token(&TokenKind::Dot) {
+            ImportTreeTail::Children(if self.matches_token(&TokenKind::LeftParen) {
+                self.delimited_by(&TokenKind::RightParen, Self::parse_import_tree)?
+            } else {
+                vec![self.parse_import_tree()?]
+            })
+        } else if self.matches_token(&TokenKind::As) {
+            ImportTreeTail::Alias(self.expect_ident("import alias")?)
+        } else {
+            ImportTreeTail::Children(Vec::new())
+        };
+        Ok(ImportTree {
+            current: name,
+            tail,
+        })
+    }
+    fn parse_import(&mut self) -> Result<Import, ParseError> {
+        self.advance();
+        let import_tree = self.parse_import_tree()?;
+        Ok(Import { tree: import_tree })
+    }
     fn parse_item(&mut self) -> Result<Option<Item>, ParseError> {
         let annotations = self.parse_annotations()?;
         Ok(Some(match self.peek_token().kind {
@@ -1025,15 +1037,7 @@ impl Parser {
                 id: self.next_node_id(),
                 loc: self.current_loc(),
                 annotations,
-                kind: {
-                    self.advance();
-                    let path = self.parse_path()?;
-                    let alias = self
-                        .matches_token(&TokenKind::As)
-                        .then(|| self.expect_ident("import alias"))
-                        .transpose()?;
-                    ItemKind::Import(path, alias)
-                },
+                kind: ItemKind::Import(self.parse_import()?),
             },
             TokenKind::Fun => Item {
                 id: self.next_node_id(),

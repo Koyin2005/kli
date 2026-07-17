@@ -1,6 +1,4 @@
-import std.phantom
-import builtins.transmute
-import builtins.offset
+import builtins.(transmute,offset)
 import std.optional.Option
 
 @lang_item("slice")

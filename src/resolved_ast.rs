@@ -320,11 +320,16 @@ pub struct Module {
     pub items: Box<[DefId]>,
 }
 #[derive(Debug)]
+pub struct ImportTree {
+    pub name: Ident,
+    pub children: Box<[ImportTree]>,
+}
+#[derive(Debug)]
 pub enum ItemKind {
     TypeDef(Box<TypeDef>),
     Function(Box<Function>),
     Module(Box<Module>),
-    Import(Ident),
+    Import(Box<ImportTree>),
 }
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum AnnotationKind {
@@ -369,7 +374,7 @@ impl Item {
             ItemKind::Function(function) => function.name,
             ItemKind::Module(module) => module.name,
             ItemKind::TypeDef(type_def) => type_def.name,
-            ItemKind::Import(name) => *name,
+            ItemKind::Import(import) => import.name,
         }
     }
     #[track_caller]

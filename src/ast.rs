@@ -128,7 +128,7 @@ pub struct LetExpr {
     pub binding: LetBinding,
     pub body: Expr,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Path {
     segments: Vec<Ident>,
 }
@@ -166,6 +166,10 @@ impl Path {
         let mut segments = self.into_segments();
         let head = segments.remove(0);
         (head, segments)
+    }
+    pub fn with_extra_segment(mut self, seg: Ident) -> Self {
+        self.segments.push(seg);
+        self
     }
     pub fn segments_iter(&self) -> impl IntoIterator<Item = &Ident> {
         self.segments.iter()
@@ -371,10 +375,24 @@ pub struct Item {
     pub kind: ItemKind,
 }
 #[derive(Debug)]
+pub enum ImportTreeTail {
+    Children(Vec<ImportTree>),
+    Alias(Ident),
+}
+#[derive(Debug)]
+pub struct ImportTree {
+    pub current: Ident,
+    pub tail: ImportTreeTail,
+}
+#[derive(Debug)]
+pub struct Import {
+    pub tree: ImportTree,
+}
+#[derive(Debug)]
 pub enum ItemKind {
     TypeDef(TypeDef),
     Function(Function),
-    Import(Path, Option<Ident>),
+    Import(Import),
 }
 #[derive(Debug)]
 pub struct TypeDef {
