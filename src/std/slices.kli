@@ -83,14 +83,9 @@ do
     | true -> Option.None
     | false -> 
         do
-            let ptr : ptr[T] = iter^.ptr;
-            let r : imm[r] T =unsafe  borrow 
-                ptr^ 
-            in r end;
-            let ptr = offset(ptr,1);
-            let len = len - 1u;
-            iter^.ptr = ptr;
-            iter^.len = len;
+            let r  = unsafe  imm[r] iter^.ptr^ end;
+            iter^.ptr = offset(iter^.ptr,1);
+            iter^.len = iter^.len - 1u;
             Option.Some(r)
         end
     end 

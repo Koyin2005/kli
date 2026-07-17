@@ -40,7 +40,7 @@ fun from_slice[region r,T](s : slices.Slice[r,T], clone : fun(imm[r] T) -> T) ->
     let mut i = 0u;
     let mut l = with_capacity(slices.len(s));
     while i < slices.len(s) do 
-        do in r push(borrow mut l in r,clone(slices.expect(s,i))) end;
+        do in r push(mut[r] l,clone(slices.expect(s,i))) end;
         i = i + 1u
     end;
     l
@@ -83,7 +83,7 @@ fun grow[region r,T](l : mut[r] ArrayList[T]) -> () =
     end
 
 fun push[region r,T](l : mut[r] ArrayList[T], value : T) -> () = do
-    do in r1 reserve(borrow mut l^ in r1,1u) end;
+    do in r1 reserve(mut[r1] l^,1u) end;
     unsafe 
         ptr_write(offset(l^.ptr,ints.uint_to_int(l^.len)),value)
     end;
@@ -112,14 +112,14 @@ fun ptr_to[region r,T](l : imm[r] ArrayList[T], index : uint) -> ptr[T] =
 fun at_imm[region r,T](l : imm[r] ArrayList[T], index : uint) -> imm[r] T = 
     case index < l^.len of 
     | false -> index_out_bounds()
-    | true -> unsafe borrow l^.ptr^ in r end
+    | true -> unsafe imm[r] l^.ptr^ end
     end
 
 
 fun at_mut[region r,T](l : mut[r] ArrayList[T], index : uint) -> mut[r] T = 
     case index < l^.len  of 
     | false -> index_out_bounds()
-    | true -> unsafe borrow mut l^.ptr^ in r end
+    | true -> unsafe mut[r] l^.ptr^ end
     end
 
 fun reserve[region r,T](l : mut[r] ArrayList[T], count : uint) -> () = do
@@ -132,7 +132,7 @@ fun reserve[region r,T](l : mut[r] ArrayList[T], count : uint) -> () = do
         | true -> 
             do in r1 
                 unsafe 
-                    resize(borrow mut l^ in r1,new_cap) 
+                    resize(mut[r1] l^,new_cap) 
                 end
             end
         | false -> () 

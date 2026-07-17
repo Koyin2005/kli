@@ -529,11 +529,12 @@ impl Parser {
                 })
             }
             TokenKind::Mut | TokenKind::Imm => {
-                let mutable = if self.matches_token(&TokenKind::Mut) {
+                let mutable = if self.check_token(&TokenKind::Mut){
                     Mutable::Mutable
                 } else {
                     Mutable::Immutable
                 };
+                self.advance();
                 self.expect(&TokenKind::LeftBracket)?;
                 let region = self.parse_region()?;
                 self.expect(&TokenKind::RightBracket)?;
