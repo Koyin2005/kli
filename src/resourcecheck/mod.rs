@@ -501,7 +501,6 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                 if self.place_map.state_of(id) == PlaceState::Owned {
                     return;
                 }
-
                 PlaceState::Owned
             }
             PlaceUse::Read => {

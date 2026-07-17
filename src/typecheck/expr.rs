@@ -709,10 +709,24 @@ impl FunctionCtxt<'_> {
             ExprKind::Binary(binary_op, left, right) => {
                 let (left_ty, right_ty) = match binary_op {
                     BinaryOp::Add | BinaryOp::Divide | BinaryOp::Multiply | BinaryOp::Subtract => {
-                        (None, None)
+                        let operand_tys = expected_ty.as_ref().and_then(|ty| {
+                            let Type::Int(kind) = *ty else {
+                                return None;
+                            };
+                            Some(Type::Int(kind))
+                        });
+                        (operand_tys.clone(), operand_tys)
                     }
                     BinaryOp::Equals => (None, None),
-                    BinaryOp::Lesser | BinaryOp::Greater => (None, None),
+                    BinaryOp::Lesser | BinaryOp::Greater => {
+                        let operand_tys = expected_ty.as_ref().and_then(|ty| {
+                            let Type::Int(kind) = *ty else {
+                                return None;
+                            };
+                            Some(Type::Int(kind))
+                        });
+                        (operand_tys.clone(), operand_tys)
+                    }
                     BinaryOp::And => (Some(Type::Bool), Some(Type::Bool)),
                 };
                 let left = self.check_expr(left, left_ty);

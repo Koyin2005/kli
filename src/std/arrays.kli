@@ -73,29 +73,20 @@ fun resize[region r,T](l : mut[r] ArrayList[T], new_cap: uint) -> () = do
     l^.cap = new_cap
 end
 
-@unsafe
-fun grow[region r,T](l : mut[r] ArrayList[T]) -> () = 
-    do
-        let new_cap = l^.cap * 2u;
-        unsafe 
-            resize(l,new_cap)
-        end
-    end
-
 fun push[region r,T](l : mut[r] ArrayList[T], value : T) -> () = do
-    do in r1 reserve(mut[r1] l^,1u) end;
+    do in r1 reserve(mut[r1] l^,1) end;
     unsafe 
         ptr_write(offset(l^.ptr,ints.uint_to_int(l^.len)),value)
     end;
-    l^.len = l^.len + 1u
+    l^.len = l^.len + 1
 end
 
 fun pop[region r,T](l : mut[r] ArrayList[T]) -> Option[T] = do
-    case l^.len == 0u of 
-    | true -> Option.None
-    | false -> do
-        let value = unsafe ptr_read(offset(l^.ptr,ints.uint_to_int(l^.len))) end;
-        l^.len = l^.len - 1u;
+    case l^.len of 
+    | 0 -> Option.None
+    | len -> do
+        let value = unsafe ptr_read(offset(l^.ptr,ints.uint_to_int(len))) end;
+        l^.len = l^.len - 1;
         Option.Some(value)
         end
     end
@@ -123,21 +114,15 @@ fun at_mut[region r,T](l : mut[r] ArrayList[T], index : uint) -> mut[r] T =
     end
 
 fun reserve[region r,T](l : mut[r] ArrayList[T], count : uint) -> () = do
-    let additional = ints.umax(0u,count);
-    case additional > 0u of 
-    | true -> do
-        let new_len = l^.len + count;
-        let new_cap = ints.umax(new_len,l^.cap * 2u);
-        case new_cap > l^.cap of
-        | true -> 
-            do in r1 
-                unsafe 
-                    resize(mut[r1] l^,new_cap) 
-                end
+    let new_len = l^.len + count;
+    case new_len > l^.cap of 
+    | true -> 
+        do
+            let new_cap = ints.umax(new_len,l^.cap * 2);
+            unsafe 
+                do in r1 resize(mut[r1] l^,new_cap) end
             end
-        | false -> () 
         end
-    end
     | false -> ()
     end 
 end
@@ -153,7 +138,7 @@ fun drop[T](l : ArrayList[T]) -> () = do
             drop_in_place(ptr) 
         end;
         ptr = offset(ptr,1);
-        len = len - 1u
+        len = len - 1
     end;
     unsafe 
         deallocate(l.ptr) 
