@@ -9,7 +9,6 @@ use crate::{
         self, AggregateKind, ConstValue, Constant, CopyNonOverlapping, DropInPlace, Local, Operand,
         OverflowOp, Place, PointerCast, Rvalue, build::Builder,
     },
-    resolved_ast::IntegerLiteral,
     src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
     types::{FieldName, FunctionType, Type},
@@ -30,9 +29,9 @@ impl Builder<'_> {
     fn as_constant(&mut self, expr: &Expr) -> Option<Constant> {
         match expr.kind {
             ExprKind::Bool(value) => Some(Constant::bool(value)),
-            ExprKind::Int(value) => Some(match value {
-                IntegerLiteral::Signed(value) => Constant::int(value),
-                IntegerLiteral::Unsigned(value) => Constant::uint(value),
+            ExprKind::Int(value) => Some(Constant {
+                ty: Box::new(expr.ty.clone()),
+                value: ConstValue::Scalar(value as i128),
             }),
             ExprKind::Unit => Some(Constant::unit()),
             ExprKind::String(ref value) => Some(Constant {

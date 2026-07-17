@@ -162,17 +162,15 @@ pub struct PatternField {
     pub pattern: Pattern,
 }
 #[derive(Debug, Clone, Copy)]
-pub enum IntegerLiteral {
-    Signed(i64),
-    Unsigned(u64),
+pub struct IntegerLiteral {
+    pub value: u64,
+    pub kind: IntegerLiteralKind,
 }
-impl IntegerLiteral {
-    pub fn as_i128(self) -> i128 {
-        match self {
-            Self::Signed(value) => value.into(),
-            Self::Unsigned(value) => value.into(),
-        }
-    }
+#[derive(Debug, Clone, Copy)]
+pub enum IntegerLiteralKind {
+    Signed,
+    Unsigned,
+    Implicit,
 }
 #[derive(Debug)]
 pub enum PatternKind {

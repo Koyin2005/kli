@@ -551,19 +551,16 @@ impl Resolve {
     }
     fn resolve_int_lit(
         &mut self,
-        loc: SrcLoc,
-        value: u64,
-        kind: ast::NumberKind,
+        _: SrcLoc,
+        ast::IntLit { value, kind }: ast::IntLit,
     ) -> res::IntegerLiteral {
-        match kind {
-            ast::NumberKind::Signed => res::IntegerLiteral::Signed(match value.try_into() {
-                Ok(number) => number,
-                Err(_) => {
-                    self.diag.add_diagnostic("Invalid integer".to_string(), loc);
-                    0
-                }
-            }),
-            ast::NumberKind::Unsigned => res::IntegerLiteral::Unsigned(value),
+        res::IntegerLiteral {
+            value,
+            kind: match kind {
+                Some(ast::NumberKind::Signed) => res::IntegerLiteralKind::Signed,
+                Some(ast::NumberKind::Unsigned) => res::IntegerLiteralKind::Unsigned,
+                _ => res::IntegerLiteralKind::Implicit,
+            },
         }
     }
     fn resolve_pattern(&mut self, pattern: ast::Pattern) -> res::Pattern {
@@ -576,9 +573,7 @@ impl Resolve {
                     .map(|field| self.resolve_pattern(field))
                     .collect(),
             ),
-            ast::PatternKind::Int(value, kind) => {
-                res::PatternKind::Int(self.resolve_int_lit(loc, value, kind))
-            }
+            ast::PatternKind::Int(lit) => res::PatternKind::Int(self.resolve_int_lit(loc, lit)),
             ast::PatternKind::Bool(value) => res::PatternKind::Bool(value),
             ast::PatternKind::Binding(borrow, mutable, name) => {
                 let var = self.declare_var(name.symbol);
@@ -780,9 +775,7 @@ impl Resolve {
             }
             ast::ExprKind::Unit => res::ExprKind::Unit,
             ast::ExprKind::String(value) => res::ExprKind::String(value.into()),
-            ast::ExprKind::Number(value, kind) => {
-                res::ExprKind::Int(self.resolve_int_lit(loc, value, kind))
-            }
+            ast::ExprKind::Number(lit) => res::ExprKind::Int(self.resolve_int_lit(loc, lit)),
             ast::ExprKind::Bool(value) => res::ExprKind::Bool(value),
             ast::ExprKind::Return(value) => {
                 res::ExprKind::Return(Box::new(self.resolve_expr(*value)))

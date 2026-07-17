@@ -3,10 +3,10 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     ast::Mutable,
     collect::TypeDefKind,
-    resolved_ast::{IntegerLiteral, Pattern, PatternField, PatternKind, Var},
+    resolved_ast::{Pattern, PatternField, PatternKind, Var},
     typecheck::root::FunctionCtxt,
     typed_ast::{self, FieldId},
-    types::{self, FieldName, IntegerKind, Region, Type},
+    types::{self, FieldName, Region, Type},
 };
 impl FunctionCtxt<'_> {
     pub fn check_pattern(
@@ -20,13 +20,10 @@ impl FunctionCtxt<'_> {
         let expected_type = root.simplify_type(expected_type);
         match pattern.kind {
             PatternKind::Int(value) => {
-                let kind = match value {
-                    IntegerLiteral::Signed(_) => IntegerKind::Signed,
-                    IntegerLiteral::Unsigned(_) => IntegerKind::Unsigned,
-                };
-                let _ = root.unify(expected_type, Type::Int(kind), pattern.loc);
+                let (ty, value) = self.root().check_int_lit(loc, Some(&expected_type), value);
+                let _ = root.unify(expected_type, ty.clone(), pattern.loc);
                 typed_ast::Pattern {
-                    ty: Type::Int(kind),
+                    ty,
                     loc,
                     kind: typed_ast::PatternKind::Int(value),
                 }

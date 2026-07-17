@@ -116,11 +116,14 @@ impl<'s> Lexer<'s> {
         while let Some(c) = self.match_char_with(|c| char::is_digit(c, 10)) {
             src.push(c);
         }
-        let sign = if self.match_char('u').is_some() {
-            NumberKind::Unsigned
-        } else {
-            NumberKind::Signed
+        let sign = match self.peek_char() {
+            Some('u') => Some(NumberKind::Unsigned),
+            Some('i') => Some(NumberKind::Signed),
+            _ => None,
         };
+        if sign.is_some() {
+            self.next_char();
+        }
         match src.parse::<u64>() {
             Ok(n) => Some(self.new_token(TokenKind::Number(n, sign))),
             Err(e) => match e.kind() {

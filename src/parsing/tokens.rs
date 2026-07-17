@@ -35,7 +35,7 @@ pub enum TokenKind {
     LeftBracket,
     RightBracket,
     Pipe,
-    Number(u64, NumberKind),
+    Number(u64, Option<NumberKind>),
     Semi,
     Colon,
     Fun,
@@ -132,8 +132,9 @@ impl Display for TokenKind {
                     f,
                     "{number}{}",
                     match sign {
-                        NumberKind::Signed => "",
-                        NumberKind::Unsigned => "u",
+                        Some(NumberKind::Signed) => "i",
+                        Some(NumberKind::Unsigned) => "u",
+                        None => "",
                     }
                 );
             }

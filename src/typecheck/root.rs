@@ -13,7 +13,7 @@ use crate::{
     src_loc::SrcLoc,
     typecheck::{infer::TypeInfer, subst::TypeSubst},
     typed_ast::{self, Function, IteratorType, LetBinding},
-    types::{FieldName, FunctionSig, GenericArgs, Region, Type, lower::Lower},
+    types::{self, FieldName, FunctionSig, GenericArgs, Region, Type, lower::Lower},
 };
 pub struct RootCtxt<'ctxt> {
     id: DefId,
@@ -96,6 +96,35 @@ impl<'ctxt> RootCtxt<'ctxt> {
                 .add_diagnostic(format!("Expected '{}' but got '{}'", region1, region2), loc);
             Region::Unknown
         }
+    }
+    pub(super) fn check_int_lit(
+        &self,
+        loc: SrcLoc,
+        hint: Option<&Type>,
+        lit: res::IntegerLiteral,
+    ) -> (Type, u64) {
+        let integer_ty = match lit.kind {
+            res::IntegerLiteralKind::Implicit => {
+                if let Some(&Type::UINT) = hint {
+                    types::IntegerKind::Unsigned
+                } else {
+                    types::IntegerKind::Signed
+                }
+            }
+            res::IntegerLiteralKind::Signed => types::IntegerKind::Signed,
+            res::IntegerLiteralKind::Unsigned => types::IntegerKind::Unsigned,
+        };
+        let ty = Type::Int(integer_ty);
+        let value = lit.value;
+        if let types::IntegerKind::Signed = integer_ty
+            && value > i64::MAX as u64
+        {
+            self.ctxt.diag().add_diagnostic(
+                format!("Integer literal '{value}' too large for '{}'", ty),
+                loc,
+            );
+        }
+        (ty, value)
     }
     pub(super) fn iterator_element(&self, ty: Type) -> Result<(IteratorType, Type), Type> {
         fn by_ref_iter(

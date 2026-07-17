@@ -148,7 +148,7 @@ impl Builder<'_> {
             PatternKind::Int(value) => {
                 vec![MatchTest {
                     place,
-                    case: TestCase::Equals(value.as_i128()),
+                    case: TestCase::Equals(*value as i128),
                 }]
             }
             PatternKind::Bool(value) => vec![MatchTest {

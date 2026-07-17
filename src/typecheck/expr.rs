@@ -7,8 +7,8 @@ use crate::{
     index_vec::IndexVec,
     lang_items::LangItem,
     resolved_ast::{
-        BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, FunctionDefId, IntegerLiteral, Lambda,
-        LocalRegionId, Pattern, Var,
+        BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, FunctionDefId, Lambda, LocalRegionId,
+        Pattern, Var,
     },
     src_loc::SrcLoc,
     typecheck::root::{FunctionCtxt, TypeCheck},
@@ -660,14 +660,10 @@ impl FunctionCtxt<'_> {
                 make_expr(Type::Unit, typed_ast::ExprKind::Print(arg), loc)
             }
             ExprKind::Unit => make_expr(Type::Unit, typed_ast::ExprKind::Unit, loc),
-            ExprKind::Int(value) => make_expr(
-                match value {
-                    IntegerLiteral::Signed(_) => Type::INT,
-                    IntegerLiteral::Unsigned(_) => Type::UINT,
-                },
-                typed_ast::ExprKind::Int(*value),
-                loc,
-            ),
+            ExprKind::Int(value) => {
+                let (ty, value) = self.root().check_int_lit(loc, expected_ty.as_ref(), *value);
+                make_expr(ty, typed_ast::ExprKind::Int(value), loc)
+            }
             ExprKind::String(value) => {
                 let string_literal = make_expr(
                     Type::static_string_slice(self.ctxt()),

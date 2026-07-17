@@ -91,7 +91,12 @@ pub struct PatternField {
     pub name: Ident,
     pub pattern: Pattern,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
+pub struct IntLit {
+    pub value: u64,
+    pub kind: Option<NumberKind>,
+}
+#[derive(Debug, Clone, Copy)]
 pub enum NumberKind {
     Signed,
     Unsigned,
@@ -102,7 +107,7 @@ pub enum PatternKind {
     Binding(Option<Mutable>, Mutable, Ident),
     Ref(Box<Pattern>),
     Case(Ident, Option<Box<Pattern>>),
-    Int(u64, NumberKind),
+    Int(IntLit),
     Record(Vec<PatternField>),
     Tuple(Vec<Pattern>),
     Unit,
@@ -233,7 +238,7 @@ pub enum ExprKind {
     Deref(Box<Expr>),
     Field(Box<Expr>, Ident),
     Bool(bool),
-    Number(u64, NumberKind),
+    Number(IntLit),
     Record(RecordExpr),
     Tuple(Vec<Expr>),
     NamedRecord(InstancePath, Vec<FieldInit>),

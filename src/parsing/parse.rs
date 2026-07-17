@@ -4,10 +4,10 @@ use crate::{
     ast::{
         Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, CaseDef, CaseType,
         Expr, ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, GenericParam,
-        GenericParamKind, Generics, InstancePath, IsResource, Item, ItemKind, Lambda, LetBinding,
-        Module, ModuleId, Mutable, NodeId, NumberKind, Param, Path, Pattern, PatternField,
-        PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind, Type, TypeDef,
-        TypeDefKind, TypeKind,
+        GenericParamKind, Generics, InstancePath, IntLit, IsResource, Item, ItemKind, Lambda,
+        LetBinding, Module, ModuleId, Mutable, NodeId, NumberKind, Param, Path, Pattern,
+        PatternField, PatternKind, RecordExpr, RecordField, RecordType, Region, Stmt, StmtKind,
+        Type, TypeDef, TypeDefKind, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::{Ident, Symbol},
@@ -142,6 +142,16 @@ impl Parser {
         let _ = self.expect(end);
         Ok(results)
     }
+    fn parse_int_lit(&mut self, num: u64, kind: Option<tokens::NumberKind>) -> IntLit {
+        self.advance();
+        IntLit {
+            value: num,
+            kind: kind.map(|kind| match kind {
+                tokens::NumberKind::Signed => NumberKind::Signed,
+                tokens::NumberKind::Unsigned => NumberKind::Unsigned,
+            }),
+        }
+    }
     fn binary_op(&mut self) -> Option<(u32, BinaryOp)> {
         match self.peek_token().kind {
             TokenKind::Plus => Some((30, BinaryOp::Add)),
@@ -215,16 +225,10 @@ impl Parser {
                 })
             }
             TokenKind::Number(number, kind) => {
-                self.advance();
+                let lit = self.parse_int_lit(number, kind);
                 Ok(Pattern {
                     loc,
-                    kind: PatternKind::Int(
-                        number,
-                        match kind {
-                            tokens::NumberKind::Signed => NumberKind::Signed,
-                            tokens::NumberKind::Unsigned => NumberKind::Unsigned,
-                        },
-                    ),
+                    kind: PatternKind::Int(lit),
                 })
             }
             TokenKind::Ref => {
@@ -479,16 +483,10 @@ impl Parser {
         let loc = self.current_loc();
         match self.peek_token().kind {
             TokenKind::Number(num, kind) => {
-                self.advance();
+                let lit = self.parse_int_lit(num, kind);
                 Ok(Expr {
                     loc,
-                    kind: ExprKind::Number(
-                        num,
-                        match kind {
-                            tokens::NumberKind::Signed => NumberKind::Signed,
-                            tokens::NumberKind::Unsigned => NumberKind::Unsigned,
-                        },
-                    ),
+                    kind: ExprKind::Number(lit),
                 })
             }
             TokenKind::True => {
@@ -529,7 +527,7 @@ impl Parser {
                 })
             }
             TokenKind::Mut | TokenKind::Imm => {
-                let mutable = if self.check_token(&TokenKind::Mut){
+                let mutable = if self.check_token(&TokenKind::Mut) {
                     Mutable::Mutable
                 } else {
                     Mutable::Immutable
