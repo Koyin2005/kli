@@ -334,13 +334,8 @@ impl Parser {
             stmts.push(stmt);
         }
     }
-    fn parse_block_expr_tail(&mut self, loc: SrcLoc) -> Result<Expr,ParseError>{
+    fn parse_block_expr_tail(&mut self, loc: SrcLoc, region : Option<Ident>) -> Result<Expr,ParseError>{
 
-        let region = if self.matches_token(&TokenKind::In) {
-            Some(self.expect_ident("region name")?)
-        } else {
-            None
-        };
         let body = self.parse_block_body()?;
         self.expect(&TokenKind::End)?;
         Ok(Expr {
@@ -350,7 +345,13 @@ impl Parser {
     }
     fn parse_block_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
             self.expect(&TokenKind::Do)?;
-            self.parse_block_expr_tail(loc)
+            
+        let region = if self.matches_token(&TokenKind::In) {
+            Some(self.expect_ident("region name")?)
+        } else {
+            None
+        };
+            self.parse_block_expr_tail(loc,region)
     }
     fn parse_case_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.advance();
@@ -518,7 +519,7 @@ impl Parser {
             }
             TokenKind::Unsafe => {
                 self.advance();
-                let expr = self.parse_block_expr_tail(loc)?;
+                let expr = self.parse_block_expr_tail(loc,None)?;
                 Ok(Expr { loc, kind: ExprKind::Unsafe(Box::new(expr)) })
             }
             TokenKind::Borrow => {

@@ -177,6 +177,7 @@ impl<'s> Lexer<'s> {
                 "panic" => TokenKind::Panic,
                 "int" => TokenKind::Int,
                 "uint" => TokenKind::Uint,
+                "unsafe" => TokenKind::Unsafe,
                 "string" => TokenKind::String,
                 "bool" => TokenKind::Bool,
                 "let" => TokenKind::Let,

@@ -77,12 +77,16 @@ end
 fun grow[region r,T](l : mut[r] ArrayList[T]) -> () = 
     do
         let new_cap = l^.cap * 2u;
-        resize(l,new_cap)
+        unsafe 
+            resize(l,new_cap)
+        end
     end
 
 fun push[region r,T](l : mut[r] ArrayList[T], value : T) -> () = do
     do in r1 reserve(borrow mut l^ in r1,1u) end;
-    ptr_write(offset(l^.ptr,ints.uint_to_int(l^.len)),value);
+    unsafe 
+        ptr_write(offset(l^.ptr,ints.uint_to_int(l^.len)),value)
+    end;
     l^.len = l^.len + 1u
 end
 
@@ -90,7 +94,7 @@ fun pop[region r,T](l : mut[r] ArrayList[T]) -> Option[T] = do
     case l^.len == 0u of 
     | true -> Option.None
     | false -> do
-        let value = ptr_read(offset(l^.ptr,ints.uint_to_int(l^.len)));
+        let value = unsafe ptr_read(offset(l^.ptr,ints.uint_to_int(l^.len))) end;
         l^.len = l^.len - 1u;
         Option.Some(value)
         end
@@ -125,7 +129,12 @@ fun reserve[region r,T](l : mut[r] ArrayList[T], count : uint) -> () = do
         let new_len = l^.len + count;
         let new_cap = ints.umax(new_len,l^.cap * 2u);
         case new_cap > l^.cap of
-        | true -> do in r1 resize(borrow mut l^ in r1,new_cap) end
+        | true -> 
+            do in r1 
+                unsafe 
+                    resize(borrow mut l^ in r1,new_cap) 
+                end
+            end
         | false -> () 
         end
     end
