@@ -334,8 +334,11 @@ impl Parser {
             stmts.push(stmt);
         }
     }
-    fn parse_block_expr_tail(&mut self, loc: SrcLoc, region : Option<Ident>) -> Result<Expr,ParseError>{
-
+    fn parse_block_expr_tail(
+        &mut self,
+        loc: SrcLoc,
+        region: Option<Ident>,
+    ) -> Result<Expr, ParseError> {
         let body = self.parse_block_body()?;
         self.expect(&TokenKind::End)?;
         Ok(Expr {
@@ -344,14 +347,14 @@ impl Parser {
         })
     }
     fn parse_block_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
-            self.expect(&TokenKind::Do)?;
-            
+        self.expect(&TokenKind::Do)?;
+
         let region = if self.matches_token(&TokenKind::In) {
             Some(self.expect_ident("region name")?)
         } else {
             None
         };
-            self.parse_block_expr_tail(loc,region)
+        self.parse_block_expr_tail(loc, region)
     }
     fn parse_case_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.advance();
@@ -519,8 +522,11 @@ impl Parser {
             }
             TokenKind::Unsafe => {
                 self.advance();
-                let expr = self.parse_block_expr_tail(loc,None)?;
-                Ok(Expr { loc, kind: ExprKind::Unsafe(Box::new(expr)) })
+                let expr = self.parse_block_expr_tail(loc, None)?;
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::Unsafe(Box::new(expr)),
+                })
             }
             TokenKind::Borrow => {
                 self.advance();
@@ -904,7 +910,10 @@ impl Parser {
         while let Some(token) = self.match_token(&TokenKind::At) {
             let loc = token.loc;
             let name = if let Some(token) = self.match_token(&TokenKind::Unsafe) {
-                Ident { symbol: Symbol::intern("unsafe"), loc:token.loc }
+                Ident {
+                    symbol: Symbol::intern("unsafe"),
+                    loc: token.loc,
+                }
             } else {
                 self.expect_ident("annotation name")?
             };

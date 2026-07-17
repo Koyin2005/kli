@@ -20,17 +20,17 @@ fun from_raw_parts[region r,T](ptr : ptr[T], len : uint) -> Slice[r,T] =
     }
 
 fun from_ref[region r,T]( ref_value : imm[r] T) -> Slice[r,T] = 
-    from_raw_parts(transmute(ref_value),1u)
+    unsafe from_raw_parts(refs.ref_into_raw(ref_value),1u) end
 
 fun len[region r,T](slice : Slice[r,T]) -> uint = 
     slice.len
 
 @unsafe
-fun get_unchecked[region r,T](slice : Slice[r,T], index: uint) -> imm[r] T = transmute(offset(slice.ptr,std.ints.uint_to_int(index)))
+fun get_unchecked[region r,T](slice : Slice[r,T], index: uint) -> imm[r] T = std.refs.ref_from_raw(offset(slice.ptr,std.ints.uint_to_int(index)))
 
 fun get[region r,T](slice : Slice[r,T], index: uint) -> Option[imm[r] T] = 
     case index < slice.len of
-    | true -> Option.Some(get_unchecked(slice,index))
+    | true -> Option.Some(unsafe get_unchecked(slice,index) end)
     | false -> Option.None
     end
 
@@ -39,7 +39,7 @@ fun index_out_bounds() -> never =
 
 fun expect[region r,T](slice : Slice[r,T], index: uint) -> imm[r] T = 
     case index < slice.len of
-    | true -> transmute(get_unchecked(slice,index))
+    | true -> unsafe get_unchecked(slice,index) end
     | false -> index_out_bounds()
     end
 
@@ -56,11 +56,11 @@ fun split_at[region r,T](slice : Slice[r,T], index : uint) -> Option[(Slice[r,T]
 
     let left_ptr = slice.ptr;
     let left_len = index;
-    let left = from_raw_parts(left_ptr,left_len);
+    let left = unsafe from_raw_parts(left_ptr,left_len) end;
 
     let right_ptr = offset(slice.ptr,std.ints.uint_to_int(index));
     let right_len = slice.len - index;
-    let right = from_raw_parts(right_ptr,right_len);
+    let right = unsafe from_raw_parts(right_ptr,right_len) end;
     Option.Some((left,right))
 end
 
@@ -83,8 +83,10 @@ do
     | true -> Option.None
     | false -> 
         do
-            let ptr = iter^.ptr;
-            let r : imm[r] T = borrow ptr^ in r;
+            let ptr : ptr[T] = iter^.ptr;
+            let r : imm[r] T =unsafe  borrow 
+                ptr^ 
+            in r end;
             let ptr = offset(ptr,1);
             let len = len - 1u;
             iter^.ptr = ptr;

@@ -4,24 +4,28 @@ import builtins.ptr_read
 
 fun replace[region r,T](m : mut[r] T, f : fun(T) => T) -> mut[r] T = do
     let p = ref_into_raw_mut(m);
-    let tmp = ptr_read(p);
-    ptr_write(p,f(tmp));
-    ref_from_raw_mut(p)
+    unsafe 
+        let tmp = ptr_read(p);
+        ptr_write(p,f(tmp));
+        ref_from_raw_mut(p)
+    end
 end
 
 fun swap[region r,T](m : mut[r] T, value : T) -> T = do
     let p = ref_into_raw_mut(m);
-    let tmp = ptr_read(p);
-    ptr_write(p,value);
-    tmp
+    unsafe 
+        let tmp = ptr_read(p);
+        ptr_write(p,value);
+        tmp
+    end
 end
 
 
-fun freeze[region r,T](r : mut[r] T) -> imm[r] T = transmute(r)
+fun freeze[region r,T](r : mut[r] T) -> imm[r] T = unsafe transmute(r) end
 
 
-fun ref_into_raw[region r,T](r : imm[r] T) -> ptr[T] = transmute(r)
-fun ref_into_raw_mut[region r,T](r : mut[r] T) -> ptr[T] = transmute(r)
+fun ref_into_raw[region r,T](r : imm[r] T) -> ptr[T] = unsafe  transmute(r) end
+fun ref_into_raw_mut[region r,T](r : mut[r] T) -> ptr[T] = unsafe transmute(r) end
 
 
 @unsafe

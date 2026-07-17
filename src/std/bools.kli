@@ -11,4 +11,4 @@ fun as_int(x : bool) -> int =
     end
 
 fun as_byte(x : bool) -> byte = 
-    builtins.transmute(x)
+    unsafe builtins.transmute(x) end

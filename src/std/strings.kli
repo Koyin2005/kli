@@ -29,4 +29,4 @@ fun from_utf8_slice_unchecked[region r](v : Slice[r,byte]) -> StringSlice[r] =
 
 @lang_item("string_from_slice")
 fun from_slice[region r](s : StringSlice[r]) -> String = 
-    from_utf8_unchecked(arrays.from_slice(s.value,fun(x) -> x^))
+    unsafe from_utf8_unchecked(arrays.from_slice(s.value,fun(x) -> x^)) end

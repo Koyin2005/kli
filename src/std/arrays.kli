@@ -105,21 +105,21 @@ fun index_out_bounds() -> never = panic
 
 fun ptr_to[region r,T](l : imm[r] ArrayList[T], index : uint) -> ptr[T] = 
     case index < l^.len of 
-    | true -> addr_of(l^.ptr^)
+    | true -> l^.ptr
     | false -> index_out_bounds()
     end
 
 fun at_imm[region r,T](l : imm[r] ArrayList[T], index : uint) -> imm[r] T = 
     case index < l^.len of 
     | false -> index_out_bounds()
-    | true -> borrow l^.ptr^ in r
+    | true -> unsafe borrow l^.ptr^ in r end
     end
 
 
 fun at_mut[region r,T](l : mut[r] ArrayList[T], index : uint) -> mut[r] T = 
     case index < l^.len  of 
     | false -> index_out_bounds()
-    | true -> borrow mut l^.ptr^ in r
+    | true -> unsafe borrow mut l^.ptr^ in r end
     end
 
 fun reserve[region r,T](l : mut[r] ArrayList[T], count : uint) -> () = do
@@ -143,15 +143,19 @@ fun reserve[region r,T](l : mut[r] ArrayList[T], count : uint) -> () = do
 end
     
 fun as_slice[region r,T](l : imm[r] ArrayList[T]) -> slices.Slice[r,T] = 
-    slices.from_raw_parts(l^.ptr,l^.len)
+    unsafe slices.from_raw_parts(l^.ptr,l^.len) end
 
 fun drop[T](l : ArrayList[T]) -> () = do
     let mut len = l.len;
     let mut ptr = l.ptr;
     while len > 0u do
-        drop_in_place(ptr);
+        unsafe 
+            drop_in_place(ptr) 
+        end;
         ptr = offset(ptr,1);
         len = len - 1u
     end;
-    deallocate(l.ptr)
+    unsafe 
+        deallocate(l.ptr) 
+    end
 end

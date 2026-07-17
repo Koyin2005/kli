@@ -749,7 +749,7 @@ impl Resolve {
             ast::ExprKind::Unsafe(expr) => {
                 let expr = self.resolve_expr(*expr);
                 res::ExprKind::Unsafe(Box::new(expr))
-            },
+            }
             ast::ExprKind::Block(block, region) => self.in_scope(|this| {
                 let region = region.map(|region| this.declare_region(region.symbol));
                 res::ExprKind::Block(

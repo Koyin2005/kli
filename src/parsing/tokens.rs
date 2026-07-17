@@ -151,7 +151,7 @@ impl Display for TokenKind {
             Self::As => "as",
             Self::And => "and",
             Self::Return => "return",
-            Self::Unsafe => "unsafe"
+            Self::Unsafe => "unsafe",
         };
         f.write_str(txt)
     }
