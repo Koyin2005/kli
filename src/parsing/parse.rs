@@ -528,16 +528,16 @@ impl Parser {
                     kind: ExprKind::Unsafe(Box::new(expr)),
                 })
             }
-            TokenKind::Borrow => {
-                self.advance();
+            TokenKind::Mut | TokenKind::Imm => {
                 let mutable = if self.matches_token(&TokenKind::Mut) {
                     Mutable::Mutable
                 } else {
                     Mutable::Immutable
                 };
-                let expr = self.parse_expr()?;
-                let _ = self.expect(&TokenKind::In);
+                self.expect(&TokenKind::LeftBracket)?;
                 let region = self.parse_region()?;
+                self.expect(&TokenKind::RightBracket)?;
+                let expr = self.parse_expr()?;
                 Ok(Expr {
                     loc,
                     kind: ExprKind::Borrow(Box::new(BorrowExpr {
