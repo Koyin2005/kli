@@ -141,6 +141,7 @@ pub enum ExprKind {
     While(Box<Expr>, Box<Expr>),
     Tuple(Vec<Expr>),
     Return(Box<Expr>),
+    MethodCall(Box<Expr>, Ident, Box<[Expr]>),
 }
 #[derive(Debug, Clone, Copy)]
 pub enum RegionKind {

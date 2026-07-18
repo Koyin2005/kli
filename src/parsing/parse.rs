@@ -133,7 +133,7 @@ impl Parser {
         mut f: impl FnMut(&mut Self) -> Result<T, ParseError>,
     ) -> Result<Vec<T>, ParseError> {
         let mut results = Vec::new();
-        while !self.is_eof() && !self.matches_token(end) {
+        while !self.is_eof() && !self.check_token(end) {
             results.push(f(self)?);
             if !self.match_coma() {
                 break;
@@ -659,14 +659,7 @@ impl Parser {
             expr = match self.peek_token().kind {
                 TokenKind::LeftParen => {
                     self.advance();
-                    let mut args = Vec::new();
-                    while self.check_is_not_token(&TokenKind::RightParen) {
-                        args.push(self.parse_expr()?);
-                        if !self.match_coma() {
-                            break;
-                        }
-                    }
-                    let _ = self.expect(&TokenKind::RightParen);
+                    let args = self.delimited_by(&TokenKind::RightParen, Self::parse_expr)?;
                     Expr {
                         loc: expr.loc,
                         kind: ExprKind::Call(Box::new(expr), args),
@@ -685,6 +678,16 @@ impl Parser {
                     Expr {
                         loc: expr.loc,
                         kind: ExprKind::Field(Box::new(expr), name),
+                    }
+                }
+                TokenKind::Arrow => {
+                    self.advance();
+                    let name = self.expect_ident("method name")?;
+                    self.expect(&TokenKind::LeftParen)?;
+                    let args = self.delimited_by(&TokenKind::RightParen, Self::parse_expr)?;
+                    Expr {
+                        loc: expr.loc,
+                        kind: ExprKind::MethodCall(Box::new(expr), name, args),
                     }
                 }
                 _ => break Ok(expr),

@@ -8,7 +8,7 @@ use crate::{
     lang_items::LangItem,
     resolved_ast::{
         BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, FunctionDefId, Lambda, LocalRegionId,
-        Pattern, Var,
+        Node, Pattern, Var,
     },
     src_loc::SrcLoc,
     typecheck::root::{FunctionCtxt, TypeCheck},
@@ -923,6 +923,71 @@ impl FunctionCtxt<'_> {
                         kind: typed_ast::ExprKind::Err,
                     },
                 }
+            }
+            ExprKind::MethodCall(rcvr, method, args) => {
+                let rcvr = self.check_expr(rcvr, None);
+
+                let name_info = match rcvr.ty.clone() {
+                    Type::Named(id, name, args) => Some((id, name, args)),
+                    _ => None,
+                };
+                let ctxt = self.ctxt();
+                let impl_ = name_info
+                    .and_then(|(id, _, args)| ctxt.impl_for(id).map(|impl_| (impl_, args)));
+                let method_info = impl_.and_then(|(impl_, args)| {
+                    impl_
+                        .methods
+                        .iter()
+                        .find_map(|&id| {
+                            if ctxt.ident(id)?.symbol == method.symbol {
+                                Some(id)
+                            } else {
+                                None
+                            }
+                        })
+                        .map(|impl_| (impl_, args))
+                });
+                let (sig, generic_args, id) = match method_info {
+                    Some((id, args)) => (ctxt.signature_of(id).bind(&args), args, Some(id)),
+                    None => {
+                        self.ctxt().diag().add_diagnostic(
+                            format!("'{}' does not have method '{}'", rcvr.ty, method.symbol),
+                            loc,
+                        );
+                        (
+                            FunctionSig {
+                                params: Vec::new(),
+                                return_type: Type::Unknown,
+                            },
+                            GenericArgs::new(),
+                            None,
+                        )
+                    }
+                };
+                let sig_params = if sig.params.first().is_some() {
+                    let mut params = sig.params.clone();
+                    let ty = params.remove(0);
+                    self.root().unify(ty, rcvr.ty.clone(), rcvr.loc);
+                    params
+                } else {
+                    self.ctxt()
+                        .diag()
+                        .add_diagnostic(format!("Cannot call method"), loc);
+                    sig.params.clone()
+                };
+                let (ty, mut args) =
+                    self.check_call_sig(loc, args, sig_params, Some(sig.return_type.clone()));
+                let function = make_expr(
+                    Type::new_function(sig.params, sig.return_type),
+                    if let Some(id) = id {
+                        typed_ast::ExprKind::Function(id, generic_args)
+                    } else {
+                        typed_ast::ExprKind::Err
+                    },
+                    loc,
+                );
+                args.insert(0, rcvr);
+                make_expr(ty, typed_ast::ExprKind::Call(Box::new(function), args), loc)
             }
         }
     }

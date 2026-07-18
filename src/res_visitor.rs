@@ -132,7 +132,7 @@ pub trait Visitor {
                     self.visit_expr(expr);
                 }
             }
-            ExprKind::Call(callee, args) => {
+            ExprKind::Call(callee, args) | ExprKind::MethodCall(callee, _, args) => {
                 self.visit_expr(callee);
                 for arg in args {
                     self.visit_expr(arg);

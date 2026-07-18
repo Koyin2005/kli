@@ -851,6 +851,11 @@ impl<'info> Resolve<'info> {
                     }))
                 })
             }
+            ast::ExprKind::MethodCall(rcvr, method, args) => res::ExprKind::MethodCall(
+                Box::new(self.resolve_expr(*rcvr)),
+                method,
+                args.into_iter().map(|arg| self.resolve_expr(arg)).collect(),
+            ),
         };
         res::Expr { loc, kind }
     }

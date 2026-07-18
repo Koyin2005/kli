@@ -15,7 +15,7 @@ use crate::{
     ident::Ident,
     index_vec::IndexVec,
     lang_items::LangItems,
-    resolved_ast::{self, AnnotationKind, Item, ItemKind, Node, TypeDef},
+    resolved_ast::{self, AnnotationKind, Item, ItemKind, Node, TypeDef, TypeImpl},
     scheme::Scheme,
     src_loc::SrcLoc,
     typecheck::infer::TypeInfer,
@@ -295,6 +295,16 @@ impl CtxtRef<'_> {
             Node::Impl(_) => todo!("impl span"),
             Node::Method(function) => function.name.loc,
         }
+    }
+    pub fn impl_for(&self, ty_id: DefId) -> Option<&TypeImpl> {
+        let ItemKind::TypeDef(ref type_def) = self.node(ty_id).item()?.kind else {
+            return None;
+        };
+        let impl_ = type_def.impl_?;
+        let Node::Impl(impl_) = self.node(impl_) else {
+            return None;
+        };
+        Some(impl_)
     }
     #[track_caller]
     pub fn expect_ident(self, id: DefId) -> Ident {

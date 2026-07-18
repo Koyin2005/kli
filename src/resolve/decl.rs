@@ -36,7 +36,7 @@ impl DeclareInBody<'_, '_> {
                     self.declare_in_exprs(expr);
                 }
             }
-            ast::ExprKind::Call(callee, args) => {
+            ast::ExprKind::Call(callee, args) | ast::ExprKind::MethodCall(callee, _, args) => {
                 self.declare_in_exprs(callee);
                 for arg in args {
                     self.declare_in_exprs(arg);
