@@ -8,6 +8,12 @@ type Slice[region r,T] = {
     ptr : ptr[T],
     len : uint
 }
+fun get[region r,T](slice : Slice[r,T], index: uint) -> Option[imm[r] T] = 
+    case index < slice.len of
+    | true -> Option.Some(unsafe get_unchecked(slice,index) end)
+    | false -> Option.None
+    end
+
 
 
 @unsafe
@@ -25,12 +31,6 @@ fun len[region r,T](slice : Slice[r,T]) -> uint =
 
 @unsafe
 fun get_unchecked[region r,T](slice : Slice[r,T], index: uint) -> imm[r] T = std.refs.ref_from_raw(offset(slice.ptr,std.ints.uint_to_int(index)))
-
-fun get[region r,T](slice : Slice[r,T], index: uint) -> Option[imm[r] T] = 
-    case index < slice.len of
-    | true -> Option.Some(unsafe get_unchecked(slice,index) end)
-    | false -> Option.None
-    end
 
 fun index_out_bounds() -> never = 
     panic
