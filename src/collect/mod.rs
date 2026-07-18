@@ -292,6 +292,8 @@ impl CtxtRef<'_> {
             Node::Field(field_def) => field_def.name.loc,
             Node::Case(case_def) => case_def.name.loc,
             Node::CaseField(case_field) => case_field.ty.loc,
+            Node::Impl(_) => todo!("impl span"),
+            Node::Method(function) => function.name.loc,
         }
     }
     #[track_caller]
@@ -308,7 +310,8 @@ impl CtxtRef<'_> {
                     loc: field.ty.loc,
                 },
                 Node::Field(field_def) => field_def.name,
-                Node::Lambda(_) => return None,
+                Node::Lambda(_) | Node::Impl(_) => return None,
+                Node::Method(method) => method.name,
             })
         })
     }
@@ -354,7 +357,13 @@ impl CtxtRef<'_> {
                 },
                 Node::CaseField(field) => Lower::new(self, id, None).lower_type(&field.ty),
                 Node::Field(field) => Lower::new(self, id, None).lower_type(&field.ty),
-                Node::Lambda(_) => unreachable!("Can't get the type of lambda"),
+                Node::Lambda(_) => panic!("Can't get the type of lambda"),
+                Node::Impl(_) => panic!("Cannot get the type of impl"),
+                Node::Method(_) => {
+                    return self.signature_of(id).map(|signature| {
+                        Type::new_function(signature.params, signature.return_type)
+                    });
+                }
             })
         })
     }
@@ -401,10 +410,21 @@ impl CtxtRef<'_> {
                     .as_deref()
                     .map_or_else(Generics::new, lower_generics),
             },
-            Node::Case(_) | Node::CaseField(_) | Node::Field(_) => {
+            Node::Case(_) | Node::CaseField(_) | Node::Field(_) | Node::Impl(_) => {
                 self.generics(self.expect_parent(id))
             }
             Node::Lambda(_) => self.generics(self.expect_parent(id)),
+            Node::Method(function) => {
+                let mut generics = self.generics(self.expect_parent(id));
+                generics.params.extend(
+                    function
+                        .generics
+                        .as_ref()
+                        .iter()
+                        .flat_map(|generics| lower_generics(generics).params.into_iter()),
+                );
+                generics
+            }
         })
     }
     pub fn self_with_anecstors(self, id: DefId) -> impl Iterator<Item = DefId> {
@@ -471,7 +491,11 @@ impl CtxtRef<'_> {
     }
     #[track_caller]
     pub fn signature_of(self, id: DefId) -> Scheme<FunctionSig> {
-        let function = self.expect_item(id).expect_function_def();
+        let function = match self.node(id) {
+            Node::Item(item) => item.expect_function_def(),
+            Node::Method(method) => method,
+            _ => unreachable!("expected a valid function"),
+        };
         let lower = Lower::new(self, id, None);
         Scheme::new(FunctionSig::new(
             lower.lower_types(&mut function.param_tys.iter()).collect(),
@@ -493,6 +517,8 @@ impl CtxtRef<'_> {
                 Node::CaseField(_) => write!(f, "{}", Symbol::ZERO),
                 Node::Lambda(lambda) => write!(f, "(lambda at {:?})", lambda.loc),
                 Node::Field(field) => write!(f, "{}", field.name.symbol),
+                Node::Impl(_) => Ok(()),
+                Node::Method(function) => write!(f, "{}", function.name.symbol),
             }
         }
         impl std::fmt::Display for DisplayNode<'_> {

@@ -43,7 +43,7 @@ type Scope = HashMap<Symbol, Res>;
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Def {
     Function(ModuleNodeId),
-    TypeDef(ModuleNodeId),
+    Type(ModuleNodeId),
     Module(ModuleId),
 }
 impl From<Def> for Res {
@@ -75,7 +75,16 @@ struct FieldInfo {
     _id: NodeId,
 }
 #[derive(Debug)]
-enum TypeDefInfo {
+pub(super) struct TypeImplInfo {
+    pub methods: HashMap<Symbol, ModuleNodeId>,
+}
+#[derive(Debug)]
+pub struct TypeInfo {
+    kind: TypeDefInfoKind,
+    impl_: Option<ModuleNodeId>,
+}
+#[derive(Debug)]
+enum TypeDefInfoKind {
     Variant {
         cases: Vec<CaseInfo>,
         case_map: HashMap<Symbol, usize>,
@@ -329,7 +338,7 @@ impl<'info> Resolve<'info> {
                 TypeAlias::Never => Some(res::TypeName::Never),
                 TypeAlias::Pair => Some(res::TypeName::Pair),
             },
-            Ok(Res::Def(Def::TypeDef(id))) => Some(res::TypeName::UserDefined(self.def_id_for(id))),
+            Ok(Res::Def(Def::Type(id))) => Some(res::TypeName::UserDefined(self.def_id_for(id))),
             Ok(Res::VariantCase(..)) => {
                 self.cannot_use_as_error(name.symbol, "type", name.loc);
                 None
@@ -544,18 +553,31 @@ impl<'info> Resolve<'info> {
                     return Err(NameResolutionError::NotInScope);
                 }
             }
-            Res::Def(Def::TypeDef(id)) => {
+            Res::Def(Def::Type(id)) => {
                 let type_def = &self.decl_info.type_defs[&id];
-                let (cases, case_map) = match type_def {
-                    TypeDefInfo::Record { .. } => {
-                        return Err(NameResolutionError::NotInScope);
+                let res = 'a: {
+                    let (cases, case_map) = match &type_def.kind {
+                        TypeDefInfoKind::Record { .. } => {
+                            break 'a None;
+                        }
+                        TypeDefInfoKind::Variant { cases, case_map } => (cases, case_map),
+                    };
+                    if let Some(&case) = case_map.get(&segment.symbol) {
+                        Some(Res::VariantCase(ModuleNodeId(id.0, cases[case].id)))
+                    } else {
+                        None
                     }
-                    TypeDefInfo::Variant { cases, case_map } => (cases, case_map),
                 };
-                let Some(&case) = case_map.get(&segment.symbol) else {
+                if let Some(res) = res {
+                    res
+                } else if let Some(impl_) = type_def.impl_
+                    && let impl_ = &self.decl_info.impls_[&impl_]
+                    && let Some(&method) = impl_.methods.get(&segment.symbol)
+                {
+                    Res::Def(Def::Function(method))
+                } else {
                     return Err(NameResolutionError::NotInScope);
-                };
-                Res::VariantCase(ModuleNodeId(id.0, cases[case].id))
+                }
             }
             Res::Var(var) => {
                 return Err(NameResolutionError::VariableField(
@@ -645,7 +667,7 @@ impl<'info> Resolve<'info> {
                 ),
                 Res::Param(_)
                 | Res::LocalRegion(_)
-                | Res::Def(Def::Module(_) | Def::TypeDef(_))
+                | Res::Def(Def::Module(_) | Def::Type(_))
                 | Res::TypeAlias(_) => {
                     self.resolve_generic_args(args);
                     self.diag
@@ -893,8 +915,9 @@ impl<'info> Resolve<'info> {
         &mut self,
         type_id: ModuleNodeId,
         body: ast::TypeDefKind,
-    ) -> res::TypeDefKind {
-        match body {
+        impl_: Option<ast::TypeImpl>,
+    ) -> (Option<DefId>, res::TypeDefKind) {
+        let kind = match body {
             ast::TypeDefKind::Record(record) => res::TypeDefKind::Record(res::RecordDef {
                 fields: record
                     .fields
@@ -931,22 +954,49 @@ impl<'info> Resolve<'info> {
                     })
                     .collect(),
             }),
-        }
+        };
+        let impl_ = if let Some(impl_) = impl_ {
+            let def_id = self.def_id_for(ModuleNodeId(type_id.0, impl_.id));
+            let methods = impl_
+                .methods
+                .into_iter()
+                .map(|method| {
+                    let id = self.def_id_for(ModuleNodeId(type_id.0, method.id));
+                    let function = self.resolve_function(method.function);
+                    self.add_node(id, res::Node::Method(Box::new(function)))
+                })
+                .collect();
+            self.add_node(
+                def_id,
+                res::Node::Impl(Box::new(res::TypeImpl {
+                    ty: self.def_id_for(type_id),
+                    methods,
+                })),
+            );
+            Some(def_id)
+        } else {
+            None
+        };
+        (impl_, kind)
     }
     fn resolve_type_def(&mut self, id: ModuleNodeId, type_def: ast::TypeDef) -> res::TypeDef {
         self.resolve_item(|this| {
-            let (generics, kind) = if let Some(generics) = type_def.generics {
+            let (generics, (impl_, kind)) = if let Some(generics) = type_def.generics {
                 let (generics, kind) = this.resolve_generics(generics, |this| {
-                    this.resolve_type_def_body(id, type_def.kind)
+                    this.resolve_type_def_body(id, type_def.kind, type_def.imp)
                 });
                 (Some(generics), kind)
             } else {
-                (None, this.resolve_type_def_body(id, type_def.kind))
+                (
+                    None,
+                    this.resolve_type_def_body(id, type_def.kind, type_def.imp),
+                )
             };
             res::TypeDef {
                 name: type_def.name,
                 generics: generics.map(Box::new),
                 kind,
+                impl_,
             }
         })
     }

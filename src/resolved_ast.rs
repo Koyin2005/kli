@@ -293,9 +293,15 @@ pub enum TypeDefKind {
     Record(RecordDef),
 }
 #[derive(Debug)]
+pub struct TypeImpl {
+    pub ty: DefId,
+    pub methods: Vec<DefId>,
+}
+#[derive(Debug)]
 pub struct TypeDef {
     pub name: Ident,
     pub generics: Option<Box<Generics>>,
+    pub impl_: Option<DefId>,
     pub kind: TypeDefKind,
 }
 impl TypeDef {
@@ -398,21 +404,25 @@ impl Item {
 
 #[derive(Debug)]
 pub enum Node {
+    Method(Box<Function>),
     Item(Box<Item>),
     Lambda(Rc<Lambda>),
     Field(Box<FieldDef>),
     Case(Box<CaseDef>),
     CaseField(Box<CaseField>),
+    Impl(Box<TypeImpl>),
 }
 
 impl Node {
     pub fn kind(&self) -> &'static str {
         match self {
+            Node::Method(_) => "method",
             Node::Item(item) => item.kind_str(),
             Node::Lambda(_) => "lambda",
             Node::Field(_) => "field",
             Node::Case(_) => "case",
             Node::CaseField(_) => "case field",
+            Self::Impl(_) => "impl",
         }
     }
     pub fn item(&self) -> Option<&Item> {

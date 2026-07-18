@@ -2,11 +2,14 @@ use std::collections::HashMap;
 
 use crate::{
     Symbol,
-    ast::{self, ModuleId, NodeId},
+    ast::{self, ModuleId, NodeId, TypeImpl},
     def_ids::DefId,
     diagnostics::DiagnosticReporter,
     ident::Ident,
-    resolve::{CaseInfo, Def, FieldInfo, ModuleInfo, ModuleItems, ModuleNodeId, TypeDefInfo},
+    resolve::{
+        CaseInfo, Def, FieldInfo, ModuleInfo, ModuleItems, ModuleNodeId, TypeDefInfoKind,
+        TypeImplInfo, TypeInfo,
+    },
     src_loc::SrcLoc,
 };
 
@@ -90,7 +93,8 @@ pub(super) struct DeclareResults {
     pub parents: HashMap<DefId, DefId>,
     pub item_id_to_def_id: HashMap<ModuleNodeId, DefId>,
     pub modules: HashMap<ModuleId, ModuleInfo>,
-    pub type_defs: HashMap<ModuleNodeId, TypeDefInfo>,
+    pub type_defs: HashMap<ModuleNodeId, TypeInfo>,
+    pub impls_: HashMap<ModuleNodeId, TypeImplInfo>,
     pub builtin_module: Option<ModuleId>,
     pub top_level_modules: HashMap<Symbol, ModuleId>,
 }
@@ -114,11 +118,7 @@ impl<'d> Declare<'d> {
         }
     }
 
-    fn in_new_module(
-        &mut self,
-        module: &ast::Module,
-        f: impl FnOnce(&mut Self),
-    ) {
+    fn in_new_module(&mut self, module: &ast::Module, f: impl FnOnce(&mut Self)) {
         self.declare_item(
             Ident {
                 symbol: module.name,
@@ -177,15 +177,20 @@ impl<'d> Declare<'d> {
         def_id
     }
 
-    fn declare_function(&mut self, id: ModuleNodeId, function: &ast::Function) {
-        self.declare_item(function.name, "function", Def::Function(id));
-        if let Some(body) = function.body.as_ref() {
-            DeclareInBody {
-                declare: self,
-                module: id.0,
+    fn declare_function_body(&mut self, id: DefId, function: &ast::Function, module: ModuleId) {
+        self.with_parent_def_id(id, |this| {
+            if let Some(body) = function.body.as_ref() {
+                DeclareInBody {
+                    declare: this,
+                    module: module,
+                }
+                .declare_in_exprs(body);
             }
-            .declare_in_exprs(body);
-        }
+        })
+    }
+    fn declare_function(&mut self, id: ModuleNodeId, def_id: DefId, function: &ast::Function) {
+        self.declare_item(function.name, "function", Def::Function(id));
+        self.declare_function_body(def_id, function, id.0);
     }
     fn declare_module_items(&mut self, module: &ast::Module) {
         self.in_new_module(module, |this| {
@@ -203,7 +208,7 @@ impl<'d> Declare<'d> {
                         this.declare_type_def(full_id, def_id, type_def);
                     }
                     ast::ItemKind::Function(function) => {
-                        this.declare_function(full_id, function);
+                        this.declare_function(full_id, def_id, function);
                     }
                     ast::ItemKind::Import(..) => {}
                 }
@@ -213,7 +218,22 @@ impl<'d> Declare<'d> {
             }
         })
     }
-
+    fn declare_impl(&mut self, mod_id: ModuleId, imp_: &TypeImpl) {
+        let id = self.declare_def_id_for(mod_id, imp_.id);
+        let methods = self.with_parent_def_id(id, |this| {
+            imp_.methods
+                .iter()
+                .map(|method| {
+                    let id = this.declare_def_id_for(mod_id, method.id);
+                    this.declare_function_body(id, &method.function, mod_id);
+                    (method.function.name.symbol, ModuleNodeId(mod_id, method.id))
+                })
+                .collect()
+        });
+        self.results
+            .impls_
+            .insert(ModuleNodeId(mod_id, imp_.id), TypeImplInfo { methods });
+    }
     fn declare_type_def(
         &mut self,
         mod_node_id: ModuleNodeId,
@@ -221,7 +241,7 @@ impl<'d> Declare<'d> {
         type_def: &ast::TypeDef,
     ) {
         let name = type_def.name;
-        let info = self.with_parent_def_id(def_id, |this| {
+        let (kind, impl_) = self.with_parent_def_id(def_id, |this| {
             let info = match type_def.kind {
                 ast::TypeDefKind::Record(ref record) => this.with_parent_def_id(def_id, |this| {
                     let mut fields = Vec::new();
@@ -232,7 +252,7 @@ impl<'d> Declare<'d> {
                             _id: field.id,
                         });
                     }
-                    TypeDefInfo::Record { _fields: fields }
+                    TypeDefInfoKind::Record { _fields: fields }
                 }),
                 ast::TypeDefKind::Variant(ref cases) => {
                     let cases = cases
@@ -250,7 +270,7 @@ impl<'d> Declare<'d> {
                             }
                         })
                         .collect::<Vec<_>>();
-                    TypeDefInfo::Variant {
+                    TypeDefInfoKind::Variant {
                         case_map: cases
                             .iter()
                             .enumerate()
@@ -260,10 +280,18 @@ impl<'d> Declare<'d> {
                     }
                 }
             };
-            info
+            let impl_ = if let Some(ref impl_) = type_def.imp {
+                this.declare_impl(mod_node_id.0, impl_);
+                Some(ModuleNodeId(mod_node_id.0, impl_.id))
+            } else {
+                None
+            };
+            (info, impl_)
         });
-        self.results.type_defs.insert(mod_node_id, info);
-        self.declare_item(name, "type", Def::TypeDef(mod_node_id));
+        self.results
+            .type_defs
+            .insert(mod_node_id, TypeInfo { kind, impl_ });
+        self.declare_item(name, "type", Def::Type(mod_node_id));
     }
     pub fn declare(mut self, modules: &[ast::Module]) -> DeclareResults {
         for module in modules.iter() {
