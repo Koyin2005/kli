@@ -251,7 +251,7 @@ fn main() {
     let Some(modules) = parse_all_modules(file_tree) else {
         return;
     };
-    let Ok(context) = Resolve::new(config).resolve(modules) else {
+    let Ok(context) = Resolve::resolve(config, modules) else {
         return;
     };
     let ctxt = context.as_ref();

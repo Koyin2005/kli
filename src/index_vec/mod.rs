@@ -62,6 +62,9 @@ impl<I: Id, V> IndexVec<I, V> {
     pub const fn new() -> Self {
         Self(Vec::new(), PhantomData)
     }
+    pub fn from_function(count: usize, f: impl FnMut(I) -> V) -> Self {
+        Self(Vec::from_iter((0..count).map(I::new).map(f)), PhantomData)
+    }
     pub fn new_from(count: usize, value: V) -> Self
     where
         V: Clone,
@@ -71,10 +74,7 @@ impl<I: Id, V> IndexVec<I, V> {
         } else if count == 1 {
             return Self(vec![value], PhantomData);
         }
-        Self(
-            Vec::from_iter(std::iter::repeat_n(value, count)),
-            PhantomData,
-        )
+        Self(Vec::from_iter(vec![value; count]), PhantomData)
     }
     pub fn push(&mut self, value: V) -> I {
         let index = I::new(self.0.len());
