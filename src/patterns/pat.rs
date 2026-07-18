@@ -30,7 +30,6 @@ impl Pat {
     }
     pub fn format(&self, ctxt: CtxtRef<'_>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.constructor {
-            Constructor::Unit => f.write_str("()"),
             Constructor::Missing => f.write_str("missing"),
             Constructor::Bool(value) => {
                 if value {
@@ -59,17 +58,20 @@ impl Pat {
             Constructor::NonExhaustive => f.write_str("_"),
             Constructor::Record => {
                 use crate::typed_ast::FieldId;
-                let fields: &mut dyn Fn(FieldId) -> _ = match &self.ty {
-                    Type::Record(fields) => &mut |i| Some(fields[i].name),
-                    &Type::Named(id, ..) => &mut move |i| {
+                let (fields,brackets) : ( &mut dyn Fn(FieldId) -> _,_) = match &self.ty {
+                    Type::Record(fields) => (&mut |i| Some(fields[i].name),("{","}")),
+                    &Type::Named(id, ..) => (&mut move |i| {
                         Some(crate::types::FieldName::Named(
                             ctxt.type_def(id).fields()[i].name,
                         ))
-                    },
-                    Type::Tuple(_) => &mut |_| None,
+                    },("{","}")),
+                    Type::Tuple(fields) => (&mut |_| None,("(",if fields.len() == 1 {",)"} else {
+                        ")"
+                    })),
                     _ => unreachable!("should be a record"),
                 };
-                f.write_str("{")?;
+                let (start,end) = brackets;
+                f.write_str(start)?;
                 let mut first = true;
 
                 for pat in self.fields.iter() {
@@ -82,7 +84,7 @@ impl Pat {
                     pat.pat.format(ctxt, f)?;
                     first = false;
                 }
-                f.write_str("}")
+                f.write_str(end)
             }
         }
     }
@@ -157,13 +159,6 @@ fn split_constructors(
         | Type::Function(..)
         | Type::Array(..)
         | Type::RawPointer(_) => {}
-        Type::Unit => {
-            if seen_constructors.contains(&Constructor::Unit) {
-                seen.push(Constructor::Unit);
-            } else {
-                missing.push(Constructor::Missing);
-            }
-        }
         Type::Bool => {
             let is_true = seen_constructors.contains(&Constructor::Bool(true));
             let is_false = seen_constructors.contains(&Constructor::Bool(false));

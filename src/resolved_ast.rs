@@ -238,7 +238,6 @@ pub struct FunctionType {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TypeName {
-    Unit,
     Int,
     Uint,
     Bool,

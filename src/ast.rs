@@ -293,7 +293,6 @@ pub enum TypeKind {
     Uint,
     Bool,
     String,
-    Unit,
     Char,
     Record(RecordType),
     Named(InstancePath),

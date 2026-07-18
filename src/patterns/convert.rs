@@ -15,7 +15,7 @@ pub fn pattern_to_pat(ctxt: CtxtRef<'_>, pattern: &Pattern) -> Pat {
         },
         PatternKind::Unit => Pat {
             ty,
-            constructor: Constructor::Unit,
+            constructor: Constructor::Record,
             fields: Vec::new(),
         },
         PatternKind::Ref(inner) => Pat {

@@ -355,9 +355,6 @@ impl<'info> Resolve<'info> {
             ast::TypeKind::Uint => {
                 res::TypeKind::Named(res::TypeName::Uint, Box::new(res::GenericArgs::NONE))
             }
-            ast::TypeKind::Unit => {
-                res::TypeKind::Named(res::TypeName::Unit, Box::new(res::GenericArgs::NONE))
-            }
             ast::TypeKind::String => {
                 res::TypeKind::Named(res::TypeName::String, Box::new(res::GenericArgs::NONE))
             }

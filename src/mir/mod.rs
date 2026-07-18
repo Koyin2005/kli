@@ -200,7 +200,7 @@ impl Constant {
         }
     }
     pub fn unit() -> Self {
-        Self::zero_sized(Type::Unit)
+        Self::zero_sized(Type::UNIT)
     }
 }
 #[derive(Clone, Debug)]

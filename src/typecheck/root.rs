@@ -341,7 +341,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
                 main.name.loc,
             );
         }
-        if !matches!(signature.return_type, Type::Unit) {
+        if !signature.return_type.is_unit() {
             self.ctxt().diag().add_diagnostic(
                 "'main' should have '()' as return type".to_string(),
                 main.name.loc,

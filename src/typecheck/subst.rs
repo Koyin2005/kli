@@ -15,7 +15,6 @@ impl<'a> TypeSubst<'a> {
         match ty {
             Type::Bool
             | Type::Int(_)
-            | Type::Unit
             | Type::Unknown
             | Type::Char
             | Type::Param(..)

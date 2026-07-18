@@ -148,10 +148,6 @@ impl<'a> Lower<'a> {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::Bool
             }
-            TypeName::Unit => {
-                let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                Type::Unit
-            }
             TypeName::Int => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::Int(IntegerKind::Signed)

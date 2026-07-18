@@ -853,7 +853,7 @@ impl Parser {
                 if self.matches_token(&TokenKind::RightParen) {
                     Ok(Type {
                         loc,
-                        kind: TypeKind::Unit,
+                        kind: TypeKind::Tuple(Vec::new()),
                     })
                 } else {
                     let ty = self.parse_type()?;

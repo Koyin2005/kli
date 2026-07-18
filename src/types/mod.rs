@@ -179,7 +179,6 @@ pub enum IntegerKind {
 pub enum Type {
     Infer(usize),
     Unknown,
-    Unit,
     Int(IntegerKind),
     Bool,
     Char,
@@ -189,15 +188,22 @@ pub enum Type {
     Imm(Region, Box<Type>),
     Mut(Region, Box<Type>),
     Function(FunctionType),
-    Tuple(Box<[Type]>),
+    Tuple(Vec<Type>),
     Record(IndexVec<FieldId, RecordField>),
     RawPointer(Box<Type>),
     Array(Box<Type>, u64),
     Named(DefId, Symbol, GenericArgs),
 }
 impl Type {
+    pub const UNIT : Self = Self::Tuple(Vec::new());
     pub const UINT: Self = Self::Int(IntegerKind::Unsigned);
     pub const INT: Self = Self::Int(IntegerKind::Signed);
+    pub const fn is_unit(&self) -> bool{
+        match self{
+            Self::Tuple(fields) => fields.is_empty(),
+            _ => false
+        }
+    }
     pub fn is_bool(&self) -> bool {
         matches!(self, Self::Bool)
     }
@@ -401,7 +407,6 @@ impl Type {
     pub fn is_resource(&self, ctxt: CtxtRef<'_>) -> bool {
         match self {
             Type::Bool
-            | Type::Unit
             | Type::Unknown
             | Type::Int(_)
             | Type::Imm(..)
@@ -444,7 +449,6 @@ impl Type {
         match self {
             Type::Infer(_)
             | Type::Unknown
-            | Type::Unit
             | Type::Int(_)
             | Type::Bool
             | Type::Char
@@ -483,7 +487,6 @@ impl Type {
         visit_ty(self)?;
         match self {
             Type::Int(_)
-            | Type::Unit
             | Type::Infer(_)
             | Type::Unknown
             | Type::Bool
@@ -558,6 +561,9 @@ impl Display for Type {
                         f.pad(", ")?;
                     }
                     write!(f, "{}", field)?;
+                    if first && fields.len() == 1{
+                        f.pad(",")?;
+                    }
                     first = false;
                 }
                 f.pad(")")
@@ -568,7 +574,6 @@ impl Display for Type {
                 IntegerKind::Signed => f.pad("int"),
                 IntegerKind::Unsigned => f.pad("uint"),
             },
-            Type::Unit => f.pad("()"),
             Type::Unknown => f.pad("{unknown}"),
             Type::Infer(_) => f.pad("_"),
             &Type::Param(name, _) => write!(f, "{}", name),
@@ -611,7 +616,6 @@ pub trait TypeMap {
             Type::Bool
             | Type::Char
             | Type::Int(_)
-            | Type::Unit
             | Type::Unknown
             | Type::Byte
             | Type::Infer(_)

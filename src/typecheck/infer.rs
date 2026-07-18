@@ -118,7 +118,6 @@ impl TypeInfer {
             (ty @ Type::Int(IntegerKind::Signed), Type::Int(IntegerKind::Signed))
             | (ty @ Type::Int(IntegerKind::Unsigned), Type::Int(IntegerKind::Unsigned))
             | (ty @ Type::Bool, Type::Bool)
-            | (ty @ Type::Unit, Type::Unit)
             | (ty @ Type::Unknown, Type::Unknown)
             | (ty @ Type::Char, Type::Char)
             | (ty @ Type::Byte, Type::Byte)
@@ -222,7 +221,6 @@ impl TypeInfer {
                 | Type::Imm(..)
                 | Type::Mut(..)
                 | Type::Record(..)
-                | Type::Unit
                 | Type::RawPointer(_)
                 | Type::Named(..)
                 | Type::Never

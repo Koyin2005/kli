@@ -29,9 +29,9 @@ impl FunctionCtxt<'_> {
                 }
             }
             PatternKind::Unit => {
-                let _ = root.unify(expected_type, Type::Unit, pattern.loc);
+                let _ = root.unify(expected_type, Type::UNIT, pattern.loc);
                 typed_ast::Pattern {
-                    ty: Type::Unit,
+                    ty: Type::UNIT,
                     loc,
                     kind: typed_ast::PatternKind::Unit,
                 }
@@ -40,11 +40,7 @@ impl FunctionCtxt<'_> {
                 let expected_fields = match expected_type {
                     Type::Tuple(field_tys) => field_tys,
                     _ => {
-                        return typed_ast::Pattern {
-                            ty: Type::Unknown,
-                            loc,
-                            kind: typed_ast::PatternKind::Err,
-                        };
+                        Vec::new()
                     }
                 };
                 if expected_fields.len() != fields.len() {

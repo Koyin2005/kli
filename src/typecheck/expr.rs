@@ -142,16 +142,16 @@ impl FunctionCtxt<'_> {
             }
         };
         let pattern = self.check_pattern(pattern, element, None);
-        let body = self.check_expr_coerces_to(body, Some(Type::Unit));
+        let body = self.check_expr_coerces_to(body, Some(Type::UNIT));
         let Some(iterator_type) = iterator_type else {
             return typed_ast::Expr {
-                ty: Type::Unit,
+                ty: Type::UNIT,
                 loc,
                 kind: typed_ast::ExprKind::Err,
             };
         };
         typed_ast::Expr {
-            ty: Type::Unit,
+            ty: Type::UNIT,
             loc,
             kind: typed_ast::ExprKind::For {
                 pattern: Box::new(pattern),
@@ -566,9 +566,9 @@ impl FunctionCtxt<'_> {
             }
             ExprKind::While(condition, body) => {
                 let condition = self.check_expr_coerces_to(condition, Some(Type::Bool));
-                let body = self.check_expr_coerces_to(body, Some(Type::Unit));
+                let body = self.check_expr_coerces_to(body, Some(Type::UNIT));
                 typed_ast::Expr {
-                    ty: Type::Unit,
+                    ty: Type::UNIT,
                     loc,
                     kind: typed_ast::ExprKind::While(Box::new(condition), Box::new(body)),
                 }
@@ -657,9 +657,9 @@ impl FunctionCtxt<'_> {
             }
             ExprKind::Print(arg) => {
                 let arg = arg.as_ref().map(|arg| Box::new(self.check_expr(arg, None)));
-                make_expr(Type::Unit, typed_ast::ExprKind::Print(arg), loc)
+                make_expr(Type::UNIT, typed_ast::ExprKind::Print(arg), loc)
             }
-            ExprKind::Unit => make_expr(Type::Unit, typed_ast::ExprKind::Unit, loc),
+            ExprKind::Unit => make_expr(Type::UNIT, typed_ast::ExprKind::Unit, loc),
             ExprKind::Int(value) => {
                 let (ty, value) = self.root().check_int_lit(loc, expected_ty.as_ref(), *value);
                 make_expr(ty, typed_ast::ExprKind::Int(value), loc)
@@ -834,7 +834,7 @@ impl FunctionCtxt<'_> {
                 let value = self.check_expr_coerces_to(value, Some(place.ty.clone()));
                 typed_ast::Expr {
                     loc,
-                    ty: Type::Unit,
+                    ty: Type::UNIT,
                     kind: typed_ast::ExprKind::Assign(Box::new(place), Box::new(value)),
                 }
             }

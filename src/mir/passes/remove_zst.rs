@@ -9,7 +9,7 @@ pub struct RemoveZst;
 impl RemoveZst {
     fn is_zst(ty: &Type, ctxt: CtxtRef<'_>) -> bool {
         match ty {
-            Type::Unit | Type::Never => true,
+            Type::Never => true,
             Type::Array(ty, _) => Self::is_zst(ty, ctxt),
             Type::Bool
             | Type::Char
@@ -36,7 +36,7 @@ impl RemoveZst {
                         let field_ty = if let Some(field) = case.field {
                             field.type_of(generic_args, ctxt)
                         } else {
-                            Type::Unit
+                            Type::UNIT
                         };
                         field_ty.is_uninhabited(ctxt) && Self::is_zst(&field_ty, ctxt)
                     }),

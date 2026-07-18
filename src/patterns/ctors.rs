@@ -12,7 +12,6 @@ pub enum Constructor {
     Record,
     Ref,
     Case(Symbol),
-    Unit,
     NonExhaustive,
     Missing,
 }
@@ -22,7 +21,6 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Cons
         Type::Bool => vec![Constructor::Bool(true), Constructor::Bool(false)],
         Type::Imm(..) | Type::Mut(..) => vec![Constructor::Ref],
         Type::Never => Vec::new(),
-        Type::Unit => vec![Constructor::Unit],
         Type::Char
         | Type::Unknown
         | Type::Param(..)
@@ -73,8 +71,7 @@ pub fn fields_of(ty: &Type, constructor: Constructor, ctxt: CtxtRef<'_>) -> Vec<
         | Constructor::Bool(_)
         | Constructor::NonExhaustive
         | Constructor::Wildcard
-        | Constructor::Missing
-        | Constructor::Unit => Vec::new(),
+        | Constructor::Missing => Vec::new(),
         Constructor::Ref => {
             let (Type::Imm(_, ty) | Type::Mut(_, ty)) = ty else {
                 unreachable!("Should be a view")

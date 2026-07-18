@@ -261,7 +261,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 .as_scalar()
                 .and_then(|value| bool::try_from(value).ok())
                 .map_or(Ok(()), |value| write!(self.output, "{}", value)),
-            ty @ (types::Type::Never | types::Type::Unit) => write!(self.output, "{ty}"),
+            types::Type::Never => unreachable!("already did zero sized types"),
             types::Type::Imm(..) | types::Type::Mut(..) | types::Type::RawPointer(_) => {
                 write!(self.output, "unknown of '{}'", ty)
             }
