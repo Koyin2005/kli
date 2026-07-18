@@ -182,7 +182,7 @@ impl<'d> Declare<'d> {
             if let Some(body) = function.body.as_ref() {
                 DeclareInBody {
                     declare: this,
-                    module: module,
+                    module,
                 }
                 .declare_in_exprs(body);
             }

@@ -26,6 +26,11 @@ impl Var {
     }
 }
 #[derive(Debug)]
+pub struct Signature {
+    pub params: Box<[Type]>,
+    pub return_type: Type,
+}
+#[derive(Debug)]
 pub struct BorrowExpr {
     pub mutable: Mutable,
     pub place: Expr,
@@ -404,8 +409,13 @@ impl Item {
 }
 
 #[derive(Debug)]
+pub struct Method {
+    pub annotations: Vec<Annotation>,
+    pub function: Function,
+}
+#[derive(Debug)]
 pub enum Node {
-    Method(Box<Function>),
+    Method(Box<Method>),
     Item(Box<Item>),
     Lambda(Rc<Lambda>),
     Field(Box<FieldDef>),

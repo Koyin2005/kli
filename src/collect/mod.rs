@@ -216,10 +216,10 @@ impl CtxtRef<'_> {
     }
     #[track_caller]
     pub fn annotations(&self, id: DefId) -> &[resolved_ast::Annotation] {
-        if let Some(item) = self.node(id).item() {
-            &item.annotations
-        } else {
-            &[]
+        match self.node(id) {
+            Node::Item(item) => &item.annotations,
+            Node::Method(method) => &method.annotations,
+            _ => &[],
         }
     }
     #[track_caller]
@@ -293,7 +293,7 @@ impl CtxtRef<'_> {
             Node::Case(case_def) => case_def.name.loc,
             Node::CaseField(case_field) => case_field.ty.loc,
             Node::Impl(_) => todo!("impl span"),
-            Node::Method(function) => function.name.loc,
+            Node::Method(method) => method.function.name.loc,
         }
     }
     pub fn impl_for(&self, ty_id: DefId) -> Option<&TypeImpl> {
@@ -321,7 +321,7 @@ impl CtxtRef<'_> {
                 },
                 Node::Field(field_def) => field_def.name,
                 Node::Lambda(_) | Node::Impl(_) => return None,
-                Node::Method(method) => method.name,
+                Node::Method(method) => method.function.name,
             })
         })
     }
@@ -424,10 +424,11 @@ impl CtxtRef<'_> {
                 self.generics(self.expect_parent(id))
             }
             Node::Lambda(_) => self.generics(self.expect_parent(id)),
-            Node::Method(function) => {
+            Node::Method(method) => {
                 let mut generics = self.generics(self.expect_parent(id));
                 generics.params.extend(
-                    function
+                    method
+                        .function
                         .generics
                         .as_ref()
                         .iter()
@@ -503,7 +504,7 @@ impl CtxtRef<'_> {
     pub fn signature_of(self, id: DefId) -> Scheme<FunctionSig> {
         let function = match self.node(id) {
             Node::Item(item) => item.expect_function_def(),
-            Node::Method(method) => method,
+            Node::Method(method) => &method.function,
             _ => unreachable!("expected a valid function"),
         };
         let lower = Lower::new(self, id, None);
@@ -528,7 +529,7 @@ impl CtxtRef<'_> {
                 Node::Lambda(lambda) => write!(f, "(lambda at {:?})", lambda.loc),
                 Node::Field(field) => write!(f, "{}", field.name.symbol),
                 Node::Impl(_) => Ok(()),
-                Node::Method(function) => write!(f, "{}", function.name.symbol),
+                Node::Method(method) => write!(f, "{}", method.function.name.symbol),
             }
         }
         impl std::fmt::Display for DisplayNode<'_> {

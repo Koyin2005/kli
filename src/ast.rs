@@ -398,6 +398,7 @@ pub enum ItemKind {
 #[derive(Debug)]
 pub struct Method {
     pub id: NodeId,
+    pub annotations: Vec<Annotation>,
     pub function: Function,
 }
 #[derive(Debug)]

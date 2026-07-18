@@ -18,6 +18,6 @@ fun equal[region r,K](first : imm[r] K, second : imm[r] K) -> bool;
 
 fun new[K,V]() -> HashMap[K,V] = do
     HashMap {
-        buckets = arrays.new()
+        buckets = ArrayList.new()
     }
 end

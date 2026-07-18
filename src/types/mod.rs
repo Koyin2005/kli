@@ -225,6 +225,12 @@ impl Type {
             GenericArgs::from_iter(std::iter::once(GenericArg::Region(Region::Static))),
         )
     }
+    pub fn as_named(&self) -> Option<(DefId, Symbol, GenericArgsRef<'_>)> {
+        let Self::Named(id, name, args) = self else {
+            return None;
+        };
+        Some((*id, *name, args))
+    }
     pub fn closure_env(fields: impl Iterator<Item = Capture>) -> Self {
         Self::record_named_fields(fields.map(|capture| (capture.var.0, capture.ty)))
     }

@@ -9,7 +9,7 @@ use crate::{
     def_ids::DefId,
     ident::Ident,
     lang_items::LangItem,
-    resolved_ast::{self as res, VarId},
+    resolved_ast::{self as res, Node, VarId},
     src_loc::SrcLoc,
     typecheck::{infer::TypeInfer, subst::TypeSubst},
     typed_ast::{self, Function, IteratorType, LetBinding},
@@ -485,10 +485,23 @@ impl<'ctxt> TypeCheck<'ctxt> {
         self.check_annotations();
         let mut functions = BTreeMap::new();
         for item in self.ctxt.all_items() {
-            let Some(function) = item.function_def() else {
-                continue;
-            };
-            self.check_function_item(&mut functions, item.id, function);
+            match &item.kind {
+                res::ItemKind::Function(function) => {
+                    self.check_function_item(&mut functions, item.id, function)
+                }
+                res::ItemKind::TypeDef(_) => {
+                    let Some(impl_) = self.ctxt.impl_for(item.id) else {
+                        continue;
+                    };
+                    for &id in &impl_.methods {
+                        let Node::Method(method) = self.ctxt.node(id) else {
+                            unreachable!()
+                        };
+                        self.check_function_item(&mut functions, id, &method.function);
+                    }
+                }
+                _ => (),
+            }
         }
         if !self.ctxt.diag().report_all() {
             Ok(typed_ast::Program { functions })

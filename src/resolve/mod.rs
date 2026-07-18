@@ -100,7 +100,6 @@ pub struct Resolve<'info> {
     vars: usize,
     regions: usize,
     generics: usize,
-    prev_kinds: Vec<HashMap<Symbol, GenericKind>>,
     generic_kinds: HashMap<Symbol, GenericKind>,
     current_module: Option<ModuleId>,
     diag: DiagnosticReporter,
@@ -129,7 +128,6 @@ impl<'info> Resolve<'info> {
             generics: 0,
             diag: DiagnosticReporter::new(),
             generic_kinds: HashMap::new(),
-            prev_kinds: Vec::new(),
             nodes: IndexVec::from_function(results.def_ids, |_| None),
             current_module: None,
             decl_info: results,
@@ -264,23 +262,20 @@ impl<'info> Resolve<'info> {
     }
     fn resolve_generics<T>(
         &mut self,
-        generics: ast::Generics,
+        generics: Option<ast::Generics>,
         f: impl FnOnce(&mut Self) -> T,
-    ) -> (res::Generics, T) {
-        let names = generics
-            .params
-            .iter()
-            .map(|param| {
-                self.declare_param(param.name.symbol);
-                param.name
-            })
-            .collect::<Vec<_>>();
-        let old_kinds = std::mem::replace(
-            &mut self.generic_kinds,
-            generics
+    ) -> (Option<res::Generics>, T) {
+        if let Some(generics) = generics {
+            let names = generics
                 .params
                 .iter()
                 .map(|param| {
+                    self.declare_param(param.name.symbol);
+                    param.name
+                })
+                .collect::<Vec<_>>();
+            self.generic_kinds
+                .extend(generics.params.iter().map(|param| {
                     (
                         param.name.symbol,
                         match param.kind {
@@ -288,30 +283,27 @@ impl<'info> Resolve<'info> {
                             ast::GenericParamKind::Type => res::GenericKind::Type,
                         },
                     )
+                }));
+            let value = f(self);
+            let kinds = generics
+                .params
+                .into_iter()
+                .map(|param| match param.kind {
+                    ast::GenericParamKind::Region => res::GenericKind::Region,
+                    ast::GenericParamKind::Type => res::GenericKind::Type,
                 })
-                .collect(),
-        );
-        self.prev_kinds.push(old_kinds);
-        let value = f(self);
-        let kinds = generics
-            .params
-            .into_iter()
-            .map(|param| match param.kind {
-                ast::GenericParamKind::Region => res::GenericKind::Region,
-                ast::GenericParamKind::Type => res::GenericKind::Type,
-            })
-            .collect();
-        if let Some(old_kinds) = self.prev_kinds.pop() {
-            self.generic_kinds = old_kinds;
+                .collect();
+            (
+                Some(res::Generics {
+                    loc: generics.loc,
+                    names,
+                    kinds,
+                }),
+                value,
+            )
+        } else {
+            (None, f(self))
         }
-        (
-            res::Generics {
-                loc: generics.loc,
-                names,
-                kinds,
-            },
-            value,
-        )
     }
     fn resolve_type_path(&mut self, path: &Path, loc: SrcLoc) -> Option<res::TypeName> {
         let name = *path.segments().last().unwrap();
@@ -321,7 +313,7 @@ impl<'info> Resolve<'info> {
                 None
             }
             Ok(Res::Param(index)) => {
-                if self.generic_kinds[&path.last().symbol] != res::GenericKind::Type {
+                if self.generic_kinds[&name.symbol] != res::GenericKind::Type {
                     self.diag.add_diagnostic(
                         format!("Generic kind mismatch for '{}'", name.symbol),
                         name.loc,
@@ -863,7 +855,7 @@ impl<'info> Resolve<'info> {
         &mut self,
         params: Vec<ast::Param>,
         return_type: ast::Type,
-    ) -> (Box<[res::Param]>, Box<[res::Type]>, res::Type) {
+    ) -> (Box<[res::Param]>, res::Signature) {
         let (names, tys): (Vec<_>, Vec<_>) = params
             .into_iter()
             .map(|param| (param.name, self.resolve_type(param.ty)))
@@ -884,28 +876,28 @@ impl<'info> Resolve<'info> {
             .unzip();
         (
             params.into_boxed_slice(),
-            param_tys.into_boxed_slice(),
-            return_type,
+            res::Signature {
+                params: param_tys.into_boxed_slice(),
+                return_type,
+            },
         )
     }
     fn resolve_function(&mut self, function: ast::Function) -> res::Function {
         self.resolve_item(|this| {
-            let (generics, (params, param_tys, return_type), body) =
-                if let Some(generics) = function.generics {
-                    let (generics, (sig, body)) = this.resolve_generics(generics, |this| {
-                        (
-                            this.resolve_signature(function.params, function.return_type),
-                            function.body.map(|body| this.resolve_expr(body)),
-                        )
-                    });
-                    (Some(Box::new(generics)), sig, body)
-                } else {
-                    (
-                        None,
-                        this.resolve_signature(function.params, function.return_type),
-                        function.body.map(|body| this.resolve_expr(body)),
-                    )
-                };
+            let (generics, rest) = this.resolve_generics(function.generics, |this| {
+                let (params, sig) = this.resolve_signature(function.params, function.return_type);
+                (
+                    params,
+                    sig,
+                    function.body.map(|body| this.resolve_expr(body)),
+                )
+            });
+            let generics = generics.map(Box::new);
+            let (params, sig, body) = rest;
+            let res::Signature {
+                params: param_tys,
+                return_type,
+            } = sig;
             res::Function {
                 name: function.name,
                 param_tys,
@@ -967,8 +959,15 @@ impl<'info> Resolve<'info> {
                 .into_iter()
                 .map(|method| {
                     let id = self.def_id_for(ModuleNodeId(type_id.0, method.id));
+                    let annotations = self.resolve_annotations(method.annotations);
                     let function = self.resolve_function(method.function);
-                    self.add_node(id, res::Node::Method(Box::new(function)))
+                    self.add_node(
+                        id,
+                        res::Node::Method(Box::new(res::Method {
+                            annotations,
+                            function,
+                        })),
+                    )
                 })
                 .collect();
             self.add_node(
@@ -986,16 +985,10 @@ impl<'info> Resolve<'info> {
     }
     fn resolve_type_def(&mut self, id: ModuleNodeId, type_def: ast::TypeDef) -> res::TypeDef {
         self.resolve_item(|this| {
-            let (generics, (impl_, kind)) = if let Some(generics) = type_def.generics {
-                let (generics, kind) = this.resolve_generics(generics, |this| {
+            let (generics, (impl_, kind)) = {
+                this.resolve_generics(type_def.generics, |this| {
                     this.resolve_type_def_body(id, type_def.kind, type_def.imp)
-                });
-                (Some(generics), kind)
-            } else {
-                (
-                    None,
-                    this.resolve_type_def_body(id, type_def.kind, type_def.imp),
-                )
+                })
             };
             res::TypeDef {
                 name: type_def.name,
@@ -1006,8 +999,11 @@ impl<'info> Resolve<'info> {
         })
     }
     fn resolve_item<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        let old_generics = self.generic_kinds.clone();
+        let old_generic_count = self.generics;
         let value = self.in_scope(|this| f(this));
-        self.generics = 0;
+        self.generic_kinds = old_generics;
+        self.generics = old_generic_count;
         self.vars = 0;
         value
     }

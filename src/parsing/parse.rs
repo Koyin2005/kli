@@ -133,7 +133,19 @@ impl Parser {
         mut f: impl FnMut(&mut Self) -> Result<T, ParseError>,
     ) -> Result<Vec<T>, ParseError> {
         let mut results = Vec::new();
-        while !self.is_eof() && !self.check_token(end) {
+        while !self.is_eof() && self.check_is_not_token(end) {
+            results.push(f(self)?);
+        }
+        let _ = self.expect(end);
+        Ok(results)
+    }
+    fn delimited_coma_sep<T>(
+        &mut self,
+        end: &TokenKind,
+        mut f: impl FnMut(&mut Self) -> Result<T, ParseError>,
+    ) -> Result<Vec<T>, ParseError> {
+        let mut results = Vec::new();
+        while !self.is_eof() && self.check_is_not_token(end) {
             results.push(f(self)?);
             if !self.match_coma() {
                 break;
@@ -217,7 +229,7 @@ impl Parser {
                     self.expect(&TokenKind::RightParen)?;
                 }
                 fields.extend(
-                    self.delimited_by(&TokenKind::RightParen, |this| this.parse_pattern())?,
+                    self.delimited_coma_sep(&TokenKind::RightParen, |this| this.parse_pattern())?,
                 );
                 Ok(Pattern {
                     loc,
@@ -269,7 +281,7 @@ impl Parser {
             }
             TokenKind::LeftBrace => {
                 self.advance();
-                let fields = self.delimited_by(&TokenKind::RightBrace, |this| {
+                let fields = self.delimited_coma_sep(&TokenKind::RightBrace, |this| {
                     let name = this.expect_ident("field name")?;
                     let _ = this.expect(&TokenKind::Equal);
                     let pattern = this.parse_pattern()?;
@@ -410,7 +422,7 @@ impl Parser {
     }
     fn parse_record_expr_fields(&mut self) -> Result<Vec<FieldInit>, ParseError> {
         self.advance();
-        let fields = self.delimited_by(&TokenKind::RightBrace, |this| {
+        let fields = self.delimited_coma_sep(&TokenKind::RightBrace, |this| {
             let name = this.expect_ident("field name")?;
             let _ = this.expect(&TokenKind::Equal);
             let value = this.parse_expr()?;
@@ -447,7 +459,7 @@ impl Parser {
             self.expect(&TokenKind::RightParen)?;
         }
         let mut exprs = vec![expr];
-        exprs.extend(self.delimited_by(&TokenKind::RightParen, |this| this.parse_expr())?);
+        exprs.extend(self.delimited_coma_sep(&TokenKind::RightParen, |this| this.parse_expr())?);
         Ok(Expr {
             loc,
             kind: ExprKind::Tuple(exprs),
@@ -659,7 +671,7 @@ impl Parser {
             expr = match self.peek_token().kind {
                 TokenKind::LeftParen => {
                     self.advance();
-                    let args = self.delimited_by(&TokenKind::RightParen, Self::parse_expr)?;
+                    let args = self.delimited_coma_sep(&TokenKind::RightParen, Self::parse_expr)?;
                     Expr {
                         loc: expr.loc,
                         kind: ExprKind::Call(Box::new(expr), args),
@@ -684,7 +696,7 @@ impl Parser {
                     self.advance();
                     let name = self.expect_ident("method name")?;
                     self.expect(&TokenKind::LeftParen)?;
-                    let args = self.delimited_by(&TokenKind::RightParen, Self::parse_expr)?;
+                    let args = self.delimited_coma_sep(&TokenKind::RightParen, Self::parse_expr)?;
                     Expr {
                         loc: expr.loc,
                         kind: ExprKind::MethodCall(Box::new(expr), name, args),
@@ -731,7 +743,8 @@ impl Parser {
     }
     fn parse_optional_generic_args(&mut self) -> Result<Option<GenericArgs>, ParseError> {
         if let Some(Token { loc, .. }) = self.match_token(&TokenKind::LeftBracket) {
-            let args = self.delimited_by(&TokenKind::RightBracket, Self::parse_generic_arg)?;
+            let args =
+                self.delimited_coma_sep(&TokenKind::RightBracket, Self::parse_generic_arg)?;
             Ok(Some(GenericArgs { loc, args }))
         } else {
             Ok(None)
@@ -739,7 +752,7 @@ impl Parser {
     }
     fn parse_optional_generics(&mut self) -> Result<Option<Generics>, ParseError> {
         if let Some(Token { loc, .. }) = self.match_token(&TokenKind::LeftBracket) {
-            let params = self.delimited_by(&TokenKind::RightBracket, |this| {
+            let params = self.delimited_coma_sep(&TokenKind::RightBracket, |this| {
                 let kind = if this.matches_token(&TokenKind::Region) {
                     GenericParamKind::Region
                 } else {
@@ -766,13 +779,13 @@ impl Parser {
     }
     fn parse_record_type(&mut self) -> Result<RecordType, ParseError> {
         let _ = self.expect(&TokenKind::LeftBrace);
-        let fields = self.delimited_by(&TokenKind::RightBrace, Self::parse_record_field)?;
+        let fields = self.delimited_coma_sep(&TokenKind::RightBrace, Self::parse_record_field)?;
         Ok(RecordType { fields })
     }
     fn parse_type_function(&mut self) -> Result<FunctionType, ParseError> {
         let _ = self.expect(&TokenKind::Fun);
         let _ = self.expect(&TokenKind::LeftParen);
-        let params = self.delimited_by(&TokenKind::RightParen, Self::parse_type)?;
+        let params = self.delimited_coma_sep(&TokenKind::RightParen, Self::parse_type)?;
         let is_resource = self.parse_resource_arrow().unwrap_or(IsResource::Data);
 
         let return_type = self.parse_type()?;
@@ -851,7 +864,7 @@ impl Parser {
                     }
                     let mut fields = vec![ty];
                     fields.extend(
-                        self.delimited_by(&TokenKind::RightParen, |this| this.parse_type())?,
+                        self.delimited_coma_sep(&TokenKind::RightParen, |this| this.parse_type())?,
                     );
                     Ok(Type {
                         loc,
@@ -910,7 +923,7 @@ impl Parser {
             };
             let mut fields = Vec::new();
             if self.matches_token(&TokenKind::LeftParen) {
-                fields = self.delimited_by(&TokenKind::RightParen, |this| {
+                fields = self.delimited_coma_sep(&TokenKind::RightParen, |this| {
                     Ok(match this.peek_token() {
                         Token {
                             loc: _,
@@ -988,9 +1001,14 @@ impl Parser {
             return Ok(None);
         }
         let methods = self.delimited_by(&TokenKind::End, |this| {
+            let annotations = this.parse_annotations()?;
             let function = this.parse_function()?;
             let id = this.next_node_id();
-            Ok(Method { id, function })
+            Ok(Method {
+                id,
+                annotations,
+                function,
+            })
         })?;
         Ok(Some(TypeImpl {
             id: self.next_node_id(),
@@ -1030,7 +1048,7 @@ impl Parser {
         let name = self.expect_ident("import path")?;
         let tail = if self.matches_token(&TokenKind::Dot) {
             ImportTreeTail::Children(if self.matches_token(&TokenKind::LeftParen) {
-                Some(self.delimited_by(&TokenKind::RightParen, Self::parse_import_tree)?)
+                Some(self.delimited_coma_sep(&TokenKind::RightParen, Self::parse_import_tree)?)
             } else {
                 Some(vec![self.parse_import_tree()?])
             })

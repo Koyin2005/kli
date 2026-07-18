@@ -1,19 +1,19 @@
-import std.arrays
+import std.arrays.ArrayList
 import std.slices.Slice
 @opaque
 @lang_item("string")
 type String = {
-    array : arrays.ArrayList[byte]
+    array : ArrayList[byte]
 }
 
-fun new() -> String = String { array = arrays.new()}
+fun new() -> String = String { array = ArrayList.new()}
 
-fun with_capacity(cap : uint) -> String = String { array = arrays.with_capacity(cap)}
+fun with_capacity(cap : uint) -> String = String { array = ArrayList.with_capacity(cap)}
 
 fun push_char[region r](s : mut[r] String, c : char) -> () = panic
 
 @unsafe
-fun from_utf8_unchecked(v : arrays.ArrayList[byte]) -> String = String {array = v}
+fun from_utf8_unchecked(v : ArrayList[byte]) -> String = String {array = v}
 
 @opaque
 @lang_item("string_slice")
@@ -29,4 +29,4 @@ fun from_utf8_slice_unchecked[region r](v : Slice[r,byte]) -> StringSlice[r] =
 
 @lang_item("string_from_slice")
 fun from_slice[region r](s : StringSlice[r]) -> String = 
-    unsafe from_utf8_unchecked(arrays.from_slice(s.value,fun(x) -> x^)) end
+    unsafe from_utf8_unchecked(ArrayList.from_slice(s.value,fun(x) -> x^)) end

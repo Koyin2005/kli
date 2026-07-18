@@ -237,9 +237,8 @@ impl<'ctxt> MirDump<'ctxt> {
             );
         } else if let ConstValue::String(string) = value {
             return write!(self.output, "\"{string}\"");
-        }
-        else if let ConstValue::ZeroSized = value {
-            return write!(self.output,"{ty}");
+        } else if let ConstValue::ZeroSized = value {
+            return write!(self.output, "{ty}");
         }
         match ty {
             types::Type::Infer(_) | types::Type::Param(..) | types::Type::Unknown => {

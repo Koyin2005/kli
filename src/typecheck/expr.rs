@@ -7,8 +7,8 @@ use crate::{
     index_vec::IndexVec,
     lang_items::LangItem,
     resolved_ast::{
-        BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, FunctionDefId, Lambda, LocalRegionId,
-        Node, Pattern, Var,
+        self, BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, FunctionDefId, Lambda,
+        LocalRegionId, Pattern, Var,
     },
     src_loc::SrcLoc,
     typecheck::root::{FunctionCtxt, TypeCheck},
@@ -927,9 +927,14 @@ impl FunctionCtxt<'_> {
             ExprKind::MethodCall(rcvr, method, args) => {
                 let rcvr = self.check_expr(rcvr, None);
 
-                let name_info = match rcvr.ty.clone() {
-                    Type::Named(id, name, args) => Some((id, name, args)),
-                    _ => None,
+                let (name_info, _) = match &rcvr.ty {
+                    Type::Named(id, name, args) => (Some((*id, *name, args.clone())), false),
+                    Type::Imm(_, ty) | Type::Mut(_, ty) => (
+                        ty.as_named()
+                            .map(|(id, name, args)| (id, name, args.to_vec())),
+                        true,
+                    ),
+                    _ => (None, false),
                 };
                 let ctxt = self.ctxt();
                 let impl_ = name_info
@@ -948,7 +953,14 @@ impl FunctionCtxt<'_> {
                         .map(|impl_| (impl_, args))
                 });
                 let (sig, generic_args, id) = match method_info {
-                    Some((id, args)) => (ctxt.signature_of(id).bind(&args), args, Some(id)),
+                    Some((id, _)) => {
+                        let args = self.root().lower_generic_args_for(
+                            id,
+                            method.loc,
+                            &resolved_ast::GenericArgs::NONE,
+                        );
+                        (ctxt.signature_of(id).bind(&args), args, Some(id))
+                    }
                     None => {
                         self.ctxt().diag().add_diagnostic(
                             format!("'{}' does not have method '{}'", rcvr.ty, method.symbol),
@@ -964,15 +976,15 @@ impl FunctionCtxt<'_> {
                         )
                     }
                 };
-                let sig_params = if sig.params.first().is_some() {
+                let sig_params = if !sig.params.is_empty() {
                     let mut params = sig.params.clone();
                     let ty = params.remove(0);
-                    self.root().unify(ty, rcvr.ty.clone(), rcvr.loc);
+                    self.root().unify(ty.clone(), rcvr.ty.clone(), rcvr.loc);
                     params
                 } else {
                     self.ctxt()
                         .diag()
-                        .add_diagnostic(format!("Cannot call method"), loc);
+                        .add_diagnostic("Cannot call method".to_string(), loc);
                     sig.params.clone()
                 };
                 let (ty, mut args) =
