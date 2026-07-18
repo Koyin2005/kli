@@ -5,9 +5,9 @@ use crate::{
         Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, CaseDef, CaseType,
         Expr, ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, GenericParam,
         GenericParamKind, Generics, Import, ImportTree, ImportTreeTail, InstancePath, IntLit,
-        IsResource, Item, ItemKind, Lambda, LetBinding, Module, ModuleId, Mutable, NodeId,
+        IsResource, Item, ItemKind, Lambda, LetBinding, Method, Module, ModuleId, Mutable, NodeId,
         NumberKind, Param, Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField,
-        RecordType, Region, Stmt, StmtKind, Type, TypeDef, TypeDefKind, TypeKind,
+        RecordType, Region, Stmt, StmtKind, Type, TypeDef, TypeDefKind, TypeImpl, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::{Ident, Symbol},
@@ -980,6 +980,20 @@ impl Parser {
             id: self.next_node_id(),
         })
     }
+    fn parse_impl(&mut self) -> Result<Option<TypeImpl>, ParseError> {
+        if !self.matches_token(&TokenKind::Impl) {
+            return Ok(None);
+        }
+        let methods = self.delimited_by(&TokenKind::End, |this| {
+            let function = this.parse_function()?;
+            let id = this.next_node_id();
+            Ok(Method { id, function })
+        })?;
+        Ok(Some(TypeImpl {
+            id: self.next_node_id(),
+            methods,
+        }))
+    }
     fn parse_type_def(&mut self) -> Result<TypeDef, ParseError> {
         self.advance();
         let name = self.expect_ident("type name")?;
@@ -1001,10 +1015,12 @@ impl Parser {
                 return Err(self.expect_error("'valid type def'"));
             }
         };
+        let impl_ = self.parse_impl()?;
         Ok(TypeDef {
             generics,
             name,
             kind,
+            imp: impl_,
         })
     }
     fn parse_import_tree(&mut self) -> Result<ImportTree, ParseError> {

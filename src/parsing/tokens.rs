@@ -36,6 +36,7 @@ pub enum TokenKind {
     RightBracket,
     Pipe,
     Number(u64, Option<NumberKind>),
+    Impl,
     Semi,
     Colon,
     Fun,
@@ -127,6 +128,7 @@ impl Display for TokenKind {
             Self::String => "string",
             Self::Imm => "imm",
             Self::Ref => "ref",
+            Self::Impl => "impl",
             Self::Number(number, sign) => {
                 return write!(
                     f,

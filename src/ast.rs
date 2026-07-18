@@ -395,10 +395,21 @@ pub enum ItemKind {
     Import(Import),
 }
 #[derive(Debug)]
+pub struct Method {
+    pub id: NodeId,
+    pub function: Function,
+}
+#[derive(Debug)]
+pub struct TypeImpl {
+    pub id: NodeId,
+    pub methods: Vec<Method>,
+}
+#[derive(Debug)]
 pub struct TypeDef {
     pub name: Ident,
     pub generics: Option<Generics>,
     pub kind: TypeDefKind,
+    pub imp: Option<TypeImpl>,
 }
 define_id!(NodeId);
 impl NodeId {

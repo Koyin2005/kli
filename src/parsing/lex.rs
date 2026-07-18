@@ -188,6 +188,7 @@ impl<'s> Lexer<'s> {
                 "print" => TokenKind::Print,
                 "static" => TokenKind::Static,
                 "ref" => TokenKind::Ref,
+                "impl" => TokenKind::Impl,
                 "char" => TokenKind::Char,
                 "true" => TokenKind::True,
                 "false" => TokenKind::False,
