@@ -314,10 +314,7 @@ impl CtxtRef<'_> {
             Some(match self.node(id) {
                 Node::Item(item) => item.ident(),
                 Node::Case(case_def) => case_def.name,
-                Node::CaseField(field) => Ident {
-                    symbol: Symbol::ZERO,
-                    loc: field.ty.loc,
-                },
+                Node::CaseField(field) => Ident::new(Symbol::ZERO, field.ty.loc),
                 Node::Field(field_def) => field_def.name,
                 Node::Lambda(_) | Node::Impl(_) => return None,
                 Node::Method(method) => method.function.name,

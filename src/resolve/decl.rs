@@ -120,10 +120,7 @@ impl<'d> Declare<'d> {
 
     fn in_new_module(&mut self, module: &ast::Module, f: impl FnOnce(&mut Self)) {
         self.declare_item(
-            Ident {
-                symbol: module.name,
-                loc: SrcLoc::dummy(),
-            },
+            Ident::new(module.name, SrcLoc::dummy().with_file(module.name)),
             "module",
             Def::Module(module.id),
         );

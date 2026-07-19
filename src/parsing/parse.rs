@@ -93,7 +93,7 @@ impl Parser {
                 unreachable!("Has to be an ident")
             };
             let symbol = Symbol::intern(&name);
-            Some(Ident { symbol, loc })
+            Some(Ident::new(symbol, loc))
         } else {
             None
         }
@@ -920,10 +920,7 @@ impl Parser {
         while let Some(token) = self.match_token(&TokenKind::At) {
             let loc = token.loc;
             let name = if let Some(token) = self.match_token(&TokenKind::Unsafe) {
-                Ident {
-                    symbol: Symbol::intern("unsafe"),
-                    loc: token.loc,
-                }
+                Ident::new(Symbol::UNSAFE, token.loc)
             } else {
                 self.expect_ident("annotation name")?
             };
@@ -943,6 +940,13 @@ impl Parser {
                                 unreachable!("Should be a string literal")
                             };
                             AnnotationField::String(loc, string)
+                        }
+                        &Token {
+                            loc,
+                            kind: TokenKind::Ident(_),
+                        } => {
+                            let ident = this.match_ident().expect("checked for ident");
+                            todo!("Ident fields")
                         }
                         _ => return Err(this.expect_error("'valid annotation'")),
                     })

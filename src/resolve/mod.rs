@@ -882,23 +882,11 @@ impl<'info> Resolve<'info> {
                    end
                 */
                 let array_list_path = Path::new(vec![
-                    Ident {
-                        symbol: Symbol::STD,
-                        loc,
-                    },
-                    Ident {
-                        symbol: Symbol::intern("arrays"),
-                        loc,
-                    },
-                    Ident {
-                        symbol: Symbol::intern("ArrayList"),
-                        loc,
-                    },
+                    Ident::new(Symbol::STD, loc),
+                    Ident::new(Symbol::intern("arrays"), loc),
+                    Ident::new(Symbol::intern("ArrayList"), loc),
                 ]);
-                let with_capacity_ident = Ident {
-                    symbol: Symbol::intern("with_capacity"),
-                    loc,
-                };
+                let with_capacity_ident = Ident::new(Symbol::intern("with_capacity"), loc);
                 let with_path = array_list_path
                     .clone()
                     .with_extra_segment(with_capacity_ident);
@@ -912,10 +900,7 @@ impl<'info> Resolve<'info> {
                         };
                     }
                 };
-                let push_ident = Ident {
-                    symbol: Symbol::intern("push"),
-                    loc,
-                };
+                let push_ident = Ident::new(Symbol::intern("push"), loc);
                 let push_path = array_list_path.clone().with_extra_segment(push_ident);
                 let push_res = match self.resolve_path(&push_path) {
                     Ok(res) => res,
@@ -933,10 +918,7 @@ impl<'info> Resolve<'info> {
                 let Res::Def(Def::Function(push_function)) = push_res else {
                     unreachable!("Should be a push function")
                 };
-                let local_name = Ident {
-                    symbol: Symbol::intern("list"),
-                    loc,
-                };
+                let local_name = Ident::new(Symbol::intern("list"), loc);
                 let with_capacity_function = self.def_id_for(with_capacity_function);
                 let push_function = self.def_id_for(push_function);
                 let local_var = self.fresh_var();
@@ -1356,10 +1338,7 @@ impl<'info> Resolve<'info> {
                 loc: SrcLoc::dummy().with_file(module.name),
                 annotations: Vec::new().into_boxed_slice(),
                 kind: res::ItemKind::Module(Box::new(res::Module {
-                    name: Ident {
-                        symbol: module.name,
-                        loc: SrcLoc::dummy().with_file(module.name),
-                    },
+                    name: Ident::new(module.name, SrcLoc::dummy().with_file(module.name)),
                     items: mod_items.into_boxed_slice(),
                 })),
             };

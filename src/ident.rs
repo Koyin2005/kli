@@ -5,11 +5,17 @@ use std::{
 };
 
 use crate::{index_vec::IndexVec, src_loc::SrcLoc};
-
+///A source code identifier
 #[derive(Debug, Clone, Copy)]
 pub struct Ident {
     pub symbol: Symbol,
     pub loc: SrcLoc,
+}
+impl Ident {
+    /// Constructs an ident with `symbol` and `loc`
+    pub fn new(symbol: Symbol, loc: SrcLoc) -> Self {
+        Self { symbol, loc }
+    }
 }
 pub type SymbolContent = String;
 #[derive(Clone, Copy)]
