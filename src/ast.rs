@@ -322,6 +322,7 @@ pub struct Lambda {
 #[derive(Debug)]
 pub enum AnnotationField {
     String(SrcLoc, String),
+    Ident(Ident),
 }
 #[derive(Debug)]
 pub struct Annotation {

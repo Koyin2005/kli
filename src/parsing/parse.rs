@@ -941,12 +941,12 @@ impl Parser {
                             };
                             AnnotationField::String(loc, string)
                         }
-                        &Token {
-                            loc,
+                        Token {
+                            loc: _,
                             kind: TokenKind::Ident(_),
                         } => {
                             let ident = this.match_ident().expect("checked for ident");
-                            todo!("Ident fields")
+                            AnnotationField::Ident(ident)
                         }
                         _ => return Err(this.expect_error("'valid annotation'")),
                     })
