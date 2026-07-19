@@ -68,10 +68,9 @@ impl Visitor for SafetyCheck<'_> {
         if let PlaceKind::Deref(ref value) = place.kind
             && value.ty.as_pointer().is_some()
         {
-            self.ctxt.diag().add_diagnostic(
-                "deref of raw pointer outside unsafe context".to_string(),
-                place.loc,
-            )
+            self.ctxt
+                .diag()
+                .add_diagnostic("deref of raw pointer outside unsafe context", place.loc)
         }
         walk_place(self, place);
     }

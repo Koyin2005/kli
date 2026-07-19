@@ -305,7 +305,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
         match self.place_mutable(place) {
             Mutable::Immutable => self
                 .err
-                .add_diagnostic("Cannot write to immutable place".to_string(), place.loc),
+                .add_diagnostic("Cannot write to immutable place", place.loc),
             Mutable::Mutable => (),
         }
     }
@@ -328,7 +328,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             PatternKind::Binding(borrow, mutable, var, ty) => {
                 if in_ref && ty.is_resource(self.ctxt) && borrow.is_none() {
                     self.err
-                        .add_diagnostic("Cannot move out of reference".to_string(), pattern.loc)
+                        .add_diagnostic("Cannot move out of reference", pattern.loc)
                 }
                 self.init_var(*mutable, var.1, var.0, (**ty).clone());
             }
@@ -428,28 +428,38 @@ impl<'ctxt> ResourceCheck<'ctxt> {
             })
     }
     #[track_caller]
-    fn format_move_place(&self, place: &MovePlace) -> (Type, String) {
-        match place {
-            MovePlace::Var(var) => {
-                let info = &self.vars[&var.1];
-                (info.ty.clone(), info.name.to_string())
-            }
-            MovePlace::FieldOf(inner, field) => {
-                let (inner_ty, mut inner_str) = self.format_move_place(inner);
-                let (ty, name) = inner_ty
-                    .field_info(*field, self.ctxt)
-                    .expect("should have a field");
-                inner_str.push('.');
-                inner_str.push_str(&name.to_string());
-                (ty, inner_str)
-            }
-            MovePlace::Deref(inner) => {
-                let (inner_ty, mut inner_str) = self.format_move_place(inner);
-                let ty = inner_ty.into_pointer_type(self.ctxt).unwrap().1;
-                inner_str.push('^');
-                (ty, inner_str)
+    fn format_move_place<'a>(&'a self, place: &'a MovePlace) -> impl std::fmt::Display + 'a {
+        fn helper(
+            this: &ResourceCheck<'_>,
+            place: &MovePlace,
+            f: &mut std::fmt::Formatter,
+        ) -> Type {
+            match place {
+                MovePlace::Var(var) => {
+                    let info = &this.vars[&var.1];
+                    let _ = write!(f, "{}", info.name);
+                    info.ty.clone()
+                }
+                MovePlace::FieldOf(inner, field) => {
+                    let inner_ty = helper(this, inner, f);
+                    let (ty, name) = inner_ty
+                        .field_info(*field, this.ctxt)
+                        .expect("should have a field");
+                    let _ = write!(f, ".{}", name);
+                    ty
+                }
+                MovePlace::Deref(inner) => {
+                    let inner_ty = helper(this, inner, f);
+                    let ty = inner_ty.into_pointer_type(this.ctxt).unwrap().1;
+                    let _ = write!(f, "^");
+                    ty
+                }
             }
         }
+        std::fmt::from_fn(move |f| {
+            let _ = helper(self, place, f);
+            Ok(())
+        })
     }
     fn check_move_place_use(
         &mut self,
@@ -466,7 +476,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     self.err.add_diagnostic(
                         format!(
                             "Cannot read from '{}' as it has been moved from",
-                            self.format_move_place(&place).1
+                            self.format_move_place(&place)
                         ),
                         loc,
                     );
@@ -478,7 +488,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     self.err.add_diagnostic(
                         format!(
                             "Cannot write to immutable place '{}'",
-                            self.format_move_place(&place).1
+                            self.format_move_place(&place)
                         ),
                         loc,
                     );
@@ -491,7 +501,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     self.err.add_diagnostic(
                         format!(
                             "Cannot assign to '{}' while borrowed",
-                            self.format_move_place(&place).1
+                            self.format_move_place(&place)
                         ),
                         loc,
                     );
@@ -510,7 +520,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                         self.err.add_diagnostic(
                             format!(
                                 "Cannot move from '{}' in a loop",
-                                self.format_move_place(&place).1
+                                self.format_move_place(&place)
                             ),
                             loc,
                         );
@@ -521,7 +531,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                         self.err.add_diagnostic(
                             format!(
                                 "Cannot move from '{}' while borrowed",
-                                self.format_move_place(&place).1
+                                self.format_move_place(&place)
                             ),
                             loc,
                         );
@@ -531,7 +541,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                         self.err.add_diagnostic(
                             format!(
                                 "Cannot move from '{}', as it contains indirection",
-                                self.format_move_place(&place).1
+                                self.format_move_place(&place)
                             ),
                             loc,
                         );
@@ -701,8 +711,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                 match (old_var_mutable, mutable) {
                     (Mutable::Mutable, _) | (Mutable::Immutable, Mutable::Immutable) => (),
                     (Mutable::Immutable, Mutable::Mutable) => {
-                        self.err
-                            .add_diagnostic("Cannot borrow as mut".to_string(), place.loc);
+                        self.err.add_diagnostic("Cannot borrow as mut", place.loc);
                     }
                 }
 
@@ -710,7 +719,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     Some(place) => place,
                     None => {
                         self.err
-                            .add_diagnostic("Cannot borrow this place".to_string(), place.loc);
+                            .add_diagnostic("Cannot borrow this place", place.loc);
                         return;
                     }
                 };
@@ -719,7 +728,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     self.err.add_diagnostic(
                         format!(
                             "Cannot borrow '{}' while moved",
-                            self.format_move_place(&move_place).1
+                            self.format_move_place(&move_place)
                         ),
                         place.loc,
                     );
@@ -729,7 +738,7 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     self.err.add_diagnostic(
                         format!(
                             "Cannot borrow '{}' with region '{}'",
-                            self.format_move_place(&move_place).1,
+                            self.format_move_place(&move_place),
                             region
                         ),
                         place.loc,
@@ -743,12 +752,10 @@ impl<'ctxt> ResourceCheck<'ctxt> {
                     Entry::Occupied(entry) => match (entry.get().0, mutable) {
                         (Mutable::Immutable, Mutable::Immutable) => (),
                         (_, Mutable::Mutable) => {
-                            self.err
-                                .add_diagnostic("Cannot borrow as mut".to_string(), loc);
+                            self.err.add_diagnostic("Cannot borrow as mut", loc);
                         }
                         (Mutable::Mutable, Mutable::Immutable) => {
-                            self.err
-                                .add_diagnostic("Cannot borrow as imm".to_string(), loc);
+                            self.err.add_diagnostic("Cannot borrow as imm", loc);
                         }
                     },
                 }

@@ -1,13 +1,20 @@
-use std::{cell::RefCell, fmt::Display};
+use std::{borrow::Cow, cell::RefCell, fmt::Display};
 
 use crate::src_loc::SrcLoc;
 
+type Msg = Cow<'static, str>;
 #[track_caller]
-pub fn emit_fatal_diagnostic(loc: SrcLoc, msg: String) -> ! {
-    panic!("{}", Diagnostic { loc, msg })
+pub fn emit_fatal_diagnostic(loc: SrcLoc, msg: impl Into<Msg>) -> ! {
+    panic!(
+        "{}",
+        Diagnostic {
+            loc,
+            msg: msg.into()
+        }
+    )
 }
 struct Diagnostic {
-    msg: String,
+    msg: Msg,
     loc: SrcLoc,
 }
 impl Display for Diagnostic {
@@ -33,8 +40,11 @@ impl DiagnosticReporter {
             diagnostics: RefCell::new(Vec::new()),
         }
     }
-    pub fn add_diagnostic(&self, msg: String, loc: SrcLoc) {
-        self.diagnostics.borrow_mut().push(Diagnostic { msg, loc });
+    pub fn add_diagnostic(&self, msg: impl Into<Msg>, loc: SrcLoc) {
+        self.diagnostics.borrow_mut().push(Diagnostic {
+            msg: msg.into(),
+            loc,
+        });
     }
 
     pub fn report_all(&self) -> bool {

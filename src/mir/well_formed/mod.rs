@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::{
     ast::IsResource,
     collect::{CtxtRef, TypeDefKind},
@@ -20,21 +22,26 @@ impl<'ctxt> WellFormed<'ctxt> {
         Self { ctxt, body }
     }
     #[track_caller]
-    fn assert(&mut self, condition: bool, msg: impl FnOnce() -> String, loc: SrcLoc) {
+    fn assert<S: Into<Cow<'static, str>>>(
+        &mut self,
+        condition: bool,
+        msg: impl FnOnce() -> S,
+        loc: SrcLoc,
+    ) {
         if !condition {
             emit_fatal_diagnostic(loc, msg());
         }
     }
     #[track_caller]
-    fn assert_with_some<T, U>(
+    fn assert_with_some<T, U, S: Into<Cow<'static, str>>>(
         &mut self,
         value: T,
         f: impl FnOnce(T) -> Option<U>,
-        msg: impl FnOnce() -> String,
+        msg: impl FnOnce() -> S,
         loc: SrcLoc,
     ) -> U {
         let Some(value) = f(value) else {
-            emit_fatal_diagnostic(loc, msg());
+            emit_fatal_diagnostic(loc, msg().into());
         };
         value
     }
@@ -73,7 +80,7 @@ impl Visit for WellFormed<'_> {
                             Type::Array(ty, _) => Some(*ty),
                             _ => None,
                         },
-                        || "Cannot take an index for non-array".to_string(),
+                        || "Cannot take an index for non-array",
                         loc,
                     )
                 }
@@ -85,7 +92,7 @@ impl Visit for WellFormed<'_> {
                             Type::Imm(_, ty) | Type::Mut(_, ty) => Some(*ty),
                             _ => None,
                         },
-                        || "Cannot deref non pointer or non ref".to_string(),
+                        || "Cannot deref non pointer or non ref",
                         loc,
                     )
                 }
@@ -108,14 +115,14 @@ impl Visit for WellFormed<'_> {
                     } else {
                         false
                     },
-                    || "type does not have a discriminant".to_string(),
+                    || "type does not have a discriminant",
                     loc,
                 );
             }
             super::Rvalue::Aggregate(aggregate_kind, fields) => match aggregate_kind {
                 super::AggregateKind::Record { field_names } => self.assert(
                     fields.len() == field_names.len(),
-                    || "Field names should be same length as fields".to_string(),
+                    || "Field names should be same length as fields",
                     loc,
                 ),
                 super::AggregateKind::NamedRecord(id, args) => {
@@ -123,7 +130,7 @@ impl Visit for WellFormed<'_> {
                     let field_info = type_def.fields();
                     self.assert(
                         fields.len() == field_info.len(),
-                        || "should have fields for each field def".to_string(),
+                        || "should have fields for each field def",
                         loc,
                     );
                     for (field, operand) in field_info.iter().zip(fields) {
@@ -147,13 +154,13 @@ impl Visit for WellFormed<'_> {
                             [env, code] => Some((env, code)),
                             _ => None,
                         },
-                        || "closure should have two fields".to_string(),
+                        || "closure should have two fields",
                         loc,
                     );
                     let env_ty = env.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
                     self.assert(
                         env_ty.as_pointer().is_some_and(|ty| *ty == Type::Byte),
-                        || "env should be byte pointer".to_string(),
+                        || "env should be byte pointer",
                         loc,
                     );
                     let code = code.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
@@ -165,7 +172,7 @@ impl Visit for WellFormed<'_> {
                                 ..
                             })
                         ),
-                        || "code should be function pointer".to_string(),
+                        || "code should be function pointer",
                         loc,
                     );
                 }
@@ -180,7 +187,7 @@ impl Visit for WellFormed<'_> {
                             field.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
                         self.assert(
                             field_ty == *ty,
-                            || "array field must have same type as array".to_string(),
+                            || "array field must have same type as array",
                             loc,
                         );
                     }
@@ -230,12 +237,12 @@ impl Visit for WellFormed<'_> {
                         Type::Function(function_type) => Some(function_type),
                         _ => None,
                     },
-                    || "Can only call function types".to_string(),
+                    || "Can only call function types",
                     loc,
                 );
                 self.assert(
                     resource == IsResource::Data,
-                    || "Can only call data functions".to_string(),
+                    || "Can only call data functions",
                     loc,
                 );
                 let operand_tys = operands
@@ -290,7 +297,7 @@ impl Visit for WellFormed<'_> {
                     let (pointer_type, _) = self.assert_with_some(
                         operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type),
                         |ty| ty.into_pointer_type(ctxt).ok(),
-                        || "Cannot take a non pointer type".to_string(),
+                        || "Cannot take a non pointer type",
                         loc,
                     );
                     match (pointer_cast, pointer_type) {
@@ -318,7 +325,7 @@ impl Visit for WellFormed<'_> {
                 let ty = place.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
                 self.assert(
                     matches!(ty, Type::Array(..)),
-                    || "Expected an array type".to_string(),
+                    || "Expected an array type",
                     loc,
                 );
             }

@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, HashMap},
     path::Path,
 };
@@ -34,7 +35,7 @@ struct FileEntry {
 }
 #[derive(Debug)]
 enum FileEntryKind {
-    Single { src: String },
+    Single { src: Cow<'static, str> },
     Folder(BTreeMap<Symbol, FileEntry>),
 }
 struct Files {
@@ -75,7 +76,7 @@ fn find_src_files_at(path: &Path) -> Result<Vec<FileEntry>, FileError> {
             };
             file_entries.push(FileEntry {
                 name,
-                kind: FileEntryKind::Single { src },
+                kind: FileEntryKind::Single { src: src.into() },
             });
         } else if metadata.is_dir() {
             let Ok(name) = entry.file_name().into_string() else {
@@ -129,7 +130,7 @@ fn find_all_src_files(path: &Path) -> Result<Files, FileError> {
                 name,
                 FileEntry {
                     name,
-                    kind: FileEntryKind::Single { src },
+                    kind: FileEntryKind::Single { src: src.into() },
                 },
             )]),
         }
@@ -180,15 +181,13 @@ fn find_std_lib() -> FileEntry {
     let cmp_file = include_str!("std/cmp.kli");
     let map_file = include_str!("std/maps.kli");
     let slice_file = include_str!("std/slices.kli");
-    fn file_from(name: &str, src: &str) -> (Symbol, FileEntry) {
+    fn file_from(name: &str, src: &'static str) -> (Symbol, FileEntry) {
         let name = Symbol::intern(name);
         (
             name,
             FileEntry {
                 name,
-                kind: FileEntryKind::Single {
-                    src: src.to_string(),
-                },
+                kind: FileEntryKind::Single { src: src.into() },
             },
         )
     }
@@ -215,7 +214,7 @@ fn find_builtins() -> FileEntry {
     FileEntry {
         name: Symbol::BUILTINS,
         kind: FileEntryKind::Single {
-            src: builtins.to_string(),
+            src: builtins.into(),
         },
     }
 }

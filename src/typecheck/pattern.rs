@@ -88,10 +88,9 @@ impl FunctionCtxt<'_> {
                 let cases = match type_def.kind {
                     TypeDefKind::Variant(ref variant_def) => variant_def,
                     _ => {
-                        root.ctxt().diag().add_diagnostic(
-                            "expected 'variant' type but got 'record'".to_string(),
-                            loc,
-                        );
+                        root.ctxt()
+                            .diag()
+                            .add_diagnostic("expected 'variant' type but got 'record'", loc);
                         if let Some(inner) = inner {
                             let _ = self.check_pattern(inner, Type::Unknown, binding_mode);
                         }

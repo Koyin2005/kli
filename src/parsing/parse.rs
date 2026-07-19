@@ -190,8 +190,7 @@ impl Parser {
                 }
                 _ => Err({
                     let loc = self.current_loc();
-                    self.diag
-                        .add_diagnostic("Expected a valid region".to_string(), loc);
+                    self.diag.add_diagnostic("Expected a valid region", loc);
                     ParseError
                 }),
             },
@@ -308,8 +307,7 @@ impl Parser {
                 })
             }
             _ => {
-                self.diag
-                    .add_diagnostic("Expected a valid pattern".to_string(), loc);
+                self.diag.add_diagnostic("Expected a valid pattern", loc);
                 Err(ParseError)
             }
         }

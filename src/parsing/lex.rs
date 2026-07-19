@@ -9,15 +9,21 @@ use crate::{
 
 pub struct Lexer<'src> {
     chars: Peekable<Chars<'src>>,
+    src: &'src str,
     file: Symbol,
     line: u32,
+    index: u32,
     start_line: u32,
+    start_index: u32,
     diag: DiagnosticReporter,
 }
 impl<'s> Lexer<'s> {
     pub fn new(file: Symbol, src: &'s str) -> Self {
         Self {
             file,
+            index: 0,
+            start_index: 0,
+            src,
             chars: src.chars().peekable(),
             line: 1,
             start_line: 1,
@@ -29,6 +35,7 @@ impl<'s> Lexer<'s> {
     }
     fn next_char(&mut self) -> Option<char> {
         self.chars.next().inspect(|x| {
+            self.index += 1;
             if *x == '\n' {
                 self.line = self.line.checked_add(1).expect("file too big");
             }
@@ -129,8 +136,7 @@ impl<'s> Lexer<'s> {
             Err(e) => match e.kind() {
                 IntErrorKind::PosOverflow => {
                     let loc = self.current_loc();
-                    self.diag
-                        .add_diagnostic("Integer too large".to_string(), loc);
+                    self.diag.add_diagnostic("Integer too large", loc);
                     Some(Token {
                         loc,
                         kind: TokenKind::Number(u64::MAX, sign),
@@ -158,18 +164,19 @@ impl<'s> Lexer<'s> {
         } else {
             let loc = self.current_loc();
             self.diag
-                .add_diagnostic("Expected '\"' at end of string".to_string(), loc);
+                .add_diagnostic("Expected '\"' at end of string", loc);
             None
         }
     }
+    fn current_token_src(&self) -> &str {
+        &self.src[self.start_index as usize..self.index as usize]
+    }
     fn ident_token(&mut self) -> Option<Token> {
-        let mut src = self.next_char()?.to_string();
-        while let Some(c) = self.match_char_with(Self::is_ident_char) {
-            src.push(c);
-        }
+        self.next_char()?;
+        while self.match_char_with(Self::is_ident_char).is_some() {}
         Some(Token {
             loc: self.current_loc(),
-            kind: match src.as_str() {
+            kind: match self.current_token_src() {
                 "addr_of" => TokenKind::AddrOf,
                 "fun" => TokenKind::Fun,
                 "imm" => TokenKind::Imm,
@@ -203,7 +210,7 @@ impl<'s> Lexer<'s> {
                 "as" => TokenKind::As,
                 "and" => TokenKind::And,
                 "return" => TokenKind::Return,
-                _ => TokenKind::Ident(src),
+                _ => TokenKind::Ident(self.current_token_src().to_string()),
             },
         })
     }
@@ -212,6 +219,7 @@ impl<'s> Lexer<'s> {
         let line = self.line;
         let &c = self.chars.peek()?;
         self.start_line = line;
+        self.start_index = self.index;
         match c {
             '@' => Some(self.next_token_from_char(TokenKind::At)),
             '.' => Some(self.next_token_from_char(TokenKind::Dot)),

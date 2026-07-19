@@ -80,7 +80,7 @@ impl<'a> Lower<'a> {
                         (_, kind @ (GenericKind::Region | GenericKind::Type)) => {
                             self.ctxt
                                 .diag()
-                                .add_diagnostic("Generic kind mismatch".to_string(), arg.loc());
+                                .add_diagnostic("Generic kind mismatch", arg.loc());
                             match kind {
                                 GenericKind::Region => GenericArg::Region(Region::Unknown),
                                 GenericKind::Type => GenericArg::Type(Type::Unknown),
@@ -167,7 +167,7 @@ impl<'a> Lower<'a> {
                 } else {
                     self.ctxt
                         .diag()
-                        .add_diagnostic("Expected a 'type' generic arg for 'ptr'".to_string(), loc);
+                        .add_diagnostic("Expected a 'type' generic arg for 'ptr'", loc);
                     Type::Unknown
                 };
                 Type::pointer(ty)

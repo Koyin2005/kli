@@ -73,7 +73,7 @@ impl FunctionCtxt<'_> {
                 self.root()
                     .ctxt()
                     .diag()
-                    .add_diagnostic("invalid place".to_string(), place.loc);
+                    .add_diagnostic("invalid place", place.loc);
                 (Type::Unknown, typed_ast::PlaceKind::Invalid)
             }
         };
@@ -987,9 +987,7 @@ impl FunctionCtxt<'_> {
                     self.root().unify(ty.clone(), rcvr.ty.clone(), rcvr.loc);
                     params
                 } else {
-                    self.ctxt()
-                        .diag()
-                        .add_diagnostic("Cannot call method".to_string(), loc);
+                    self.ctxt().diag().add_diagnostic("Cannot call method", loc);
                     sig.params.clone()
                 };
                 let (ty, mut args) =

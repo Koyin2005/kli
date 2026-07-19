@@ -186,7 +186,7 @@ impl<'ctxt> RootCtxt<'ctxt> {
     pub(super) fn type_annotations_needed(&self, loc: SrcLoc) {
         self.ctxt
             .diag()
-            .add_diagnostic("type annotations needed".to_string(), loc);
+            .add_diagnostic("type annotations needed", loc);
     }
 
     pub(super) fn var_type(&self, var: VarId) -> Type {
@@ -324,28 +324,24 @@ impl<'ctxt> TypeCheck<'ctxt> {
     fn validate_main(&self) {
         let Some((main_id, main)) = self.ctxt.main_function() else {
             let loc = SrcLoc::dummy();
-            self.ctxt
-                .diag()
-                .add_diagnostic("Missing main".to_string(), loc);
+            self.ctxt.diag().add_diagnostic("Missing main", loc);
             return;
         };
         if !self.ctxt.generics(main_id).is_empty() {
             self.ctxt()
                 .diag()
-                .add_diagnostic("'main' should not be generic".to_string(), main.name.loc);
+                .add_diagnostic("'main' should not be generic", main.name.loc);
         }
         let signature = self.ctxt.signature_of(main_id).skip();
         if !signature.params.is_empty() {
-            self.ctxt().diag().add_diagnostic(
-                "'main' should have no parameters".to_string(),
-                main.name.loc,
-            );
+            self.ctxt()
+                .diag()
+                .add_diagnostic("'main' should have no parameters", main.name.loc);
         }
         if !signature.return_type.is_unit() {
-            self.ctxt().diag().add_diagnostic(
-                "'main' should have '()' as return type".to_string(),
-                main.name.loc,
-            );
+            self.ctxt()
+                .diag()
+                .add_diagnostic("'main' should have '()' as return type", main.name.loc);
         }
     }
     pub(super) fn check_function(
@@ -438,7 +434,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
                 for line in unsolved {
                     self.ctxt
                         .diag()
-                        .add_diagnostic("type annotations needed".to_string(), line);
+                        .add_diagnostic("type annotations needed", line);
                 }
             } else {
                 TypeSubst::new(&mut root_ctxt.infer.borrow_mut()).subst_function(&mut function);

@@ -1,6 +1,7 @@
 use crate::{
     Symbol,
     collect::{CtxtRef, TypeDefKind},
+    index_vec::IndexVec,
     mir::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, CastKind,
         ConstValue, CopyNonOverlapping, DropInPlace, LocalKind, Operand, Place, PlaceProjection,
@@ -20,6 +21,21 @@ impl<'ctxt> MirDump<'ctxt> {
             output: Box::new(output),
             ctxt,
         }
+    }
+    fn write_with_coma_sep<T>(
+        &mut self,
+        elems: impl IntoIterator<Item = T>,
+        mut f: impl FnMut(&mut Self, T) -> std::io::Result<()>,
+    ) -> std::io::Result<()> {
+        let mut first = true;
+        for value in elems {
+            if !first {
+                write!(self.output, ",")?;
+            }
+            f(self, value)?;
+            first = false;
+        }
+        Ok(())
     }
     fn write_header(&mut self, body: &Body) -> std::io::Result<()> {
         match body.src {
@@ -55,39 +71,32 @@ impl<'ctxt> MirDump<'ctxt> {
         Ok(())
     }
     fn write_place(&mut self, place: &Place) -> std::io::Result<()> {
-        if !place.projections.is_empty() {
-            let mut output = format!("{}", place.base);
-            for projection in place.projections.iter() {
-                output = match projection {
-                    PlaceProjection::Field(field) => {
-                        output.push_str(&format!(".{}", field.into_usize()));
-                        output
-                    }
-                    PlaceProjection::ConstantIndex(index) => {
-                        output.push_str(".[");
-                        output.push_str(&format!("{}", index));
-                        output.push(']');
-                        output
-                    }
-                    PlaceProjection::Deref => {
-                        output.push('^');
-                        output
-                    }
-                    PlaceProjection::Index(index) => {
-                        output.push_str(".[");
-                        output.push_str(&format!("_{}", index.0));
-                        output.push(']');
-                        output
-                    }
-                    PlaceProjection::CaseDowncast(_, name) => {
-                        format!("({} as {})", output, name)
-                    }
-                };
-            }
-            write!(self.output, "{}", output)?;
-            return Ok(());
+        if place.projections.is_empty() {
+            return write!(self.output, "{}", place.base);
         }
-        write!(self.output, "{}", place.base)
+        let mut output = format!("{}", place.base);
+        for projection in place.projections.iter() {
+            use std::fmt::Write;
+            match projection {
+                PlaceProjection::Field(field) => {
+                    let _ = write!(&mut output, ".{}", field.into_usize());
+                }
+                PlaceProjection::ConstantIndex(index) => {
+                    let _ = write!(&mut output, ".[{}]", index);
+                }
+                PlaceProjection::Deref => {
+                    output.push('^');
+                }
+                PlaceProjection::Index(index) => {
+                    let _ = write!(&mut output, ".[_{}]", index.0);
+                }
+                PlaceProjection::CaseDowncast(_, name) => {
+                    let current = std::mem::take(&mut output);
+                    let _ = write!(&mut output, "({} as {})", current, name);
+                }
+            };
+        }
+        write!(self.output, "{}", output)
     }
     fn write_rvalue(&mut self, rvalue: &Rvalue) -> std::io::Result<()> {
         match rvalue {
@@ -121,32 +130,24 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, ")")?;
             }
             Rvalue::Aggregate(kind, fields) => {
-                let name = match kind {
+                match kind {
                     AggregateKind::Array(..)
                     | AggregateKind::Record { .. }
-                    | AggregateKind::Tuple => "".to_string(),
+                    | AggregateKind::Tuple => (),
                     AggregateKind::Closure(params, return_type) => {
-                        let mut first = true;
-                        let mut output = "Closure((".to_string();
-                        for param in params {
-                            if !first {
-                                output.push(',');
-                            }
-                            output.push_str(&param.to_string());
-                            first = false;
-                        }
-                        output.push_str(") -> ");
-                        output.push_str(&return_type.to_string());
-                        output.push(')');
-                        output
+                        write!(self.output, "Closure((")?;
+                        self.write_with_coma_sep(params, |this, param| {
+                            write!(this.output, "{}", param)
+                        })?;
+                        write!(self.output, ") -> {return_type})")?;
                     }
                     AggregateKind::Variant(id, index, args) => {
                         let name = self.ctxt.type_def(*id).case(*index).name;
-                        format!("{}{}", name, display_generic_args(args))
+                        write!(self.output, "{}{}", name, display_generic_args(args))?;
                     }
                     AggregateKind::NamedRecord(id, args) => {
                         let name = self.ctxt.type_def(*id).name;
-                        format!("{}{}", name, display_generic_args(args))
+                        write!(self.output, "{}{}", name, display_generic_args(args))?;
                     }
                 };
                 let (open_bracket, close_bracket) = match kind {
@@ -155,48 +156,36 @@ impl<'ctxt> MirDump<'ctxt> {
                     _ => ('{', '}'),
                 };
                 let ctxt = self.ctxt;
-                let field_name = move |i: FieldId| match kind {
-                    AggregateKind::Tuple => None,
-                    AggregateKind::Array(..) => None,
-                    AggregateKind::Record { field_names } => Some(field_names[i].to_string()),
-                    AggregateKind::Closure(..) => Some(match i {
-                        i if i == FieldId::FIRST_FIELD => "env".to_string(),
-                        i if i == FieldId::new(1) => "code".to_string(),
-                        _ => unreachable!("Should only have 2 fields"),
-                    }),
-                    AggregateKind::Variant(_, _, _) => Some(match i {
-                        FieldId::FIRST_FIELD => "0".to_string(),
-                        _ => unreachable!("Should only have one field"),
-                    }),
+                let write_field_name = move |this: &mut MirDump<'_>, i: FieldId| match kind {
+                    AggregateKind::Tuple | AggregateKind::Array(..) => Ok(()),
+                    AggregateKind::Record { field_names } => {
+                        write!(this.output, "{} = ", field_names[i])
+                    }
+                    AggregateKind::Closure(..) => write!(
+                        this.output,
+                        "{} = ",
+                        match i {
+                            i if i == FieldId::FIRST_FIELD => "env",
+                            i if i == FieldId::new(1) => "code",
+                            _ => unreachable!("Should only have 2 fields"),
+                        }
+                    ),
+                    AggregateKind::Variant(_, _, _) => write!(this.output, "{} = ", i.into_usize()),
                     AggregateKind::NamedRecord(id, ..) => {
-                        Some(ctxt.type_def(*id).fields()[i].name.to_string())
+                        write!(this.output, "{} = ", ctxt.type_def(*id).fields()[i].name)
                     }
                 };
-                write!(self.output, "{name}{open_bracket}")?;
-                let mut first = true;
-                for (i, operand) in fields.iter_enumerated() {
-                    if !first {
-                        write!(self.output, ", ")?;
-                    }
-                    if let Some(name) = field_name(i) {
-                        write!(self.output, "{} = ", name)?;
-                    }
-                    self.write_operand(operand)?;
-                    first = false;
-                }
+                write!(self.output, "{open_bracket}")?;
+                self.write_with_coma_sep(fields.iter_enumerated(), |this, (i, operand)| {
+                    write_field_name(this, i)?;
+                    this.write_operand(operand)
+                })?;
                 write!(self.output, "{}", close_bracket)?;
             }
             Rvalue::Call(operand, args) => {
                 self.write_operand(operand)?;
                 write!(self.output, "(")?;
-                let mut first = true;
-                for arg in args {
-                    if !first {
-                        write!(self.output, ",")?;
-                    }
-                    self.write_operand(arg)?;
-                    first = false;
-                }
+                self.write_with_coma_sep(args, |this, arg| this.write_operand(arg))?;
                 write!(self.output, ")")?;
             }
             Rvalue::Ref(mutable, region, place) => {
@@ -288,41 +277,36 @@ impl<'ctxt> MirDump<'ctxt> {
                 let ConstValue::Record(field_consts) = value else {
                     unreachable!("should be a record")
                 };
-                let field_name = |ty: &types::Type, field_index: FieldId| match ty {
-                    types::Type::Record(fields) => Some(fields[field_index].name),
-                    types::Type::Tuple(_) => None,
+                let (fields, (open_bracket, closing_bracket)) = match ty {
+                    types::Type::Tuple(_) => (&IndexVec::new(), ('(', ')')),
+                    types::Type::Record(fields) => (fields, ('{', '}')),
                     _ => unreachable!(),
                 };
-                let mut first = true;
-                write!(self.output, "{{")?;
-                for (i, value) in field_consts.iter().enumerate() {
-                    let i = FieldId::new(i);
-                    if !first {
-                        write!(self.output, ",")?;
-                    }
-                    if let Some(name) = field_name(ty, i) {
-                        write!(self.output, "{} = ", name)?;
-                    }
-                    self.write_constant(&value.ty, &value.value)?;
-                    first = false;
-                }
-                write!(self.output, "}}")
+                write!(self.output, "{}", open_bracket)?;
+                self.write_with_coma_sep(
+                    field_consts.iter().enumerate(),
+                    move |this, (i, value)| {
+                        let i = FieldId::new(i);
+                        if let Some(field) = fields.get(i) {
+                            write!(this.output, "{} = ", field.name)?;
+                        }
+                        this.write_constant(&value.ty, &value.value)
+                    },
+                )?;
+                write!(self.output, "{}", closing_bracket)
             }
             types::Type::Array(..) => unimplemented!(),
-
             types::Type::Named(def_id, name, args) => match self.ctxt.type_def(*def_id).kind {
                 TypeDefKind::Record(fields) => match value {
                     ConstValue::Record(values) => {
-                        let mut first = true;
                         write!(self.output, "{name}{}{{", display_generic_args(args))?;
-                        for (value, field) in values.iter().zip(fields) {
-                            if !first {
-                                write!(self.output, ",")?;
-                            }
-                            write!(self.output, "{} = ", field.name)?;
-                            self.write_constant(&value.ty, &value.value)?;
-                            first = false;
-                        }
+                        self.write_with_coma_sep(
+                            values.iter().zip(fields),
+                            |this, (value, field)| {
+                                write!(this.output, "{} = ", field.name)?;
+                                this.write_constant(&value.ty, &value.value)
+                            },
+                        )?;
                         write!(self.output, "}}")
                     }
                     _ => write!(self.output, "unknown value of {ty}"),
