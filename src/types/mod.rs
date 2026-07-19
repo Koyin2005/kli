@@ -195,13 +195,13 @@ pub enum Type {
     Named(DefId, Symbol, GenericArgs),
 }
 impl Type {
-    pub const UNIT : Self = Self::Tuple(Vec::new());
+    pub const UNIT: Self = Self::Tuple(Vec::new());
     pub const UINT: Self = Self::Int(IntegerKind::Unsigned);
     pub const INT: Self = Self::Int(IntegerKind::Signed);
-    pub const fn is_unit(&self) -> bool{
-        match self{
+    pub const fn is_unit(&self) -> bool {
+        match self {
             Self::Tuple(fields) => fields.is_empty(),
-            _ => false
+            _ => false,
         }
     }
     pub fn is_bool(&self) -> bool {
@@ -561,7 +561,7 @@ impl Display for Type {
                         f.pad(", ")?;
                     }
                     write!(f, "{}", field)?;
-                    if first && fields.len() == 1{
+                    if first && fields.len() == 1 {
                         f.pad(",")?;
                     }
                     first = false;

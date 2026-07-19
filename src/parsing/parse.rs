@@ -657,6 +657,14 @@ impl Parser {
                 })
             }
             TokenKind::LeftBrace => self.parse_record_expr(loc),
+            TokenKind::LeftBracket => {
+                self.advance();
+                let fields = self.delimited_coma_sep(&TokenKind::RightBracket, Self::parse_expr)?;
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::Array(fields),
+                })
+            }
             ref kind => {
                 let msg = format!("Expected valid expr but got {kind}");
                 let loc = self.current_loc();

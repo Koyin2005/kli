@@ -248,6 +248,7 @@ pub enum ExprKind {
     NamedRecord(InstancePath, Vec<FieldInit>),
     AddressOf(Box<Expr>),
     MethodCall(Box<Expr>, Ident, Vec<Expr>),
+    Array(Vec<Expr>),
     Return(Box<Expr>),
 }
 #[derive(Debug, Clone, Copy)]

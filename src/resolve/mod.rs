@@ -93,6 +93,23 @@ enum TypeDefInfoKind {
         _fields: Vec<FieldInfo>,
     },
 }
+fn make_block_expr(
+    loc: SrcLoc,
+    region: Option<LocalRegionId>,
+    stmts: impl IntoIterator<Item = res::Stmt>,
+    expr: res::Expr,
+) -> res::Expr {
+    res::Expr {
+        loc,
+        kind: res::ExprKind::Block(
+            Box::new(res::BlockBody {
+                stmts: stmts.into_iter().collect(),
+                expr: Box::new(expr),
+            }),
+            region,
+        ),
+    }
+}
 pub struct Resolve<'info> {
     config: Config,
     env: Scope,
@@ -406,16 +423,23 @@ impl<'info> Resolve<'info> {
         };
         res::Type { loc: ty.loc, kind }
     }
-
-    fn declare_region(&mut self, region: Symbol) -> LocalRegionId {
+    fn fresh_region(&mut self) -> LocalRegionId {
         let region_id = LocalRegionId::new(self.vars);
         self.regions += 1;
+        region_id
+    }
+    fn declare_region(&mut self, region: Symbol) -> LocalRegionId {
+        let region_id = self.fresh_region();
         self.env.insert(region, Res::LocalRegion(region_id));
         region_id
     }
-    fn declare_var(&mut self, var: Symbol) -> VarId {
+    fn fresh_var(&mut self) -> VarId {
         let var_id = VarId::new(self.vars);
         self.vars += 1;
+        var_id
+    }
+    fn declare_var(&mut self, var: Symbol) -> VarId {
+        let var_id = self.fresh_var();
         self.env.insert(var, Res::Var(var_id));
         var_id
     }
@@ -845,6 +869,156 @@ impl<'info> Resolve<'info> {
                 method,
                 args.into_iter().map(|arg| self.resolve_expr(arg)).collect(),
             ),
+            ast::ExprKind::Array(fields) => {
+                /*
+                   [a_1,a_2,...,a_n]
+                   do
+                       let mut l = std.arrays.new();
+                       do in r std.arrays.push(mut[r] l, a_1) end;
+                       do in r std.arrays.push(mut[r] l, a_2) end;
+                       ..
+                       do in r std.arrays.push(mut[r] l, a_n) end;
+                       l
+                   end
+                */
+                let array_list_path = Path::new(vec![
+                    Ident {
+                        symbol: Symbol::STD,
+                        loc,
+                    },
+                    Ident {
+                        symbol: Symbol::intern("arrays"),
+                        loc,
+                    },
+                    Ident {
+                        symbol: Symbol::intern("ArrayList"),
+                        loc,
+                    },
+                ]);
+                let with_capacity_ident = Ident {
+                    symbol: Symbol::intern("with_capacity"),
+                    loc,
+                };
+                let with_path = array_list_path
+                    .clone()
+                    .with_extra_segment(with_capacity_ident);
+                let new_res = match self.resolve_path(&with_path) {
+                    Ok(res) => res,
+                    Err(err) => {
+                        self.path_res_error(&with_path, loc, err);
+                        return res::Expr {
+                            loc,
+                            kind: res::ExprKind::Err,
+                        };
+                    }
+                };
+                let push_ident = Ident {
+                    symbol: Symbol::intern("push"),
+                    loc,
+                };
+                let push_path = array_list_path.clone().with_extra_segment(push_ident);
+                let push_res = match self.resolve_path(&push_path) {
+                    Ok(res) => res,
+                    Err(err) => {
+                        self.path_res_error(&push_path, loc, err);
+                        return res::Expr {
+                            loc,
+                            kind: res::ExprKind::Err,
+                        };
+                    }
+                };
+                let Res::Def(Def::Function(with_capacity_function)) = new_res else {
+                    unreachable!("Should be a with_capacity function")
+                };
+                let Res::Def(Def::Function(push_function)) = push_res else {
+                    unreachable!("Should be a push function")
+                };
+                let local_name = Ident {
+                    symbol: Symbol::intern("list"),
+                    loc,
+                };
+                let with_capacity_function = self.def_id_for(with_capacity_function);
+                let push_function = self.def_id_for(push_function);
+                let local_var = self.fresh_var();
+                let var_expr = move || res::Expr {
+                    loc,
+                    kind: res::ExprKind::Var(res::Var(local_name.symbol, local_var)),
+                };
+                fn make_function(loc: SrcLoc, id: DefId) -> res::Expr {
+                    res::Expr {
+                        loc,
+                        kind: res::ExprKind::Function(
+                            res::FunctionDefId(id),
+                            Box::new(res::GenericArgs::NONE),
+                        ),
+                    }
+                }
+                fn make_call(
+                    loc: SrcLoc,
+                    callee: res::Expr,
+                    args: impl IntoIterator<Item = res::Expr>,
+                ) -> res::Expr {
+                    res::Expr {
+                        loc,
+                        kind: res::ExprKind::Call(Box::new(callee), args.into_iter().collect()),
+                    }
+                }
+                let let_stmt = res::Stmt {
+                    loc,
+                    kind: res::StmtKind::Let(Box::new(res::LetBinding {
+                        pattern: res::Pattern {
+                            loc,
+                            kind: res::PatternKind::Binding(
+                                None,
+                                ast::Mutable::Mutable,
+                                local_name,
+                                local_var,
+                            ),
+                        },
+                        ty: None,
+                        value: make_call(
+                            loc,
+                            make_function(loc, with_capacity_function),
+                            [res::Expr {
+                                loc,
+                                kind: res::ExprKind::Int(res::IntegerLiteral {
+                                    value: fields.len() as u64,
+                                    kind: res::IntegerLiteralKind::Implicit,
+                                }),
+                            }],
+                        ),
+                    })),
+                };
+                let stmts = std::iter::once(let_stmt).chain(fields.into_iter().enumerate().map(
+                    |(i, field)| {
+                        let region_name = Symbol::intern(&format!("r{}", i + 1));
+                        let region = self.fresh_region();
+                        let borrowed_var = res::Expr {
+                            loc,
+                            kind: res::ExprKind::Borrow(Box::new(res::BorrowExpr {
+                                mutable: ast::Mutable::Mutable,
+                                place: var_expr(),
+                                region: res::Region {
+                                    loc,
+                                    kind: res::RegionKind::Local(region_name, region),
+                                },
+                            })),
+                        };
+                        let push_call = make_call(
+                            loc,
+                            make_function(loc, push_function),
+                            [borrowed_var, self.resolve_expr(field)],
+                        );
+                        let block_expr = make_block_expr(loc, Some(region), [], push_call);
+                        res::Stmt {
+                            loc,
+                            kind: res::StmtKind::Expr(block_expr),
+                        }
+                    },
+                ));
+
+                return make_block_expr(loc, None, stmts, var_expr());
+            }
         };
         res::Expr { loc, kind }
     }

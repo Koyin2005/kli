@@ -39,9 +39,7 @@ impl FunctionCtxt<'_> {
             PatternKind::Tuple(ref fields) => {
                 let expected_fields = match expected_type {
                     Type::Tuple(field_tys) => field_tys,
-                    _ => {
-                        Vec::new()
-                    }
+                    _ => Vec::new(),
                 };
                 if expected_fields.len() != fields.len() {
                     self.ctxt().diag().add_diagnostic(
@@ -53,17 +51,17 @@ impl FunctionCtxt<'_> {
                         pattern.loc,
                     );
                 }
-                let fields = {
-                    let mut pat_fields = Vec::new();
-                    for (i, field) in fields.iter().enumerate() {
+                let fields = fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, field)| {
                         let ty = expected_fields.get(i).cloned().unwrap_or(Type::Unknown);
-                        pat_fields.push(typed_ast::PatternField {
+                        typed_ast::PatternField {
                             index: FieldId::new(i),
                             pattern: self.check_pattern(field, ty, binding_mode),
-                        });
-                    }
-                    pat_fields
-                };
+                        }
+                    })
+                    .collect();
                 typed_ast::Pattern {
                     ty: Type::Tuple(expected_fields),
                     loc,

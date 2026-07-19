@@ -545,6 +545,10 @@ impl CtxtRef<'_> {
             let mut id = id;
             let mut output = self.display(id).to_string();
             while let Some(parent) = self.parent_of(id) {
+                if let Node::Impl(_) = self.node(parent) {
+                    id = parent;
+                    continue;
+                }
                 output = format!("{}.{}", self.display(parent), output);
                 id = parent;
             }

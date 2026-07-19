@@ -42,7 +42,7 @@ impl DeclareInBody<'_, '_> {
                     self.declare_in_exprs(arg);
                 }
             }
-            ast::ExprKind::Tuple(fields) => {
+            ast::ExprKind::Tuple(fields) | ast::ExprKind::Array(fields) => {
                 for field in fields {
                     self.declare_in_exprs(field)
                 }
@@ -244,14 +244,17 @@ impl<'d> Declare<'d> {
         let (kind, impl_) = self.with_parent_def_id(def_id, |this| {
             let info = match type_def.kind {
                 ast::TypeDefKind::Record(ref record) => this.with_parent_def_id(def_id, |this| {
-                    let mut fields = Vec::new();
-                    for field in &record.fields {
-                        this.declare_def_id_for(mod_node_id.0, field.id);
-                        fields.push(FieldInfo {
-                            _name: field.name,
-                            _id: field.id,
-                        });
-                    }
+                    let fields = record
+                        .fields
+                        .iter()
+                        .map(|field| {
+                            this.declare_def_id_for(mod_node_id.0, field.id);
+                            FieldInfo {
+                                _name: field.name,
+                                _id: field.id,
+                            }
+                        })
+                        .collect();
                     TypeDefInfoKind::Record { _fields: fields }
                 }),
                 ast::TypeDefKind::Variant(ref cases) => {

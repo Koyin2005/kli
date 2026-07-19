@@ -58,19 +58,23 @@ impl Pat {
             Constructor::NonExhaustive => f.write_str("_"),
             Constructor::Record => {
                 use crate::typed_ast::FieldId;
-                let (fields,brackets) : ( &mut dyn Fn(FieldId) -> _,_) = match &self.ty {
-                    Type::Record(fields) => (&mut |i| Some(fields[i].name),("{","}")),
-                    &Type::Named(id, ..) => (&mut move |i| {
-                        Some(crate::types::FieldName::Named(
-                            ctxt.type_def(id).fields()[i].name,
-                        ))
-                    },("{","}")),
-                    Type::Tuple(fields) => (&mut |_| None,("(",if fields.len() == 1 {",)"} else {
-                        ")"
-                    })),
+                let (fields, brackets): (&mut dyn Fn(FieldId) -> _, _) = match &self.ty {
+                    Type::Record(fields) => (&mut |i| Some(fields[i].name), ("{", "}")),
+                    &Type::Named(id, ..) => (
+                        &mut move |i| {
+                            Some(crate::types::FieldName::Named(
+                                ctxt.type_def(id).fields()[i].name,
+                            ))
+                        },
+                        ("{", "}"),
+                    ),
+                    Type::Tuple(fields) => (
+                        &mut |_| None,
+                        ("(", if fields.len() == 1 { ",)" } else { ")" }),
+                    ),
                     _ => unreachable!("should be a record"),
                 };
-                let (start,end) = brackets;
+                let (start, end) = brackets;
                 f.write_str(start)?;
                 let mut first = true;
 

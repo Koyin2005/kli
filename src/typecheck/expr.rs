@@ -540,6 +540,19 @@ impl FunctionCtxt<'_> {
         }
         expr
     }
+    pub(super) fn combine_expr_tys(
+        &self,
+        exprs: impl Iterator<Item = typed_ast::Expr>,
+        combined_ty: Type,
+    ) -> impl Iterator<Item = typed_ast::Expr> {
+        exprs.map(move |expr| {
+            let Ok(coercion) = self.unify_or_coerce(expr.loc, combined_ty.clone(), expr.ty.clone())
+            else {
+                return expr;
+            };
+            self.apply_coercion(coercion, expr)
+        })
+    }
     pub(super) fn check_expr_kind(
         &self,
         expr: &Expr,
@@ -792,37 +805,29 @@ impl FunctionCtxt<'_> {
             }
             ExprKind::Case(matched, case_arms) => {
                 let matched = self.check_expr(matched, None);
-                let mut arms = case_arms
-                    .iter()
-                    .map(|arm| {
-                        let pattern = self.check_pattern(&arm.pattern, matched.ty.clone(), None);
-                        let body = self.check_expr_coerces_to(&arm.body, expected_ty.clone());
-                        typed_ast::CaseArm { pattern, body }
-                    })
-                    .collect::<Vec<_>>();
-                let combined_ty = self.merge_ty(arms.iter().map(|arm| arm.body.ty.clone()));
+                let mut patterns = Vec::with_capacity(case_arms.len());
+                let mut bodies = Vec::with_capacity(case_arms.len());
+                for arm in case_arms {
+                    patterns.push(self.check_pattern(&arm.pattern, matched.ty.clone(), None));
+                    bodies.push(self.check_expr_coerces_to(&arm.body, expected_ty.clone()));
+                }
+                let combined_ty = self.merge_ty(bodies.iter().map(|body| body.ty.clone()));
                 let ty = if let Some(combined_ty) = combined_ty {
-                    arms = arms
-                        .into_iter()
-                        .map(|mut arm| {
-                            let Ok(coercion) = self.unify_or_coerce(
-                                arm.pattern.loc,
-                                combined_ty.clone(),
-                                arm.body.ty.clone(),
-                            ) else {
-                                return arm;
-                            };
-                            arm.body = self.apply_coercion(coercion, arm.body);
-                            arm
-                        })
+                    bodies = self
+                        .combine_expr_tys(bodies.into_iter(), combined_ty.clone())
                         .collect();
                     combined_ty
-                } else if arms.is_empty() {
+                } else if patterns.is_empty() {
                     Type::Never
                 } else {
                     self.root().type_annotations_needed(loc);
                     Type::Unknown
                 };
+                let arms = patterns
+                    .into_iter()
+                    .zip(bodies)
+                    .map(|(pat, body)| typed_ast::CaseArm { pattern: pat, body })
+                    .collect();
                 typed_ast::Expr {
                     ty,
                     loc,
