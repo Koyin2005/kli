@@ -931,56 +931,25 @@ impl FunctionCtxt<'_> {
             }
             ExprKind::MethodCall(rcvr, method, args) => {
                 let rcvr = self.check_expr(rcvr, None);
-
-                let (name_info, _) = match &rcvr.ty {
-                    Type::Named(id, name, args) => (Some((*id, *name, args.clone())), false),
-                    Type::Imm(_, ty) | Type::Mut(_, ty) => (
-                        ty.as_named()
-                            .map(|(id, name, args)| (id, name, args.to_vec())),
-                        true,
-                    ),
-                    _ => (None, false),
-                };
-                let ctxt = self.ctxt();
-                let impl_ = name_info
-                    .and_then(|(id, _, args)| ctxt.impl_for(id).map(|impl_| (impl_, args)));
-                let method_info = impl_.and_then(|(impl_, args)| {
-                    impl_
-                        .methods
-                        .iter()
-                        .find_map(|&id| {
-                            if ctxt.ident(id)?.symbol == method.symbol {
-                                Some(id)
-                            } else {
-                                None
-                            }
-                        })
-                        .map(|impl_| (impl_, args))
-                });
-                let (sig, generic_args, id) = match method_info {
-                    Some((id, _)) => {
-                        let args = self.root().lower_generic_args_for(
-                            id,
-                            method.loc,
-                            &resolved_ast::GenericArgs::NONE,
-                        );
-                        (ctxt.signature_of(id).bind(&args), args, Some(id))
-                    }
-                    None => {
-                        self.ctxt().diag().add_diagnostic(
-                            format!("'{}' does not have method '{}'", rcvr.ty, method.symbol),
-                            loc,
-                        );
-                        (
+                let (sig, generic_args, id) =
+                    match self.root().resolve_method(method.loc, &rcvr.ty, *method) {
+                        Ok((id, mut args)) => {
+                            args.extend(self.root().lower_generic_args_for(
+                                id,
+                                method.loc,
+                                &resolved_ast::GenericArgs::NONE,
+                            ));
+                            (self.ctxt().signature_of(id).bind(&args), args, Some(id))
+                        }
+                        Err(_) => (
                             FunctionSig {
                                 params: Vec::new(),
                                 return_type: Type::Unknown,
                             },
                             GenericArgs::new(),
                             None,
-                        )
-                    }
-                };
+                        ),
+                    };
                 let sig_params = if !sig.params.is_empty() {
                     let mut params = sig.params.clone();
                     let ty = params.remove(0);
@@ -1003,6 +972,25 @@ impl FunctionCtxt<'_> {
                 );
                 args.insert(0, rcvr);
                 make_expr(ty, typed_ast::ExprKind::Call(Box::new(function), args), loc)
+            }
+            ExprKind::TypeRelativePath(ty_name, method, args) => {
+                let ty =
+                    self.root()
+                        .lower_type_name(loc, *ty_name, &resolved_ast::GenericArgs::NONE);
+                let Ok((id, base_args)) = self.root().resolve_method(loc, &ty, *method) else {
+                    return make_expr(Type::Unknown, typed_ast::ExprKind::Err, loc);
+                };
+                let args = {
+                    let mut all_args = base_args;
+                    all_args.extend(self.root().lower_generic_args_for(id, loc, args));
+                    all_args
+                };
+                let sig = self.ctxt().signature_of(id).bind(&args);
+                make_expr(
+                    Type::new_function(sig.params, sig.return_type),
+                    typed_ast::ExprKind::Function(id, args),
+                    loc,
+                )
             }
         }
     }

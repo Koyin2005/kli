@@ -133,27 +133,42 @@ impl TypeDefInfo {
 
 #[derive(Debug, Clone, Default)]
 pub struct Generics {
+    parent: Option<DefId>,
     params: Vec<GenericParam>,
 }
 impl Generics {
     const fn new() -> Self {
-        Self { params: Vec::new() }
+        Self {
+            parent: None,
+            params: Vec::new(),
+        }
     }
     pub const fn is_empty(&self) -> bool {
         self.params.is_empty()
     }
     #[track_caller]
-    pub fn kind(&self, index: usize) -> GenericKind {
-        let Some(kind) = self.get_kind(index) else {
-            panic!("generic param for {:?} not found", index)
+    pub fn kind(&self, index: usize, ctxt: CtxtRef<'_>) -> GenericKind {
+        let Some(kind) = self.get_kind(index, ctxt) else {
+            unreachable!("generic param for '{}' not found", index)
         };
         kind
     }
+    fn get_kind(&self, index: usize, ctxt: CtxtRef<'_>) -> Option<GenericKind> {
+        let Some(parent) = self.parent else {
+            return self.get_own_kind(index);
+        };
+        let parent_generics = ctxt.generics(parent);
+        if index < parent_generics.own_count() {
+            return parent_generics.get_kind(index, ctxt);
+        } else {
+            return self.get_own_kind(index - parent_generics.own_count());
+        }
+    }
     #[track_caller]
-    pub fn get_kind(&self, index: usize) -> Option<GenericKind> {
+    fn get_own_kind(&self, index: usize) -> Option<GenericKind> {
         self.params.as_slice().get(index).map(|param| param.kind)
     }
-    pub const fn count(&self) -> usize {
+    pub const fn own_count(&self) -> usize {
         self.params.len()
     }
     pub fn kinds(&self) -> impl Iterator<Item = GenericKind> {
@@ -409,29 +424,24 @@ impl CtxtRef<'_> {
                 ItemKind::Function(function_def) => function_def
                     .generics
                     .as_deref()
-                    .map_or_else(Generics::new, lower_generics),
+                    .map_or_else(Generics::new, lower_generic_args_no_parent),
                 ItemKind::Module(_) | ItemKind::Import(_) => Generics::new(),
                 ItemKind::TypeDef(type_def) => type_def
                     .generics
                     .as_deref()
-                    .map_or_else(Generics::new, lower_generics),
+                    .map_or_else(Generics::new, lower_generic_args_no_parent),
             },
             Node::Case(_) | Node::CaseField(_) | Node::Field(_) | Node::Impl(_) => {
                 self.generics(self.expect_parent(id))
             }
             Node::Lambda(_) => self.generics(self.expect_parent(id)),
-            Node::Method(method) => {
-                let mut generics = self.generics(self.expect_parent(id));
-                generics.params.extend(
-                    method
-                        .function
-                        .generics
-                        .as_ref()
-                        .iter()
-                        .flat_map(|generics| lower_generics(generics).params.into_iter()),
-                );
-                generics
-            }
+            Node::Method(method) => method.function.generics.as_ref().map_or_else(
+                || Generics {
+                    parent: Some(self.expect_parent(id)),
+                    params: Vec::new(),
+                },
+                |generics| lower_generics(Some(self.expect_parent(id)), generics),
+            ),
         })
     }
     pub fn self_with_anecstors(self, id: DefId) -> impl Iterator<Item = DefId> {
@@ -537,7 +547,7 @@ impl CtxtRef<'_> {
             node: self.node(id),
         }
     }
-    pub fn display_path_for(&self, id: DefId) -> impl std::fmt::Display {
+    pub fn display_path_for(&self, id: DefId) -> impl std::fmt::Display + std::fmt::Debug {
         std::fmt::from_fn(move |f| {
             let mut id = id;
             let mut output = self.display(id).to_string();
@@ -598,8 +608,12 @@ impl CtxtRef<'_> {
         self.0.lang_items.compute((), |()| LangItems::collect(self))
     }
 }
-fn lower_generics(generics: &resolved_ast::Generics) -> Generics {
+fn lower_generic_args_no_parent(generics: &resolved_ast::Generics) -> Generics {
+    lower_generics(None, generics)
+}
+fn lower_generics(parent: Option<DefId>, generics: &resolved_ast::Generics) -> Generics {
     Generics {
+        parent,
         params: generics
             .kinds
             .iter()

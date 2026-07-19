@@ -147,6 +147,7 @@ pub enum ExprKind {
     Tuple(Vec<Expr>),
     Return(Box<Expr>),
     MethodCall(Box<Expr>, Ident, Box<[Expr]>),
+    TypeRelativePath(TypeName, Ident, Box<GenericArgs>),
 }
 #[derive(Debug, Clone, Copy)]
 pub enum RegionKind {

@@ -39,7 +39,6 @@ impl
 
 
     fun with_capacity(cap : uint) -> ArrayList[T] = do
-        let cap = ints.umax(cap,0u);
         ArrayList {
             ptr = allocate(cap),
             len = 0u,
@@ -49,9 +48,9 @@ impl
 
     fun from_slice[region r](s : slices.Slice[r,T], clone : fun(imm[r] T) -> T) -> ArrayList[T] = do
         let mut i = 0u;
-        let mut l = ArrayList.with_capacity(slices.len(s));
+        let mut l : ArrayList[T] = ArrayList.with_capacity(slices.len(s));
         while i < slices.len(s) do 
-            do in r (mut[r] l)->push(clone(slices.expect(s,i))) end;
+            do in r ArrayList.push(mut [r] l,clone(slices.expect(s,i))) end;
             i = i + 1u
         end;
         l
@@ -122,7 +121,7 @@ impl
             do
                 let new_cap = ints.umax(new_len,l^.cap * 2);
                 unsafe 
-                    do in r1 (mut[r1] l^)->resize(new_cap) end
+                    do in r1 ArrayList.resize(mut[r] l^,new_cap) end
                 end
             end
         | false -> ()

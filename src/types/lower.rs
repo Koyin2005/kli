@@ -24,7 +24,7 @@ impl<'a> Lower<'a> {
     pub fn lower_region(&self, region: &res::Region) -> Region {
         match &region.kind {
             &res::RegionKind::Param(name, param) => {
-                if let GenericKind::Region = self.ctxt.generics(self.id).kind(param) {
+                if let GenericKind::Region = self.ctxt.generics(self.id).kind(param, self.ctxt) {
                     Region::Param(name, param)
                 } else {
                     self.ctxt
@@ -120,14 +120,14 @@ impl<'a> Lower<'a> {
         args: &res::GenericArgs,
     ) -> GenericArgs {
         let generics = self.ctxt.generics(id);
-        let count = generics.count();
+        let count = generics.own_count();
         self.lower_generic_args_with(generics, count, loc, args)
     }
     pub fn lower_type_name(&self, loc: SrcLoc, name: TypeName, args: &res::GenericArgs) -> Type {
         match name {
             TypeName::Param(name, param) => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                if let GenericKind::Type = self.ctxt.generics(self.id).kind(param) {
+                if let GenericKind::Type = self.ctxt.generics(self.id).kind(param, self.ctxt) {
                     Type::Param(name, param)
                 } else {
                     self.ctxt

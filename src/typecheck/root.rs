@@ -97,6 +97,46 @@ impl<'ctxt> RootCtxt<'ctxt> {
             Region::Unknown
         }
     }
+    pub(super) fn resolve_method(
+        &self,
+        loc: SrcLoc,
+        ty: &Type,
+        method: Ident,
+    ) -> Result<(DefId, GenericArgs), TypeError> {
+        let (name_info, _) = match ty {
+            Type::Named(id, name, args) => (Some((*id, *name, args.clone())), false),
+            Type::Imm(_, ty) | Type::Mut(_, ty) => (
+                ty.as_named()
+                    .map(|(id, name, args)| (id, name, args.to_vec())),
+                true,
+            ),
+            _ => (None, false),
+        };
+        let ctxt = self.ctxt();
+        let impl_ =
+            name_info.and_then(|(id, _, args)| ctxt.impl_for(id).map(|impl_| (impl_, args)));
+        let method_info = impl_.and_then(|(impl_, args)| {
+            impl_
+                .methods
+                .iter()
+                .find_map(|&id| {
+                    if ctxt.ident(id)?.symbol == method.symbol {
+                        Some(id)
+                    } else {
+                        None
+                    }
+                })
+                .map(|impl_| (impl_, args))
+        });
+        let Some((id, args)) = method_info else {
+            self.ctxt().diag().add_diagnostic(
+                format!("'{}' does not have method '{}'", ty, method.symbol),
+                loc,
+            );
+            return Err(TypeError);
+        };
+        Ok((id, args))
+    }
     pub(super) fn check_int_lit(
         &self,
         loc: SrcLoc,

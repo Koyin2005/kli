@@ -22,6 +22,7 @@ enum NameResolutionError {
     NotInScope,
     InvalidPathStart,
     VariableField(SrcLoc, res::Var, Vec<Ident>),
+    TypeRelative(res::TypeName, Vec<Ident>),
 }
 pub(super) type ModuleItems = HashMap<Symbol, Def>;
 #[derive(Debug)]
@@ -37,6 +38,18 @@ enum TypeAlias {
     ArrayList,
     Never,
     Pair,
+}
+impl TypeAlias {
+    fn into_type_name(self) -> res::TypeName {
+        match self {
+            TypeAlias::Ptr => res::TypeName::Ptr,
+            TypeAlias::Box => res::TypeName::Box,
+            TypeAlias::Byte => res::TypeName::Byte,
+            TypeAlias::ArrayList => res::TypeName::ArrayList,
+            TypeAlias::Never => res::TypeName::Never,
+            TypeAlias::Pair => res::TypeName::Pair,
+        }
+    }
 }
 type Scope = HashMap<Symbol, Res>;
 
@@ -339,14 +352,7 @@ impl<'info> Resolve<'info> {
                 Some(res::TypeName::Param(name.symbol, index))
             }
             Ok(Res::Unknown) => None,
-            Ok(Res::TypeAlias(alias)) => match alias {
-                TypeAlias::Ptr => Some(res::TypeName::Ptr),
-                TypeAlias::Box => Some(res::TypeName::Box),
-                TypeAlias::Byte => Some(res::TypeName::Byte),
-                TypeAlias::ArrayList => Some(res::TypeName::ArrayList),
-                TypeAlias::Never => Some(res::TypeName::Never),
-                TypeAlias::Pair => Some(res::TypeName::Pair),
-            },
+            Ok(Res::TypeAlias(alias)) => Some(alias.into_type_name()),
             Ok(Res::Def(Def::Type(id))) => Some(res::TypeName::UserDefined(self.def_id_for(id))),
             Ok(Res::VariantCase(..)) => {
                 self.cannot_use_as_error(name.symbol, "type", name.loc);
@@ -583,13 +589,11 @@ impl<'info> Resolve<'info> {
                 };
                 if let Some(res) = res {
                     res
-                } else if let Some(impl_) = type_def.impl_
-                    && let impl_ = &self.decl_info.impls_[&impl_]
-                    && let Some(&method) = impl_.methods.get(&segment.symbol)
-                {
-                    Res::Def(Def::Function(method))
                 } else {
-                    return Err(NameResolutionError::NotInScope);
+                    return Err(NameResolutionError::TypeRelative(
+                        res::TypeName::UserDefined(self.def_id_for(id)),
+                        vec![segment],
+                    ));
                 }
             }
             Res::Var(var) => {
@@ -599,10 +603,15 @@ impl<'info> Resolve<'info> {
                     Vec::new(),
                 ));
             }
+            Res::TypeAlias(alias) => {
+                return Err(NameResolutionError::TypeRelative(
+                    alias.into_type_name(),
+                    vec![segment],
+                ));
+            }
             Res::Def(Def::Function(_))
             | Res::Param(_)
             | Res::LocalRegion(_)
-            | Res::TypeAlias(_)
             | Res::VariantCase(..) => return Err(NameResolutionError::InvalidPathStart),
         })
     }
@@ -616,8 +625,12 @@ impl<'info> Resolve<'info> {
             curr = self
                 .resolve_sub_path(curr, segment, head_seg)
                 .map_err(|mut err| {
-                    if let NameResolutionError::VariableField(_, _, fields) = &mut err {
-                        *fields = path.segments()[index..].to_vec()
+                    match &mut err {
+                        NameResolutionError::TypeRelative(.., fields)
+                        | NameResolutionError::VariableField(.., fields) => {
+                            *fields = path.segments()[index..].to_vec()
+                        }
+                        _ => (),
                     }
 
                     err
@@ -636,6 +649,9 @@ impl<'info> Resolve<'info> {
             NameResolutionError::VariableField(..) => {
                 self.invalid_path_start_error(path, loc);
             }
+            NameResolutionError::TypeRelative(..) => {
+                self.invalid_path_start_error(path, loc);
+            }
         }
     }
     fn resolve_path_as_expr(
@@ -646,10 +662,18 @@ impl<'info> Resolve<'info> {
     ) -> res::ExprKind {
         match self.resolve_path(&path) {
             Err(error) => {
-                self.resolve_generic_args(args);
+                let args = self.resolve_generic_args(args);
                 match error {
                     NameResolutionError::NotInScope | NameResolutionError::InvalidPathStart => {
                         self.path_res_error(&path, loc, error);
+                    }
+                    NameResolutionError::TypeRelative(.., ref methods) if methods.len() > 1 => {
+                        self.path_res_error(&path, loc, error);
+                    }
+                    NameResolutionError::TypeRelative(ty, methods) => {
+                        let mut methods = methods.into_iter();
+                        let method = methods.next().unwrap();
+                        return res::ExprKind::TypeRelativePath(ty, method, Box::new(args));
                     }
                     NameResolutionError::VariableField(loc, var, fields) => {
                         let expr = res::Expr {
@@ -886,55 +910,23 @@ impl<'info> Resolve<'info> {
                     Ident::new(Symbol::intern("arrays"), loc),
                     Ident::new(Symbol::intern("ArrayList"), loc),
                 ]);
-                let with_capacity_ident = Ident::new(Symbol::intern("with_capacity"), loc);
-                let with_path = array_list_path
+                let with_capacity_path = array_list_path
                     .clone()
-                    .with_extra_segment(with_capacity_ident);
-                let new_res = match self.resolve_path(&with_path) {
-                    Ok(res) => res,
-                    Err(err) => {
-                        self.path_res_error(&with_path, loc, err);
-                        return res::Expr {
-                            loc,
-                            kind: res::ExprKind::Err,
-                        };
-                    }
+                    .with_extra_segment(Ident::new(Symbol::intern("with_capacity"), loc));
+                let with_cap_expr = self.resolve_path_as_expr(loc, with_capacity_path, None);
+                let push_expr = |this: &mut Resolve<'_>| {
+                    let push_path = array_list_path
+                        .clone()
+                        .with_extra_segment(Ident::new(Symbol::intern("push"), loc));
+                    this.resolve_path_as_expr(loc, push_path, None)
                 };
-                let push_ident = Ident::new(Symbol::intern("push"), loc);
-                let push_path = array_list_path.clone().with_extra_segment(push_ident);
-                let push_res = match self.resolve_path(&push_path) {
-                    Ok(res) => res,
-                    Err(err) => {
-                        self.path_res_error(&push_path, loc, err);
-                        return res::Expr {
-                            loc,
-                            kind: res::ExprKind::Err,
-                        };
-                    }
-                };
-                let Res::Def(Def::Function(with_capacity_function)) = new_res else {
-                    unreachable!("Should be a with_capacity function")
-                };
-                let Res::Def(Def::Function(push_function)) = push_res else {
-                    unreachable!("Should be a push function")
-                };
+
                 let local_name = Ident::new(Symbol::intern("list"), loc);
-                let with_capacity_function = self.def_id_for(with_capacity_function);
-                let push_function = self.def_id_for(push_function);
                 let local_var = self.fresh_var();
                 let var_expr = move || res::Expr {
                     loc,
                     kind: res::ExprKind::Var(res::Var(local_name.symbol, local_var)),
                 };
-                fn make_function(loc: SrcLoc, id: DefId) -> res::Expr {
-                    res::Expr {
-                        loc,
-                        kind: res::ExprKind::Function(
-                            res::FunctionDefId(id),
-                            Box::new(res::GenericArgs::NONE),
-                        ),
-                    }
-                }
                 fn make_call(
                     loc: SrcLoc,
                     callee: res::Expr,
@@ -960,7 +952,10 @@ impl<'info> Resolve<'info> {
                         ty: None,
                         value: make_call(
                             loc,
-                            make_function(loc, with_capacity_function),
+                            res::Expr {
+                                loc,
+                                kind: with_cap_expr,
+                            },
                             [res::Expr {
                                 loc,
                                 kind: res::ExprKind::Int(res::IntegerLiteral {
@@ -988,7 +983,10 @@ impl<'info> Resolve<'info> {
                         };
                         let push_call = make_call(
                             loc,
-                            make_function(loc, push_function),
+                            res::Expr {
+                                loc,
+                                kind: push_expr(self),
+                            },
                             [borrowed_var, self.resolve_expr(field)],
                         );
                         let block_expr = make_block_expr(loc, Some(region), [], push_call);

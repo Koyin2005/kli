@@ -240,7 +240,7 @@ impl<'d> Declare<'d> {
         let name = type_def.name;
         let (kind, impl_) = self.with_parent_def_id(def_id, |this| {
             let info = match type_def.kind {
-                ast::TypeDefKind::Record(ref record) => this.with_parent_def_id(def_id, |this| {
+                ast::TypeDefKind::Record(ref record) => {
                     let fields = record
                         .fields
                         .iter()
@@ -253,14 +253,14 @@ impl<'d> Declare<'d> {
                         })
                         .collect();
                     TypeDefInfoKind::Record { _fields: fields }
-                }),
+                }
                 ast::TypeDefKind::Variant(ref cases) => {
                     let cases = cases
                         .iter()
                         .map(|case| {
-                            let def_id = this.declare_def_id_for(mod_node_id.0, case.id);
+                            let case_def_id = this.declare_def_id_for(mod_node_id.0, case.id);
                             if let Some(ty) = case.ty.as_ref() {
-                                this.with_parent_def_id(def_id, |this| {
+                                this.with_parent_def_id(case_def_id, |this| {
                                     this.declare_def_id_for(mod_node_id.0, ty.id);
                                 })
                             }
