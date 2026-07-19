@@ -217,19 +217,15 @@ impl<'d> Declare<'d> {
     }
     fn declare_impl(&mut self, mod_id: ModuleId, imp_: &TypeImpl) {
         let id = self.declare_def_id_for(mod_id, imp_.id);
-        let methods = self.with_parent_def_id(id, |this| {
-            imp_.methods
-                .iter()
-                .map(|method| {
-                    let id = this.declare_def_id_for(mod_id, method.id);
-                    this.declare_function_body(id, &method.function, mod_id);
-                    (method.function.name.symbol, ModuleNodeId(mod_id, method.id))
-                })
-                .collect()
+        self.with_parent_def_id(id, |this| {
+            imp_.methods.iter().for_each(|method| {
+                let id = this.declare_def_id_for(mod_id, method.id);
+                this.declare_function_body(id, &method.function, mod_id);
+            })
         });
         self.results
             .impls_
-            .insert(ModuleNodeId(mod_id, imp_.id), TypeImplInfo { methods });
+            .insert(ModuleNodeId(mod_id, imp_.id), TypeImplInfo {});
     }
     fn declare_type_def(
         &mut self,
@@ -238,7 +234,7 @@ impl<'d> Declare<'d> {
         type_def: &ast::TypeDef,
     ) {
         let name = type_def.name;
-        let (kind, impl_) = self.with_parent_def_id(def_id, |this| {
+        let (kind, _) = self.with_parent_def_id(def_id, |this| {
             let info = match type_def.kind {
                 ast::TypeDefKind::Record(ref record) => {
                     let fields = record
@@ -290,7 +286,7 @@ impl<'d> Declare<'d> {
         });
         self.results
             .type_defs
-            .insert(mod_node_id, TypeInfo { kind, impl_ });
+            .insert(mod_node_id, TypeInfo { kind });
         self.declare_item(name, "type", Def::Type(mod_node_id));
     }
     pub fn declare(mut self, modules: &[ast::Module]) -> DeclareResults {

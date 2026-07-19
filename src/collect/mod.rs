@@ -159,9 +159,9 @@ impl Generics {
         };
         let parent_generics = ctxt.generics(parent);
         if index < parent_generics.own_count() {
-            return parent_generics.get_kind(index, ctxt);
+            parent_generics.get_kind(index, ctxt)
         } else {
-            return self.get_own_kind(index - parent_generics.own_count());
+            self.get_own_kind(index - parent_generics.own_count())
         }
     }
     #[track_caller]

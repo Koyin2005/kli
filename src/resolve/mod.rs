@@ -88,13 +88,10 @@ struct FieldInfo {
     _id: NodeId,
 }
 #[derive(Debug)]
-pub(super) struct TypeImplInfo {
-    pub methods: HashMap<Symbol, ModuleNodeId>,
-}
+pub(super) struct TypeImplInfo {}
 #[derive(Debug)]
 pub struct TypeInfo {
     kind: TypeDefInfoKind,
-    impl_: Option<ModuleNodeId>,
 }
 #[derive(Debug)]
 enum TypeDefInfoKind {
