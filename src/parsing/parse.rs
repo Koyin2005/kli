@@ -17,6 +17,10 @@ use crate::{
     },
     src_loc::SrcLoc,
 };
+enum ParseAction {
+    Stop,
+    Continue,
+}
 pub struct ParseError;
 pub struct Parser {
     diag: DiagnosticReporter,
@@ -130,13 +134,17 @@ impl Parser {
     fn delimited_by<T>(
         &mut self,
         end: &TokenKind,
-        mut f: impl FnMut(&mut Self) -> Result<T, ParseError>,
+        mut f: impl FnMut(&mut Self) -> Result<(ParseAction, T), ParseError>,
     ) -> Result<Vec<T>, ParseError> {
         let mut results = Vec::new();
         while !self.is_eof() && self.check_is_not_token(end) {
-            results.push(f(self)?);
+            let (action, value) = f(self)?;
+            results.push(value);
+            if matches!(action, ParseAction::Stop) {
+                break;
+            }
         }
-        let _ = self.expect(end);
+        self.expect(end)?;
         Ok(results)
     }
     fn delimited_coma_sep<T>(
@@ -144,15 +152,17 @@ impl Parser {
         end: &TokenKind,
         mut f: impl FnMut(&mut Self) -> Result<T, ParseError>,
     ) -> Result<Vec<T>, ParseError> {
-        let mut results = Vec::new();
-        while !self.is_eof() && self.check_is_not_token(end) {
-            results.push(f(self)?);
-            if !self.match_coma() {
-                break;
-            }
-        }
-        let _ = self.expect(end);
-        Ok(results)
+        self.delimited_by(end, move |this| {
+            let value = f(this)?;
+            Ok((
+                if this.match_coma() {
+                    ParseAction::Continue
+                } else {
+                    ParseAction::Stop
+                },
+                value,
+            ))
+        })
     }
     fn parse_int_lit(&mut self, num: u64, kind: Option<tokens::NumberKind>) -> IntLit {
         self.advance();
@@ -338,23 +348,22 @@ impl Parser {
                         kind: ExprKind::Unit,
                     }),
                 });
-            }
-            let stmt = if let Some(stmt) = self.parse_definition_stmt()? {
-                stmt
+            } else if let Some(stmt) = self.parse_definition_stmt()? {
+                stmts.push(stmt);
             } else {
                 let expr = self.parse_expr()?;
-                if !self.matches_token(&TokenKind::Semi) {
+                if self.matches_token(&TokenKind::Semi) {
+                    stmts.push(Stmt {
+                        loc: expr.loc,
+                        kind: StmtKind::Expr(expr),
+                    });
+                } else if self.check_token(&TokenKind::End) {
                     break Ok(BlockBody {
                         stmts,
                         expr: Box::new(expr),
                     });
                 }
-                Stmt {
-                    loc: expr.loc,
-                    kind: StmtKind::Expr(expr),
-                }
-            };
-            stmts.push(stmt);
+            }
         }
     }
     fn parse_block_expr_tail(
@@ -798,10 +807,10 @@ impl Parser {
         Ok(RecordType { fields })
     }
     fn parse_type_function(&mut self) -> Result<FunctionType, ParseError> {
-        let _ = self.expect(&TokenKind::Fun);
-        let _ = self.expect(&TokenKind::LeftParen);
+        self.expect(&TokenKind::Fun)?;
+        self.expect(&TokenKind::LeftParen)?;
         let params = self.delimited_coma_sep(&TokenKind::RightParen, Self::parse_type)?;
-        let is_resource = self.parse_resource_arrow().unwrap_or(IsResource::Data);
+        let is_resource = self.parse_resource_arrow()?;
 
         let return_type = self.parse_type()?;
         Ok(FunctionType {
@@ -878,9 +887,8 @@ impl Parser {
                         self.expect(&TokenKind::RightParen)?;
                     }
                     let mut fields = vec![ty];
-                    fields.extend(
-                        self.delimited_coma_sep(&TokenKind::RightParen, |this| this.parse_type())?,
-                    );
+                    fields
+                        .extend(self.delimited_coma_sep(&TokenKind::RightParen, Self::parse_type)?);
                     Ok(Type {
                         loc,
                         kind: TypeKind::Tuple(fields),
@@ -966,25 +974,17 @@ impl Parser {
         Ok(annotations)
     }
     fn parse_function(&mut self) -> Result<Function, ParseError> {
-        let _ = self.expect(&TokenKind::Fun);
+        self.expect(&TokenKind::Fun)?;
         let name = self.expect_ident("function name")?;
         let generics = self.parse_optional_generics()?;
-        let _ = self.expect(&TokenKind::LeftParen);
-        let mut params = Vec::new();
-        while self.check_token_is_ident() {
-            let param = self.parse_param()?;
-            params.push(param);
-            if !self.match_coma() {
-                break;
-            }
-        }
-        let _ = self.expect(&TokenKind::RightParen);
-        let _ = self.expect(&TokenKind::Arrow);
+        self.expect(&TokenKind::LeftParen)?;
+        let params = self.delimited_coma_sep(&TokenKind::RightParen, Self::parse_param)?;
+        self.expect(&TokenKind::Arrow)?;
         let ty = self.parse_type()?;
         let body = if self.matches_token(&TokenKind::Semi) {
             None
         } else {
-            let _ = self.expect(&TokenKind::Equal);
+            self.expect(&TokenKind::Equal)?;
             let body = self.parse_expr()?;
             Some(body)
         };
@@ -1023,11 +1023,14 @@ impl Parser {
             let annotations = this.parse_annotations()?;
             let function = this.parse_function()?;
             let id = this.next_node_id();
-            Ok(Method {
-                id,
-                annotations,
-                function,
-            })
+            Ok((
+                ParseAction::Continue,
+                Method {
+                    id,
+                    annotations,
+                    function,
+                },
+            ))
         })?;
         Ok(Some(TypeImpl {
             id: self.next_node_id(),

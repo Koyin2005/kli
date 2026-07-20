@@ -20,6 +20,18 @@ fun reallocate[T](p : ptr[T], new_len : uint) -> ptr[T] =
         deallocate(p);
         new_ptr
     end
+
+
+@unsafe
+fun drop_slice[T](ptr : ptr[T], len : uint ) -> () = do
+    let mut i = 0u;
+    while i < len do
+        unsafe 
+            drop_in_place(offset(ptr,ints.uint_to_int(i)));
+        end;
+        i = i + 1;
+    end
+end
 @opaque
 @lang_item("array_list")
 type ArrayList[T] = {
@@ -49,11 +61,50 @@ impl
     fun from_slice[region r](s : slices.Slice[r,T], clone : fun(imm[r] T) -> T) -> ArrayList[T] = do
         let mut i = 0u;
         let mut l : ArrayList[T] = ArrayList.with_capacity(slices.len(s));
-        while i < slices.len(s) do 
-            do in r ArrayList.push(mut [r] l,clone(slices.expect(s,i))) end;
+        let len = slices.len(s);
+        while i < len do 
+            do in r ArrayList.push(mut[r] l,clone(slices.expect(s,i))) end;
             i = i + 1u
         end;
         l
+    end
+
+    fun from_function(count : uint, f:fun(uint) -> T) -> ArrayList[T] = do 
+        let mut i = 0u;
+        let mut l : ArrayList[T] = ArrayList.with_capacity(count);
+        while i < count do
+            do in r ArrayList.push(mut [r] l,f(i)) end;
+            i = i + 1u;
+        end;
+        l
+    end
+
+    fun map_in_place(this : ArrayList[T], f : fun(T) -> T) -> ArrayList[T] = do
+        let mut i = 0u;
+        let len = do in r ArrayList.len(imm[r] this) end;
+        while i < len do
+            let ptr = offset(this.ptr,ints.uint_to_int(i));
+            unsafe 
+               ptr^ = f(ptr_read(ptr))
+            end
+            i = i + 1;
+        end;
+        this
+    end
+
+    fun map[U](this : ArrayList[T], f : fun(T) -> U) -> ArrayList[U] = do
+        let mut new_list = ArrayList.with_capacity(do in r ArrayList.len(imm[r] this) end);
+        let {ptr = ptr, cap = cap, len = len} = this;
+        let mut i = 0u;
+        while i < len do
+            let element = unsafe ptr_read(offset(ptr, ints.uint_to_int(i))) end;
+            do in r ArrayList.push(mut[r] new_list,f(element)) end;
+            i = i + 1;
+        end;
+        unsafe 
+            deallocate(ptr)
+        end;
+        new_list
     end
 
     @unsafe
@@ -131,17 +182,12 @@ impl
     fun as_slice[region r](l : imm[r] ArrayList[T]) -> slices.Slice[r,T] = 
         unsafe slices.from_raw_parts(l^.ptr,l^.len) end
 
+    
     fun drop(l : ArrayList[T]) -> () = do
         let mut len = l.len;
         let mut ptr = l.ptr;
-        while len > 0u do
-            unsafe 
-                drop_in_place(ptr) 
-            end;
-            ptr = offset(ptr,1);
-            len = len - 1
-        end;
         unsafe 
+            drop_slice(ptr,len);
             deallocate(l.ptr) 
         end
     end

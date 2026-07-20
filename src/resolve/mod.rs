@@ -895,11 +895,12 @@ impl<'info> Resolve<'info> {
                    [a_1,a_2,...,a_n]
                    do
                        let mut l = std.arrays.new();
+                       do in r
                        do in r std.arrays.push(mut[r] l, a_1) end;
                        do in r std.arrays.push(mut[r] l, a_2) end;
                        ..
                        do in r std.arrays.push(mut[r] l, a_n) end;
-                       l
+                       end
                    end
                 */
                 let array_list_path = Path::new(vec![
