@@ -22,7 +22,12 @@ pub fn transmutable(ctxt: CtxtRef<'_>, from: &Type, to: &Type) -> bool {
         {
             true
         }
-        _ => from.pointer_kind(ctxt).is_some() && to.pointer_kind(ctxt).is_some(),
+        _ => {
+            (from.pointer_kind(ctxt).is_some() && to.pointer_kind(ctxt).is_some())
+                || ctxt
+                    .layout_of(from)
+                    .is_ok_and(|from| ctxt.layout_of(to).is_ok_and(|to| from.size == to.size))
+        }
     }
 }
 

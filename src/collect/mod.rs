@@ -15,6 +15,7 @@ use crate::{
     ident::Ident,
     index_vec::IndexVec,
     lang_items::LangItems,
+    layout::{Layout, calculate_layout},
     resolved_ast::{self, AnnotationKind, Item, ItemKind, Node, TypeDef, TypeImpl},
     scheme::Scheme,
     src_loc::SrcLoc,
@@ -605,6 +606,9 @@ impl CtxtRef<'_> {
     }
     pub fn lang_items(self) -> LangItems {
         self.0.lang_items.compute((), |()| LangItems::collect(self))
+    }
+    pub fn layout_of(self, ty: &Type) -> Result<Layout, crate::layout::LayoutError> {
+        calculate_layout(self, ty)
     }
 }
 fn lower_generic_args_no_parent(generics: &resolved_ast::Generics) -> Generics {
