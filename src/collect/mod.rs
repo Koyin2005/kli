@@ -158,13 +158,13 @@ impl Generics {
             return self.get_own_kind(index);
         };
         let parent_generics = ctxt.generics(parent);
-        if index < parent_generics.own_count() {
+        if let Some(own_index) = index.checked_sub(parent_generics.own_count()){
+            self.get_own_kind(own_index)
+        }
+        else {
             parent_generics.get_kind(index, ctxt)
-        } else {
-            self.get_own_kind(index - parent_generics.own_count())
         }
     }
-    #[track_caller]
     fn get_own_kind(&self, index: usize) -> Option<GenericKind> {
         self.params.as_slice().get(index).map(|param| param.kind)
     }

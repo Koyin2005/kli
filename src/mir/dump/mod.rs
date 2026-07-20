@@ -40,11 +40,15 @@ impl<'ctxt> MirDump<'ctxt> {
     fn write_header(&mut self, body: &Body) -> std::io::Result<()> {
         match body.src {
             BodySource::Function(f) => {
-                if let crate::resolved_ast::Node::Method(_) = self.ctxt.node(f){
+                if let crate::resolved_ast::Node::Method(_) = self.ctxt.node(f) {
                     let ty_id = self.ctxt.expect_parent(self.ctxt.expect_parent(f));
-                    write!(self.output,"fun {}.{}",self.ctxt.display(ty_id),self.ctxt.display(f))?;
-                }
-                else {
+                    write!(
+                        self.output,
+                        "fun {}.{}",
+                        self.ctxt.display(ty_id),
+                        self.ctxt.display(f)
+                    )?;
+                } else {
                     write!(self.output, "fun {}", self.ctxt.display(f))?;
                 }
             }
