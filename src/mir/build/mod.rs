@@ -33,7 +33,7 @@ impl<'ctxt> Builder<'ctxt> {
             body: Body {
                 src: source,
                 locals: Locals::default(),
-                block_info: BasicBlocks::new(IndexVec::new_from(1, BasicBlock::default())),
+                block_info: BasicBlocks::new(IndexVec::from_value(1, BasicBlock::default())),
                 return_type,
             },
             current_block: BasicBlockId::ENTRY,

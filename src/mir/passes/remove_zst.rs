@@ -1,6 +1,6 @@
 use crate::{
     CtxtRef,
-    collect::TypeDefKind,
+    layout::{Layout, calculate_layout},
     mir::{Constant, Locals, Location, Operand, StmtKind, passes::MirPass, visitor::MutVisit},
     types::Type,
 };
@@ -8,41 +8,9 @@ use crate::{
 pub struct RemoveZst;
 impl RemoveZst {
     fn is_zst(ty: &Type, ctxt: CtxtRef<'_>) -> bool {
-        match ty {
-            Type::Never => true,
-            Type::Array(ty, _) => Self::is_zst(ty, ctxt),
-            Type::Bool
-            | Type::Char
-            | Type::Int(_)
-            | Type::Byte
-            | Type::Param(..)
-            | Type::Function(..)
-            | Type::RawPointer(..)
-            | Type::Imm(..)
-            | Type::Mut(..) => false,
-            Type::Infer(_) => false,
-            Type::Unknown => false,
-            Type::Record(fields) => fields.iter().all(|field| Self::is_zst(&field.ty, ctxt)),
-            Type::Tuple(fields) => fields.iter().all(|field| Self::is_zst(field, ctxt)),
-            Type::Named(def_id, _, generic_args) => {
-                if ctxt.is_type_recursive(*def_id) {
-                    return false;
-                }
-                match ctxt.type_def(*def_id).kind {
-                    TypeDefKind::Record(ref fields) => fields
-                        .iter()
-                        .all(|field| Self::is_zst(&field.type_of(generic_args, ctxt), ctxt)),
-                    TypeDefKind::Variant(ref cases) => cases.iter().all(|case| {
-                        let field_ty = if let Some(field) = case.field {
-                            field.type_of(generic_args, ctxt)
-                        } else {
-                            Type::UNIT
-                        };
-                        field_ty.is_uninhabited(ctxt) && Self::is_zst(&field_ty, ctxt)
-                    }),
-                }
-            }
-        }
+        calculate_layout(ctxt, ty)
+            .as_ref()
+            .is_ok_and(Layout::is_zst)
     }
 }
 impl MirPass for RemoveZst {

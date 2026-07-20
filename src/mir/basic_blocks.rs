@@ -38,7 +38,7 @@ impl BasicBlocks {
     }
     pub fn predecessors(&self) -> &Predecessors {
         self.cache.predecessors.get_or_init(|| {
-            let mut preds = Predecessors::new_from(self.blocks.len(), Vec::new());
+            let mut preds = Predecessors::from_value(self.blocks.len(), Vec::new());
             for (block_id, block) in self.blocks.iter_enumerated() {
                 if let Some(terminator) = &block.terminator {
                     for succ in terminator.successors() {

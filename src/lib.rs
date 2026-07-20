@@ -24,5 +24,6 @@ mod captures;
 pub mod config;
 mod def_ids;
 mod lang_items;
+pub mod layout;
 mod res_visitor;
 pub mod unsafety;

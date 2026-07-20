@@ -105,7 +105,7 @@ pub fn dominators(bbs: &BasicBlocks) -> DominatorTree {
         IndexVec::<BasicBlockId, _>::from_iter((0..bbs.blocks().len()).map(BasicBlockId::new));
     let mut min_path_label =
         IndexVec::<BasicBlockId, _>::from_iter((0..bbs.blocks().len()).map(BasicBlockId::new));
-    let mut ancestors = IndexVec::<BasicBlockId, _>::new_from(bbs.blocks().len(), None);
+    let mut ancestors = IndexVec::<BasicBlockId, _>::from_value(bbs.blocks().len(), None);
     for &(parent, node) in dfs.iter().rev() {
         let Some(parent) = parent else {
             continue;

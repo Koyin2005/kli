@@ -215,22 +215,24 @@ impl Builder<'_> {
                 let rhs_block = self.switch_to_new_block();
                 self.expr_into_dest(dest.clone(), right);
                 let merge_block = self.goto_to_new_block(right.loc);
-                
 
-                let (true_block,false_block,value,const_loc) = match op{
-                    LogicalOp::And => (rhs_block,constant_block,false,left.loc),
-                    LogicalOp::Or => (constant_block,rhs_block,true,right.loc),
+                let (true_block, false_block, value, const_loc) = match op {
+                    LogicalOp::And => (rhs_block, constant_block, false, left.loc),
+                    LogicalOp::Or => (constant_block, rhs_block, true, right.loc),
                 };
-                
+
                 self.switch_to_block(constant_block);
-                self.assign(const_loc, dest, Rvalue::Use(Operand::Constant(Constant::bool(value))));
+                self.assign(
+                    const_loc,
+                    dest,
+                    Rvalue::Use(Operand::Constant(Constant::bool(value))),
+                );
                 self.finish_block_with_goto(const_loc, merge_block);
 
                 self.switch_to_block(branch_block);
                 self.finish_block_with_if(left.loc, left_operand, true_block, false_block);
 
                 self.switch_to_block(merge_block);
-
             }
             ExprKind::Record(_)
             | ExprKind::Function(..)
