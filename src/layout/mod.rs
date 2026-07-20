@@ -17,7 +17,7 @@ pub const INT_SIZE: Size = Size::BYTE.mul(8);
 pub const INT_ALIGN: Align = Align::from_bytes(8).unwrap();
 
 /// Size of an allocation in bytes
-#[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash)]
+#[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash, Debug)]
 #[repr(transparent)]
 pub struct Size(u64);
 impl Size {
@@ -74,7 +74,7 @@ impl Size {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash)]
+#[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash, Debug)]
 pub struct Align(u8);
 impl Align {
     pub const BYTE: Self = Self(0);
@@ -90,17 +90,22 @@ impl Align {
         2u64.pow(self.0 as u32)
     }
 }
-
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug)]
+pub enum TagEncoding {
+    Uninhabited,
+    Field { offset: Size, scalar: Scalar },
+    Data { offset: Size },
+}
+#[derive(Clone, Debug)]
 pub struct VariantLayout {
     pub field: FieldLayout,
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FieldLayout {
     pub offset: Size,
     pub layout: Layout,
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Layout {
     pub size: Size,
     pub alignment: Align,
@@ -129,7 +134,7 @@ impl Layout {
         let LayoutKind::Variant { tag, .. } = self.kind else {
             return false;
         };
-        tag.is_none()
+        matches!(tag, TagEncoding::Uninhabited)
     }
     pub const fn zst() -> Self {
         Self {
@@ -143,7 +148,7 @@ impl Layout {
             size: self.size,
             alignment: self.alignment,
             kind: LayoutKind::Variant {
-                tag: None,
+                tag: TagEncoding::Uninhabited,
                 data_offset: Size::ZERO,
                 cases: IndexVec::new(),
             },
@@ -153,7 +158,7 @@ impl Layout {
         self.size.equal(Size::ZERO)
     }
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Scalar {
     Byte,
     Bool,
@@ -161,11 +166,11 @@ pub enum Scalar {
     Uint32,
     Int64(IntegerKind),
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum LayoutKind {
     Aggregate(IndexVec<FieldId, FieldLayout>),
     Variant {
-        tag: Option<(Size, Scalar)>,
+        tag: TagEncoding,
         data_offset: Size,
         cases: IndexVec<CaseId, Layout>,
     },
@@ -185,12 +190,6 @@ fn variant_layout(
     if cases.is_empty() {
         return Ok(Layout::zst().uninhabited());
     }
-    if let Some([ty]) = cases.as_slice().as_array() {
-        let Some(ty) = ty else {
-            return Ok(Layout::zst());
-        };
-        return calculate_layout(ctxt, ty);
-    }
     let case_layouts = cases
         .iter()
         .map(|case| {
@@ -201,20 +200,6 @@ fn variant_layout(
             }
         })
         .collect::<Result<IndexVec<CaseId, _>, _>>()?;
-    if let [first, second] = case_layouts.as_slice()
-        && first.is_zst() != second.is_zst()
-    {
-        let (_, non_zst_layout) = if first.is_zst() {
-            (CaseId::new(0), second)
-        } else {
-            (CaseId::new(1), first)
-        };
-        if let Some(scalar) = non_zst_layout.as_scalar()
-            && let Scalar::Pointer { non_null: true } = scalar
-        {
-            return Ok(Layout::pointer(false));
-        }
-    }
     let (tag_size, tag_scalar, tag_align) = if cases.len() < 256usize {
         (Size::BYTE, Scalar::Byte, Align::BYTE)
     } else {
@@ -242,7 +227,7 @@ fn variant_layout(
         size: tag_size.add(biggest_size.size).align_to(max_align),
         alignment: max_align,
         kind: LayoutKind::Variant {
-            tag: Some((tag_offset, tag_scalar)),
+            tag: TagEncoding::Field { offset: tag_offset, scalar: tag_scalar },
             data_offset,
             cases: case_layouts,
         },
@@ -263,8 +248,9 @@ fn aggregate_layout(mut field_layouts: Vec<(FieldId, Layout)>) -> Result<Layout,
     );
     for (field, layout) in field_layouts {
         let align = layout.alignment;
+        let size = layout.size;
         layouts[field] = FieldLayout { offset, layout };
-        offset = offset.align_to(align);
+        offset = offset.add(size).align_to(align);
     }
     Ok(Layout {
         size: offset,

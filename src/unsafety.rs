@@ -11,12 +11,10 @@ use crate::{
 pub fn transmutable(ctxt: CtxtRef<'_>, from: &Type, to: &Type) -> bool {
     match (from, to) {
         (from, to) if from == to => true,
-        _ => {
-            (from.pointer_kind(ctxt).is_some() && to.pointer_kind(ctxt).is_some())
-                || ctxt
-                    .layout_of(from)
-                    .is_ok_and(|from| ctxt.layout_of(to).is_ok_and(|to| from.size == to.size))
-        }
+        _ => match (ctxt.layout_of(from), ctxt.layout_of(to)) {
+            (Ok(from_layout), Ok(to_layout)) => from_layout.size == to_layout.size,
+            _ => false,
+        },
     }
 }
 
@@ -69,9 +67,6 @@ impl Visitor for SafetyCheck<'_> {
         walk_place(self, place);
     }
     fn visit_expr(&mut self, expr: &crate::typed_ast::Expr) {
-        if self.in_unsafe_block {
-            return;
-        }
         let function = match expr.kind {
             ExprKind::Unsafe(ref expr) => {
                 let was_in_unsafe_block = self.in_unsafe_block;
@@ -105,12 +100,14 @@ impl Visitor for SafetyCheck<'_> {
             ExprKind::Function(id, _) if is_unsafe(self.ctxt, id) => id,
             _ => return walk_expr(self, expr),
         };
-        self.ctxt.diag().add_diagnostic(
-            format!(
-                "use of unsafe function '{}' outside unsafe context",
-                self.ctxt.expect_ident(function).symbol
-            ),
-            expr.loc,
-        )
+        if !self.in_unsafe_block {
+            self.ctxt.diag().add_diagnostic(
+                format!(
+                    "use of unsafe function '{}' outside unsafe context",
+                    self.ctxt.expect_ident(function).symbol
+                ),
+                expr.loc,
+            )
+        }
     }
 }
