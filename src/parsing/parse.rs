@@ -330,6 +330,15 @@ impl Parser {
     fn parse_block_body(&mut self) -> Result<BlockBody, ParseError> {
         let mut stmts = Vec::new();
         loop {
+            if self.check_token(&TokenKind::End) {
+                break Ok(BlockBody {
+                    stmts,
+                    expr: Box::new(Expr {
+                        loc: self.current_loc(),
+                        kind: ExprKind::Unit,
+                    }),
+                });
+            }
             let stmt = if let Some(stmt) = self.parse_definition_stmt()? {
                 stmt
             } else {
