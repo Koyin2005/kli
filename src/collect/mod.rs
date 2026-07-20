@@ -158,10 +158,9 @@ impl Generics {
             return self.get_own_kind(index);
         };
         let parent_generics = ctxt.generics(parent);
-        if let Some(own_index) = index.checked_sub(parent_generics.own_count()){
+        if let Some(own_index) = index.checked_sub(parent_generics.own_count()) {
             self.get_own_kind(own_index)
-        }
-        else {
+        } else {
             parent_generics.get_kind(index, ctxt)
         }
     }

@@ -204,36 +204,33 @@ impl Builder<'_> {
                 self.build_match(dest, expr, arms);
             }
             ExprKind::Logic(op, left, right) => {
+                //Evaluate the left hand side
                 let left_operand = self.operand(left);
-                match op {
-                    LogicalOp::And => {
-                        let branch_block = self.current_block;
+                let branch_block = self.current_block;
 
-                        let true_block_start = self.switch_to_new_block();
-                        self.expr_into_dest(dest.clone(), right);
-                        let true_block_end = self.current_block;
+                //Create the block for the short circuit side
+                let constant_block = self.new_block();
 
-                        let false_block = self.switch_to_new_block();
-                        self.assign(
-                            left.loc,
-                            dest,
-                            Rvalue::Use(Operand::Constant(Constant::bool(false))),
-                        );
-                        let merge_block = self.goto_to_new_block(right.loc);
+                //Evaluate the right hand side
+                let rhs_block = self.switch_to_new_block();
+                self.expr_into_dest(dest.clone(), right);
+                let merge_block = self.goto_to_new_block(right.loc);
+                
 
-                        self.switch_to_block(true_block_end);
-                        self.finish_block_with_goto(right.loc, merge_block);
+                let (true_block,false_block,value,const_loc) = match op{
+                    LogicalOp::And => (rhs_block,constant_block,false,left.loc),
+                    LogicalOp::Or => (constant_block,rhs_block,true,right.loc),
+                };
+                
+                self.switch_to_block(constant_block);
+                self.assign(const_loc, dest, Rvalue::Use(Operand::Constant(Constant::bool(value))));
+                self.finish_block_with_goto(const_loc, merge_block);
 
-                        self.switch_to_block(branch_block);
-                        self.finish_block_with_if(
-                            expr.loc,
-                            left_operand,
-                            true_block_start,
-                            false_block,
-                        );
-                        self.switch_to_block(merge_block);
-                    }
-                }
+                self.switch_to_block(branch_block);
+                self.finish_block_with_if(left.loc, left_operand, true_block, false_block);
+
+                self.switch_to_block(merge_block);
+
             }
             ExprKind::Record(_)
             | ExprKind::Function(..)

@@ -119,6 +119,7 @@ pub enum BinaryOp {
 #[derive(Debug)]
 pub enum LogicalOp {
     And,
+    Or,
 }
 #[derive(Debug)]
 pub enum ExprKind {

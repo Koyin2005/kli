@@ -210,6 +210,7 @@ impl<'s> Lexer<'s> {
                 "as" => TokenKind::As,
                 "and" => TokenKind::And,
                 "return" => TokenKind::Return,
+                "or" => TokenKind::Or,
                 _ => TokenKind::Ident(self.current_token_src().to_string()),
             },
         })

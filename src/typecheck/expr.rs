@@ -520,6 +520,80 @@ impl FunctionCtxt<'_> {
             kind: typed_ast::ExprKind::Record(expr_fields),
         }
     }
+    fn check_binary_op(
+        &self,
+        loc: SrcLoc,
+        binary_op: BinaryOp,
+        left: &Expr,
+        right: &Expr,
+        expected_ty: Option<&Type>,
+    ) -> typed_ast::Expr {
+        let (left_ty, right_ty) = match binary_op {
+            BinaryOp::Add | BinaryOp::Divide | BinaryOp::Multiply | BinaryOp::Subtract => {
+                let operand_tys = expected_ty.as_ref().and_then(|&ty| {
+                    let &Type::Int(kind) = ty else {
+                        return None;
+                    };
+                    Some(Type::Int(kind))
+                });
+                (operand_tys.clone(), operand_tys)
+            }
+            BinaryOp::Equals => (None, None),
+            BinaryOp::Lesser | BinaryOp::Greater => {
+                let operand_tys = expected_ty.as_ref().and_then(|ty| {
+                    let &Type::Int(kind) = *ty else {
+                        return None;
+                    };
+                    Some(Type::Int(kind))
+                });
+                (operand_tys.clone(), operand_tys)
+            }
+            BinaryOp::And | BinaryOp::Or => (Some(Type::Bool), Some(Type::Bool)),
+        };
+        let left = self.check_expr(left, left_ty);
+        let right = self.check_expr(right, right_ty);
+        let result_ty = match binary_op {
+            BinaryOp::Add | BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Divide => {
+                (left.ty == right.ty && left.ty.is_integer()).then(|| right.ty.clone())
+            }
+            BinaryOp::Equals => {
+                (left.ty == right.ty && left.ty.is_builtin_scalar()).then_some(Type::Bool)
+            }
+            BinaryOp::Lesser | BinaryOp::Greater => {
+                (left.ty == right.ty && left.ty.is_integer()).then_some(Type::Bool)
+            }
+            BinaryOp::And | BinaryOp::Or => Some(Type::Bool),
+        };
+        let result = result_ty.unwrap_or_else(|| {
+            self.ctxt().diag().add_diagnostic(
+                format!(
+                    "invalid operands '{}' and '{}' for '{binary_op}'",
+                    left.ty, right.ty
+                ),
+                loc,
+            );
+            Type::Unknown
+        });
+        let op = match binary_op {
+            BinaryOp::Add => Ok(typed_ast::BinaryOp::Add),
+            BinaryOp::Subtract => Ok(typed_ast::BinaryOp::Subtract),
+            BinaryOp::Multiply => Ok(typed_ast::BinaryOp::Multiply),
+            BinaryOp::Divide => Ok(typed_ast::BinaryOp::Divide),
+            BinaryOp::Equals => Ok(typed_ast::BinaryOp::Equals),
+            BinaryOp::Lesser => Ok(typed_ast::BinaryOp::Lesser),
+            BinaryOp::Greater => Ok(typed_ast::BinaryOp::Greater),
+            BinaryOp::Or => Err(typed_ast::LogicalOp::Or),
+            BinaryOp::And => Err(typed_ast::LogicalOp::And),
+        };
+        typed_ast::Expr {
+            loc,
+            ty: result,
+            kind: match op {
+                Ok(op) => typed_ast::ExprKind::Binary(op, Box::new(left), Box::new(right)),
+                Err(op) => typed_ast::ExprKind::Logic(op, Box::new(left), Box::new(right)),
+            },
+        }
+    }
     pub(super) fn check_expr_coerces_to(
         &self,
         expr: &Expr,
@@ -720,81 +794,7 @@ impl FunctionCtxt<'_> {
                 }
             }
             ExprKind::Binary(binary_op, left, right) => {
-                let (left_ty, right_ty) = match binary_op {
-                    BinaryOp::Add | BinaryOp::Divide | BinaryOp::Multiply | BinaryOp::Subtract => {
-                        let operand_tys = expected_ty.as_ref().and_then(|ty| {
-                            let Type::Int(kind) = *ty else {
-                                return None;
-                            };
-                            Some(Type::Int(kind))
-                        });
-                        (operand_tys.clone(), operand_tys)
-                    }
-                    BinaryOp::Equals => (None, None),
-                    BinaryOp::Lesser | BinaryOp::Greater => {
-                        let operand_tys = expected_ty.as_ref().and_then(|ty| {
-                            let Type::Int(kind) = *ty else {
-                                return None;
-                            };
-                            Some(Type::Int(kind))
-                        });
-                        (operand_tys.clone(), operand_tys)
-                    }
-                    BinaryOp::And => (Some(Type::Bool), Some(Type::Bool)),
-                };
-                let left = self.check_expr(left, left_ty);
-                let right = self.check_expr(right, right_ty);
-                let result_ty = match binary_op {
-                    BinaryOp::Add | BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Divide => {
-                        (left.ty == right.ty && left.ty.is_integer()).then(|| right.ty.clone())
-                    }
-                    BinaryOp::Equals => {
-                        (left.ty == right.ty && left.ty.is_builtin_scalar()).then_some(Type::Bool)
-                    }
-                    BinaryOp::Lesser | BinaryOp::Greater => {
-                        (left.ty == right.ty && left.ty.is_integer()).then_some(Type::Bool)
-                    }
-                    BinaryOp::And => Some(Type::Bool),
-                };
-                fn binary_kind(
-                    op: typed_ast::BinaryOp,
-                    left: typed_ast::Expr,
-                    right: typed_ast::Expr,
-                ) -> typed_ast::ExprKind {
-                    typed_ast::ExprKind::Binary(op, Box::new(left), Box::new(right))
-                }
-                let result = result_ty.unwrap_or_else(|| {
-                    self.ctxt().diag().add_diagnostic(
-                        format!(
-                            "invalid operands '{}' and '{}' for '{binary_op}'",
-                            left.ty, right.ty
-                        ),
-                        expr.loc,
-                    );
-                    Type::Unknown
-                });
-                typed_ast::Expr {
-                    loc,
-                    ty: result,
-                    kind: match *binary_op {
-                        BinaryOp::Add => binary_kind(typed_ast::BinaryOp::Add, left, right),
-                        BinaryOp::Subtract => {
-                            binary_kind(typed_ast::BinaryOp::Subtract, left, right)
-                        }
-                        BinaryOp::Multiply => {
-                            binary_kind(typed_ast::BinaryOp::Multiply, left, right)
-                        }
-                        BinaryOp::Divide => binary_kind(typed_ast::BinaryOp::Divide, left, right),
-                        BinaryOp::Equals => binary_kind(typed_ast::BinaryOp::Equals, left, right),
-                        BinaryOp::Lesser => binary_kind(typed_ast::BinaryOp::Lesser, left, right),
-                        BinaryOp::Greater => binary_kind(typed_ast::BinaryOp::Greater, left, right),
-                        BinaryOp::And => typed_ast::ExprKind::Logic(
-                            typed_ast::LogicalOp::And,
-                            Box::new(left),
-                            Box::new(right),
-                        ),
-                    },
-                }
+                self.check_binary_op(loc, *binary_op, left, right, expected_ty.as_ref())
             }
             ExprKind::Lambda(lambda) => {
                 self.check_lambda(loc, lambda.id, lambda, expected_ty.clone())

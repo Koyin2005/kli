@@ -174,16 +174,19 @@ impl Parser {
             }),
         }
     }
+    /// Returns the binding power of the current token and its respective op if its a valid binary operator
+    /// otherwise returns `None`
     fn binary_op(&mut self) -> Option<(u32, BinaryOp)> {
         match self.peek_token().kind {
-            TokenKind::Plus => Some((30, BinaryOp::Add)),
-            TokenKind::Minus => Some((30, BinaryOp::Subtract)),
+            TokenKind::Plus => Some((35, BinaryOp::Add)),
+            TokenKind::Minus => Some((35, BinaryOp::Subtract)),
             TokenKind::Slash => Some((40, BinaryOp::Divide)),
             TokenKind::Star => Some((40, BinaryOp::Multiply)),
             TokenKind::DoubleEqual => Some((10, BinaryOp::Equals)),
             TokenKind::Lesser => Some((20, BinaryOp::Lesser)),
             TokenKind::Greater => Some((20, BinaryOp::Greater)),
-            TokenKind::And => Some((0, BinaryOp::And)),
+            TokenKind::And => Some((2, BinaryOp::And)),
+            TokenKind::Or => Some((1, BinaryOp::Or)),
             _ => None,
         }
     }

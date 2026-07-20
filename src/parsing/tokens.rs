@@ -14,6 +14,7 @@ pub enum NumberKind {
 }
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TokenKind {
+    Or,
     With,
     LeftBrace,
     RightBrace,
@@ -155,6 +156,7 @@ impl Display for TokenKind {
             Self::And => "and",
             Self::Return => "return",
             Self::Unsafe => "unsafe",
+            Self::Or => "or",
         };
         f.write_str(txt)
     }
