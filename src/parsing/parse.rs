@@ -342,32 +342,40 @@ impl Parser {
     }
     fn parse_block_body(&mut self) -> Result<BlockBody, ParseError> {
         let mut stmts = Vec::new();
-        loop {
-            if self.check_token(&TokenKind::End) {
-                break Ok(BlockBody {
-                    stmts,
-                    expr: Box::new(Expr {
-                        loc: self.current_loc(),
-                        kind: ExprKind::Unit,
-                    }),
-                });
-            } else if let Some(stmt) = self.parse_definition_stmt()? {
+        while !self.is_eof() && self.check_is_not_token(&TokenKind::End) {
+            if let Some(stmt) = self.parse_definition_stmt()? {
                 stmts.push(stmt);
             } else {
                 let expr = self.parse_expr()?;
-                if self.matches_token(&TokenKind::Semi) {
+                if self.matches_token(&TokenKind::Semi) 
+                {
                     stmts.push(Stmt {
                         loc: expr.loc,
                         kind: StmtKind::Expr(expr),
                     });
-                } else if self.check_token(&TokenKind::End) {
-                    break Ok(BlockBody {
+                }
+                else if self.check_is_not_token(&TokenKind::End) {
+                    stmts.push(Stmt {
+                        loc: expr.loc,
+                        kind: StmtKind::Expr(expr),
+                    });
+                    break;
+                } 
+                else {
+                    return Ok(BlockBody {
                         stmts,
                         expr: Box::new(expr),
                     });
                 }
             }
         }
+        Ok(BlockBody {
+            stmts,
+            expr: Box::new(Expr {
+                loc: self.current_loc(),
+                kind: ExprKind::Unit,
+            }),
+        })
     }
     fn parse_block_expr_tail(
         &mut self,

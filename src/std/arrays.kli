@@ -86,7 +86,7 @@ impl
             let ptr = offset(this.ptr,ints.uint_to_int(i));
             unsafe 
                ptr^ = f(ptr_read(ptr))
-            end
+            end;
             i = i + 1;
         end;
         this

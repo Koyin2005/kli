@@ -227,7 +227,10 @@ fn variant_layout(
         size: tag_size.add(biggest_size.size).align_to(max_align),
         alignment: max_align,
         kind: LayoutKind::Variant {
-            tag: TagEncoding::Field { offset: tag_offset, scalar: tag_scalar },
+            tag: TagEncoding::Field {
+                offset: tag_offset,
+                scalar: tag_scalar,
+            },
             data_offset,
             cases: case_layouts,
         },
