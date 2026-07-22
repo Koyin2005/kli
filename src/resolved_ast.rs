@@ -31,12 +31,6 @@ pub struct Signature {
     pub return_type: Type,
 }
 #[derive(Debug)]
-pub struct BorrowExpr {
-    pub mutable: Mutable,
-    pub place: Expr,
-    pub region: Region,
-}
-#[derive(Debug)]
 pub struct Lambda {
     pub id: DefId,
     pub loc: SrcLoc,
@@ -129,7 +123,6 @@ pub enum ExprKind {
     Var(Var),
     Function(FunctionDefId, Box<GenericArgs>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
-    Borrow(Box<BorrowExpr>),
     Panic,
     Lambda(Rc<Lambda>),
     Deref(Box<Expr>),

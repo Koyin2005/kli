@@ -45,9 +45,6 @@ impl<'ctxt> RootCtxt<'ctxt> {
     fn lower(&self) -> Lower<'_> {
         Lower::new(self.ctxt, self.id, Some(&self.infer))
     }
-    pub(super) fn lower_region(&self, region: &res::Region) -> Region {
-        self.lower().lower_region(region)
-    }
     pub(super) fn lower_type(&self, ty: &res::Type) -> Type {
         self.lower().lower_type(ty)
     }
@@ -83,18 +80,6 @@ impl<'ctxt> RootCtxt<'ctxt> {
                 .diag()
                 .add_diagnostic(format!("Expected '{}' but got '{}'", ty1, ty2), loc);
             Type::Unknown
-        }
-    }
-    pub(super) fn unify_region(&self, region1: Region, region2: Region, loc: SrcLoc) -> Region {
-        if let Some(region) = self.infer.borrow_mut().unify_region(region1, region2) {
-            region
-        } else {
-            let region1 = self.infer.borrow().simplify_region(region1);
-            let region2 = self.infer.borrow().simplify_region(region2);
-            self.ctxt
-                .diag()
-                .add_diagnostic(format!("Expected '{}' but got '{}'", region1, region2), loc);
-            Region::Unknown
         }
     }
     pub(super) fn resolve_method(

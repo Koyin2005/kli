@@ -6,7 +6,7 @@ use crate::{
     def_ids::DefId,
     index_vec::IndexVec,
     resolved_ast::{
-        self, BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, FunctionDefId, Lambda,
+        self, BlockBody, Expr, ExprKind, FieldInit, FunctionDefId, Lambda,
         LocalRegionId, Pattern, Var,
     },
     src_loc::SrcLoc,
@@ -157,55 +157,6 @@ impl FunctionCtxt<'_> {
                 iterator: Box::new(iterator),
                 iterator_type,
                 body: Box::new(body),
-            },
-        }
-    }
-    fn check_borrow(
-        &self,
-        loc: SrcLoc,
-        borrow: &BorrowExpr,
-        expected_ty: Option<Type>,
-    ) -> typed_ast::Expr {
-        let &BorrowExpr {
-            mutable,
-            ref place,
-            ref region,
-        } = borrow;
-        let (ty_mutable, ty_region, expected) = if let Some(ref expected) = expected_ty
-            && let Ok((ty_mutable, ty_region, ty)) = expected.as_reference_type()
-        {
-            (Some(ty_mutable), Some(ty_region), Some(ty.clone()))
-        } else {
-            (None, None, None)
-        };
-        let place = self.check_place(place, expected);
-        let region = {
-            let region = self.root().lower_region(region);
-            match ty_region {
-                Some(expected) => self.root().unify_region(expected, region, loc),
-                None => region,
-            }
-        };
-        if let Some(ty_mutable) = ty_mutable
-            && ty_mutable != mutable
-        {
-            self.root().ctxt().diag().add_diagnostic(
-                format!("Expected a '{}' but got '{}'", ty_mutable, mutable),
-                loc,
-            );
-        }
-        if let Some(expected) = expected_ty
-            && expected.as_reference_type().is_err()
-        {
-            self.root().expect_ty_error("reference", &expected, loc);
-        }
-        typed_ast::Expr {
-            ty: Type::reference(place.ty.clone(), mutable, region),
-            loc,
-            kind: typed_ast::ExprKind::Borrow {
-                mutable,
-                region,
-                place,
             },
         }
     }
@@ -786,7 +737,6 @@ impl FunctionCtxt<'_> {
             ExprKind::Lambda(lambda) => {
                 self.check_lambda(loc, lambda.id, lambda, expected_ty.clone())
             }
-            ExprKind::Borrow(borrow) => self.check_borrow(loc, borrow, expected_ty),
             ExprKind::For(for_expr) => {
                 self.check_for_loop(loc, &for_expr.pattern, &for_expr.iterator, &for_expr.body)
             }
