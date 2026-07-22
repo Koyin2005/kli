@@ -361,20 +361,18 @@ impl Parser {
     fn parse_block_expr_tail(
         &mut self,
         loc: SrcLoc,
-        region: Option<Ident>,
     ) -> Result<Expr, ParseError> {
         let body = self.parse_block_body()?;
         self.expect(&TokenKind::End)?;
         Ok(Expr {
             loc,
-            kind: ExprKind::Block(body, region),
+            kind: ExprKind::Block(body),
         })
     }
     fn parse_block_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.expect(&TokenKind::Do)?;
 
-        let region = None;
-        self.parse_block_expr_tail(loc, region)
+        self.parse_block_expr_tail(loc)
     }
     fn parse_case_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.advance();
@@ -525,7 +523,7 @@ impl Parser {
             }
             TokenKind::Unsafe => {
                 self.advance();
-                let expr = self.parse_block_expr_tail(loc, None)?;
+                let expr = self.parse_block_expr_tail(loc)?;
                 Ok(Expr {
                     loc,
                     kind: ExprKind::Unsafe(Box::new(expr)),

@@ -233,7 +233,7 @@ pub enum ExprKind {
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Path(InstancePath),
     Lambda(Box<Lambda>),
-    Block(BlockBody, Option<Ident>),
+    Block(BlockBody),
     Deref(Box<Expr>),
     Field(Box<Expr>, Ident),
     Bool(bool),

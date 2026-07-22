@@ -64,7 +64,7 @@ impl DeclareInBody<'_, '_> {
                 self.declare.declare_def_id_for(self.module, lambda.id);
                 self.declare_in_exprs(&lambda.body);
             }
-            ast::ExprKind::Block(block_body, _) => {
+            ast::ExprKind::Block(block_body) => {
                 for stmt in block_body.stmts.iter() {
                     match &stmt.kind {
                         ast::StmtKind::Expr(expr) => self.declare_in_exprs(expr),

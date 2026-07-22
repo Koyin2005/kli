@@ -67,7 +67,6 @@ impl From<Def> for Res {
 
 #[derive(Clone, Copy, Debug)]
 enum Res {
-    LocalRegion(LocalRegionId),
     Param(usize),
     Var(VarId),
     Def(Def),
@@ -227,15 +226,6 @@ impl<'info> Resolve<'info> {
                     ast::TypeKind::Named(ast::InstancePath {
                         ref path,
                         generic_args: None,
-                    }) if let Ok(Res::LocalRegion(local)) = self.resolve_path(path) => {
-                        res::GenericArg::Region(res::Region {
-                            loc: arg.ty.loc,
-                            kind: res::RegionKind::Local(path.last().symbol, local),
-                        })
-                    }
-                    ast::TypeKind::Named(ast::InstancePath {
-                        ref path,
-                        generic_args: None,
                     }) if let Ok(Res::Param(index)) = self.resolve_path(path)
                         && let name = path.last()
                         && self.is_region_param(name) =>
@@ -316,7 +306,7 @@ impl<'info> Resolve<'info> {
                 self.cannot_use_as_error(name.symbol, "type", name.loc);
                 None
             }
-            Ok(Res::Def(Def::Function(_) | Def::Module(_)) | Res::LocalRegion(_) | Res::Var(_)) => {
+            Ok(Res::Def(Def::Function(_) | Def::Module(_))  | Res::Var(_)) => {
                 self.cannot_use_as_error(name.symbol, "type", name.loc);
                 None
             }
@@ -382,11 +372,6 @@ impl<'info> Resolve<'info> {
     fn fresh_region(&mut self) -> LocalRegionId {
         let region_id = LocalRegionId::new(self.vars);
         self.regions += 1;
-        region_id
-    }
-    fn declare_region(&mut self, region: Symbol) -> LocalRegionId {
-        let region_id = self.fresh_region();
-        self.env.insert(region, Res::LocalRegion(region_id));
         region_id
     }
     fn fresh_var(&mut self) -> VarId {
@@ -561,7 +546,6 @@ impl<'info> Resolve<'info> {
             }
             Res::Def(Def::Function(_))
             | Res::Param(_)
-            | Res::LocalRegion(_)
             | Res::VariantCase(..) => return Err(NameResolutionError::InvalidPathStart),
         })
     }
@@ -653,7 +637,6 @@ impl<'info> Resolve<'info> {
                     Box::new(self.resolve_generic_args(args)),
                 ),
                 Res::Param(_)
-                | Res::LocalRegion(_)
                 | Res::Def(Def::Module(_) | Def::Type(_))
                 | Res::TypeAlias(_) => {
                     self.resolve_generic_args(args);
@@ -675,8 +658,7 @@ impl<'info> Resolve<'info> {
                 let expr = self.resolve_expr(*expr);
                 res::ExprKind::Unsafe(Box::new(expr))
             }
-            ast::ExprKind::Block(block, region) => self.in_scope(|this| {
-                let region = region.map(|region| this.declare_region(region.symbol));
+            ast::ExprKind::Block(block) => self.in_scope(|this| {
                 res::ExprKind::Block(
                     Box::new(res::BlockBody {
                         stmts: block
@@ -686,7 +668,7 @@ impl<'info> Resolve<'info> {
                             .collect(),
                         expr: Box::new(this.resolve_expr(*block.expr)),
                     }),
-                    region,
+                    None,
                 )
             }),
             ast::ExprKind::Tuple(fields) => res::ExprKind::Tuple(
