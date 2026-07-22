@@ -71,7 +71,6 @@ impl<'a> TypeSubst<'a> {
     pub fn subst_pattern(&mut self, pattern: &mut Pattern) {
         match &mut pattern.kind {
             PatternKind::Bool(_) | PatternKind::Int(_) | PatternKind::Err | PatternKind::Unit => (),
-            PatternKind::Ref(pattern) => self.subst_pattern(pattern),
             PatternKind::Binding(.., ty) => self.subst_type(ty),
             PatternKind::Case(.., args, _, inner) => {
                 self.subst_generic_args(args);

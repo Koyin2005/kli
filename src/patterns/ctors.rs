@@ -10,7 +10,6 @@ pub enum Constructor {
     Int(i128),
     Wildcard,
     Record,
-    Ref,
     Case(Symbol),
     NonExhaustive,
     Missing,
@@ -71,9 +70,6 @@ pub fn fields_of(ty: &Type, constructor: Constructor, ctxt: CtxtRef<'_>) -> Vec<
         | Constructor::NonExhaustive
         | Constructor::Wildcard
         | Constructor::Missing => Vec::new(),
-        Constructor::Ref => {
-                unreachable!("Should be a view")
-        }
         Constructor::Record => match ty {
             Type::Record(fields) => fields.iter().map(|field| field.ty.clone()).collect(),
             Type::Named(id, _, args) => ctxt

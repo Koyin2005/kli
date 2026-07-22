@@ -41,10 +41,6 @@ impl Pat {
             Constructor::Int(value) => {
                 write!(f, "{}", value)
             }
-            Constructor::Ref => {
-                f.write_str("ref ")?;
-                self.fields[0].pat.format(ctxt, f)
-            }
             Constructor::Case(name) => {
                 if let Some(field) = self.fields.first() {
                     write!(f, "{}(", name)?;

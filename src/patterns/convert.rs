@@ -18,11 +18,6 @@ pub fn pattern_to_pat(ctxt: CtxtRef<'_>, pattern: &Pattern) -> Pat {
             constructor: Constructor::Record,
             fields: Vec::new(),
         },
-        PatternKind::Ref(inner) => Pat {
-            ty,
-            constructor: Constructor::Ref,
-            fields: vec![pattern_to_pat(ctxt, inner).with_index(0)],
-        },
         PatternKind::Record(fields) => Pat {
             ty,
             constructor: Constructor::Record,
