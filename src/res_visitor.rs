@@ -39,11 +39,6 @@ pub trait Visitor {
     fn super_visit_type(&mut self, ty: &Type) {
         match &ty.kind {
             TypeKind::Unknown => (),
-            TypeKind::Ptr(ty) => self.visit_type(ty),
-            TypeKind::Imm(region, ty) | TypeKind::Mut(region, ty) => {
-                self.visit_region(**region);
-                self.visit_type(ty);
-            }
             TypeKind::Function(function_type) => {
                 for param in function_type.params.iter() {
                     self.visit_type(param);

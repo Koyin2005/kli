@@ -199,7 +199,6 @@ impl<'a> Lower<'a> {
             res::TypeKind::Tuple(fields) => {
                 Type::tuple(fields.iter().map(|field| self.lower_type(field)))
             }
-            res::TypeKind::Ptr(pointee) => Type::pointer(self.lower_type(pointee)),
             res::TypeKind::Record(fields) => Type::Record({
                 let mut seen_fields = HashSet::new();
                 fields
@@ -221,16 +220,6 @@ impl<'a> Lower<'a> {
             }),
             res::TypeKind::Unknown => Type::Unknown,
             &res::TypeKind::Named(name, ref args) => self.lower_type_name(ty.loc, name, args),
-            res::TypeKind::Imm(region, ty) => {
-                let region = self.lower_region(region);
-                let ty = self.lower_type(ty);
-                Type::Imm(region, Box::new(ty))
-            }
-            res::TypeKind::Mut(region, ty) => {
-                let region = self.lower_region(region);
-                let ty = self.lower_type(ty);
-                Type::Mut(region, Box::new(ty))
-            }
             res::TypeKind::Function(function_type) => {
                 let res::FunctionType {
                     is_resource,

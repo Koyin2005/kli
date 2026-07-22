@@ -244,9 +244,6 @@ pub enum TypeName {
 }
 #[derive(Debug)]
 pub enum TypeKind {
-    Ptr(Box<Type>),
-    Imm(Box<Region>, Box<Type>),
-    Mut(Box<Region>, Box<Type>),
     Function(Box<FunctionType>),
     Named(TypeName, Box<GenericArgs>),
     Unknown,
