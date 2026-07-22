@@ -6,16 +6,12 @@ use crate::{
     def_ids::DefId,
     index_vec::IndexVec,
     resolved_ast::{
-        self, BlockBody, Expr, ExprKind, FieldInit, FunctionDefId, Lambda,
-        Pattern, Var,
+        self, BlockBody, Expr, ExprKind, FieldInit, FunctionDefId, Lambda, Pattern, Var,
     },
     src_loc::SrcLoc,
     typecheck::root::{FunctionCtxt, TypeCheck},
     typed_ast::{self, Capture, FieldId, RecordFieldInit},
-    types::{
-        FieldName, FunctionSig, FunctionType, GenericArgs, PointerType, RecordField,
-        Type,
-    },
+    types::{FieldName, FunctionSig, FunctionType, GenericArgs, PointerType, RecordField, Type},
 };
 
 impl FunctionCtxt<'_> {
@@ -700,13 +696,11 @@ impl FunctionCtxt<'_> {
                 let (ty, value) = self.root().check_int_lit(loc, expected_ty.as_ref(), *value);
                 make_expr(ty, typed_ast::ExprKind::Int(value), loc)
             }
-            ExprKind::String(value) => {
-                make_expr(
-                    Type::string(self.ctxt()),
-                    typed_ast::ExprKind::String(value.clone()),
-                    loc,
-                )
-            }
+            ExprKind::String(value) => make_expr(
+                Type::string(self.ctxt()),
+                typed_ast::ExprKind::String(value.clone()),
+                loc,
+            ),
             ExprKind::Call(callee, args) => self.check_call(loc, callee, args, expected_ty),
             ExprKind::Panic => typed_ast::Expr {
                 loc,

@@ -8,8 +8,7 @@ use crate::resolved_ast::{self as res, TypeName};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
 use crate::types::{
-    FieldName, FunctionType, GenericArg, GenericArgs, GenericKind, IntegerKind, RecordField,
-    Region, Type,
+    FieldName, FunctionType, GenericArg, GenericArgs, GenericKind, IntegerKind, RecordField, Type,
 };
 pub struct Lower<'a> {
     ctxt: CtxtRef<'a>,
@@ -56,21 +55,11 @@ impl<'a> Lower<'a> {
                         (res::GenericArg::Type(ty), GenericKind::Type) => {
                             GenericArg::Type(self.lower_type(ty))
                         }
-                        (_, kind @ GenericKind::Region) => {
-                            self.ctxt
-                                .diag()
-                                .add_diagnostic("Generic kind mismatch", arg.loc());
-                            match kind {
-                                GenericKind::Region => GenericArg::Region(Region::Unknown),
-                                GenericKind::Type => GenericArg::Type(Type::Unknown),
-                            }
-                        }
                     },
                     (Some(arg), None) => match arg {
                         res::GenericArg::Type(ty) => GenericArg::Type(self.lower_type(ty)),
                     },
                     (None, Some(kind)) => match kind {
-                        GenericKind::Region => GenericArg::Region(Region::Unknown),
                         GenericKind::Type => GenericArg::Type(Type::Unknown),
                     },
                 };
@@ -103,14 +92,7 @@ impl<'a> Lower<'a> {
         match name {
             TypeName::Param(name, param) => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                if let GenericKind::Type = self.ctxt.generics(self.id).kind(param, self.ctxt) {
-                    Type::Param(name, param)
-                } else {
-                    self.ctxt
-                        .diag()
-                        .add_diagnostic(format!("Cannot use '{}' as a type", name), loc);
-                    Type::Unknown
-                }
+                Type::Param(name, param)
             }
             TypeName::UserDefined(id) => {
                 let args = self.lower_generic_args(id, loc, args);

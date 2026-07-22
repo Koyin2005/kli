@@ -22,7 +22,7 @@ use crate::{
     typecheck::infer::TypeInfer,
     typed_ast::FieldId,
     types::{
-        CaseId, FunctionSig, GenericArg, GenericArgsRef, GenericKind, GenericParam, Region, Type,
+        CaseId, FunctionSig, GenericArg, GenericArgsRef, GenericKind, GenericParam, Type,
         lower::Lower,
     },
 };
@@ -177,7 +177,6 @@ impl Generics {
     pub fn instantiate(&self, infer: &mut TypeInfer, loc: SrcLoc) -> Vec<GenericArg> {
         self.kinds()
             .map(|kind| match kind {
-                GenericKind::Region => GenericArg::Region(Region::Infer(infer.fresh_region(loc))),
                 GenericKind::Type => GenericArg::Type(Type::Infer(infer.fresh_ty(loc))),
             })
             .collect()
@@ -185,7 +184,6 @@ impl Generics {
     pub fn instantiate_unknown(&self) -> Vec<GenericArg> {
         self.kinds()
             .map(|kind| match kind {
-                GenericKind::Region => GenericArg::Region(Region::Unknown),
                 GenericKind::Type => GenericArg::Type(Type::Unknown),
             })
             .collect()
@@ -195,7 +193,6 @@ impl Generics {
             .iter()
             .enumerate()
             .map(|(i, param)| match param.kind {
-                GenericKind::Region => GenericArg::Region(Region::Param(param.name, i)),
                 GenericKind::Type => GenericArg::Type(Type::Param(param.name, i)),
             })
             .collect()
@@ -624,7 +621,6 @@ fn lower_generics(parent: Option<DefId>, generics: &resolved_ast::Generics) -> G
             .map(|(kind, name)| GenericParam {
                 name: name.symbol,
                 kind: match kind {
-                    resolved_ast::GenericKind::Region => GenericKind::Region,
                     resolved_ast::GenericKind::Type => GenericKind::Type,
                 },
             })

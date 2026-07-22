@@ -397,8 +397,7 @@ impl Visit for WellFormed<'_> {
                 );
             }
             StmtKind::Noop => (),
-            StmtKind::Print(_) => {
-            }
+            StmtKind::Print(_) => {}
             StmtKind::Deallocate(operand) => {
                 let pointer = operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
                 self.assert(

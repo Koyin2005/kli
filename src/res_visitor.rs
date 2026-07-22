@@ -1,6 +1,6 @@
 use crate::resolved_ast::{
-    BlockBody, Expr, ExprKind, GenericArg, GenericArgs, Param, Pattern,
-    Stmt, StmtKind, Type, TypeKind, Var,
+    BlockBody, Expr, ExprKind, GenericArg, GenericArgs, Param, Pattern, Stmt, StmtKind, Type,
+    TypeKind, Var,
 };
 
 pub trait Visitor {

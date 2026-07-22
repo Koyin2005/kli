@@ -184,7 +184,6 @@ pub struct Param {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GenericKind {
-    Region,
     Type,
 }
 #[derive(Debug)]

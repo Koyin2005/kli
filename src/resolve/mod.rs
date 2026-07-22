@@ -270,7 +270,7 @@ impl<'info> Resolve<'info> {
                 self.cannot_use_as_error(name.symbol, "type", name.loc);
                 None
             }
-            Ok(Res::Def(Def::Function(_) | Def::Module(_))  | Res::Var(_)) => {
+            Ok(Res::Def(Def::Function(_) | Def::Module(_)) | Res::Var(_)) => {
                 self.cannot_use_as_error(name.symbol, "type", name.loc);
                 None
             }
@@ -503,9 +503,9 @@ impl<'info> Resolve<'info> {
                     vec![segment],
                 ));
             }
-            Res::Def(Def::Function(_))
-            | Res::Param(_)
-            | Res::VariantCase(..) => return Err(NameResolutionError::InvalidPathStart),
+            Res::Def(Def::Function(_)) | Res::Param(_) | Res::VariantCase(..) => {
+                return Err(NameResolutionError::InvalidPathStart);
+            }
         })
     }
     fn resolve_path(&mut self, path: &Path) -> Result<Res, NameResolutionError> {
@@ -595,9 +595,7 @@ impl<'info> Resolve<'info> {
                     res::FunctionDefId(self.def_id_for(function)),
                     Box::new(self.resolve_generic_args(args)),
                 ),
-                Res::Param(_)
-                | Res::Def(Def::Module(_) | Def::Type(_))
-                | Res::TypeAlias(_) => {
+                Res::Param(_) | Res::Def(Def::Module(_) | Def::Type(_)) | Res::TypeAlias(_) => {
                     self.resolve_generic_args(args);
                     self.diag
                         .add_diagnostic(format!("Can't use '{}' as a value", path), loc);
@@ -618,16 +616,14 @@ impl<'info> Resolve<'info> {
                 res::ExprKind::Unsafe(Box::new(expr))
             }
             ast::ExprKind::Block(block) => self.in_scope(|this| {
-                res::ExprKind::Block(
-                    Box::new(res::BlockBody {
-                        stmts: block
-                            .stmts
-                            .into_iter()
-                            .map(|stmt| this.resolve_stmt(stmt))
-                            .collect(),
-                        expr: Box::new(this.resolve_expr(*block.expr)),
-                    }),
-                )
+                res::ExprKind::Block(Box::new(res::BlockBody {
+                    stmts: block
+                        .stmts
+                        .into_iter()
+                        .map(|stmt| this.resolve_stmt(stmt))
+                        .collect(),
+                    expr: Box::new(this.resolve_expr(*block.expr)),
+                }))
             }),
             ast::ExprKind::Tuple(fields) => res::ExprKind::Tuple(
                 fields

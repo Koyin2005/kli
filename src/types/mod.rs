@@ -23,7 +23,6 @@ pub enum PointerType {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GenericKind {
-    Region,
     Type,
 }
 #[derive(Clone, Copy, Debug)]

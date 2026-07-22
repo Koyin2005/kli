@@ -2,8 +2,8 @@ use std::{iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        Annotation, AnnotationField, BinaryOp, BlockBody, CaseArm, CaseDef, CaseType,
-        Expr, ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, GenericParam,
+        Annotation, AnnotationField, BinaryOp, BlockBody, CaseArm, CaseDef, CaseType, Expr,
+        ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, GenericParam,
         GenericParamKind, Generics, Import, ImportTree, ImportTreeTail, InstancePath, IntLit,
         IsResource, Item, ItemKind, Lambda, LetBinding, Method, Module, ModuleId, Mutable, NodeId,
         NumberKind, Param, Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField,
@@ -328,21 +328,18 @@ impl Parser {
                 stmts.push(stmt);
             } else {
                 let expr = self.parse_expr()?;
-                if self.matches_token(&TokenKind::Semi) 
-                {
+                if self.matches_token(&TokenKind::Semi) {
                     stmts.push(Stmt {
                         loc: expr.loc,
                         kind: StmtKind::Expr(expr),
                     });
-                }
-                else if self.check_is_not_token(&TokenKind::End) {
+                } else if self.check_is_not_token(&TokenKind::End) {
                     stmts.push(Stmt {
                         loc: expr.loc,
                         kind: StmtKind::Expr(expr),
                     });
                     break;
-                } 
-                else {
+                } else {
                     return Ok(BlockBody {
                         stmts,
                         expr: Box::new(expr),
@@ -358,10 +355,7 @@ impl Parser {
             }),
         })
     }
-    fn parse_block_expr_tail(
-        &mut self,
-        loc: SrcLoc,
-    ) -> Result<Expr, ParseError> {
+    fn parse_block_expr_tail(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         let body = self.parse_block_body()?;
         self.expect(&TokenKind::End)?;
         Ok(Expr {
@@ -744,7 +738,10 @@ impl Parser {
         if let Some(Token { loc, .. }) = self.match_token(&TokenKind::LeftBracket) {
             let params = self.delimited_coma_sep(&TokenKind::RightBracket, |this| {
                 let name = this.expect_ident("generic param name")?;
-                Ok(GenericParam { name, kind:GenericParamKind::Type })
+                Ok(GenericParam {
+                    name,
+                    kind: GenericParamKind::Type,
+                })
             })?;
             Ok(Some(Generics { loc, params }))
         } else {
