@@ -11,7 +11,6 @@ use crate::{
     define_id,
     index_vec::IndexVec,
     lang_items::LangItem,
-    resolved_ast::LocalRegionId,
     typed_ast::{Capture, FieldId},
 };
 define_id!(CaseId);
@@ -125,7 +124,6 @@ pub enum Region {
     Unknown,
     Static,
     Param(Symbol, usize),
-    Local(Symbol, LocalRegionId),
     Infer(usize),
 }
 impl Region {
@@ -139,7 +137,7 @@ impl Display for Region {
             Region::Unknown => f.pad("{unknown}"),
             Region::Static => f.pad("static"),
             Region::Infer(_) => f.pad("_"),
-            Region::Param(name, _) | Region::Local(name, _) => {
+            Region::Param(name, _) => {
                 write!(f, "{}", name)
             }
         }
