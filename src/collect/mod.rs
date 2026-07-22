@@ -262,8 +262,6 @@ impl CtxtRef<'_> {
                 | Type::Param(..)
                 | Type::RawPointer(_)
                 | Type::Int(_)
-                | Type::Imm(..)
-                | Type::Mut(..)
                 | Type::Function(..)
                 | Type::Never => false,
                 Type::Record(fields) => fields

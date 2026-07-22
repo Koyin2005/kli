@@ -177,13 +177,6 @@ fn split_constructors(
                 missing.push(Constructor::Bool(false));
             }
         }
-        Type::Imm(..) | Type::Mut(..) => {
-            if seen_constructors.contains(&Constructor::Ref) {
-                seen.push(Constructor::Ref);
-            } else {
-                missing.push(Constructor::Ref);
-            }
-        }
         Type::Record(_) | Type::Tuple(_) => {
             if seen_constructors.contains(&Constructor::Record) {
                 seen.push(Constructor::Record);

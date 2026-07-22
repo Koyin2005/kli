@@ -116,20 +116,6 @@ impl TypeInfer {
                     .collect::<Option<_>>()
                     .map(Type::Tuple)
             }
-            (Type::Imm(region1, ty1), Type::Imm(region2, ty2)) => self
-                .unify_ty(*ty1, *ty2)
-                .and_then(|ty| {
-                    self.unify_region(region1, region2)
-                        .map(|region| (ty, region))
-                })
-                .map(|(ty, region)| Type::Imm(region, Box::new(ty))),
-            (Type::Mut(region1, ty1), Type::Mut(region2, ty2)) => self
-                .unify_ty(*ty1, *ty2)
-                .and_then(|ty| {
-                    self.unify_region(region1, region2)
-                        .map(|region| (ty, region))
-                })
-                .map(|(ty, region)| Type::Mut(region, Box::new(ty))),
             (Type::Function(function1), Type::Function(function2))
                 if function1.params.len() == function2.params.len()
                     && function1.resource == function2.resource =>
@@ -176,8 +162,6 @@ impl TypeInfer {
                 | Type::Array(..)
                 | Type::Function(..)
                 | Type::Byte
-                | Type::Imm(..)
-                | Type::Mut(..)
                 | Type::Record(..)
                 | Type::RawPointer(_)
                 | Type::Named(..)

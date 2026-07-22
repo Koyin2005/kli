@@ -325,7 +325,7 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
                     .collect(),
             );
         }
-        Type::RawPointer(_) | Type::Imm(..) | Type::Mut(..) => {
+        Type::RawPointer(_)=> {
             Layout::pointer(!matches!(ty, Type::RawPointer(_)))
         }
         Type::Array(ty, count) => {

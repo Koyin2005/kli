@@ -261,7 +261,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 .and_then(|value| bool::try_from(value).ok())
                 .map_or(Ok(()), |value| write!(self.output, "{}", value)),
             types::Type::Never => unreachable!("already did zero sized types"),
-            types::Type::Imm(..) | types::Type::Mut(..) | types::Type::RawPointer(_) => {
+             types::Type::RawPointer(_) => {
                 write!(self.output, "unknown of '{}'", ty)
             }
             types::Type::Function(_) => match value {

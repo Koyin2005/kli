@@ -172,8 +172,6 @@ pub enum Type {
     Byte,
     Never,
     Param(Symbol, usize),
-    Imm(Region, Box<Type>),
-    Mut(Region, Box<Type>),
     Function(FunctionType),
     Tuple(Vec<Type>),
     Record(IndexVec<FieldId, RecordField>),
@@ -298,20 +296,15 @@ impl Type {
         Self::Tuple(field_tys.into_iter().collect())
     }
     pub fn is_reference(&self) -> bool {
-        matches!(self, Self::Imm(..) | Self::Mut(..))
+        false
     }
-    pub fn reference(self, mutable: Mutable, region: Region) -> Self {
-        match mutable {
-            Mutable::Immutable => Self::Imm(region, Box::new(self)),
-            Mutable::Mutable => Self::Mut(region, Box::new(self)),
-        }
+    pub fn reference(self, _: Mutable, region: Region) -> Self {
+        match region {}
     }
     pub fn into_pointer_type(self, ctxt: CtxtRef<'_>) -> Result<(PointerType, Self), Self> {
         match self {
             Self::RawPointer(ty) => Ok((PointerType::Raw, *ty)),
             Self::Named(..) => Ok((PointerType::Box, self.into_box(ctxt)?)),
-            Self::Imm(region, ty) => Ok((PointerType::Reference(region, Mutable::Immutable), *ty)),
-            Self::Mut(region, ty) => Ok((PointerType::Reference(region, Mutable::Mutable), *ty)),
             _ => Err(self),
         }
     }
@@ -345,8 +338,6 @@ impl Type {
         match self {
             Self::RawPointer(_) => Some(PointerType::Raw),
             Self::Named(..) if self.as_box(ctxt).is_some() => Some(PointerType::Box),
-            &Self::Imm(region, _) => Some(PointerType::Reference(region, Mutable::Immutable)),
-            &Self::Mut(region, _) => Some(PointerType::Reference(region, Mutable::Mutable)),
             _ => None,
         }
     }
@@ -362,12 +353,7 @@ impl Type {
         }
     }
     pub fn as_reference_type(&self) -> Result<(Mutable, Region, &Self), &Self> {
-        let (region, mutable, ty) = match self {
-            Self::Imm(region, ty) => (*region, Mutable::Immutable, ty),
-            Self::Mut(region, ty) => (*region, Mutable::Mutable, ty),
-            _ => return Err(self),
-        };
-        Ok((mutable, region, ty))
+        return Err(self)
     }
     pub fn erase_regions(self) -> Self {
         struct EraseRegions;
@@ -398,7 +384,6 @@ impl Type {
             | Type::Param(..)
             | Type::Function(..) => false,
             Type::Never => true,
-            Type::Imm(_, ty) | Type::Mut(_, ty) => ty.is_uninhabited(ctxt),
             Type::Record(fields) => fields.iter().any(|field| field.ty.is_uninhabited(ctxt)),
             Type::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
             Type::RawPointer(_) => false,
@@ -437,10 +422,6 @@ impl Type {
             | Type::Param(..)
             | Type::Never => ControlFlow::Continue(()),
             Type::RawPointer(ty) | Type::Array(ty, _) => ty.visit(visit_ty, visit_region),
-            &(Type::Imm(region, ref ty) | Type::Mut(region, ref ty)) => {
-                visit_region(region)?;
-                ty.visit(visit_ty, visit_region)
-            }
             Type::Function(function_type) => {
                 for param in function_type.params.iter() {
                     param.visit(visit_ty, visit_region)?;
@@ -519,12 +500,6 @@ impl Display for Type {
             Type::Unknown => f.pad("{unknown}"),
             Type::Infer(_) => f.pad("_"),
             &Type::Param(name, _) => write!(f, "{}", name),
-            Type::Imm(region, ty) => {
-                write!(f, "imm [{}] {}", region, ty)
-            }
-            Type::Mut(region, ty) => {
-                write!(f, "mut [{}] {}", region, ty)
-            }
             Type::Function(FunctionType {
                 resource,
                 params,
@@ -565,14 +540,6 @@ pub trait TypeMap {
             | Type::Never => Ok(ty),
             Type::Array(ty, count) => Ok(Type::Array(Box::new(self.map_type(*ty)?), count)),
             Type::RawPointer(ty) => Ok(Type::RawPointer(Box::new(self.map_type(*ty)?))),
-            Type::Imm(region, ty) => Ok(Type::Imm(
-                self.map_region(region)?,
-                Box::new(self.map_type(*ty)?),
-            )),
-            Type::Mut(region, ty) => Ok(Type::Mut(
-                self.map_region(region)?,
-                Box::new(self.map_type(*ty)?),
-            )),
             Type::Function(function_type) => {
                 Ok(Type::Function(self.map_function_type(function_type)?))
             }

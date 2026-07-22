@@ -13,7 +13,7 @@ use crate::{
     src_loc::SrcLoc,
     typecheck::{infer::TypeInfer, subst::TypeSubst},
     typed_ast::{self, Function, IteratorType, LetBinding},
-    types::{self, FieldName, FunctionSig, GenericArgs, Region, Type, lower::Lower},
+    types::{self, FieldName, FunctionSig, GenericArgs, Type, lower::Lower},
 };
 pub struct RootCtxt<'ctxt> {
     id: DefId,
@@ -90,11 +90,6 @@ impl<'ctxt> RootCtxt<'ctxt> {
     ) -> Result<(DefId, GenericArgs), TypeError> {
         let (name_info, _) = match ty {
             Type::Named(id, name, args) => (Some((*id, *name, args.clone())), false),
-            Type::Imm(_, ty) | Type::Mut(_, ty) => (
-                ty.as_named()
-                    .map(|(id, name, args)| (id, name, args.to_vec())),
-                true,
-            ),
             _ => (None, false),
         };
         let ctxt = self.ctxt();
@@ -152,22 +147,7 @@ impl<'ctxt> RootCtxt<'ctxt> {
         (ty, value)
     }
     pub(super) fn iterator_element(&self, ty: Type) -> Result<(IteratorType, Type), Type> {
-        fn by_ref_iter(
-            this: &RootCtxt<'_>,
-            region: Region,
-            mutable: crate::ast::Mutable,
-            pointee: Type,
-        ) -> Result<(IteratorType, Type), Type> {
-            let pointee = this.simplify_type(pointee);
-            Err(Type::reference(pointee, mutable, region))
-        }
         match ty {
-            Type::Imm(region, pointee) => {
-                by_ref_iter(self, region, crate::ast::Mutable::Immutable, *pointee)
-            }
-            Type::Mut(region, pointee) => {
-                by_ref_iter(self, region, crate::ast::Mutable::Mutable, *pointee)
-            }
             Type::Infer(var) => match self.simplify_type(Type::Infer(var)) {
                 Type::Infer(_) => Err(ty),
                 ty => self.iterator_element(ty),

@@ -19,7 +19,6 @@ pub enum Constructor {
 pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Constructor> {
     match ty {
         Type::Bool => vec![Constructor::Bool(true), Constructor::Bool(false)],
-        Type::Imm(..) | Type::Mut(..) => vec![Constructor::Ref],
         Type::Never => Vec::new(),
         Type::Char
         | Type::Unknown
@@ -73,10 +72,7 @@ pub fn fields_of(ty: &Type, constructor: Constructor, ctxt: CtxtRef<'_>) -> Vec<
         | Constructor::Wildcard
         | Constructor::Missing => Vec::new(),
         Constructor::Ref => {
-            let (Type::Imm(_, ty) | Type::Mut(_, ty)) = ty else {
                 unreachable!("Should be a view")
-            };
-            vec![(**ty).clone()]
         }
         Constructor::Record => match ty {
             Type::Record(fields) => fields.iter().map(|field| field.ty.clone()).collect(),

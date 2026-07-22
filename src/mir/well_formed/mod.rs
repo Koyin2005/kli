@@ -89,7 +89,6 @@ impl Visit for WellFormed<'_> {
                         ty,
                         |ty| match ty {
                             Type::RawPointer(ty) => Some(*ty),
-                            Type::Imm(_, ty) | Type::Mut(_, ty) => Some(*ty),
                             _ => None,
                         },
                         || "Cannot deref non pointer or non ref",

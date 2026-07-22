@@ -21,10 +21,6 @@ impl<'a> TypeSubst<'a> {
             | Type::Never
             | Type::Byte => (),
             Type::Array(ty, _) | Type::RawPointer(ty) => self.subst_type(ty),
-            Type::Imm(region, ty) | Type::Mut(region, ty) => {
-                self.subst_region(region);
-                self.subst_type(ty);
-            }
             Type::Function(FunctionType {
                 resource: _,
                 params,
