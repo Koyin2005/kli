@@ -31,21 +31,17 @@ pub struct GenericParam {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GenericArg {
-    Region(Region),
     Type(Type),
 }
 impl GenericArg {
     pub fn expect_ty(&self) -> &Type {
-        let GenericArg::Type(ty) = self else {
-            unreachable!("expected a type")
-        };
+        let GenericArg::Type(ty) = self;
         ty
     }
 }
 impl TypeMappable for GenericArg {
     fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         match self {
-            Self::Region(region) => Ok(GenericArg::Region(region.apply_map(m)?)),
             Self::Type(ty) => Ok(GenericArg::Type(ty.apply_map(m)?)),
         }
     }
@@ -66,7 +62,6 @@ impl Display for DisplayGenericArgs<'_> {
                     write!(f, ",")?;
                 }
                 match arg {
-                    GenericArg::Region(region) => write!(f, "{}", region),
                     GenericArg::Type(ty) => write!(f, "{}", ty),
                 }?;
                 first = false;
@@ -320,9 +315,7 @@ impl Type {
             return None;
         }
         let arg = args.first()?;
-        let GenericArg::Type(ty) = arg else {
-            return None;
-        };
+        let GenericArg::Type(ty) = arg;
         Some(ty)
     }
     pub fn pointer_kind(&self, ctxt: CtxtRef<'_>) -> Option<PointerType> {
@@ -430,7 +423,6 @@ impl Type {
             Type::Named(.., generic_args) => {
                 for arg in generic_args {
                     match arg {
-                        &GenericArg::Region(region) => visit_region(region)?,
                         GenericArg::Type(ty) => ty.visit(visit_ty, visit_region)?,
                     }
                 }
@@ -548,9 +540,6 @@ pub trait TypeMap {
                 args.into_iter()
                     .map(|arg| {
                         Ok(match arg {
-                            GenericArg::Region(region) => {
-                                GenericArg::Region(self.map_region(region)?)
-                            }
                             GenericArg::Type(ty) => GenericArg::Type(self.map_type(ty)?),
                         })
                     })

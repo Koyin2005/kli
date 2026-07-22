@@ -1,7 +1,7 @@
 use crate::{
     typecheck::infer::TypeInfer,
     typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
-    types::{FunctionType, GenericArg, Region, Type},
+    types::{FunctionType, GenericArg, Type},
 };
 
 pub struct TypeSubst<'a> {
@@ -49,9 +49,6 @@ impl<'a> TypeSubst<'a> {
             }
         }
     }
-    pub fn subst_region(&mut self, region: &mut Region) {
-        match *region {}
-    }
     pub fn subst_generic_args(&mut self, args: &mut [GenericArg]) {
         for arg in args {
             self.subst_generic_arg(arg);
@@ -59,9 +56,6 @@ impl<'a> TypeSubst<'a> {
     }
     pub fn subst_generic_arg(&mut self, arg: &mut GenericArg) {
         match arg {
-            GenericArg::Region(region) => {
-                self.subst_region(region);
-            }
             GenericArg::Type(ty) => {
                 self.subst_type(ty);
             }

@@ -63,10 +63,6 @@ impl TypeInfer {
                     (GenericArg::Type(ty1), GenericArg::Type(ty2)) => {
                         GenericArg::Type(self.unify_ty(ty1, ty2)?)
                     }
-                    (GenericArg::Region(r1), GenericArg::Region(r2)) => {
-                        GenericArg::Region(self.unify_region(r1, r2)?)
-                    }
-                    (GenericArg::Type(_) | GenericArg::Region(_), _) => return None,
                 })
             })
             .collect::<Option<GenericArgs>>()

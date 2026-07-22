@@ -153,13 +153,6 @@ impl<'a> Lower<'a> {
                 let into_type_arg = move |arg: GenericArg| -> Type {
                     match arg {
                         GenericArg::Type(ty) => ty,
-                        GenericArg::Region(region) => {
-                            self.ctxt.diag().add_diagnostic(
-                                format!("Expected a 'type' but got region '{region}'"),
-                                loc,
-                            );
-                            Type::Unknown
-                        }
                     }
                 };
                 let mut args = args.into_iter();
