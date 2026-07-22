@@ -56,7 +56,6 @@ impl<'a> TypeSubst<'a> {
     pub fn subst_region(&mut self, region: &mut Region) {
         match region {
             Region::Static | Region::Unknown  => (),
-            Region::Infer(var) => *region = self.infer.simplify_region(Region::Infer(*var)),
         }
     }
     pub fn subst_generic_args(&mut self, args: &mut [GenericArg]) {

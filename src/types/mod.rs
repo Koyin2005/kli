@@ -122,7 +122,6 @@ impl FunctionType {
 pub enum Region {
     Unknown,
     Static,
-    Infer(usize),
 }
 impl Region {
     pub const fn no_op_visit<T>(self) -> ControlFlow<T> {
@@ -134,7 +133,6 @@ impl Display for Region {
         match self {
             Region::Unknown => f.pad("{unknown}"),
             Region::Static => f.pad("static"),
-            Region::Infer(_) => f.pad("_"),
         }
     }
 }

@@ -31,11 +31,6 @@ impl TypeInfer {
         self.type_vars.clear();
         self.region_vars.clear();
     }
-    pub fn fresh_region(&mut self, loc: SrcLoc) -> usize {
-        let next_var = self.region_vars.len();
-        self.region_vars.push(RegionVarInfo { region: None, loc });
-        next_var
-    }
     pub fn fresh_ty(&mut self, loc: SrcLoc) -> usize {
         let next_var = self.type_vars.len();
         self.type_vars.push(TypeVarInfo { ty: None, loc });
@@ -65,19 +60,6 @@ impl TypeInfer {
             (r @ Region::Unknown, Region::Unknown) | (r @ Region::Static, Region::Static) => {
                 Some(r)
             }
-            (Region::Infer(var), Region::Infer(other)) if var == other => Some(Region::Infer(var)),
-            (Region::Infer(var), r) | (r, Region::Infer(var)) => match &mut self.region_vars[var] {
-                RegionVarInfo {
-                    region: Some(entry),
-                    ..
-                } => {
-                    let entry = *entry;
-                    let r = self.unify_region(entry, r);
-                    self.region_vars[var].region.clone_from(&r);
-                    r
-                }
-                RegionVarInfo { region: entry, .. } => Some(*entry.insert(r)),
-            },
             _ => None,
         }
     }
@@ -227,18 +209,7 @@ struct Simplify<'a>(&'a TypeInfer);
 impl TypeMap for Simplify<'_> {
     type Error = std::convert::Infallible;
     fn map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
-        let Region::Infer(var) = region else {
             return self.super_map_region(region);
-        };
-        if let RegionVarInfo {
-            region: Some(region),
-            loc: _,
-        } = self.0.region_vars[var]
-        {
-            self.map_region(region)
-        } else {
-            Ok(region)
-        }
     }
     fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
         let Type::Infer(var) = ty else {
