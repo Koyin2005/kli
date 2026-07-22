@@ -120,8 +120,6 @@ impl FunctionType {
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
 pub enum Region {
-    Unknown,
-    Static,
 }
 impl Region {
     pub const fn no_op_visit<T>(self) -> ControlFlow<T> {
@@ -129,10 +127,8 @@ impl Region {
     }
 }
 impl Display for Region {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Region::Unknown => f.pad("{unknown}"),
-            Region::Static => f.pad("static"),
+    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
         }
     }
 }
@@ -327,9 +323,7 @@ impl Type {
             return Err(self);
         };
         let [arg] = args.try_into().unwrap();
-        let GenericArg::Type(ty) = arg else {
-            unreachable!()
-        };
+        let GenericArg::Type(ty) = arg;
         Ok(ty)
     }
     pub fn as_box(&self, ctxt: CtxtRef<'_>) -> Option<&Type> {
@@ -379,8 +373,8 @@ impl Type {
         struct EraseRegions;
         impl TypeMap for EraseRegions {
             type Error = std::convert::Infallible;
-            fn map_region(&mut self, _: Region) -> Result<Region, Self::Error> {
-                Ok(Region::Static)
+            fn map_region(&mut self, r: Region) -> Result<Region, Self::Error> {
+                match r {}
             }
         }
         let Ok(ty) = EraseRegions.map_type(self);

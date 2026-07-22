@@ -10,11 +10,6 @@ pub struct TypeVarInfo {
     ty: Option<Type>,
     loc: SrcLoc,
 }
-#[derive(Debug)]
-pub struct RegionVarInfo {
-    region: Option<Region>,
-    loc: SrcLoc,
-}
 #[derive(Default)]
 pub struct TypeInfer {
     type_vars: Vec<TypeVarInfo>,
@@ -49,9 +44,6 @@ impl TypeInfer {
     }
     pub fn unify_region(&mut self, region1: Region, region2: Region) -> Option<Region> {
         match (region1, region2) {
-            (r @ Region::Unknown, Region::Unknown) | (r @ Region::Static, Region::Static) => {
-                Some(r)
-            }
             _ => None,
         }
     }

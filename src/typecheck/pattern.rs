@@ -162,7 +162,7 @@ impl FunctionCtxt<'_> {
                         (mutable, region, ty.clone())
                     } else {
                         root.expect_ty_error("reference", &expected_type, pattern.loc);
-                        (Mutable::Mutable, Region::Unknown, Type::Unknown)
+                        (Mutable::Mutable, unreachable!() as Region, Type::Unknown)
                     };
                 let inner = self.check_pattern(inner, ty.clone(), Some((region, mutable)));
                 typed_ast::Pattern {
