@@ -143,7 +143,7 @@ impl<'a> Lower<'a> {
                     TypeName::String => LangItem::String,
                     TypeName::ArrayList => LangItem::ArrayList,
                     TypeName::Box => LangItem::Box,
-                    _ => unreachable!(),
+                    _ => unreachable!("checked above"),
                 });
                 let args = self.lower_generic_args(id, loc, args);
                 Type::Named(id, self.ctxt.expect_ident(id).symbol, args)
