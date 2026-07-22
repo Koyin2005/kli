@@ -65,10 +65,6 @@ impl TypeInfer {
             (r @ Region::Unknown, Region::Unknown) | (r @ Region::Static, Region::Static) => {
                 Some(r)
             }
-            (Region::Param(name1, index1), Region::Param(name2, index2)) if index1 == index2 => {
-                assert_eq!(name1, name2);
-                Some(Region::Param(name1, index1))
-            }
             (Region::Infer(var), Region::Infer(other)) if var == other => Some(Region::Infer(var)),
             (Region::Infer(var), r) | (r, Region::Infer(var)) => match &mut self.region_vars[var] {
                 RegionVarInfo {

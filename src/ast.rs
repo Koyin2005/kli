@@ -339,11 +339,6 @@ pub struct Function {
     pub return_type: Type,
     pub body: Option<Expr>,
 }
-#[derive(Debug, Clone)]
-pub enum Region {
-    Static(SrcLoc),
-    Named(Ident),
-}
 #[derive(Debug)]
 pub struct CaseType {
     pub id: NodeId,

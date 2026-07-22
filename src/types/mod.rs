@@ -122,7 +122,6 @@ impl FunctionType {
 pub enum Region {
     Unknown,
     Static,
-    Param(Symbol, usize),
     Infer(usize),
 }
 impl Region {
@@ -136,9 +135,6 @@ impl Display for Region {
             Region::Unknown => f.pad("{unknown}"),
             Region::Static => f.pad("static"),
             Region::Infer(_) => f.pad("_"),
-            Region::Param(name, _) => {
-                write!(f, "{}", name)
-            }
         }
     }
 }

@@ -26,13 +26,7 @@ impl<T: TypeMappable> Scheme<T> {
                 Ok(ty)
             }
             fn map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
-                let Region::Param(_, index) = region else {
                     return self.super_map_region(region);
-                };
-                let Some(GenericArg::Region(region)) = self.0.get(index).cloned() else {
-                    return Ok(Region::Unknown);
-                };
-                Ok(region)
             }
         }
         let Ok(value) = self.value.apply_map(&mut Binder(args));
