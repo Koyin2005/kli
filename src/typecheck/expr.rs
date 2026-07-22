@@ -136,7 +136,7 @@ impl FunctionCtxt<'_> {
                 (None, Type::Unknown)
             }
         };
-        let pattern = self.check_pattern(pattern, element, None);
+        let pattern = self.check_pattern(pattern, element);
         let body = self.check_expr_coerces_to(body, Some(Type::UNIT));
         let Some(iterator_type) = iterator_type else {
             return typed_ast::Expr {
@@ -738,7 +738,7 @@ impl FunctionCtxt<'_> {
                 let mut patterns = Vec::with_capacity(case_arms.len());
                 let mut bodies = Vec::with_capacity(case_arms.len());
                 for arm in case_arms {
-                    patterns.push(self.check_pattern(&arm.pattern, matched.ty.clone(), None));
+                    patterns.push(self.check_pattern(&arm.pattern, matched.ty.clone()));
                     bodies.push(self.check_expr_coerces_to(&arm.body, expected_ty.clone()));
                 }
                 let combined_ty = self.merge_ty(bodies.iter().map(|body| body.ty.clone()));

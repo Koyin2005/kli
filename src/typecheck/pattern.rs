@@ -1,19 +1,17 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ast::Mutable,
     collect::TypeDefKind,
     resolved_ast::{Pattern, PatternField, PatternKind, Var},
     typecheck::root::FunctionCtxt,
     typed_ast::{self, FieldId},
-    types::{self, FieldName, Region, Type},
+    types::{self, FieldName, Type},
 };
 impl FunctionCtxt<'_> {
     pub fn check_pattern(
         &self,
         pattern: &Pattern,
         expected_type: Type,
-        binding_mode: Option<(Region, Mutable)>,
     ) -> typed_ast::Pattern {
         let loc = pattern.loc;
         let root = self.root();
@@ -58,7 +56,7 @@ impl FunctionCtxt<'_> {
                         let ty = expected_fields.get(i).cloned().unwrap_or(Type::Unknown);
                         typed_ast::PatternField {
                             index: FieldId::new(i),
-                            pattern: self.check_pattern(field, ty, binding_mode),
+                            pattern: self.check_pattern(field, ty),
                         }
                     })
                     .collect();
@@ -74,7 +72,7 @@ impl FunctionCtxt<'_> {
                     ty => {
                         root.expect_ty_error("variant type", &ty, loc);
                         if let Some(inner) = inner {
-                            let _ = self.check_pattern(inner, Type::Unknown, binding_mode);
+                            let _ = self.check_pattern(inner, Type::Unknown);
                         }
                         return typed_ast::Pattern {
                             ty,
@@ -92,7 +90,7 @@ impl FunctionCtxt<'_> {
                             .diag()
                             .add_diagnostic("expected 'variant' type but got 'record'", loc);
                         if let Some(inner) = inner {
-                            let _ = self.check_pattern(inner, Type::Unknown, binding_mode);
+                            let _ = self.check_pattern(inner, Type::Unknown);
                         }
                         return typed_ast::Pattern {
                             ty: Type::Named(id, ty_name, args),
@@ -110,7 +108,7 @@ impl FunctionCtxt<'_> {
                         name.loc,
                     );
                     if let Some(inner) = inner {
-                        let _ = self.check_pattern(inner, Type::Unknown, binding_mode);
+                        let _ = self.check_pattern(inner, Type::Unknown);
                     }
                     return typed_ast::Pattern {
                         ty: Type::Named(id, ty_name, args),
@@ -125,7 +123,7 @@ impl FunctionCtxt<'_> {
                 ) {
                     (None, None) => None,
                     (Some(inner_ty), Some(inner)) => {
-                        Some(Box::new(self.check_pattern(inner, inner_ty, binding_mode)))
+                        Some(Box::new(self.check_pattern(inner, inner_ty)))
                     }
                     (None, Some(inner)) => {
                         root.ctxt().diag().add_diagnostic(
@@ -135,7 +133,6 @@ impl FunctionCtxt<'_> {
                         Some(Box::new(self.check_pattern(
                             inner,
                             Type::Unknown,
-                            binding_mode,
                         )))
                     }
                     (Some(ty), None) => {
@@ -200,7 +197,6 @@ impl FunctionCtxt<'_> {
                                         .map(|fields| fields[field].ty.clone())
                                 })
                                 .unwrap_or(Type::Unknown),
-                            binding_mode,
                         );
                         if expected_fields.is_some() && !seen_fields.insert(name.symbol) {
                             root.ctxt().diag().add_diagnostic(

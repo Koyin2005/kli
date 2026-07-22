@@ -287,7 +287,7 @@ impl<'ctxt> FunctionCtxt<'ctxt> {
     pub(super) fn check_binding(&self, binding: &res::LetBinding) -> LetBinding {
         let ty = binding.ty.as_ref().map(|ty| self.root().lower_type(ty));
         let value = self.check_expr_coerces_to(&binding.value, ty.clone());
-        let pattern = self.check_pattern(&binding.pattern, value.ty.clone(), None);
+        let pattern = self.check_pattern(&binding.pattern, value.ty.clone());
         LetBinding { pattern, value }
     }
     pub(super) fn check_field_visibility(
