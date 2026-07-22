@@ -121,7 +121,6 @@ where
             v.visit_place(place);
             v.visit_expr(value);
         }
-        ExprKind::Borrow { place, .. } => v.visit_place(place),
         ExprKind::For {
             pattern,
             iterator,

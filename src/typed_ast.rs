@@ -149,11 +149,6 @@ pub enum ExprKind {
         iterator_type: IteratorType,
         body: Box<Expr>,
     },
-    Borrow {
-        mutable: Mutable,
-        place: Place,
-        region: Region,
-    },
     Case(Box<Expr>, Vec<CaseArm>),
     Assign(Box<Place>, Box<Expr>),
     Lambda(Box<Lambda>),

@@ -245,7 +245,6 @@ impl Builder<'_> {
             | ExprKind::Print(_)
             | ExprKind::For { .. }
             | ExprKind::Assign(..)
-            | ExprKind::Borrow { .. }
             | ExprKind::VariantInit(..)
             | ExprKind::String(_)
             | ExprKind::Lambda(_)
@@ -547,11 +546,6 @@ impl Builder<'_> {
                 self.expr_stmt(expr);
                 Rvalue::Use(Operand::Constant(Constant::unit()))
             }
-            &ExprKind::Borrow {
-                mutable,
-                ref place,
-                region,
-            } => Rvalue::Ref(mutable, region, self.lower_place(place)),
             ExprKind::AddressOf(place) => Rvalue::RawPtrTo(self.lower_place(place)),
             ExprKind::Lambda(lambda) => {
                 let is_resource = lambda.is_resource == IsResource::Resource;

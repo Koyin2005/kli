@@ -84,7 +84,6 @@ impl Builder<'_> {
             | ExprKind::Unit
             | ExprKind::Bool(_)
             | ExprKind::Int(_)
-            | ExprKind::Borrow { .. }
             | ExprKind::Load(_)
             | ExprKind::Case(..)
             | ExprKind::Call(..)

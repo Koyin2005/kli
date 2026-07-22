@@ -165,10 +165,6 @@ impl<'a> TypeSubst<'a> {
                 self.subst_place(place);
                 self.subst_expr(expr);
             }
-            ExprKind::Borrow { place, region, .. } => {
-                self.subst_place(place);
-                self.subst_region(region);
-            }
             ExprKind::Case(matchee, arms) => {
                 self.subst_expr(matchee);
                 for arm in arms {
