@@ -12,12 +12,12 @@ use crate::types::{
 };
 pub struct Lower<'a> {
     ctxt: CtxtRef<'a>,
-    id: DefId,
+    _id: DefId,
     infer: Option<&'a RefCell<TypeInfer>>,
 }
 impl<'a> Lower<'a> {
     pub fn new(ctxt: CtxtRef<'a>, id: DefId, infer: Option<&'a RefCell<TypeInfer>>) -> Self {
-        Self { ctxt, id, infer }
+        Self { ctxt, _id:id, infer }
     }
     pub fn lower_types(
         &self,
