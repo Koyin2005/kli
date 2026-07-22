@@ -335,17 +335,6 @@ impl Type {
             PointerType::Raw => Self::pointer(pointee),
         }
     }
-    pub fn erase_regions(self) -> Self {
-        struct EraseRegions;
-        impl TypeMap for EraseRegions {
-            type Error = std::convert::Infallible;
-            fn map_region(&mut self, r: Region) -> Result<Region, Self::Error> {
-                match r {}
-            }
-        }
-        let Ok(ty) = EraseRegions.map_type(self);
-        ty
-    }
     pub fn is_resource(&self, ctxt: CtxtRef<'_>) -> bool {
         _ = ctxt;
         false
@@ -559,9 +548,6 @@ pub trait TypeMap {
         *function_type.return_type = self.map_type(*function_type.return_type)?;
         Ok(function_type)
     }
-    fn super_map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
-        Ok(region)
-    }
     fn super_map_field(&mut self, field: RecordField) -> Result<RecordField, Self::Error> {
         let mut field = field;
         let ty = self.map_type(field.ty)?;
@@ -570,9 +556,6 @@ pub trait TypeMap {
     }
     fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
         self.super_map_type(ty)
-    }
-    fn map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
-        self.super_map_region(region)
     }
     fn map_field(&mut self, field: RecordField) -> Result<RecordField, Self::Error> {
         self.super_map_field(field)
@@ -594,11 +577,6 @@ pub trait TypeMappable {
 impl TypeMappable for Type {
     fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         m.map_type(self)
-    }
-}
-impl TypeMappable for Region {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
-        m.map_region(self)
     }
 }
 

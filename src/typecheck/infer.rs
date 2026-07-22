@@ -35,7 +35,6 @@ impl TypeInfer {
             .collect()
     }
     pub fn simplify_region(&self, region: Region) -> Region {
-        let Ok(region) = Simplify(self).map_region(region);
         region
     }
     pub fn simplify_type(&self, ty: Type) -> Type {
@@ -172,9 +171,6 @@ impl TypeInfer {
 struct Simplify<'a>(&'a TypeInfer);
 impl TypeMap for Simplify<'_> {
     type Error = std::convert::Infallible;
-    fn map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
-        return self.super_map_region(region);
-    }
     fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
         let Type::Infer(var) = ty else {
             return self.super_map_type(ty);

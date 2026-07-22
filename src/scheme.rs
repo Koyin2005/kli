@@ -1,4 +1,4 @@
-use crate::types::{GenericArg, GenericArgsRef, Region, Type, TypeMap, TypeMappable};
+use crate::types::{GenericArg, GenericArgsRef, Type, TypeMap, TypeMappable};
 #[derive(Clone, Eq, PartialEq)]
 pub struct Scheme<T> {
     value: T,
@@ -24,9 +24,6 @@ impl<T: TypeMappable> Scheme<T> {
                     return Ok(Type::Unknown);
                 };
                 Ok(ty)
-            }
-            fn map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
-                return self.super_map_region(region);
             }
         }
         let Ok(value) = self.value.apply_map(&mut Binder(args));
