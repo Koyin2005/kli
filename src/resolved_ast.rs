@@ -151,10 +151,6 @@ pub enum ExprKind {
 }
 #[derive(Debug, Clone, Copy)]
 pub enum RegionKind {
-    Param(Symbol, usize),
-    Local(Symbol, LocalRegionId),
-    Static,
-    Unknown,
 }
 
 #[derive(Debug, Clone, Copy)]

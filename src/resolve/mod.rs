@@ -11,7 +11,7 @@ use crate::ident::Ident;
 use crate::index_vec::IndexVec;
 use crate::lang_items::LangItem;
 use crate::resolve::decl::DeclareResults;
-use crate::resolved_ast::{GenericKind, LocalRegionId, VarId, VariantDef};
+use crate::resolved_ast::{GenericKind, VarId, VariantDef};
 use crate::src_loc::SrcLoc;
 use crate::{Symbol, ast, resolved_ast as res};
 
@@ -102,29 +102,11 @@ enum TypeDefInfoKind {
         _fields: Vec<FieldInfo>,
     },
 }
-fn make_block_expr(
-    loc: SrcLoc,
-    region: Option<LocalRegionId>,
-    stmts: impl IntoIterator<Item = res::Stmt>,
-    expr: res::Expr,
-) -> res::Expr {
-    res::Expr {
-        loc,
-        kind: res::ExprKind::Block(
-            Box::new(res::BlockBody {
-                stmts: stmts.into_iter().collect(),
-                expr: Box::new(expr),
-            }),
-            region,
-        ),
-    }
-}
 pub struct Resolve<'info> {
     config: Config,
     env: Scope,
     prev_envs: Vec<Scope>,
     vars: usize,
-    regions: usize,
     generics: usize,
     generic_kinds: HashMap<Symbol, GenericKind>,
     current_module: Option<ModuleId>,
@@ -150,7 +132,6 @@ impl<'info> Resolve<'info> {
             prev_envs: Vec::new(),
             env,
             vars: 0,
-            regions: 0,
             generics: 0,
             diag: DiagnosticReporter::new(),
             generic_kinds: HashMap::new(),
@@ -193,11 +174,6 @@ impl<'info> Resolve<'info> {
     fn add_item(&mut self, id: DefId, item: res::Item) {
         self.add_node(id, res::Node::Item(Box::new(item)));
     }
-    fn is_region_param(&self, name: Ident) -> bool {
-        self.generic_kinds
-            .get(&name.symbol)
-            .is_some_and(|kind| *kind == res::GenericKind::Region)
-    }
     fn error_on_generic_args(
         &mut self,
         kind: &str,
@@ -223,18 +199,6 @@ impl<'info> Resolve<'info> {
                 .args
                 .into_iter()
                 .map(|arg| match arg.ty.kind {
-                    ast::TypeKind::Named(ast::InstancePath {
-                        ref path,
-                        generic_args: None,
-                    }) if let Ok(Res::Param(index)) = self.resolve_path(path)
-                        && let name = path.last()
-                        && self.is_region_param(name) =>
-                    {
-                        res::GenericArg::Region(res::Region {
-                            loc: arg.ty.loc,
-                            kind: res::RegionKind::Param(name.symbol, index),
-                        })
-                    }
                     _ => res::GenericArg::Type(self.resolve_type(arg.ty)),
                 })
                 .collect(),
@@ -368,11 +332,6 @@ impl<'info> Resolve<'info> {
             },
         };
         res::Type { loc: ty.loc, kind }
-    }
-    fn fresh_region(&mut self) -> LocalRegionId {
-        let region_id = LocalRegionId::new(self.vars);
-        self.regions += 1;
-        region_id
     }
     fn fresh_var(&mut self) -> VarId {
         let var_id = VarId::new(self.vars);
@@ -812,111 +771,8 @@ impl<'info> Resolve<'info> {
                 args.into_iter().map(|arg| self.resolve_expr(arg)).collect(),
             ),
             ast::ExprKind::Array(fields) => {
-                /*
-                   [a_1,a_2,...,a_n]
-                   do
-                       let mut l = std.arrays.new();
-                       do in r
-                       do in r std.arrays.push(mut[r] l, a_1) end;
-                       do in r std.arrays.push(mut[r] l, a_2) end;
-                       ..
-                       do in r std.arrays.push(mut[r] l, a_n) end;
-                       end
-                   end
-                */
-                let array_list_path = Path::new(vec![
-                    Ident::new(Symbol::STD, loc),
-                    Ident::new(Symbol::intern("arrays"), loc),
-                    Ident::new(Symbol::intern("ArrayList"), loc),
-                ]);
-                let with_capacity_path = array_list_path
-                    .clone()
-                    .with_extra_segment(Ident::new(Symbol::intern("with_capacity"), loc));
-                let with_cap_expr = self.resolve_path_as_expr(loc, with_capacity_path, None);
-                let push_expr = |this: &mut Resolve<'_>| {
-                    let push_path = array_list_path
-                        .clone()
-                        .with_extra_segment(Ident::new(Symbol::intern("push"), loc));
-                    this.resolve_path_as_expr(loc, push_path, None)
-                };
-
-                let local_name = Ident::new(Symbol::intern("list"), loc);
-                let local_var = self.fresh_var();
-                let var_expr = move || res::Expr {
-                    loc,
-                    kind: res::ExprKind::Var(res::Var(local_name.symbol, local_var)),
-                };
-                fn make_call(
-                    loc: SrcLoc,
-                    callee: res::Expr,
-                    args: impl IntoIterator<Item = res::Expr>,
-                ) -> res::Expr {
-                    res::Expr {
-                        loc,
-                        kind: res::ExprKind::Call(Box::new(callee), args.into_iter().collect()),
-                    }
-                }
-                let let_stmt = res::Stmt {
-                    loc,
-                    kind: res::StmtKind::Let(Box::new(res::LetBinding {
-                        pattern: res::Pattern {
-                            loc,
-                            kind: res::PatternKind::Binding(
-                                None,
-                                ast::Mutable::Mutable,
-                                local_name,
-                                local_var,
-                            ),
-                        },
-                        ty: None,
-                        value: make_call(
-                            loc,
-                            res::Expr {
-                                loc,
-                                kind: with_cap_expr,
-                            },
-                            [res::Expr {
-                                loc,
-                                kind: res::ExprKind::Int(res::IntegerLiteral {
-                                    value: fields.len() as u64,
-                                    kind: res::IntegerLiteralKind::Implicit,
-                                }),
-                            }],
-                        ),
-                    })),
-                };
-                let stmts = std::iter::once(let_stmt).chain(fields.into_iter().enumerate().map(
-                    |(i, field)| {
-                        let region_name = Symbol::intern(&format!("r{}", i + 1));
-                        let region = self.fresh_region();
-                        let borrowed_var = res::Expr {
-                            loc,
-                            kind: res::ExprKind::Borrow(Box::new(res::BorrowExpr {
-                                mutable: ast::Mutable::Mutable,
-                                place: var_expr(),
-                                region: res::Region {
-                                    loc,
-                                    kind: res::RegionKind::Local(region_name, region),
-                                },
-                            })),
-                        };
-                        let push_call = make_call(
-                            loc,
-                            res::Expr {
-                                loc,
-                                kind: push_expr(self),
-                            },
-                            [borrowed_var, self.resolve_expr(field)],
-                        );
-                        let block_expr = make_block_expr(loc, Some(region), [], push_call);
-                        res::Stmt {
-                            loc,
-                            kind: res::StmtKind::Expr(block_expr),
-                        }
-                    },
-                ));
-
-                return make_block_expr(loc, None, stmts, var_expr());
+                _ = fields;
+                todo!("array literal lowering")
             }
         };
         res::Expr { loc, kind }

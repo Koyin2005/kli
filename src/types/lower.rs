@@ -22,20 +22,7 @@ impl<'a> Lower<'a> {
     }
 
     pub fn lower_region(&self, region: &res::Region) -> Region {
-        match &region.kind {
-            &res::RegionKind::Param(name, param) => {
-                if let GenericKind::Region = self.ctxt.generics(self.id).kind(param, self.ctxt) {
-                    Region::Param(name, param)
-                } else {
-                    self.ctxt
-                        .diag()
-                        .add_diagnostic(format!("Cannot use '{}' as region", name), region.loc);
-                    Region::Unknown
-                }
-            }
-            &res::RegionKind::Local(name, id) => Region::Local(name, id),
-            res::RegionKind::Static => Region::Static,
-            res::RegionKind::Unknown => Region::Unknown,
+        match region.kind {
         }
     }
     pub fn lower_types(
