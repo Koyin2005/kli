@@ -373,11 +373,7 @@ impl Parser {
     fn parse_block_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.expect(&TokenKind::Do)?;
 
-        let region = if self.matches_token(&TokenKind::In) {
-            Some(self.expect_ident("region name")?)
-        } else {
-            None
-        };
+        let region = None;
         self.parse_block_expr_tail(loc, region)
     }
     fn parse_case_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
