@@ -8,11 +8,7 @@ use crate::{
     types::{self, FieldName, Type},
 };
 impl FunctionCtxt<'_> {
-    pub fn check_pattern(
-        &self,
-        pattern: &Pattern,
-        expected_type: Type,
-    ) -> typed_ast::Pattern {
+    pub fn check_pattern(&self, pattern: &Pattern, expected_type: Type) -> typed_ast::Pattern {
         let loc = pattern.loc;
         let root = self.root();
         let expected_type = root.simplify_type(expected_type);
@@ -130,10 +126,7 @@ impl FunctionCtxt<'_> {
                             format!("'{}' has no inner fields", name.symbol),
                             name.loc,
                         );
-                        Some(Box::new(self.check_pattern(
-                            inner,
-                            Type::Unknown,
-                        )))
+                        Some(Box::new(self.check_pattern(inner, Type::Unknown)))
                     }
                     (Some(ty), None) => {
                         root.ctxt().diag().add_diagnostic(

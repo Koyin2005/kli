@@ -113,18 +113,6 @@ impl FunctionType {
     }
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
-pub enum Region {}
-impl Region {
-    pub const fn no_op_visit<T>(self) -> ControlFlow<T> {
-        ControlFlow::Continue(())
-    }
-}
-impl Display for Region {
-    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {}
-    }
-}
-#[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
 pub enum FieldName {
     Named(Symbol),
     Index(FieldId),
@@ -375,11 +363,7 @@ impl Type {
             }
         }
     }
-    pub fn visit<T>(
-        &self,
-        visit_ty: &mut impl FnMut(&Self) -> ControlFlow<T>,
-        visit_region: &mut impl FnMut(Region) -> ControlFlow<T>,
-    ) -> ControlFlow<T> {
+    pub fn visit<T>(&self, visit_ty: &mut impl FnMut(&Self) -> ControlFlow<T>) -> ControlFlow<T> {
         visit_ty(self)?;
         match self {
             Type::Int(_)
@@ -390,12 +374,12 @@ impl Type {
             | Type::Byte
             | Type::Param(..)
             | Type::Never => ControlFlow::Continue(()),
-            Type::RawPointer(ty) | Type::Array(ty, _) => ty.visit(visit_ty, visit_region),
+            Type::RawPointer(ty) | Type::Array(ty, _) => ty.visit(visit_ty),
             Type::Function(function_type) => {
                 for param in function_type.params.iter() {
-                    param.visit(visit_ty, visit_region)?;
+                    param.visit(visit_ty)?;
                 }
-                function_type.return_type.visit(visit_ty, visit_region)
+                function_type.return_type.visit(visit_ty)
             }
             Type::Record(fields) => {
                 for field in fields {
@@ -412,7 +396,7 @@ impl Type {
             Type::Named(.., generic_args) => {
                 for arg in generic_args {
                     match arg {
-                        GenericArg::Type(ty) => ty.visit(visit_ty, visit_region)?,
+                        GenericArg::Type(ty) => ty.visit(visit_ty)?,
                     }
                 }
                 ControlFlow::Continue(())

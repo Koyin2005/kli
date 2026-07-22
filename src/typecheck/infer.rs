@@ -1,9 +1,7 @@
 use crate::{
     index_vec::IndexVec,
     src_loc::SrcLoc,
-    types::{
-        FunctionType, GenericArg, GenericArgs, IntegerKind, RecordField, Region, Type, TypeMap,
-    },
+    types::{FunctionType, GenericArg, GenericArgs, IntegerKind, RecordField, Type, TypeMap},
 };
 #[derive(Debug)]
 pub struct TypeVarInfo {
@@ -34,17 +32,9 @@ impl TypeInfer {
             .filter_map(|var| var.ty.is_none().then_some(var.loc))
             .collect()
     }
-    pub fn simplify_region(&self, region: Region) -> Region {
-        region
-    }
     pub fn simplify_type(&self, ty: Type) -> Type {
         let Ok(ty) = Simplify(self).map_type(ty);
         ty
-    }
-    pub fn unify_region(&mut self, region1: Region, region2: Region) -> Option<Region> {
-        match (region1, region2) {
-            _ => None,
-        }
     }
     pub fn unify_generic_args(
         &mut self,
