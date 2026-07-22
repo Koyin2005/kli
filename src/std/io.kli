@@ -1,6 +1,6 @@
 
 
-fun print_int(value : int) -> () = do in r
+fun print_int(value : int) -> () = do
     print(value)
 end
 
