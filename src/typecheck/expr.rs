@@ -5,7 +5,6 @@ use crate::{
     collect::TypeDefKind,
     def_ids::DefId,
     index_vec::IndexVec,
-    lang_items::LangItem,
     resolved_ast::{
         self, BlockBody, BorrowExpr, Expr, ExprKind, FieldInit, FunctionDefId, Lambda,
         LocalRegionId, Pattern, Var,
@@ -14,8 +13,8 @@ use crate::{
     typecheck::root::{FunctionCtxt, TypeCheck},
     typed_ast::{self, Capture, FieldId, RecordFieldInit},
     types::{
-        FieldName, FunctionSig, FunctionType, GenericArg, GenericArgs, PointerType, RecordField,
-        Region, Type,
+        FieldName, FunctionSig, FunctionType, GenericArgs, PointerType, RecordField,
+        Type,
     },
 };
 
