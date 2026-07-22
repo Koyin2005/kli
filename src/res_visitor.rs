@@ -1,5 +1,5 @@
 use crate::resolved_ast::{
-    BlockBody, Expr, ExprKind, GenericArg, GenericArgs, LocalRegionId, Param, Pattern, Region,
+    BlockBody, Expr, ExprKind, GenericArg, GenericArgs, LocalRegionId, Param, Pattern,
     Stmt, StmtKind, Type, TypeKind, Var,
 };
 
