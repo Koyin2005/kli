@@ -1,10 +1,10 @@
 use crate::resolved_ast::{
-    BlockBody, Expr, ExprKind, GenericArg, GenericArgs, LocalRegionId, Param, Pattern,
+    BlockBody, Expr, ExprKind, GenericArg, GenericArgs, Param, Pattern,
     Stmt, StmtKind, Type, TypeKind, Var,
 };
 
 pub trait Visitor {
-    fn super_visit_block(&mut self, block_body: &BlockBody, _: Option<LocalRegionId>) {
+    fn super_visit_block(&mut self, block_body: &BlockBody) {
         for stmt in &block_body.stmts {
             self.visit_stmt(stmt);
         }
@@ -72,7 +72,7 @@ pub trait Visitor {
     }
     fn super_visit_expr(&mut self, expr: &Expr) {
         match &expr.kind {
-            ExprKind::Block(block_body) => self.visit_block(block_body, None),
+            ExprKind::Block(block_body) => self.visit_block(block_body),
             ExprKind::Unit
             | ExprKind::Err
             | ExprKind::Int(_)
@@ -160,8 +160,8 @@ pub trait Visitor {
             }
         }
     }
-    fn visit_block(&mut self, block_body: &BlockBody, region: Option<LocalRegionId>) {
-        self.super_visit_block(block_body, region);
+    fn visit_block(&mut self, block_body: &BlockBody) {
+        self.super_visit_block(block_body);
     }
     fn visit_type(&mut self, ty: &Type) {
         self.super_visit_type(ty);

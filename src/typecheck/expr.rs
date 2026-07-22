@@ -7,7 +7,7 @@ use crate::{
     index_vec::IndexVec,
     resolved_ast::{
         self, BlockBody, Expr, ExprKind, FieldInit, FunctionDefId, Lambda,
-        LocalRegionId, Pattern, Var,
+        Pattern, Var,
     },
     src_loc::SrcLoc,
     typecheck::root::{FunctionCtxt, TypeCheck},
@@ -371,7 +371,6 @@ impl FunctionCtxt<'_> {
         &self,
         loc: SrcLoc,
         body: &BlockBody,
-        region: Option<LocalRegionId>,
         expected_ty: Option<Type>,
     ) -> typed_ast::Expr {
         let stmts = body
@@ -388,7 +387,7 @@ impl FunctionCtxt<'_> {
         typed_ast::Expr {
             ty,
             loc,
-            kind: typed_ast::ExprKind::Block(body, region),
+            kind: typed_ast::ExprKind::Block(body, None),
         }
     }
     fn check_record(
@@ -631,7 +630,7 @@ impl FunctionCtxt<'_> {
                 }
             }
             ExprKind::Record(fields) => self.check_record(loc, fields, expected_ty.clone()),
-            ExprKind::Block(block) => self.check_block(loc, block,None, expected_ty),
+            ExprKind::Block(block) => self.check_block(loc, block, expected_ty),
             ExprKind::Annotate(expr, ty) => self.check_expr(expr, Some(self.root().lower_type(ty))),
             ExprKind::Err => typed_ast::Expr {
                 loc,
