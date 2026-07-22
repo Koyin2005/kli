@@ -1,5 +1,4 @@
 use crate::{
-    ast::Mutable,
     mir::{
         BasicBlock, BasicBlockId, Body, Constant, CopyNonOverlapping, DropInPlace, Local, Location,
         Operand, Place, PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind, Terminator,

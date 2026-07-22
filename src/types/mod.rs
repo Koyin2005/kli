@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     Symbol,
-    ast::{IsResource, Mutable},
+    ast::IsResource,
     collect::{CtxtRef, TypeDefKind},
     def_ids::DefId,
     define_id,
@@ -294,12 +294,6 @@ impl Type {
     pub fn tuple(field_tys: impl IntoIterator<Item = Self>) -> Self {
         Self::Tuple(field_tys.into_iter().collect())
     }
-    pub fn is_reference(&self) -> bool {
-        false
-    }
-    pub fn reference(self, _: Mutable, region: Region) -> Self {
-        match region {}
-    }
     pub fn into_pointer_type(self, ctxt: CtxtRef<'_>) -> Result<(PointerType, Self), Self> {
         match self {
             Self::RawPointer(ty) => Ok((PointerType::Raw, *ty)),
@@ -349,9 +343,6 @@ impl Type {
             }
             PointerType::Raw => Self::pointer(pointee),
         }
-    }
-    pub fn as_reference_type(&self) -> Result<(Mutable, Region, &Self), &Self> {
-        return Err(self)
     }
     pub fn erase_regions(self) -> Self {
         struct EraseRegions;
