@@ -115,7 +115,7 @@ impl<'a> TypeSubst<'a> {
             ExprKind::Return(value) | ExprKind::Unsafe(value) => {
                 self.subst_expr(value);
             }
-            ExprKind::Block(block, _) => {
+            ExprKind::Block(block) => {
                 for stmt in &mut block.stmts {
                     self.subst_stmt(stmt);
                 }

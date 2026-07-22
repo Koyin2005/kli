@@ -14,7 +14,6 @@ use crate::{
 #[derive(Debug, PartialEq, Eq)]
 pub struct FunctionDefId(pub DefId);
 define_id!(VarId);
-define_id!(LocalRegionId);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Var(pub Symbol, pub VarId);
 impl Var {

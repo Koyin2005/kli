@@ -66,7 +66,7 @@ where
     V: Visitor + ?Sized,
 {
     match &expr.kind {
-        ExprKind::Block(body, _) => {
+        ExprKind::Block(body) => {
             for stmt in &body.stmts {
                 v.visit_stmt(stmt);
             }

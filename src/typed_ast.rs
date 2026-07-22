@@ -6,7 +6,7 @@ use crate::{
     def_ids::DefId,
     define_id,
     ident::Ident,
-    resolved_ast::{LocalRegionId, Var, VarId},
+    resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
     types::{CaseId, GenericArgs, GenericKind, Region, Type},
 };
@@ -126,7 +126,7 @@ pub enum ExprKind {
     Unsafe(Box<Expr>),
     Return(Box<Expr>),
     Record(Box<[RecordFieldInit]>),
-    Block(BlockBody, Option<LocalRegionId>),
+    Block(BlockBody),
     String(Rc<str>),
     Bool(bool),
     Int(u64),

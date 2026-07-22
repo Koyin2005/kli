@@ -387,7 +387,7 @@ impl FunctionCtxt<'_> {
         typed_ast::Expr {
             ty,
             loc,
-            kind: typed_ast::ExprKind::Block(body, None),
+            kind: typed_ast::ExprKind::Block(body),
         }
     }
     fn check_record(
