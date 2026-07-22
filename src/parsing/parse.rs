@@ -191,23 +191,7 @@ impl Parser {
         }
     }
     fn parse_region(&mut self) -> Result<Region, ParseError> {
-        match self.match_ident() {
-            Some(name) => Ok(Region::Named(name)),
-            None => match self.match_token(&TokenKind::Static) {
-                Some(Token {
-                    loc,
-                    kind: TokenKind::Static,
-                }) => {
-                    self.advance();
-                    Ok(Region::Static(loc))
-                }
-                _ => Err({
-                    let loc = self.current_loc();
-                    self.diag.add_diagnostic("Expected a valid region", loc);
-                    ParseError
-                }),
-            },
-        }
+        Err(self.expect_error("not regions"))
     }
     fn parse_pattern_ident(
         &mut self,
