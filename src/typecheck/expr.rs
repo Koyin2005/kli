@@ -631,7 +631,7 @@ impl FunctionCtxt<'_> {
                 }
             }
             ExprKind::Record(fields) => self.check_record(loc, fields, expected_ty.clone()),
-            ExprKind::Block(block, region) => self.check_block(loc, block, *region, expected_ty),
+            ExprKind::Block(block) => self.check_block(loc, block,None, expected_ty),
             ExprKind::Annotate(expr, ty) => self.check_expr(expr, Some(self.root().lower_type(ty))),
             ExprKind::Err => typed_ast::Expr {
                 loc,

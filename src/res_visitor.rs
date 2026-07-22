@@ -72,7 +72,7 @@ pub trait Visitor {
     }
     fn super_visit_expr(&mut self, expr: &Expr) {
         match &expr.kind {
-            ExprKind::Block(block_body, id) => self.visit_block(block_body, *id),
+            ExprKind::Block(block_body) => self.visit_block(block_body, None),
             ExprKind::Unit
             | ExprKind::Err
             | ExprKind::Int(_)

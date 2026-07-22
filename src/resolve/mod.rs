@@ -627,7 +627,6 @@ impl<'info> Resolve<'info> {
                             .collect(),
                         expr: Box::new(this.resolve_expr(*block.expr)),
                     }),
-                    None,
                 )
             }),
             ast::ExprKind::Tuple(fields) => res::ExprKind::Tuple(
