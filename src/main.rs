@@ -13,7 +13,6 @@ use kli::{
     parsing::parse::Parser,
     patterns::visit::PatternCheck,
     resolve::Resolve,
-    resourcecheck::ResourceCheck,
     typecheck::root::TypeCheck,
     unsafety::SafetyCheck,
 };
@@ -263,9 +262,6 @@ fn main() {
             had_error |= PatternCheck::new(ctxt, id).check(body);
         }
         had_error |= SafetyCheck::check(ctxt, id, function).is_err();
-    }
-    for (id, function) in program.functions.iter() {
-        had_error |= ResourceCheck::new(ctxt).check_function(*id, function);
     }
     if had_error {
         return;

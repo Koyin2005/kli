@@ -9,7 +9,6 @@ pub mod parsing;
 pub mod patterns;
 pub mod resolve;
 mod resolved_ast;
-pub mod resourcecheck;
 mod scheme;
 mod src_loc;
 pub mod typecheck;
