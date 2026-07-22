@@ -788,14 +788,8 @@ impl Parser {
     fn parse_optional_generics(&mut self) -> Result<Option<Generics>, ParseError> {
         if let Some(Token { loc, .. }) = self.match_token(&TokenKind::LeftBracket) {
             let params = self.delimited_coma_sep(&TokenKind::RightBracket, |this| {
-                let kind = if this.matches_token(&TokenKind::Region) {
-                    GenericParamKind::Region
-                } else {
-                    GenericParamKind::Type
-                };
-
                 let name = this.expect_ident("generic param name")?;
-                Ok(GenericParam { name, kind })
+                Ok(GenericParam { name, kind:GenericParamKind::Type })
             })?;
             Ok(Some(Generics { loc, params }))
         } else {
