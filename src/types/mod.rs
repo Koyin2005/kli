@@ -222,15 +222,6 @@ impl Type {
         let name = ctxt.expect_ident(id).symbol;
         Type::Named(id, name, GenericArgs::new())
     }
-    pub fn static_string_slice(ctxt: CtxtRef<'_>) -> Self {
-        let id = ctxt.lang_items().expect(LangItem::StringSlice);
-        let name = ctxt.expect_ident(id).symbol;
-        Type::Named(
-            id,
-            name,
-            GenericArgs::from_iter(std::iter::once(GenericArg::Region(Region::Static))),
-        )
-    }
     pub fn as_named(&self) -> Option<(DefId, Symbol, GenericArgsRef<'_>)> {
         let Self::Named(id, name, args) = self else {
             return None;
@@ -405,42 +396,8 @@ impl Type {
         ty
     }
     pub fn is_resource(&self, ctxt: CtxtRef<'_>) -> bool {
-        match self {
-            Type::Bool
-            | Type::Unknown
-            | Type::Int(_)
-            | Type::Imm(..)
-            | Type::Char
-            | Type::Byte
-            | Type::RawPointer(_)
-            | Type::Function(FunctionType {
-                resource: IsResource::Data,
-                ..
-            })
-            | Type::Never => false,
-            Type::Array(ty, _) => ty.is_resource(ctxt),
-            Type::Mut(..)
-            | Type::Function(FunctionType {
-                resource: IsResource::Resource,
-                ..
-            })
-            | Type::Param(..) => true,
-            Type::Record(fields) => fields.iter().any(|field| field.ty.is_resource(ctxt)),
-            Type::Tuple(fields) => fields.iter().any(|field| field.is_resource(ctxt)),
-            Type::Infer(_) => unreachable!("Cannot 'infer' its a resource"),
-            &Type::Named(id, _, ref args) => {
-                let is_copy = ctxt
-                    .annotations(id)
-                    .iter()
-                    .any(|annotation| annotation.kind == crate::resolved_ast::AnnotationKind::Copy);
-                if !is_copy || ctxt.is_type_recursive(id) {
-                    return true;
-                }
-                ctxt.type_def(id)
-                    .all_fields()
-                    .any(|field| field.type_of(args, ctxt).is_resource(ctxt))
-            }
-        }
+        _ = ctxt;
+        false
     }
     pub const fn no_op_visit<T>(&self) -> ControlFlow<T> {
         ControlFlow::Continue(())

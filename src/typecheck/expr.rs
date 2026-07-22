@@ -752,21 +752,9 @@ impl FunctionCtxt<'_> {
                 make_expr(ty, typed_ast::ExprKind::Int(value), loc)
             }
             ExprKind::String(value) => {
-                let string_literal = make_expr(
-                    Type::static_string_slice(self.ctxt()),
-                    typed_ast::ExprKind::String(value.clone()),
-                    loc,
-                );
-                let from_slice_id = self.ctxt().lang_items().expect(LangItem::StringFromSlice);
-                let generic_args = vec![GenericArg::Region(Region::Static)];
-                let from_slice_function = make_expr(
-                    self.ctxt().type_of(from_slice_id).bind(&generic_args),
-                    typed_ast::ExprKind::Function(from_slice_id, generic_args),
-                    loc,
-                );
                 make_expr(
                     Type::string(self.ctxt()),
-                    typed_ast::ExprKind::Call(Box::new(from_slice_function), vec![string_literal]),
+                    typed_ast::ExprKind::String(value.clone()),
                     loc,
                 )
             }

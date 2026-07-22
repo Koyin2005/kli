@@ -47,6 +47,7 @@ impl LangItems {
     pub fn get(&self, item: LangItem) -> Option<DefId> {
         self.0[item as usize]
     }
+    #[track_caller]
     pub fn expect(&self, item: LangItem) -> DefId {
         let Some(id) = self.get(item) else {
             panic!("Expected lang item '{}' ", item.name())

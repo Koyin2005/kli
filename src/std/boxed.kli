@@ -35,19 +35,7 @@ impl
             value
         end
     end
-
-    fun deref[region r,T](x : imm[r] Box[T]) -> imm[r] T = do
-        let inner_ptr : ptr[T] = x^.inner;
-        unsafe refs.ref_from_raw(inner_ptr) end
-    end
-
-    fun deref_mut[region r,T](x : mut[r] Box[T]) -> mut[r] T = do
-        unsafe 
-            let inner_ptr : ptr[T] = x^.inner;
-            refs.ref_from_raw_mut(inner_ptr)
-        end
-    end
-
+    
     @unsafe
     fun drop(b : Box[T]) -> () = do 
         let p = Box.into_raw(b);

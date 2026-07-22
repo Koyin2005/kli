@@ -1,7 +1,4 @@
 
-fun print_string(value : string) -> () = do in r
-    print(imm[r] value)
-end
 
 fun print_int(value : int) -> () = do in r
     print(value)
