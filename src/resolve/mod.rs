@@ -402,9 +402,9 @@ impl<'info> Resolve<'info> {
             ),
             ast::PatternKind::Int(lit) => res::PatternKind::Int(self.resolve_int_lit(loc, lit)),
             ast::PatternKind::Bool(value) => res::PatternKind::Bool(value),
-            ast::PatternKind::Binding(borrow, mutable, name) => {
+            ast::PatternKind::Binding(mutable, name) => {
                 let var = self.declare_var(name.symbol);
-                res::PatternKind::Binding(borrow, mutable, name, var)
+                res::PatternKind::Binding(None, mutable, name, var)
             }
             ast::PatternKind::Record(fields) => {
                 let fields = fields

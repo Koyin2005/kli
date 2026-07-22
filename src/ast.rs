@@ -106,7 +106,7 @@ pub enum NumberKind {
 #[derive(Debug)]
 pub enum PatternKind {
     Bool(bool),
-    Binding(Option<Mutable>, Mutable, Ident),
+    Binding(Mutable, Ident),
     Ref(Box<Pattern>),
     Case(Ident, Option<Box<Pattern>>),
     Int(IntLit),
