@@ -391,6 +391,7 @@ pub struct Method {
 #[derive(Debug)]
 pub struct TypeImpl {
     pub id: NodeId,
+    pub loc: SrcLoc,
     pub methods: Vec<Method>,
 }
 #[derive(Debug)]

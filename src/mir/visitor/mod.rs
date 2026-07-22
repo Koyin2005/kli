@@ -1,9 +1,6 @@
-use crate::{
-    mir::{
-        BasicBlock, BasicBlockId, Body, Constant, CopyNonOverlapping, DropInPlace, Local, Location,
-        Operand, Place, PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind, Terminator,
-        TerminatorKind,
-    },
+use crate::mir::{
+    BasicBlock, BasicBlockId, Body, Constant, CopyNonOverlapping, DropInPlace, Local, Location,
+    Operand, Place, PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
 };
 pub enum PlaceCtxt {
     Read,

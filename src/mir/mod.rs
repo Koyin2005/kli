@@ -38,7 +38,7 @@ impl PlaceProjection {
                 .into_pointer_type(ctxt)
                 .ok()
                 .and_then(|(pointer, ty)| match pointer {
-                    PointerType::Raw  => Some(ty),
+                    PointerType::Raw => Some(ty),
                     _ => None,
                 })
                 .expect("should be a pointer type"),

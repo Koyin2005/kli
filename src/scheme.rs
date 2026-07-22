@@ -26,7 +26,7 @@ impl<T: TypeMappable> Scheme<T> {
                 Ok(ty)
             }
             fn map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
-                    return self.super_map_region(region);
+                return self.super_map_region(region);
             }
         }
         let Ok(value) = self.value.apply_map(&mut Binder(args));

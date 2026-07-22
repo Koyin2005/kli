@@ -301,7 +301,7 @@ impl CtxtRef<'_> {
             Node::Field(field_def) => field_def.name.loc,
             Node::Case(case_def) => case_def.name.loc,
             Node::CaseField(case_field) => case_field.ty.loc,
-            Node::Impl(_) => todo!("impl span"),
+            Node::Impl(impl_) => impl_.span,
             Node::Method(method) => method.function.name.loc,
         }
     }

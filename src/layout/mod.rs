@@ -325,9 +325,7 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
                     .collect(),
             );
         }
-        Type::RawPointer(_)=> {
-            Layout::pointer(!matches!(ty, Type::RawPointer(_)))
-        }
+        Type::RawPointer(_) => Layout::pointer(!matches!(ty, Type::RawPointer(_))),
         Type::Array(ty, count) => {
             let mut element_layout = calculate_layout(ctxt, ty)?;
             element_layout.size = element_layout

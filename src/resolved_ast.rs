@@ -272,6 +272,7 @@ pub enum TypeDefKind {
 }
 #[derive(Debug)]
 pub struct TypeImpl {
+    pub span: SrcLoc,
     pub ty: DefId,
     pub methods: Vec<DefId>,
 }

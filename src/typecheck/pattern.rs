@@ -256,7 +256,7 @@ impl FunctionCtxt<'_> {
                     kind: typed_ast::PatternKind::Bool(value),
                 }
             }
-            PatternKind::Binding( mutable, ref ident, var) => {
+            PatternKind::Binding(mutable, ref ident, var) => {
                 let name = ident.symbol;
 
                 let var_ty = expected_type.clone();

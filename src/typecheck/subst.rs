@@ -50,8 +50,7 @@ impl<'a> TypeSubst<'a> {
         }
     }
     pub fn subst_region(&mut self, region: &mut Region) {
-        match *region {
-        }
+        match *region {}
     }
     pub fn subst_generic_args(&mut self, args: &mut [GenericArg]) {
         for arg in args {

@@ -933,9 +933,9 @@ impl Parser {
         })
     }
     fn parse_impl(&mut self) -> Result<Option<TypeImpl>, ParseError> {
-        if !self.matches_token(&TokenKind::Impl) {
+        let Some(Token { loc, kind: _ }) = self.match_token(&TokenKind::Impl) else {
             return Ok(None);
-        }
+        };
         let methods = self.delimited_by(&TokenKind::End, |this| {
             let annotations = this.parse_annotations()?;
             let function = this.parse_function()?;
@@ -950,6 +950,7 @@ impl Parser {
             ))
         })?;
         Ok(Some(TypeImpl {
+            loc,
             id: self.next_node_id(),
             methods,
         }))

@@ -891,6 +891,7 @@ impl<'info> Resolve<'info> {
             self.add_node(
                 def_id,
                 res::Node::Impl(Box::new(res::TypeImpl {
+                    span: impl_.loc,
                     ty: self.def_id_for(type_id),
                     methods,
                 })),

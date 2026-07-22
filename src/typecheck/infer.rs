@@ -177,7 +177,7 @@ struct Simplify<'a>(&'a TypeInfer);
 impl TypeMap for Simplify<'_> {
     type Error = std::convert::Infallible;
     fn map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
-            return self.super_map_region(region);
+        return self.super_map_region(region);
     }
     fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
         let Type::Infer(var) = ty else {
