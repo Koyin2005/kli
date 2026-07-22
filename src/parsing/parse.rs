@@ -2,12 +2,12 @@ use std::{iter::Peekable, vec::IntoIter};
 
 use crate::{
     ast::{
-        Annotation, AnnotationField, BinaryOp, BlockBody, BorrowExpr, CaseArm, CaseDef, CaseType,
+        Annotation, AnnotationField, BinaryOp, BlockBody, CaseArm, CaseDef, CaseType,
         Expr, ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, GenericParam,
         GenericParamKind, Generics, Import, ImportTree, ImportTreeTail, InstancePath, IntLit,
         IsResource, Item, ItemKind, Lambda, LetBinding, Method, Module, ModuleId, Mutable, NodeId,
         NumberKind, Param, Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField,
-        RecordType, Region, Stmt, StmtKind, Type, TypeDef, TypeDefKind, TypeImpl, TypeKind,
+        RecordType, Stmt, StmtKind, Type, TypeDef, TypeDefKind, TypeImpl, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::{Ident, Symbol},
