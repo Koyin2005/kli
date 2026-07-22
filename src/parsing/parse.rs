@@ -235,14 +235,6 @@ impl Parser {
                     kind: PatternKind::Int(lit),
                 })
             }
-            TokenKind::Ref => {
-                self.advance();
-                let pattern = self.parse_pattern()?;
-                Ok(Pattern {
-                    loc,
-                    kind: PatternKind::Ref(Box::new(pattern)),
-                })
-            }
             TokenKind::Ident(_) => self.parse_pattern_ident(loc, Mutable::Immutable),
             TokenKind::Mut => {
                 self.advance();

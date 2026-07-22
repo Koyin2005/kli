@@ -416,9 +416,6 @@ impl<'info> Resolve<'info> {
                     .collect();
                 res::PatternKind::Record(fields)
             }
-            ast::PatternKind::Ref(pattern) => {
-                res::PatternKind::Ref(Box::new(self.resolve_pattern(*pattern)))
-            }
             ast::PatternKind::Case(name, inner) => res::PatternKind::Case(
                 name,
                 inner.map(|inner| Box::new(self.resolve_pattern(*inner))),

@@ -160,7 +160,6 @@ pub enum IntegerLiteralKind {
 pub enum PatternKind {
     Int(IntegerLiteral),
     Bool(bool),
-    Ref(Box<Pattern>),
     Case(Ident, Option<Box<Pattern>>),
     Binding(Option<Mutable>, Mutable, Ident, VarId),
     Record(Box<[PatternField]>),

@@ -18,7 +18,6 @@ pub trait Visitor {
             &crate::resolved_ast::PatternKind::Binding(.., name, var) => {
                 self.visit_var_def(Var(name.symbol, var))
             }
-            crate::resolved_ast::PatternKind::Ref(pattern) => self.visit_pattern(pattern),
             crate::resolved_ast::PatternKind::Case(_, pattern) => {
                 if let Some(pattern) = pattern {
                     self.visit_pattern(pattern)

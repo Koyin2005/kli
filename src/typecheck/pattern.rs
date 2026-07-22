@@ -156,21 +156,6 @@ impl FunctionCtxt<'_> {
                     kind: typed_ast::PatternKind::Case(case_id, args, i, inner),
                 }
             }
-            PatternKind::Ref(ref inner) => {
-                let (mutable, region, ty) =
-                    if let Ok((mutable, region, ty)) = expected_type.as_reference_type() {
-                        (mutable, region, ty.clone())
-                    } else {
-                        root.expect_ty_error("reference", &expected_type, pattern.loc);
-                        unreachable!()
-                    };
-                let inner = self.check_pattern(inner, ty.clone(), Some((region, mutable)));
-                typed_ast::Pattern {
-                    ty: Type::reference(inner.ty.clone(), mutable, region),
-                    loc,
-                    kind: typed_ast::PatternKind::Ref(Box::new(inner)),
-                }
-            }
             PatternKind::Record(ref pat_fields) => {
                 let (ty, expected_fields) = match root.simplify_type(expected_type) {
                     Type::Record(fields) => (Type::Record(fields.clone()), Some(fields)),

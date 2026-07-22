@@ -107,7 +107,6 @@ pub enum NumberKind {
 pub enum PatternKind {
     Bool(bool),
     Binding(Mutable, Ident),
-    Ref(Box<Pattern>),
     Case(Ident, Option<Box<Pattern>>),
     Int(IntLit),
     Record(Vec<PatternField>),
