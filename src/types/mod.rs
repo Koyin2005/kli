@@ -18,7 +18,6 @@ pub mod lower;
 #[derive(Clone, Debug)]
 pub enum PointerType {
     Box,
-    Reference(Region, Mutable),
     Raw,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -348,7 +347,6 @@ impl Type {
                 let name = ctxt.expect_ident(id).symbol;
                 Self::Named(id, name, vec![GenericArg::Type(pointee)])
             }
-            PointerType::Reference(region, mutable) => pointee.reference(mutable, region),
             PointerType::Raw => Self::pointer(pointee),
         }
     }

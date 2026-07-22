@@ -38,7 +38,7 @@ impl FunctionCtxt<'_> {
                         .simplify_type(value.ty.clone())
                         .into_pointer_type(self.root().ctxt())
                     {
-                        Ok((PointerType::Raw | PointerType::Reference(..), ty)) => ty.clone(),
+                        Ok((PointerType::Raw, ty)) => ty.clone(),
                         Ok((p, ty)) => self.root().non_deref_error(
                             &Type::pointer_type(p, ty, self.root().ctxt()),
                             value.loc,
