@@ -140,15 +140,6 @@ pub enum ExprKind {
     MethodCall(Box<Expr>, Ident, Box<[Expr]>),
     TypeRelativePath(TypeName, Ident, Box<GenericArgs>),
 }
-#[derive(Debug, Clone, Copy)]
-pub enum RegionKind {
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Region {
-    pub loc: SrcLoc,
-    pub kind: RegionKind,
-}
 
 #[derive(Debug)]
 pub struct PatternField {

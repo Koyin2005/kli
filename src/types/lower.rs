@@ -20,11 +20,6 @@ impl<'a> Lower<'a> {
     pub fn new(ctxt: CtxtRef<'a>, id: DefId, infer: Option<&'a RefCell<TypeInfer>>) -> Self {
         Self { ctxt, id, infer }
     }
-
-    pub fn lower_region(&self, region: &res::Region) -> Region {
-        match region.kind {
-        }
-    }
     pub fn lower_types(
         &self,
         tys: &mut dyn Iterator<Item = &res::Type>,
