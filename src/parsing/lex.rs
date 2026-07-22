@@ -202,7 +202,6 @@ impl<'s> Lexer<'s> {
                 "end" => TokenKind::End,
                 "of" => TokenKind::Of,
                 "do" => TokenKind::Do,
-                "region" => TokenKind::Region,
                 "type" => TokenKind::Type,
                 "while" => TokenKind::While,
                 "with" => TokenKind::With,
