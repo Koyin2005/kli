@@ -12,45 +12,49 @@ import builtins.(
 type Box[T] = {
     inner : ptr[T]
 }
+impl 
 
-fun box_into_raw[T](b : Box[T]) -> ptr[T] = b.inner
+    fun into_raw(b : Box[T]) -> ptr[T] = b.inner
 
-@unsafe
-fun box_from_raw[T](p : ptr[T]) -> Box[T] = Box { inner = p}
+    @unsafe
+    fun from_raw(p : ptr[T]) -> Box[T] = Box { inner = p}
 
-fun alloc[T](value : T) -> Box[T] = do
-    let ptr = allocate[T](1u);
-    unsafe 
-        ptr_write(ptr,value);
-        box_from_raw(ptr)
+    fun alloc(value : T) -> Box[T] = do
+        let ptr = allocate[T](1u);
+        unsafe 
+            ptr_write(ptr,value);
+            Box.from_raw(ptr)
+        end
     end
-end
 
-fun dealloc[T](b : Box[T]) -> T = do 
-    let ptr = box_into_raw(b);
-    unsafe 
-        let value = ptr_read(ptr);
-        deallocate(ptr);
-        value
+    fun dealloc(b : Box[T]) -> T = do 
+        let ptr = Box.into_raw(b);
+        unsafe 
+            let value = ptr_read(ptr);
+            deallocate(ptr);
+            value
+        end
     end
-end
 
-fun deref[region r,T](x : imm[r] Box[T]) -> imm[r] T = do
-    let inner_ptr : ptr[T] = x^.inner;
-    unsafe refs.ref_from_raw(inner_ptr) end
-end
-
-fun deref_mut[region r,T](x : mut[r] Box[T]) -> mut[r] T = do
-    unsafe 
+    fun deref[region r,T](x : imm[r] Box[T]) -> imm[r] T = do
         let inner_ptr : ptr[T] = x^.inner;
-        refs.ref_from_raw_mut(inner_ptr)
+        unsafe refs.ref_from_raw(inner_ptr) end
     end
-end
 
-fun drop[T](b : Box[T]) -> () = do 
-    let p = box_into_raw(b);
-    unsafe 
-        drop_in_place(p);
-        deallocate(p)
+    fun deref_mut[region r,T](x : mut[r] Box[T]) -> mut[r] T = do
+        unsafe 
+            let inner_ptr : ptr[T] = x^.inner;
+            refs.ref_from_raw_mut(inner_ptr)
+        end
     end
+
+    @unsafe
+    fun drop(b : Box[T]) -> () = do 
+        let p = Box.into_raw(b);
+        unsafe 
+            drop_in_place(p);
+            deallocate(p)
+        end
+    end
+
 end
