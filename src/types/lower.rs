@@ -61,10 +61,7 @@ impl<'a> Lower<'a> {
                         (res::GenericArg::Type(ty), GenericKind::Type) => {
                             GenericArg::Type(self.lower_type(ty))
                         }
-                        (res::GenericArg::Region(region), GenericKind::Region) => {
-                            GenericArg::Region(self.lower_region(region))
-                        }
-                        (_, kind @ (GenericKind::Region | GenericKind::Type)) => {
+                        (_, kind @ GenericKind::Region) => {
                             self.ctxt
                                 .diag()
                                 .add_diagnostic("Generic kind mismatch", arg.loc());
@@ -75,9 +72,6 @@ impl<'a> Lower<'a> {
                         }
                     },
                     (Some(arg), None) => match arg {
-                        res::GenericArg::Region(region) => {
-                            GenericArg::Region(self.lower_region(region))
-                        }
                         res::GenericArg::Type(ty) => GenericArg::Type(self.lower_type(ty)),
                     },
                     (None, Some(kind)) => match kind {

@@ -156,12 +156,10 @@ pub trait Visitor {
     fn visit_generic_args(&mut self, args: &GenericArgs) {
         for arg in args.args.iter() {
             match arg {
-                GenericArg::Region(region) => self.visit_region(*region),
                 GenericArg::Type(ty) => self.visit_type(ty),
             }
         }
     }
-    fn visit_region(&mut self, _: Region) {}
     fn visit_block(&mut self, block_body: &BlockBody, region: Option<LocalRegionId>) {
         self.super_visit_block(block_body, region);
     }

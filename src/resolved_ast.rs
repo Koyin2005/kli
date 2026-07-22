@@ -73,13 +73,11 @@ pub struct FieldInit {
 #[derive(Debug)]
 pub enum GenericArg {
     Type(Type),
-    Region(Region),
 }
 impl GenericArg {
     pub fn loc(&self) -> SrcLoc {
         match self {
             Self::Type(ty) => ty.loc,
-            Self::Region(region) => region.loc,
         }
     }
 }
