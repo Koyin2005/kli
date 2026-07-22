@@ -148,18 +148,6 @@ impl<'a> Lower<'a> {
                 let args = self.lower_generic_args(id, loc, args);
                 Type::Named(id, self.ctxt.expect_ident(id).symbol, args)
             }
-            TypeName::Pair => {
-                let args = self.lower_generic_args_with(Generics::default(), 2, loc, args);
-                let into_type_arg = move |arg: GenericArg| -> Type {
-                    match arg {
-                        GenericArg::Type(ty) => ty,
-                    }
-                };
-                let mut args = args.into_iter();
-                let first = args.next().map_or(Type::Unknown, into_type_arg);
-                let second = args.next().map_or(Type::Unknown, into_type_arg);
-                Type::pair(first, second)
-            }
         }
     }
     pub fn lower_type(&self, ty: &res::Type) -> Type {

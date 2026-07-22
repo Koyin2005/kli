@@ -226,7 +226,6 @@ pub enum TypeName {
     ArrayList,
     Param(Symbol, usize),
     Never,
-    Pair,
 }
 #[derive(Debug)]
 pub enum TypeKind {

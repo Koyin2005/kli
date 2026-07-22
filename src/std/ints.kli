@@ -2,7 +2,7 @@ import std.optional.Option
 
 fun wrapping_add(x : int, y : int) -> int = builtins.wrapping_add(x,y)
 
-fun overflowing_add(x : int, y : int) -> Pair[bool,int] = builtins.overflowing_add(x,y)
+fun overflowing_add(x : int, y : int) -> (bool,int) = builtins.overflowing_add(x,y)
 
 fun checked_add(x : int, y : int) -> Option[int] = do 
     case builtins.overflowing_add(x,y) of 
