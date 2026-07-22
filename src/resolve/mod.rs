@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::{BorrowExpr, GenericArgs, ModuleId, NodeId, Path, StmtKind};
+use crate::ast::{GenericArgs, ModuleId, NodeId, Path, StmtKind};
 use crate::builtins::{Builtin, Builtins};
 use crate::collect::{GlobalContext, build_global_context};
 use crate::config::Config;
@@ -180,10 +180,6 @@ impl<'info> Resolve<'info> {
         self.diag
             .add_diagnostic(format!("'{}' not in scope", path), loc);
     }
-    fn not_in_scope_error(&mut self, name: Symbol, loc: SrcLoc) {
-        self.diag
-            .add_diagnostic(format!("'{}' not in scope", name), loc);
-    }
     fn cannot_use_as_error(&mut self, name: Symbol, expected: &str, loc: SrcLoc) {
         self.diag
             .add_diagnostic(format!("Cannot use '{}' as {}", name, expected), loc);
@@ -202,39 +198,6 @@ impl<'info> Resolve<'info> {
         self.generic_kinds
             .get(&name.symbol)
             .is_some_and(|kind| *kind == res::GenericKind::Region)
-    }
-    fn resolve_region_param(&mut self, name: Ident, index: usize) -> res::RegionKind {
-        if self.generic_kinds[&name.symbol] != res::GenericKind::Region {
-            self.diag.add_diagnostic(
-                format!("Generic kind mismatch for '{}'", name.symbol),
-                name.loc,
-            );
-        }
-        res::RegionKind::Param(name.symbol, index)
-    }
-    fn resolve_region(&mut self, region: ast::Region) -> res::Region {
-        match region {
-            ast::Region::Named(name) => res::Region {
-                loc: name.loc,
-                kind: match self.resolve_name(name.symbol) {
-                    None => {
-                        self.not_in_scope_error(name.symbol, name.loc);
-                        res::RegionKind::Unknown
-                    }
-                    Some(Res::LocalRegion(region)) => res::RegionKind::Local(name.symbol, region),
-                    Some(Res::Param(index)) => self.resolve_region_param(name, index),
-                    Some(Res::Unknown) => res::RegionKind::Unknown,
-                    Some(Res::TypeAlias(_) | Res::Def(_) | Res::Var(_) | Res::VariantCase(..)) => {
-                        self.cannot_use_as_error(name.symbol, "region", name.loc);
-                        res::RegionKind::Unknown
-                    }
-                },
-            },
-            ast::Region::Static(loc) => res::Region {
-                loc,
-                kind: res::RegionKind::Static,
-            },
-        }
     }
     fn error_on_generic_args(
         &mut self,
@@ -306,7 +269,6 @@ impl<'info> Resolve<'info> {
                     (
                         param.name.symbol,
                         match param.kind {
-                            ast::GenericParamKind::Region => res::GenericKind::Region,
                             ast::GenericParamKind::Type => res::GenericKind::Type,
                         },
                     )
@@ -316,7 +278,6 @@ impl<'info> Resolve<'info> {
                 .params
                 .into_iter()
                 .map(|param| match param.kind {
-                    ast::GenericParamKind::Region => res::GenericKind::Region,
                     ast::GenericParamKind::Type => res::GenericKind::Type,
                 })
                 .collect();
@@ -405,14 +366,6 @@ impl<'info> Resolve<'info> {
                 params: params.into_iter().map(|ty| self.resolve_type(ty)).collect(),
                 return_type: Box::new(self.resolve_type(*return_type)),
             })),
-            ast::TypeKind::Imm(region, ty) => res::TypeKind::Imm(
-                Box::new(self.resolve_region(region)),
-                Box::new(self.resolve_type(*ty)),
-            ),
-            ast::TypeKind::Mut(region, ty) => res::TypeKind::Mut(
-                Box::new(self.resolve_region(region)),
-                Box::new(self.resolve_type(*ty)),
-            ),
             ast::TypeKind::Named(path) => match self.resolve_type_path(&path.path, ty.loc) {
                 None => {
                     self.resolve_generic_args(path.generic_args);
@@ -824,20 +777,6 @@ impl<'info> Resolve<'info> {
                 let place = self.resolve_expr(*place);
                 let value = self.resolve_expr(*value);
                 res::ExprKind::Assign(Box::new(place), Box::new(value))
-            }
-            ast::ExprKind::Borrow(borrow_expr) => {
-                let BorrowExpr {
-                    mutable,
-                    expr,
-                    region,
-                } = *borrow_expr;
-                let place = self.resolve_expr(expr);
-                let region = self.resolve_region(region);
-                res::ExprKind::Borrow(Box::new(res::BorrowExpr {
-                    mutable,
-                    place,
-                    region,
-                }))
             }
             ast::ExprKind::Case(matched, arms) => {
                 let matched = self.resolve_expr(*matched);

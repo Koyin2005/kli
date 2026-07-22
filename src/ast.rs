@@ -213,12 +213,6 @@ pub struct RecordExpr {
     pub fields: Vec<FieldInit>,
 }
 #[derive(Debug)]
-pub struct BorrowExpr {
-    pub mutable: Mutable,
-    pub expr: Expr,
-    pub region: Region,
-}
-#[derive(Debug)]
 pub struct InstancePath {
     pub path: Path,
     pub generic_args: Option<GenericArgs>,
@@ -232,7 +226,6 @@ pub enum ExprKind {
     Print(Option<Box<Expr>>),
     Panic,
     Call(Box<Expr>, Vec<Expr>),
-    Borrow(Box<BorrowExpr>),
     Case(Box<Expr>, Vec<CaseArm>),
     While(Box<Expr>, Box<Expr>),
     For(Box<Pattern>, Box<Expr>, Box<Expr>),
@@ -260,7 +253,6 @@ pub struct GenericParam {
 }
 #[derive(Debug, Clone, Copy)]
 pub enum GenericParamKind {
-    Region,
     Type,
 }
 #[derive(Debug, Clone)]
@@ -300,8 +292,6 @@ pub enum TypeKind {
     Record(RecordType),
     Named(InstancePath),
     Function(FunctionType),
-    Imm(Region, Box<Type>),
-    Mut(Region, Box<Type>),
     Tuple(Vec<Type>),
 }
 #[derive(Debug)]

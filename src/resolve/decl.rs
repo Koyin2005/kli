@@ -47,7 +47,6 @@ impl DeclareInBody<'_, '_> {
                     self.declare_in_exprs(field)
                 }
             }
-            ast::ExprKind::Borrow(borrow_expr) => self.declare_in_exprs(&borrow_expr.expr),
             ast::ExprKind::Case(expr, case_arms) => {
                 self.declare_in_exprs(expr);
                 for arm in case_arms.iter() {
