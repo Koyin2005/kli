@@ -18,18 +18,15 @@ pub struct RegionVarInfo {
 #[derive(Default)]
 pub struct TypeInfer {
     type_vars: Vec<TypeVarInfo>,
-    region_vars: Vec<RegionVarInfo>,
 }
 impl TypeInfer {
     pub fn new() -> Self {
         Self {
             type_vars: Vec::new(),
-            region_vars: Vec::new(),
         }
     }
     pub fn clear(&mut self) {
         self.type_vars.clear();
-        self.region_vars.clear();
     }
     pub fn fresh_ty(&mut self, loc: SrcLoc) -> usize {
         let next_var = self.type_vars.len();
@@ -40,11 +37,6 @@ impl TypeInfer {
         self.type_vars
             .iter()
             .filter_map(|var| var.ty.is_none().then_some(var.loc))
-            .chain(
-                self.region_vars
-                    .iter()
-                    .filter_map(|var| var.region.is_none().then_some(var.loc)),
-            )
             .collect()
     }
     pub fn simplify_region(&self, region: Region) -> Region {
