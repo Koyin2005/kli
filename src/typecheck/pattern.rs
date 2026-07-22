@@ -256,37 +256,15 @@ impl FunctionCtxt<'_> {
                     kind: typed_ast::PatternKind::Bool(value),
                 }
             }
-            PatternKind::Binding(borrow, mutable, ref ident, var) => {
+            PatternKind::Binding( mutable, ref ident, var) => {
                 let name = ident.symbol;
 
-                let (borrow, var_ty) = match (borrow, binding_mode) {
-                    (None, _) => (None, expected_type.clone()),
-                    (Some(_), None) => {
-                        root.ctxt().diag().add_diagnostic(
-                            format!("Cannot create borrow binding '{}'", ident.symbol),
-                            ident.loc,
-                        );
-                        (None, expected_type.clone())
-                    }
-                    (Some(borrow), Some((region, mutable))) => {
-                        if !mutable.usable_as(borrow) {
-                            root.ctxt().diag().add_diagnostic(
-                                format!("Cannot create borrow binding '{}'", ident.symbol),
-                                ident.loc,
-                            );
-                        }
-                        (
-                            Some((borrow, region)),
-                            Type::reference(expected_type.clone(), borrow, region),
-                        )
-                    }
-                };
+                let var_ty = expected_type.clone();
                 root.declare_var(var, var_ty.clone(), name);
                 typed_ast::Pattern {
                     ty: expected_type,
                     loc,
                     kind: typed_ast::PatternKind::Binding(
-                        borrow,
                         mutable,
                         Var(name, var),
                         Box::new(var_ty),

@@ -8,7 +8,7 @@ use crate::{
     ident::Ident,
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
-    types::{CaseId, GenericArgs, GenericKind, Region, Type},
+    types::{CaseId, GenericArgs, GenericKind, Type},
 };
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ pub enum PatternKind {
     Int(u64),
     Bool(bool),
     Case(DefId, GenericArgs, CaseId, Option<Box<Pattern>>),
-    Binding(Option<(Mutable, Region)>, Mutable, Var, Box<Type>),
+    Binding(Mutable, Var, Box<Type>),
     Record(Vec<PatternField>),
 }
 #[derive(Debug)]

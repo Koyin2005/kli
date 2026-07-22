@@ -128,7 +128,7 @@ impl Builder<'_> {
     }
     fn assign_to_pattern(&mut self, pattern: &Pattern, value: &Expr) {
         match &pattern.kind {
-            &typed_ast::PatternKind::Binding(None, _, var, ref ty) => {
+            &typed_ast::PatternKind::Binding(_, var, ref ty) => {
                 let place = Place::local(self.new_var(var, (**ty).clone()));
                 self.expr_into_dest(place, value);
             }
@@ -140,12 +140,8 @@ impl Builder<'_> {
     }
     pub(super) fn assign_place_to_pattern(&mut self, pattern: &Pattern, place: Place) {
         match &pattern.kind {
-            &typed_ast::PatternKind::Binding(borrowed, _, var, ref ty) => {
+            &typed_ast::PatternKind::Binding(_, var, ref ty) => {
                 let var_place = Place::local(self.new_var(var, (**ty).clone()));
-                if let Some((mutable, region)) = borrowed {
-                    self.assign(pattern.loc, var_place, Rvalue::Ref(mutable, region, place));
-                    return;
-                }
                 self.assign(pattern.loc, var_place, Rvalue::Use(Operand::Load(place)));
             }
             typed_ast::PatternKind::Bool(_)

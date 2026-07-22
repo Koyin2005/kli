@@ -288,7 +288,6 @@ impl Visit for WellFormed<'_> {
                     ),
                 }
             }
-            super::Rvalue::Ref(..) => (),
             super::Rvalue::Allocate { .. } => (),
             super::Rvalue::Cast(cast_kind, operand) => match cast_kind {
                 CastKind::PointerCast(pointer_cast) => {

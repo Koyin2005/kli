@@ -404,7 +404,7 @@ impl<'info> Resolve<'info> {
             ast::PatternKind::Bool(value) => res::PatternKind::Bool(value),
             ast::PatternKind::Binding(mutable, name) => {
                 let var = self.declare_var(name.symbol);
-                res::PatternKind::Binding(None, mutable, name, var)
+                res::PatternKind::Binding(mutable, name, var)
             }
             ast::PatternKind::Record(fields) => {
                 let fields = fields

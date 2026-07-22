@@ -2,7 +2,6 @@ use std::{collections::HashMap, fmt::Display};
 
 use crate::{
     Symbol,
-    ast::Mutable,
     collect::CtxtRef,
     def_ids::DefId,
     define_id,
@@ -11,7 +10,7 @@ use crate::{
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
     typed_ast::FieldId,
-    types::{CaseId, FieldName, GenericArg, GenericArgs, IntegerKind, PointerType, Region, Type},
+    types::{CaseId, FieldName, GenericArg, GenericArgs, IntegerKind, PointerType, Type},
 };
 pub mod basic_blocks;
 pub mod build;
@@ -260,7 +259,6 @@ pub enum Rvalue {
     Use(Operand),
     Call(Operand, Vec<Operand>),
     Binary(BinaryOp, Box<(Operand, Operand)>),
-    Ref(Mutable, Region, Place),
     RawPtrTo(Place),
     Allocate { ty: Type, count: Operand },
     Cast(CastKind, Operand),
@@ -275,7 +273,6 @@ impl Rvalue {
             | Self::Binary(..)
             | Self::Cast(..)
             | Self::Use(_)
-            | Self::Ref(..)
             | Self::RawPtrTo(_)
             | Self::Len(_)
             | Self::DanglingPtr(_)
@@ -291,9 +288,6 @@ impl Rvalue {
         match self {
             Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),
             Rvalue::Len(_) => Type::UINT,
-            &Rvalue::Ref(mutable, region, ref place) => place
-                .type_of(ctxt, locals, return_type)
-                .reference(mutable, region),
             Rvalue::Call(operand, _) => {
                 let Type::Function(function) = operand.type_of(ctxt, locals, return_type) else {
                     unreachable!("Should be a function type")

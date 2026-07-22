@@ -198,10 +198,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_with_coma_sep(args, |this, arg| this.write_operand(arg))?;
                 write!(self.output, ")")?;
             }
-            Rvalue::Ref(mutable, region, place) => {
-                write!(self.output, "ref {} [{}]", mutable, region)?;
-                self.write_place(place)?;
-            }
             Rvalue::Cast(cast, pointer) => {
                 write!(self.output, "cast(")?;
                 match cast {

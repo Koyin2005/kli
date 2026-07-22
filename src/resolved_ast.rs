@@ -161,7 +161,7 @@ pub enum PatternKind {
     Int(IntegerLiteral),
     Bool(bool),
     Case(Ident, Option<Box<Pattern>>),
-    Binding(Option<Mutable>, Mutable, Ident, VarId),
+    Binding(Mutable, Ident, VarId),
     Record(Box<[PatternField]>),
     Tuple(Box<[Pattern]>),
     Unit,
