@@ -190,9 +190,6 @@ impl Parser {
             _ => None,
         }
     }
-    fn parse_region(&mut self) -> Result<Region, ParseError> {
-        Err(self.expect_error("not regions"))
-    }
     fn parse_pattern_ident(
         &mut self,
         borrow: Option<Mutable>,
@@ -538,26 +535,6 @@ impl Parser {
                     kind: ExprKind::Unsafe(Box::new(expr)),
                 })
             }
-            TokenKind::Mut | TokenKind::Imm => {
-                let mutable = if self.check_token(&TokenKind::Mut) {
-                    Mutable::Mutable
-                } else {
-                    Mutable::Immutable
-                };
-                self.advance();
-                self.expect(&TokenKind::LeftBracket)?;
-                let region = self.parse_region()?;
-                self.expect(&TokenKind::RightBracket)?;
-                let expr = self.parse_expr()?;
-                Ok(Expr {
-                    loc,
-                    kind: ExprKind::Borrow(Box::new(BorrowExpr {
-                        mutable,
-                        expr,
-                        region,
-                    })),
-                })
-            }
             TokenKind::AddrOf => {
                 self.advance();
                 let expr = self.parse_paren_expr(loc)?;
@@ -811,28 +788,6 @@ impl Parser {
     fn parse_type(&mut self) -> Result<Type, ParseError> {
         let loc = self.current_loc();
         match self.peek_token().kind {
-            TokenKind::Mut => {
-                self.advance();
-                let _ = self.expect(&TokenKind::LeftBracket);
-                let region = self.parse_region()?;
-                let _ = self.expect(&TokenKind::RightBracket);
-                let ty = self.parse_type()?;
-                Ok(Type {
-                    loc,
-                    kind: TypeKind::Mut(region, Box::new(ty)),
-                })
-            }
-            TokenKind::Imm => {
-                self.advance();
-                let _ = self.expect(&TokenKind::LeftBracket);
-                let region = self.parse_region()?;
-                let _ = self.expect(&TokenKind::RightBracket);
-                let ty = self.parse_type()?;
-                Ok(Type {
-                    loc,
-                    kind: TypeKind::Imm(region, Box::new(ty)),
-                })
-            }
             TokenKind::Int => {
                 self.advance();
                 Ok(Type {
