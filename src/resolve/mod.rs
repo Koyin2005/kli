@@ -195,9 +195,7 @@ impl<'info> Resolve<'info> {
             args: args
                 .args
                 .into_iter()
-                .map(|arg| match arg.ty.kind {
-                    _ => res::GenericArg::Type(self.resolve_type(arg.ty)),
-                })
+                .map(|arg| res::GenericArg::Type(self.resolve_type(arg.ty)))
                 .collect(),
         }
     }
@@ -759,10 +757,12 @@ impl<'info> Resolve<'info> {
                 method,
                 args.into_iter().map(|arg| self.resolve_expr(arg)).collect(),
             ),
-            ast::ExprKind::Array(fields) => {
-                _ = fields;
-                todo!("array literal lowering")
-            }
+            ast::ExprKind::Array(fields) => res::ExprKind::Array(
+                fields
+                    .into_iter()
+                    .map(|field| self.resolve_expr(field))
+                    .collect(),
+            ),
         };
         res::Expr { loc, kind }
     }

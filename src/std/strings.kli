@@ -4,7 +4,3 @@ type String = {
     bytes : ptr[byte],
     len : uint
 }
-impl 
-
-
-end

@@ -246,7 +246,8 @@ impl Builder<'_> {
             | ExprKind::AddressOf(..)
             | ExprKind::NamedRecord(..)
             | ExprKind::While(..)
-            | ExprKind::Tuple(..) => {
+            | ExprKind::Tuple(..)
+            | ExprKind::Array(..) => {
                 let rvalue = self.build_rvalue(expr);
                 self.assign(expr.loc, dest, rvalue);
             }
@@ -618,6 +619,45 @@ impl Builder<'_> {
             }
             &ExprKind::BuiltinCall(builtin, _, ref args) => {
                 self.builtin_call(expr.loc, &expr.ty, builtin, args).into()
+            }
+            ExprKind::Array(fields) => {
+                let Type::Named(id, _, generic_args) = expr.ty.clone() else {
+                    unreachable!()
+                };
+                let ty = generic_args[0].expect_ty().clone();
+                let len: u64 = fields.len().try_into().unwrap();
+                let inline_array_ty = Type::Array(Box::new(ty.clone()), len);
+                let ptr = self.assign_to_temp(
+                    expr.loc,
+                    Type::pointer(ty.clone()),
+                    Rvalue::Allocate {
+                        ty: ty.clone(),
+                        count: Operand::Constant(Constant::uint(len)),
+                    },
+                );
+                {
+                    let fields = fields.iter().map(|field| self.operand(field)).collect();
+                    let ptr = self.assign_to_temp(
+                        expr.loc,
+                        Type::pointer(inline_array_ty.clone()),
+                        Rvalue::Cast(
+                            mir::CastKind::PointerCast(PointerCast::RawToRaw(inline_array_ty)),
+                            Operand::Load(Place::local(ptr)),
+                        ),
+                    );
+                    self.assign(
+                        expr.loc,
+                        Place::local(ptr).with_deref(),
+                        Rvalue::Aggregate(AggregateKind::Array(ty, len), fields),
+                    );
+                }
+                Rvalue::Aggregate(
+                    AggregateKind::NamedRecord(id, generic_args),
+                    IndexVec::from_vec(vec![
+                        Operand::Load(Place::local(ptr)),
+                        Operand::Constant(Constant::uint(len)),
+                    ]),
+                )
             }
         }
     }

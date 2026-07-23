@@ -139,7 +139,7 @@ pub trait Visitor {
                     self.visit_expr(&field.value);
                 }
             }
-            ExprKind::Tuple(fields) => {
+            ExprKind::Tuple(fields) | ExprKind::Array(fields) => {
                 for field in fields {
                     self.visit_expr(field);
                 }

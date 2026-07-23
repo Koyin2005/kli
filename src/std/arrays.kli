@@ -6,7 +6,7 @@ fun index_out_bounds() -> never =
         panic
     end
 
-@lang_item(array)
+@lang_item("array")
 @opaque
 type Array[T] = {
     ptr : ptr[T],
@@ -36,7 +36,7 @@ impl
     
     fun set(this : Array[T], index : uint, value : T) -> () = 
         case index < this.len of 
-        | true -> unsafe unsafe_set(this,index,value)
+        | true -> unsafe Array.unsafe_set(this,index,value) end
         | false -> index_out_bounds()
         end
 

@@ -95,7 +95,8 @@ impl Builder<'_> {
             | ExprKind::AddressOf(..)
             | ExprKind::NamedRecord(..)
             | ExprKind::Logic(..)
-            | ExprKind::Tuple(..) => {
+            | ExprKind::Tuple(..)
+            | ExprKind::Array(..) => {
                 self.expr_into_temp(expr);
             }
         }

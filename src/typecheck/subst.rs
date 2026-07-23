@@ -191,7 +191,7 @@ impl<'a> TypeSubst<'a> {
                     self.subst_expr(&mut field.value);
                 }
             }
-            ExprKind::Tuple(fields) => {
+            ExprKind::Tuple(fields) | ExprKind::Array(fields) => {
                 for field in fields {
                     self.subst_expr(field);
                 }

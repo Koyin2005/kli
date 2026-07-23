@@ -5,13 +5,20 @@ use crate::{
     collect::TypeDefKind,
     def_ids::DefId,
     index_vec::IndexVec,
+    lang_items::LangItem,
     resolved_ast::{
         self, BlockBody, Expr, ExprKind, FieldInit, FunctionDefId, Lambda, Pattern, Var,
     },
     src_loc::SrcLoc,
-    typecheck::root::{FunctionCtxt, TypeCheck},
+    typecheck::{
+        coercion::Coercion,
+        root::{FunctionCtxt, TypeCheck},
+    },
     typed_ast::{self, Capture, FieldId, RecordFieldInit},
-    types::{FieldName, FunctionSig, FunctionType, GenericArgs, PointerType, RecordField, Type},
+    types::{
+        FieldName, FunctionSig, FunctionType, GenericArg, GenericArgs, PointerType, RecordField,
+        Type,
+    },
 };
 
 impl FunctionCtxt<'_> {
@@ -559,19 +566,6 @@ impl FunctionCtxt<'_> {
         }
         expr
     }
-    pub(super) fn combine_expr_tys(
-        &self,
-        exprs: impl Iterator<Item = typed_ast::Expr>,
-        combined_ty: Type,
-    ) -> impl Iterator<Item = typed_ast::Expr> {
-        exprs.map(move |expr| {
-            let Ok(coercion) = self.unify_or_coerce(expr.loc, combined_ty.clone(), expr.ty.clone())
-            else {
-                return expr;
-            };
-            self.apply_coercion(coercion, expr)
-        })
-    }
     pub(super) fn check_expr_kind(
         &self,
         expr: &Expr,
@@ -736,16 +730,13 @@ impl FunctionCtxt<'_> {
             ExprKind::Case(matched, case_arms) => {
                 let matched = self.check_expr(matched, None);
                 let mut patterns = Vec::with_capacity(case_arms.len());
-                let mut bodies = Vec::with_capacity(case_arms.len());
+                let mut coercion = Coercion::new(expected_ty.clone(), self);
                 for arm in case_arms {
                     patterns.push(self.check_pattern(&arm.pattern, matched.ty.clone()));
-                    bodies.push(self.check_expr_coerces_to(&arm.body, expected_ty.clone()));
+                    coercion.check_expr(&arm.body);
                 }
-                let combined_ty = self.merge_ty(bodies.iter().map(|body| body.ty.clone()));
+                let (combined_ty, bodies) = coercion.finish();
                 let ty = if let Some(combined_ty) = combined_ty {
-                    bodies = self
-                        .combine_expr_tys(bodies.into_iter(), combined_ty.clone())
-                        .collect();
                     combined_ty
                 } else if patterns.is_empty() {
                     Type::Never
@@ -919,6 +910,40 @@ impl FunctionCtxt<'_> {
                 make_expr(
                     Type::new_function(sig.params, sig.return_type),
                     typed_ast::ExprKind::Function(id, args),
+                    loc,
+                )
+            }
+            ExprKind::Array(fields) => {
+                let array_id = self.ctxt().lang_items().get(LangItem::Array);
+                let element_ty = if let Some(Type::Named(ty_id, _, ref args)) = expected_ty
+                    && let Some(array_id) = array_id
+                    && ty_id == array_id
+                {
+                    args.first().map(|arg| arg.expect_ty())
+                } else {
+                    None
+                };
+                let mut coercion = Coercion::new(element_ty.cloned(), self);
+                for field in fields {
+                    coercion.check_expr(field);
+                }
+                let (combined_element_ty, elements) = coercion.finish();
+                let element_ty = combined_element_ty.unwrap_or_else(|| {
+                    self.root().type_annotations_needed(loc);
+                    Type::Unknown
+                });
+                let ty = if let Some(array_id) = array_id {
+                    let name = self.ctxt().expect_ident(array_id).symbol;
+                    Type::Named(array_id, name, vec![GenericArg::Type(element_ty)])
+                } else {
+                    self.ctxt()
+                        .diag()
+                        .add_diagnostic("Expected array type".to_string(), loc);
+                    Type::Unknown
+                };
+                make_expr(
+                    ty,
+                    typed_ast::ExprKind::Array(elements.into_boxed_slice()),
                     loc,
                 )
             }

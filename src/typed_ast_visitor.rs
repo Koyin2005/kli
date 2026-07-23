@@ -92,7 +92,7 @@ where
                 v.visit_expr(value);
             }
         }
-        ExprKind::BuiltinCall(_, _, exprs) | ExprKind::Tuple(exprs) => {
+        ExprKind::BuiltinCall(_, _, exprs) | ExprKind::Tuple(exprs) | ExprKind::Array(exprs) => {
             for expr in exprs {
                 v.visit_expr(expr);
             }
