@@ -44,7 +44,7 @@ impl TypeAlias {
             TypeAlias::Ptr => res::TypeName::Ptr,
             TypeAlias::Box => res::TypeName::Box,
             TypeAlias::Byte => res::TypeName::Byte,
-            TypeAlias::ArrayList => res::TypeName::ArrayList,
+            TypeAlias::ArrayList => res::TypeName::Array,
             TypeAlias::Never => res::TypeName::Never,
         }
     }

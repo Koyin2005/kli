@@ -138,10 +138,10 @@ impl<'a> Lower<'a> {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::Never
             }
-            TypeName::Box | TypeName::ArrayList | TypeName::String => {
+            TypeName::Box | TypeName::Array | TypeName::String => {
                 let id = self.ctxt.lang_items().expect(match name {
                     TypeName::String => LangItem::String,
-                    TypeName::ArrayList => LangItem::ArrayList,
+                    TypeName::Array => LangItem::Array,
                     TypeName::Box => LangItem::Box,
                     _ => unreachable!("checked above"),
                 });

@@ -1,0 +1,43 @@
+import std.optional.Option
+
+fun index_out_bounds() -> never = 
+    do
+        print("index out of bounds");
+        panic
+    end
+
+@lang_item(array)
+@opaque
+type Array[T] = {
+    ptr : ptr[T],
+    len : uint
+}
+impl
+    fun empty() -> Array[T] = []
+    @unsafe
+    fun unsafe_get(this : Array[T], index : uint) -> T = 
+        builtins.offset(this.ptr,std.ints.uint_to_int(index))^
+
+    fun get_checked(this : Array[T], index : uint) -> Option[T] = 
+        case index < this.len of 
+        | true -> Option.Some(unsafe Array.unsafe_get(this,index) end)
+        | false -> Option.None
+        end
+    
+    fun get(this : Array[T], index : uint) -> T = 
+        case index < this.len of
+        | true -> unsafe Array.unsafe_get(this,index) end
+        | false -> index_out_bounds()
+        end
+
+    @unsafe
+    fun unsafe_set(this : Array[T], index : uint, value : T) -> () = 
+        this.ptr^ = value
+    
+    fun set(this : Array[T], index : uint, value : T) -> () = 
+        case index < this.len of 
+        | true -> unsafe unsafe_set(this,index,value)
+        | false -> index_out_bounds()
+        end
+
+end

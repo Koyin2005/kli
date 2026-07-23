@@ -223,7 +223,7 @@ pub enum TypeName {
     Byte,
     UserDefined(DefId),
     Box,
-    ArrayList,
+    Array,
     Param(Symbol, usize),
     Never,
 }

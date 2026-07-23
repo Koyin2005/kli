@@ -2,20 +2,18 @@ use crate::{CtxtRef, def_ids::DefId, resolved_ast::AnnotationKind};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LangItem {
     Box,
-    ArrayList,
+    Array,
     String,
     Slice,
     StringSlice,
     StringFromSlice,
-    ArrayListFromRaw,
 }
 impl LangItem {
     pub const fn name(&self) -> &'static str {
         match self {
             Self::Box => "box",
-            Self::ArrayList => "array_list",
+            Self::Array => "array",
             Self::String => "string",
-            Self::ArrayListFromRaw => "array_list_from_raw",
             Self::Slice => "slice",
             Self::StringSlice => "string_slice",
             Self::StringFromSlice => "string_from_slice",
@@ -26,12 +24,11 @@ impl LangItem {
             .into_iter()
             .find(|&item| item.name() == name)
     }
-    pub const COUNT: usize = 7;
+    pub const COUNT: usize = 6;
     pub const ALL_LANG_ITEMS: [LangItem; Self::COUNT] = [
         LangItem::Box,
-        LangItem::ArrayList,
+        LangItem::Array,
         LangItem::String,
-        LangItem::ArrayListFromRaw,
         LangItem::Slice,
         LangItem::StringSlice,
         LangItem::StringFromSlice,
