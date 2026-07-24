@@ -9,13 +9,11 @@ fun index_out_bounds() -> never =
 @lang_item("array")
 @opaque
 type Array[T] = {
-    ptr : ptr[T],
-    len : uint
 }
 impl
     fun empty() -> Array[T] = []
 
-    fun len(this : Array[T]) -> uint;
+    fun len(this : Array[T]) -> uint = panic
 
     @unsafe
     fun unsafe_get(this : Array[T], index : uint) -> T = panic
@@ -25,20 +23,20 @@ impl
     fun addr_eq(this : Array[T], other : Array[T]) -> bool = panic
 
     fun get_checked(this : Array[T], index : uint) -> Option[T] = 
-        case index < this.len of 
+        case index < Array.len(this) of 
         | true -> Option.Some(unsafe Array.unsafe_get(this,index) end)
         | false -> Option.None
         end
     
     fun get(this : Array[T], index : uint) -> T = 
-        case index < this.len of
+        case index < Array.len(this) of
         | true -> unsafe Array.unsafe_get(this,index) end
         | false -> index_out_bounds()
         end
 
     
     fun set(this : Array[T], index : uint, value : T) -> () = 
-        case index < this.len of 
+        case index < Array.len(this) of 
         | true -> unsafe Array.unsafe_set(this,index,value) end
         | false -> index_out_bounds()
         end

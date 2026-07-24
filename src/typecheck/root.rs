@@ -479,16 +479,16 @@ impl<'ctxt> TypeCheck<'ctxt> {
                         node.loc(),
                     );
                 }
+            }
 
-                if let Some(function) = node.function()
-                    && function.body.is_none()
-                    && self.ctxt.builtins().builtin_for(id).is_none()
-                {
-                    self.ctxt.diag().add_diagnostic(
-                        format!("'{}' must have a body", function.name.symbol),
-                        function.name.loc,
-                    );
-                }
+            if let Some(function) = node.function()
+                && function.body.is_none()
+                && self.ctxt.builtins().builtin_for(id).is_none()
+            {
+                self.ctxt.diag().add_diagnostic(
+                    format!("'{}' must have a body", function.name.symbol),
+                    function.name.loc,
+                );
             }
         }
     }

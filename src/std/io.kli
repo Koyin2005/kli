@@ -4,4 +4,4 @@ fun print_int(value : int) -> () = do
     print(value)
 end
 
-fun read_line() -> string;
+fun read_line() -> string = panic
