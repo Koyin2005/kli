@@ -122,15 +122,6 @@ impl<'a> Lower<'a> {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::Char
             }
-            TypeName::Ptr => {
-                let args = self.lower_generic_args_with(Generics::default(), 1, loc, args);
-                let ty = if let Ok([GenericArg(ty)]) = <[_; _]>::try_from(args) {
-                    ty
-                } else {
-                    Type::Unknown
-                };
-                Type::pointer(ty)
-            }
             TypeName::Never => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::Never

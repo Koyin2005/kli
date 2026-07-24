@@ -218,7 +218,6 @@ pub enum TypeName {
     Bool,
     String,
     Char,
-    Ptr,
     Byte,
     UserDefined(DefId),
     Box,

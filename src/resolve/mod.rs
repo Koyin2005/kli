@@ -32,7 +32,6 @@ pub(super) struct ModuleInfo {
 }
 #[derive(Clone, Copy, Debug)]
 enum TypeAlias {
-    Ptr,
     Byte,
     Box,
     ArrayList,
@@ -41,7 +40,6 @@ enum TypeAlias {
 impl TypeAlias {
     fn into_type_name(self) -> res::TypeName {
         match self {
-            TypeAlias::Ptr => res::TypeName::Ptr,
             TypeAlias::Box => res::TypeName::Box,
             TypeAlias::Byte => res::TypeName::Byte,
             TypeAlias::ArrayList => res::TypeName::Array,
@@ -115,7 +113,6 @@ pub struct Resolve<'info> {
 impl<'info> Resolve<'info> {
     fn new(config: Config, results: &'info DeclareResults) -> Self {
         let env = Scope::from_iter([
-            (Symbol::intern("ptr"), Res::TypeAlias(TypeAlias::Ptr)),
             (Symbol::intern("byte"), Res::TypeAlias(TypeAlias::Byte)),
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),

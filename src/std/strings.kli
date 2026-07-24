@@ -1,6 +1,3 @@
 @opaque
 @lang_item("string")
-type String = {
-    bytes : ptr[byte],
-    len : uint
-}
+type String = {}
