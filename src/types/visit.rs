@@ -28,7 +28,7 @@ pub trait Visit {
                     self.visit_type(&field.ty);
                 }
             }
-            Type::Array(ty) => self.visit_type(ty),
+            Type::Array(ty) | Type::Box(ty) => self.visit_type(ty),
             Type::Named(.., generic_args) => {
                 self.visit_generic_args(generic_args);
             }
@@ -72,7 +72,7 @@ pub trait VisitMut {
                     self.visit_type(&mut field.ty);
                 }
             }
-            Type::Array(ty) => self.visit_type(ty),
+            Type::Array(ty) | Type::Box(ty) => self.visit_type(ty),
             Type::Named(.., generic_args) => {
                 self.visit_generic_args(generic_args);
             }

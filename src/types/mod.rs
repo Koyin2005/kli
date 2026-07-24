@@ -186,6 +186,7 @@ pub enum Type {
     Array(Box<Type>),
     Named(DefId, Symbol, GenericArgs),
     String,
+    Box(Box<Type>),
 }
 impl Type {
     pub const UNIT: Self = Self::Tuple(Vec::new());
@@ -314,7 +315,7 @@ impl Type {
             Self::Never => true,
             Self::Record(fields) => fields.iter().any(|field| field.ty.is_uninhabited(ctxt)),
             Self::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
-            Self::Array(ty) => ty.is_uninhabited(ctxt),
+            Self::Array(ty) | Self::Box(ty) => ty.is_uninhabited(ctxt),
             Self::Named(def_id, _, generic_args) => {
                 if ctxt.is_type_recursive(*def_id) {
                     false
@@ -338,6 +339,9 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Box(ty) => {
+                write!(f, "Box[{ty}]")
+            }
             Self::String => f.pad("string"),
             Type::Byte => f.pad("byte"),
             Type::Never => f.pad("never"),
@@ -435,6 +439,7 @@ pub trait TypeMap {
                     .collect::<Result<GenericArgs, _>>()?,
             )),
             Type::Array(ty) => Ok(Type::Array(Box::new(self.map_type(*ty)?))),
+            Type::Box(ty) => Ok(Type::Box(Box::new(self.map_type(*ty)?))),
         }
     }
     fn super_map_function_type(

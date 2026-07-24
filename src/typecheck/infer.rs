@@ -67,6 +67,9 @@ impl TypeInfer {
             (Type::Array(ty1), Type::Array(ty2)) => self
                 .unify_ty(*ty1, *ty2)
                 .map(|ty| Type::Array(Box::new(ty))),
+            (Type::Box(ty1), Type::Box(ty2)) => {
+                self.unify_ty(*ty1, *ty2).map(|ty| Type::Box(Box::new(ty)))
+            }
             (Type::Record(fields1), Type::Record(fields2)) if fields1.len() == fields2.len() => {
                 fields1
                     .into_iter()
@@ -141,7 +144,8 @@ impl TypeInfer {
                 | Type::Never
                 | Type::Tuple(_)
                 | Type::Array(_)
-                | Type::String,
+                | Type::String
+                | Type::Box(_),
                 _,
             ) => None,
         }

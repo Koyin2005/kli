@@ -3,7 +3,6 @@ use std::collections::HashSet;
 
 use crate::collect::{CtxtRef, Generics};
 use crate::def_ids::DefId;
-use crate::lang_items::LangItem;
 use crate::resolved_ast::{self as res, TypeName};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
@@ -138,16 +137,15 @@ impl<'a> Lower<'a> {
             TypeName::String => {
                 _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::String
-            },
-            TypeName::Box  => {
-                let id = self.ctxt.lang_items().expect(match name {
-                    TypeName::String => LangItem::String,
-                    TypeName::Array => LangItem::Array,
-                    TypeName::Box => LangItem::Box,
-                    _ => unreachable!("checked above"),
-                });
-                let args = self.lower_generic_args(id, loc, args);
-                Type::Named(id, self.ctxt.expect_ident(id).symbol, args)
+            }
+            TypeName::Box => {
+                let args = self.lower_generic_args_with(Generics::default(), 1, loc, args);
+                let ty = if let Ok([GenericArg(ty)]) = <[_; _]>::try_from(args) {
+                    ty
+                } else {
+                    Type::Unknown
+                };
+                Type::Box(Box::new(ty))
             }
         }
     }

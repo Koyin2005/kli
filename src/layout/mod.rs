@@ -298,7 +298,7 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
         Type::Byte => Layout::BYTE,
         Type::Never => Layout::zst().uninhabited(),
         Type::Param(_, _) => return Err(LayoutError::TooGeneric),
-        Type::Function(_) => Layout::pointer(true),
+        Type::Function(_) | Type::Box(_) => Layout::pointer(true),
         Type::Array(_) | Type::String => {
             return Ok(Layout {
                 size: POINTER_SIZE.add(INT_SIZE),

@@ -34,7 +34,8 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Construc
         | Type::Function(..)
         | Type::Byte
         | Type::Array(_)
-        | Type::String => ConstructorSet::NonExhaustive,
+        | Type::String
+        | Type::Box(_) => ConstructorSet::NonExhaustive,
         Type::Record(_) | Type::Tuple(_) => ConstructorSet::Record,
         Type::Infer(_) => unreachable!("Cannot have infer here"),
         Type::Named(id, _, args) => {
