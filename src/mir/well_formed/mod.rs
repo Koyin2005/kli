@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use crate::{
-    ast::IsResource,
     collect::{CtxtRef, TypeDefKind},
     diagnostics::emit_fatal_diagnostic,
     mir::{

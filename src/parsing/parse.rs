@@ -4,10 +4,10 @@ use crate::{
     ast::{
         Annotation, AnnotationField, BinaryOp, BlockBody, CaseArm, CaseDef, CaseType, Expr,
         ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, GenericParam,
-        GenericParamKind, Generics, Import, ImportTree, ImportTreeTail, InstancePath, IntLit,
-        IsResource, Item, ItemKind, Lambda, LetBinding, Method, Module, ModuleId, Mutable, NodeId,
-        NumberKind, Param, Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField,
-        RecordType, Stmt, StmtKind, Type, TypeDef, TypeDefKind, TypeImpl, TypeKind,
+        GenericParamKind, Generics, Import, ImportTree, ImportTreeTail, InstancePath, IntLit, Item,
+        ItemKind, Lambda, LetBinding, Method, Module, ModuleId, Mutable, NodeId, NumberKind, Param,
+        Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField, RecordType, Stmt,
+        StmtKind, Type, TypeDef, TypeDefKind, TypeImpl, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::{Ident, Symbol},
@@ -293,15 +293,6 @@ impl Parser {
         let _ = self.expect(&TokenKind::Arrow);
         let body = self.parse_expr()?;
         Ok(CaseArm { pat: pattern, body })
-    }
-    fn parse_resource_arrow(&mut self) -> Result<IsResource, ParseError> {
-        if self.matches_token(&TokenKind::Arrow) {
-            Ok(IsResource::Data)
-        } else if self.matches_token(&TokenKind::ThickArrow) {
-            Ok(IsResource::Resource)
-        } else {
-            Err(self.expect_error("'-> or =>'"))
-        }
     }
     fn parse_block_body(&mut self) -> Result<BlockBody, ParseError> {
         let mut stmts = Vec::new();
@@ -600,16 +591,14 @@ impl Parser {
                         break;
                     }
                 }
-                let _ = self.expect(&TokenKind::RightParen);
-
-                let resource = self.parse_resource_arrow()?;
+                let _ = self.expect(&TokenKind::RightParen)?;
+                let _ = self.expect(&TokenKind::Arrow);
                 let body = self.parse_expr()?;
                 Ok(Expr {
                     loc,
                     kind: ExprKind::Lambda(Box::new(Lambda {
                         id: self.next_node_id(),
                         params,
-                        resource,
                         body: Box::new(body),
                     })),
                 })
@@ -749,11 +738,10 @@ impl Parser {
         self.expect(&TokenKind::Fun)?;
         self.expect(&TokenKind::LeftParen)?;
         let params = self.delimited_coma_sep(&TokenKind::RightParen, Self::parse_type)?;
-        let is_resource = self.parse_resource_arrow()?;
+        let _ = self.expect(&TokenKind::Arrow);
 
         let return_type = self.parse_type()?;
         Ok(FunctionType {
-            resource: is_resource,
             params,
             return_type: Box::new(return_type),
         })

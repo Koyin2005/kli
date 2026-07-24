@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use crate::{
     Symbol,
-    ast::IsResource,
     builtins::Builtin,
     index_vec::IndexVec,
     mir::{
@@ -45,7 +44,7 @@ impl Builder<'_> {
                     value: ConstValue::Named(id, generic_args.clone()),
                 })
             }
-            ExprKind::Lambda(ref lambda) if lambda.is_resource == IsResource::Data => {
+            ExprKind::Lambda(ref lambda) if lambda.captures.is_empty() => {
                 Some(Self::lambda_code_constant(self.ctxt, lambda))
             }
             ExprKind::Const(id, ref args) => {
@@ -523,8 +522,7 @@ impl Builder<'_> {
             }
             ExprKind::AddressOf(place) => Rvalue::RawPtrTo(self.lower_place(place)),
             ExprKind::Lambda(lambda) => {
-                let is_resource = lambda.is_resource == IsResource::Resource;
-                let function = if !is_resource {
+                let function = if lambda.captures.is_empty() {
                     Operand::Constant(Self::lambda_code_constant(self.ctxt, lambda))
                 } else {
                     Operand::Constant(Self::closure_shim(
@@ -534,7 +532,7 @@ impl Builder<'_> {
                         lambda,
                     ))
                 };
-                if is_resource {
+                if !lambda.captures.is_empty() {
                     let env_ty = Type::closure_env(lambda.captures.iter().cloned());
                     let env = self.assign_to_temp(
                         expr.loc,

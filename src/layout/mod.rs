@@ -2,7 +2,6 @@ use std::borrow::Cow;
 
 use crate::{
     CtxtRef,
-    ast::IsResource,
     collect::TypeDefKind,
     index_vec::IndexVec,
     typed_ast::FieldId,
@@ -299,7 +298,7 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
         Type::Byte => Layout::BYTE,
         Type::Never => Layout::zst().uninhabited(),
         Type::Param(_, _) => return Err(LayoutError::TooGeneric),
-        Type::Function(function_type) => Layout::pointer(true),
+        Type::Function(_) => Layout::pointer(true),
         Type::Array(_) => {
             return Ok(Layout {
                 size: POINTER_SIZE.add(INT_SIZE),

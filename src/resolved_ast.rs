@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     Symbol,
-    ast::{BinaryOp, IsResource, Mutable},
+    ast::{BinaryOp, Mutable},
     def_ids::DefId,
     define_id,
     ident::Ident,
@@ -33,7 +33,6 @@ pub struct Signature {
 pub struct Lambda {
     pub id: DefId,
     pub loc: SrcLoc,
-    pub resource: IsResource,
     pub param_tys: Box<[Option<Type>]>,
     pub params: Box<[Param]>,
     pub body: Expr,
@@ -209,7 +208,6 @@ pub struct RecordFieldType {
 
 #[derive(Debug)]
 pub struct FunctionType {
-    pub is_resource: IsResource,
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
 }

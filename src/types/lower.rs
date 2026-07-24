@@ -184,7 +184,6 @@ impl<'a> Lower<'a> {
             &res::TypeKind::Named(name, ref args) => self.lower_type_name(ty.loc, name, args),
             res::TypeKind::Function(function_type) => {
                 let res::FunctionType {
-                    is_resource,
                     params,
                     return_type,
                 } = function_type.as_ref();

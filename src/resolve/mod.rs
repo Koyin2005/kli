@@ -307,11 +307,9 @@ impl<'info> Resolve<'info> {
                     .collect(),
             ),
             ast::TypeKind::Function(ast::FunctionType {
-                resource,
                 params,
                 return_type,
             }) => res::TypeKind::Function(Box::new(res::FunctionType {
-                is_resource: resource,
                 params: params.into_iter().map(|ty| self.resolve_type(ty)).collect(),
                 return_type: Box::new(self.resolve_type(*return_type)),
             })),
@@ -695,7 +693,6 @@ impl<'info> Resolve<'info> {
                     loc,
                     params: params.into_boxed_slice(),
                     param_tys: param_tys.into_boxed_slice(),
-                    resource: lambda.resource,
                     body: this.resolve_expr(*lambda.body),
                 });
                 this.add_node(id, res::Node::Lambda(Rc::clone(&lambda)));

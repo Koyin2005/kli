@@ -5,7 +5,6 @@ use std::{
 
 use crate::{
     Symbol,
-    ast::IsResource,
     collect::{CtxtRef, TypeDefKind},
     def_ids::DefId,
     define_id,
@@ -274,7 +273,7 @@ impl Type {
             _ => None,
         }
     }
-    pub fn function_type(resource: IsResource, params: Vec<Self>, return_type: Self) -> Self {
+    pub fn function_type(params: Vec<Self>, return_type: Self) -> Self {
         Self::Function(FunctionType {
             params,
             return_type: Box::new(return_type),

@@ -239,7 +239,6 @@ impl FunctionCtxt<'_> {
                 loc: lambda.loc,
                 id,
                 captures,
-                is_resource: lambda.resource,
                 params,
                 param_tys: sig.params,
                 return_type: Box::new(sig.return_type),

@@ -331,11 +331,9 @@ impl Rvalue {
                         })
                         .collect(),
                 ),
-                AggregateKind::Closure(params, return_type) => Type::function_type(
-                    crate::ast::IsResource::Resource,
-                    params.clone(),
-                    (**return_type).clone(),
-                ),
+                AggregateKind::Closure(params, return_type) => {
+                    Type::function_type(params.clone(), (**return_type).clone())
+                }
                 &AggregateKind::Variant(id, _, ref args)
                 | &AggregateKind::NamedRecord(id, ref args) => {
                     let name = ctxt.type_def(id).name;
