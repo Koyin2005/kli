@@ -117,9 +117,9 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(operand)?;
             }
             Rvalue::AllocateArray(_, elements) => {
-                write!(self.output, "{{")?;
+                write!(self.output, "[")?;
                 self.write_with_coma_sep(elements, |this, element| this.write_operand(element))?;
-                write!(self.output, "}}")?;
+                write!(self.output, "]")?;
             }
             Rvalue::Binary(op, operands) => {
                 let (left, right) = &**operands;
