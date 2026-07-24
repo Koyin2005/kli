@@ -157,7 +157,8 @@ fn split_constructors(
         | Type::Byte
         | Type::Param(..)
         | Type::Function(..)
-        | Type::Array(_) => {}
+        | Type::Array(_)
+        | Type::String => {}
         Type::Bool => {
             let is_true = seen_constructors.contains(&Constructor::Bool(true));
             let is_false = seen_constructors.contains(&Constructor::Bool(false));

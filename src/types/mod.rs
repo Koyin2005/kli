@@ -1,7 +1,4 @@
-use std::{
-    fmt::{Debug, Display},
-    ops::ControlFlow,
-};
+use std::fmt::{Debug, Display};
 
 use crate::{
     Symbol,
@@ -188,6 +185,7 @@ pub enum Type {
     Record(IndexVec<FieldId, RecordField>),
     Array(Box<Type>),
     Named(DefId, Symbol, GenericArgs),
+    String,
 }
 impl Type {
     pub const UNIT: Self = Self::Tuple(Vec::new());
@@ -302,9 +300,6 @@ impl Type {
         _ = ctxt;
         false
     }
-    pub const fn no_op_visit<T>(&self) -> ControlFlow<T> {
-        ControlFlow::Continue(())
-    }
     pub fn is_uninhabited(&self, ctxt: CtxtRef<'_>) -> bool {
         match self {
             Self::Infer(_)
@@ -314,7 +309,8 @@ impl Type {
             | Self::Char
             | Self::Byte
             | Self::Param(..)
-            | Self::Function(..) => false,
+            | Self::Function(..)
+            | Self::String => false,
             Self::Never => true,
             Self::Record(fields) => fields.iter().any(|field| field.ty.is_uninhabited(ctxt)),
             Self::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
@@ -337,49 +333,12 @@ impl Type {
             }
         }
     }
-    pub fn visit<T>(&self, visit_ty: &mut impl FnMut(&Self) -> ControlFlow<T>) -> ControlFlow<T> {
-        visit_ty(self)?;
-        match self {
-            Type::Int(_)
-            | Type::Infer(_)
-            | Type::Unknown
-            | Type::Bool
-            | Type::Char
-            | Type::Byte
-            | Type::Param(..)
-            | Type::Never => ControlFlow::Continue(()),
-            Self::Array(ty) => ty.visit(visit_ty),
-            Type::Function(function_type) => {
-                for param in function_type.params.iter() {
-                    param.visit(visit_ty)?;
-                }
-                function_type.return_type.visit(visit_ty)
-            }
-            Type::Record(fields) => {
-                for field in fields {
-                    visit_ty(&field.ty)?;
-                }
-                ControlFlow::Continue(())
-            }
-            Type::Tuple(fields) => {
-                for field in fields {
-                    visit_ty(field)?;
-                }
-                ControlFlow::Continue(())
-            }
-            Type::Named(.., generic_args) => {
-                for arg in &**generic_args {
-                    arg.0.visit(visit_ty)?;
-                }
-                ControlFlow::Continue(())
-            }
-        }
-    }
 }
 
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::String => f.pad("string"),
             Type::Byte => f.pad("byte"),
             Type::Never => f.pad("never"),
             Type::Record(fields) => {
@@ -444,7 +403,8 @@ pub trait TypeMap {
     type Error;
     fn super_map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
         match ty {
-            Type::Bool
+            Type::String
+            | Type::Bool
             | Type::Char
             | Type::Int(_)
             | Type::Unknown

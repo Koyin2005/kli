@@ -10,6 +10,7 @@ pub trait Visit {
             | Type::Char
             | Type::Byte
             | Type::Never
+            | Type::String
             | Type::Param(..) => (),
             Type::Function(function_type) => {
                 for param in function_type.params.iter() {
@@ -53,6 +54,7 @@ pub trait VisitMut {
             | Type::Char
             | Type::Byte
             | Type::Never
+            | Type::String
             | Type::Param(..) => (),
             Type::Function(function_type) => {
                 for param in function_type.params.iter_mut() {
