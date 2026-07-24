@@ -45,7 +45,7 @@ impl<'a> TypeSubst<'a> {
             }
             Type::Infer(var) => *ty = self.infer.simplify_type(Type::Infer(*var)),
             Type::Named(_, _, args) => {
-                for arg in args {
+                for arg in &mut **args {
                     self.subst_generic_arg(arg);
                 }
             }
@@ -110,7 +110,7 @@ impl<'a> TypeSubst<'a> {
                 self.subst_expr(&mut block.expr);
             }
             ExprKind::Const(_, args) => {
-                for arg in args {
+                for arg in &mut **args {
                     self.subst_generic_arg(arg);
                 }
             }
@@ -138,7 +138,7 @@ impl<'a> TypeSubst<'a> {
                 }
             }
             ExprKind::VariantInit(.., args, expr) => {
-                for arg in args {
+                for arg in &mut **args {
                     self.subst_generic_arg(arg);
                 }
                 if let Some(expr) = expr {
@@ -167,12 +167,12 @@ impl<'a> TypeSubst<'a> {
                 }
             }
             ExprKind::Function(.., args) => {
-                for arg in args {
+                for arg in &mut **args {
                     self.subst_generic_arg(arg);
                 }
             }
             ExprKind::BuiltinCall(_, generic_args, args) => {
-                for arg in generic_args {
+                for arg in &mut **generic_args {
                     self.subst_generic_arg(arg);
                 }
                 for expr in args {

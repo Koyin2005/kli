@@ -22,8 +22,8 @@ use crate::{
     typecheck::infer::TypeInfer,
     typed_ast::FieldId,
     types::{
-        CaseId, FunctionSig, GenericArg, GenericArgsRef, GenericKind, GenericParam, Type,
-        lower::Lower,
+        CaseId, FunctionSig, GenericArg, GenericArgs, GenericArgsRef, GenericKind, GenericParam,
+        Type, lower::Lower,
     },
 };
 
@@ -174,21 +174,21 @@ impl Generics {
     pub fn kinds(&self) -> impl Iterator<Item = GenericKind> {
         self.params.iter().map(|param| param.kind)
     }
-    pub fn instantiate(&self, infer: &mut TypeInfer, loc: SrcLoc) -> Vec<GenericArg> {
+    pub fn instantiate(&self, infer: &mut TypeInfer, loc: SrcLoc) -> GenericArgs {
         self.kinds()
             .map(|kind| match kind {
                 GenericKind::Type => GenericArg::Type(Type::Infer(infer.fresh_ty(loc))),
             })
             .collect()
     }
-    pub fn instantiate_unknown(&self) -> Vec<GenericArg> {
+    pub fn instantiate_unknown(&self) -> GenericArgs {
         self.kinds()
             .map(|kind| match kind {
                 GenericKind::Type => GenericArg::Type(Type::Unknown),
             })
             .collect()
     }
-    pub fn instantiate_identity(&self) -> Vec<GenericArg> {
+    pub fn instantiate_identity(&self) -> GenericArgs {
         self.params
             .iter()
             .enumerate()

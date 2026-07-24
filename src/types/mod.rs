@@ -128,7 +128,55 @@ impl Display for FieldName {
         }
     }
 }
-pub type GenericArgs = Vec<GenericArg>;
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
+pub struct GenericArgs(Vec<GenericArg>);
+impl GenericArgs {
+    pub const fn new() -> Self {
+        Self(Vec::new())
+    }
+    pub const fn from_vec(v: Vec<GenericArg>) -> Self {
+        Self(v)
+    }
+    pub fn from_single(arg: GenericArg) -> Self {
+        Self(vec![arg])
+    }
+    pub fn from_type(arg: Type) -> Self {
+        Self(vec![GenericArg::Type(arg)])
+    }
+    pub fn combine(mut self, rest: Self) -> Self {
+        self.0.extend(rest);
+        self
+    }
+}
+impl<const N: usize> TryFrom<GenericArgs> for [GenericArg; N] {
+    type Error = GenericArgs;
+    fn try_from(value: GenericArgs) -> Result<Self, Self::Error> {
+        value.0.try_into().map_err(GenericArgs::from_vec)
+    }
+}
+impl std::ops::Deref for GenericArgs {
+    type Target = [GenericArg];
+    fn deref(&self) -> GenericArgsRef<'_> {
+        &self.0
+    }
+}
+impl std::ops::DerefMut for GenericArgs {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+impl IntoIterator for GenericArgs {
+    type IntoIter = std::vec::IntoIter<GenericArg>;
+    type Item = GenericArg;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+impl FromIterator<GenericArg> for GenericArgs {
+    fn from_iter<T: IntoIterator<Item = GenericArg>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
 pub type GenericArgsRef<'a> = &'a [GenericArg];
 
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
@@ -192,7 +240,7 @@ impl Type {
     pub fn array(ctxt: CtxtRef<'_>, element: Self) -> Option<Self> {
         let id = ctxt.lang_items().get(LangItem::Array)?;
         let name = ctxt.ident(id)?.symbol;
-        Some(Type::Named(id, name, vec![GenericArg::Type(element)]))
+        Some(Type::Named(id, name, GenericArgs::from_type(element)))
     }
     pub fn string(ctxt: CtxtRef<'_>) -> Self {
         let id = ctxt.lang_items().expect(LangItem::String);
@@ -330,7 +378,7 @@ impl Type {
             PointerType::Box => {
                 let id = ctxt.lang_items().expect(LangItem::Box);
                 let name = ctxt.expect_ident(id).symbol;
-                Self::Named(id, name, vec![GenericArg::Type(pointee)])
+                Self::Named(id, name, GenericArgs::from_type(pointee))
             }
             PointerType::Raw => Self::pointer(pointee),
         }
@@ -406,7 +454,7 @@ impl Type {
                 ControlFlow::Continue(())
             }
             Type::Named(.., generic_args) => {
-                for arg in generic_args {
+                for arg in &**generic_args {
                     match arg {
                         GenericArg::Type(ty) => ty.visit(visit_ty)?,
                     }
@@ -531,7 +579,7 @@ pub trait TypeMap {
                             GenericArg::Type(ty) => GenericArg::Type(self.map_type(ty)?),
                         })
                     })
-                    .collect::<Result<Vec<_>, _>>()?,
+                    .collect::<Result<GenericArgs, _>>()?,
             )),
             Type::Array(ty) => Ok(Type::Array(Box::new(self.map_type(*ty)?))),
         }

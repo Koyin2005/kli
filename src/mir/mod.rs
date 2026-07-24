@@ -10,7 +10,7 @@ use crate::{
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
     typed_ast::FieldId,
-    types::{CaseId, FieldName, GenericArg, GenericArgs, IntegerKind, PointerType, Type},
+    types::{CaseId, FieldName, GenericArgs, IntegerKind, PointerType, Type},
 };
 pub mod basic_blocks;
 pub mod build;
@@ -139,8 +139,8 @@ impl Place {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum ConstValue {
     ZeroSized,
-    Named(DefId, Vec<GenericArg>),
-    ClosureShim(DefId, Vec<GenericArg>),
+    Named(DefId, GenericArgs),
+    ClosureShim(DefId, GenericArgs),
     Scalar(i128),
     Variant(CaseId, Option<Box<Constant>>),
     Record(Box<[Constant]>),

@@ -3,7 +3,7 @@ use std::collections::{HashSet, VecDeque};
 use crate::{
     def_ids::DefId,
     mir::{BodySource, ConstValue, Constant, Context, Location, visitor::Visit},
-    types::GenericArg,
+    types::GenericArgs,
 };
 
 type FunctionId = DefId;
@@ -14,13 +14,13 @@ pub enum InstanceKind {
 }
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Instance {
-    pub args: Vec<GenericArg>,
+    pub args: GenericArgs,
     pub kind: InstanceKind,
 }
 impl Instance {
     pub fn non_generic(kind: InstanceKind) -> Self {
         Self {
-            args: Vec::new(),
+            args: GenericArgs::new(),
             kind,
         }
     }

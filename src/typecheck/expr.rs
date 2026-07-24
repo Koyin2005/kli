@@ -851,7 +851,7 @@ impl FunctionCtxt<'_> {
                 let (sig, generic_args, id) =
                     match self.root().resolve_method(method.loc, &rcvr.ty, *method) {
                         Ok((id, mut args)) => {
-                            args.extend(self.root().lower_generic_args_for(
+                            args = args.combine(self.root().lower_generic_args_for(
                                 id,
                                 method.loc,
                                 &resolved_ast::GenericArgs::NONE,
@@ -897,11 +897,7 @@ impl FunctionCtxt<'_> {
                 let Ok((id, base_args)) = self.root().resolve_method(loc, &ty, *method) else {
                     return make_expr(Type::Unknown, typed_ast::ExprKind::Err, loc);
                 };
-                let args = {
-                    let mut all_args = base_args;
-                    all_args.extend(self.root().lower_generic_args_for(id, loc, args));
-                    all_args
-                };
+                let args = base_args.combine(self.root().lower_generic_args_for(id, loc, args));
                 let sig = self.ctxt().signature_of(id).bind(&args);
                 make_expr(
                     Type::new_function(sig.params, sig.return_type),
