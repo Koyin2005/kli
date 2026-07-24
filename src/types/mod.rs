@@ -202,7 +202,6 @@ pub enum Type {
     Tuple(Vec<Type>),
     Record(IndexVec<FieldId, RecordField>),
     RawPointer(Box<Type>),
-    InlineArray(Box<Type>, u64),
     Array(Box<Type>),
     Named(DefId, Symbol, GenericArgs),
 }
@@ -397,7 +396,7 @@ impl Type {
             Self::Record(fields) => fields.iter().any(|field| field.ty.is_uninhabited(ctxt)),
             Self::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
             Self::RawPointer(_) => false,
-            Self::InlineArray(ty, _) | Self::Array(ty) => ty.is_uninhabited(ctxt),
+            Self::Array(ty) => ty.is_uninhabited(ctxt),
             Self::Named(def_id, _, generic_args) => {
                 if ctxt.is_type_recursive(*def_id) {
                     false
@@ -427,7 +426,7 @@ impl Type {
             | Type::Byte
             | Type::Param(..)
             | Type::Never => ControlFlow::Continue(()),
-            Type::RawPointer(ty) | Type::InlineArray(ty, _) | Self::Array(ty) => ty.visit(visit_ty),
+            Type::RawPointer(ty) | Self::Array(ty) => ty.visit(visit_ty),
             Type::Function(function_type) => {
                 for param in function_type.params.iter() {
                     param.visit(visit_ty)?;
@@ -459,9 +458,6 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::InlineArray(ty, count) => {
-                write!(f, "fixed_array[{},{}]", ty, count)
-            }
             Type::Byte => f.pad("byte"),
             Type::RawPointer(ty) => {
                 write!(f, "ptr[{}]", ty)
@@ -542,9 +538,6 @@ pub trait TypeMap {
             | Type::Infer(_)
             | Type::Param(..)
             | Type::Never => Ok(ty),
-            Type::InlineArray(ty, count) => {
-                Ok(Type::InlineArray(Box::new(self.map_type(*ty)?), count))
-            }
             Type::RawPointer(ty) => Ok(Type::RawPointer(Box::new(self.map_type(*ty)?))),
             Type::Function(function_type) => {
                 Ok(Type::Function(self.map_function_type(function_type)?))

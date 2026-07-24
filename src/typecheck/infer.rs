@@ -67,12 +67,6 @@ impl TypeInfer {
                 assert_eq!(name1, name2);
                 Some(Type::Param(name1, index1))
             }
-            (Type::InlineArray(ty1, count1), Type::InlineArray(ty2, count2))
-                if count1 == count2 =>
-            {
-                self.unify_ty(*ty1, *ty2)
-                    .map(|ty| Type::InlineArray(Box::new(ty), count1))
-            }
             (Type::RawPointer(ty1), Type::RawPointer(ty2)) => self
                 .unify_ty(*ty1, *ty2)
                 .map(|ty| Type::RawPointer(Box::new(ty))),
@@ -148,7 +142,6 @@ impl TypeInfer {
                 | Type::Unknown
                 | Type::Char
                 | Type::Param(..)
-                | Type::InlineArray(..)
                 | Type::Function(..)
                 | Type::Byte
                 | Type::Record(..)

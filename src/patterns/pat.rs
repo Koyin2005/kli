@@ -157,7 +157,6 @@ fn split_constructors(
         | Type::Byte
         | Type::Param(..)
         | Type::Function(..)
-        | Type::InlineArray(..)
         | Type::RawPointer(_)
         | Type::Array(_) => {}
         Type::Bool => {

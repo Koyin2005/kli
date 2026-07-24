@@ -77,7 +77,7 @@ impl Visit for WellFormed<'_> {
                     ty = self.assert_with_some(
                         ty,
                         |ty| match ty {
-                            Type::InlineArray(ty, _) => Some(*ty),
+                            Type::Array(ty) => Some(*ty),
                             _ => None,
                         },
                         || "Cannot take an index for non-array",
@@ -317,7 +317,7 @@ impl Visit for WellFormed<'_> {
             super::Rvalue::Len(place) => {
                 let ty = place.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
                 self.assert(
-                    matches!(ty, Type::InlineArray(..)),
+                    matches!(ty, Type::Array(..)),
                     || "Expected an array type",
                     loc,
                 );

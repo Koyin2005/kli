@@ -337,14 +337,6 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
             );
         }
         Type::RawPointer(_) => Layout::pointer(!matches!(ty, Type::RawPointer(_))),
-        Type::InlineArray(ty, count) => {
-            let mut element_layout = calculate_layout(ctxt, ty)?;
-            element_layout.size = element_layout
-                .size
-                .checked_mul(*count)
-                .ok_or(LayoutError::TooBig)?;
-            element_layout
-        }
         Type::Named(id, .., args) => match ctxt.type_def(*id).kind {
             TypeDefKind::Record(fields) => {
                 return record_layout(

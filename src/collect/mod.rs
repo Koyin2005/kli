@@ -254,7 +254,6 @@ impl CtxtRef<'_> {
     pub fn is_type_recursive(self, id: DefId) -> bool {
         fn is_ty_recursive(ctxt: CtxtRef<'_>, ty: &Type, seen_ids: &mut HashSet<DefId>) -> bool {
             match ty {
-                Type::InlineArray(ty, _) => is_ty_recursive(ctxt, ty, seen_ids),
                 Type::Bool
                 | Type::Byte
                 | Type::Char
