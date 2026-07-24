@@ -136,13 +136,6 @@ impl<'ctxt> MirDump<'ctxt> {
             Rvalue::Aggregate(kind, fields) => {
                 match kind {
                     AggregateKind::Record { .. } | AggregateKind::Tuple => (),
-                    AggregateKind::Closure(params, return_type) => {
-                        write!(self.output, "Closure((")?;
-                        self.write_with_coma_sep(params, |this, param| {
-                            write!(this.output, "{}", param)
-                        })?;
-                        write!(self.output, ") -> {return_type})")?;
-                    }
                     AggregateKind::Variant(id, index, args) => {
                         let name = self.ctxt.type_def(*id).case(*index).name;
                         write!(self.output, "{}{}", name, display_generic_args(args))?;
@@ -162,15 +155,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     AggregateKind::Record { field_names } => {
                         write!(this.output, "{} = ", field_names[i])
                     }
-                    AggregateKind::Closure(..) => write!(
-                        this.output,
-                        "{} = ",
-                        match i {
-                            i if i == FieldId::FIRST_FIELD => "env",
-                            i if i == FieldId::new(1) => "code",
-                            _ => unreachable!("Should only have 2 fields"),
-                        }
-                    ),
                     AggregateKind::Variant(_, _, _) => write!(this.output, "{} = ", i.into_usize()),
                     AggregateKind::NamedRecord(id, ..) => {
                         write!(this.output, "{} = ", ctxt.type_def(*id).fields()[i].name)

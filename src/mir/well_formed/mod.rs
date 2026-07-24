@@ -144,29 +144,6 @@ impl Visit for WellFormed<'_> {
                         );
                     }
                 }
-                super::AggregateKind::Closure(..) => {
-                    let (env, code) = self.assert_with_some(
-                        fields.as_slice(),
-                        |fields| match fields {
-                            [env, code] => Some((env, code)),
-                            _ => None,
-                        },
-                        || "closure should have two fields",
-                        loc,
-                    );
-                    let env_ty = env.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                    self.assert(
-                        env_ty.as_pointer().is_some_and(|ty| *ty == Type::Byte),
-                        || "env should be byte pointer",
-                        loc,
-                    );
-                    let code = code.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                    self.assert(
-                        matches!(code, Type::Function(FunctionType { .. })),
-                        || "code should be function pointer",
-                        loc,
-                    );
-                }
                 super::AggregateKind::Variant(id, index, args) => {
                     let type_def = self.ctxt.type_def(*id);
                     let case_def = type_def.case(*index);

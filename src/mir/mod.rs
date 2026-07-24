@@ -208,7 +208,6 @@ pub enum AggregateKind {
         field_names: IndexVec<FieldId, FieldName>,
     },
     Tuple,
-    Closure(Vec<Type>, Box<Type>),
     NamedRecord(DefId, GenericArgs),
     Variant(DefId, CaseId, GenericArgs),
 }
@@ -298,9 +297,6 @@ impl Rvalue {
                         })
                         .collect(),
                 ),
-                AggregateKind::Closure(params, return_type) => {
-                    Type::function_type(params.clone(), (**return_type).clone())
-                }
                 &AggregateKind::Variant(id, _, ref args)
                 | &AggregateKind::NamedRecord(id, ref args) => {
                     let name = ctxt.type_def(id).name;
