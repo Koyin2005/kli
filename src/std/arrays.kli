@@ -10,29 +10,24 @@ fun empty[T]() -> array[T] = []
 
 fun len[T](this : array[T]) -> uint = panic
 
-@unsafe
-fun unsafe_get[T](this : array[T], index : uint) -> T = panic
-@unsafe
-fun unsafe_set[T](this : array[T], index : uint, value : T) -> () = panic
-
 fun addr_eq[T](this : array[T], other : array[T]) -> bool = panic
 
 fun get_checked[T](this : array[T], index : uint) -> Option[T] = 
     case index < len(this) of 
-    | true -> Option.Some(unsafe unsafe_get(this,index) end)
+    | true -> Option.Some((this).[index])
     | false -> Option.None
     end
 
 fun get[T](this : array[T], index : uint) -> T = 
     case index < len(this) of
-    | true -> unsafe unsafe_get(this,index) end
+    | true -> (this).[index]
     | false -> index_out_bounds()
     end
 
 
 fun set[T](this : array[T], index : uint, value : T) -> () = 
     case index < len(this) of 
-    | true -> unsafe unsafe_set(this,index,value) end
+    | true -> (this).[index] = value
     | false -> index_out_bounds()
     end
 
