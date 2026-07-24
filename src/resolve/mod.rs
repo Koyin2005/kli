@@ -626,9 +626,6 @@ impl<'info> Resolve<'info> {
                 let body = self.resolve_expr(*body);
                 res::ExprKind::While(Box::new(condition), Box::new(body))
             }
-            ast::ExprKind::AddressOf(expr) => {
-                res::ExprKind::AddressOf(Box::new(self.resolve_expr(*expr)))
-            }
             ast::ExprKind::Unit => res::ExprKind::Unit,
             ast::ExprKind::String(value) => res::ExprKind::String(value.into()),
             ast::ExprKind::Number(lit) => res::ExprKind::Int(self.resolve_int_lit(loc, lit)),

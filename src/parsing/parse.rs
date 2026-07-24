@@ -496,14 +496,6 @@ impl Parser {
                     kind: ExprKind::Unsafe(Box::new(expr)),
                 })
             }
-            TokenKind::AddrOf => {
-                self.advance();
-                let expr = self.parse_paren_expr(loc)?;
-                Ok(Expr {
-                    loc,
-                    kind: ExprKind::AddressOf(Box::new(expr)),
-                })
-            }
             TokenKind::Ident(_) => {
                 let path = self.parse_path_with_generics()?;
                 if self.check_token(&TokenKind::LeftBrace) {

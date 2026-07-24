@@ -240,7 +240,6 @@ pub enum ExprKind {
     Record(RecordExpr),
     Tuple(Vec<Expr>),
     NamedRecord(InstancePath, Vec<FieldInit>),
-    AddressOf(Box<Expr>),
     MethodCall(Box<Expr>, Ident, Vec<Expr>),
     Array(Vec<Expr>),
     Return(Box<Expr>),
