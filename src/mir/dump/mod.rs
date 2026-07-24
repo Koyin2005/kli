@@ -4,7 +4,7 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, CastKind,
-        ConstValue, CopyNonOverlapping, LocalKind, Operand, Place, PlaceProjection,
+        ConstValue, LocalKind, Operand, Place, PlaceProjection,
         Rvalue, StmtKind, TerminatorKind,
     },
     typed_ast::FieldId,
@@ -351,17 +351,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     if let Some(value) = value {
                         self.write_operand(value)?;
                     }
-                    writeln!(self.output, ")")?;
-                }
-                StmtKind::CopyNonOverlapping(copy) => {
-                    let CopyNonOverlapping { dst, src, count } = copy.as_ref();
-
-                    write!(self.output, "copy_non_overlapping(")?;
-                    self.write_operand(dst)?;
-                    write!(self.output, ",")?;
-                    self.write_operand(src)?;
-                    write!(self.output, ",")?;
-                    self.write_operand(count)?;
                     writeln!(self.output, ")")?;
                 }
                 StmtKind::Noop => writeln!(self.output, "noop")?,

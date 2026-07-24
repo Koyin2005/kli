@@ -4,7 +4,7 @@ use crate::{
     collect::{CtxtRef, TypeDefKind},
     diagnostics::emit_fatal_diagnostic,
     mir::{
-        BinaryOp, Body, CastKind, CopyNonOverlapping, Location, PointerCast, Stmt,
+        BinaryOp, Body, CastKind, Location, PointerCast, Stmt,
         StmtKind, TerminatorKind,
         visitor::{PlaceCtxt, Visit},
     },
@@ -331,32 +331,6 @@ impl Visit for WellFormed<'_> {
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt) {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
-            StmtKind::CopyNonOverlapping(copy) => {
-                let CopyNonOverlapping { dst, src, count } = copy.as_ref();
-                let dst_ty = dst.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                let src_ty = src.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                let count_ty = count.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                self.assert(
-                    dst_ty == src_ty,
-                    || format!("src and dst have types {} and {}", dst_ty, src_ty),
-                    stmt.loc,
-                );
-                self.assert(
-                    count_ty == Type::UINT,
-                    || format!("count should be int not '{}'", count_ty),
-                    stmt.loc,
-                );
-                self.assert(
-                    dst_ty.as_pointer() == src_ty.as_pointer() && dst_ty.as_pointer().is_some(),
-                    || {
-                        format!(
-                            "dst and src should be pointers, not {} and {}",
-                            dst_ty, src_ty
-                        )
-                    },
-                    stmt.loc,
-                );
-            }
             StmtKind::Assign(lhs, rhs) => {
                 let lhs_ty = lhs.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
                 let rhs_ty = rhs.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
