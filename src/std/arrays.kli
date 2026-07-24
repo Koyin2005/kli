@@ -14,9 +14,14 @@ type Array[T] = {
 }
 impl
     fun empty() -> Array[T] = []
+
+    fun len(this : Array[T]) -> uint;
+
     @unsafe
-    fun unsafe_get(this : Array[T], index : uint) -> T = 
-        builtins.offset(this.ptr,std.ints.uint_to_int(index))^
+    fun unsafe_get(this : Array[T], index : uint) -> T;
+    @unsafe
+    fun unsafe_set(this : Array[T], index : uint, value : T) -> ();
+    fun addr_eq(this : Array[T], other : Array[T]) -> bool;
 
     fun get_checked(this : Array[T], index : uint) -> Option[T] = 
         case index < this.len of 
@@ -30,14 +35,25 @@ impl
         | false -> index_out_bounds()
         end
 
-    @unsafe
-    fun unsafe_set(this : Array[T], index : uint, value : T) -> () = 
-        this.ptr^ = value
     
     fun set(this : Array[T], index : uint, value : T) -> () = 
         case index < this.len of 
         | true -> unsafe Array.unsafe_set(this,index,value) end
         | false -> index_out_bounds()
+        end
+    
+
+    fun copy_from(this : Array[T], other : Array[T]) -> () = 
+        case Array.addr_eq(this,other) of
+        | true -> ()
+        | false -> 
+            do
+                let mut i = 0;
+                while i < Array.len(other) and i < Array.len(this) do
+                    Array.set(this, i, Array.get(other,i));
+                    i = i + 1
+                end
+            end
         end
 
 end

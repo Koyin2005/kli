@@ -5,7 +5,6 @@ use crate::{
     collect::TypeDefKind,
     def_ids::DefId,
     index_vec::IndexVec,
-    lang_items::LangItem,
     resolved_ast::{
         self, BlockBody, Expr, ExprKind, FieldInit, FunctionDefId, Lambda, Pattern, Var,
     },
@@ -15,10 +14,7 @@ use crate::{
         root::{FunctionCtxt, TypeCheck},
     },
     typed_ast::{self, Capture, FieldId, RecordFieldInit},
-    types::{
-        FieldName, FunctionSig, FunctionType, GenericArg, GenericArgs, PointerType, RecordField,
-        Type,
-    },
+    types::{FieldName, FunctionSig, FunctionType, GenericArgs, PointerType, RecordField, Type},
 };
 
 impl FunctionCtxt<'_> {
@@ -914,15 +910,7 @@ impl FunctionCtxt<'_> {
                 )
             }
             ExprKind::Array(fields) => {
-                let array_id = self.ctxt().lang_items().get(LangItem::Array);
-                let element_ty = if let Some(Type::Named(ty_id, _, ref args)) = expected_ty
-                    && let Some(array_id) = array_id
-                    && ty_id == array_id
-                {
-                    args.first().map(|arg| arg.expect_ty())
-                } else {
-                    None
-                };
+                let element_ty = expected_ty.as_ref().and_then(|ty| ty.as_array(self.ctxt()));
                 let mut coercion = Coercion::new(element_ty.cloned(), self);
                 for field in fields {
                     coercion.check_expr(field);
@@ -932,15 +920,12 @@ impl FunctionCtxt<'_> {
                     self.root().type_annotations_needed(loc);
                     Type::Unknown
                 });
-                let ty = if let Some(array_id) = array_id {
-                    let name = self.ctxt().expect_ident(array_id).symbol;
-                    Type::Named(array_id, name, vec![GenericArg::Type(element_ty)])
-                } else {
+                let ty = Type::array(self.ctxt(), element_ty).unwrap_or_else(|| {
                     self.ctxt()
                         .diag()
                         .add_diagnostic("Expected array type".to_string(), loc);
                     Type::Unknown
-                };
+                });
                 make_expr(
                     ty,
                     typed_ast::ExprKind::Array(elements.into_boxed_slice()),
