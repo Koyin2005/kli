@@ -232,13 +232,17 @@ impl FunctionCtxt<'_> {
             params: sig.params.clone(),
             return_type: Box::new(sig.return_type.clone()),
         });
+        if !captures.is_empty() {
+            self.ctxt()
+                .diag()
+                .add_diagnostic(format!("Cannot capture"), loc);
+        }
         typed_ast::Expr {
             ty: function,
             loc,
             kind: typed_ast::ExprKind::Lambda(Box::new(typed_ast::Lambda {
                 loc: lambda.loc,
                 id,
-                captures,
                 params,
                 param_tys: sig.params,
                 return_type: Box::new(sig.return_type),

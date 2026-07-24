@@ -2,11 +2,11 @@ use crate::{
     collect::CtxtRef,
     def_ids::DefId,
     mir::{
-        BodySource, CastKind, Constant, Context, Local, LocalKind, Operand, Place, PointerCast,
-        Rvalue, TerminatorKind, build::Builder, visitor::Visit, well_formed::WellFormed,
+        BodySource, Constant, Context, LocalKind, Place, TerminatorKind, build::Builder,
+        visitor::Visit, well_formed::WellFormed,
     },
     src_loc::SrcLoc,
-    typed_ast::{self, FieldId, Lambda},
+    typed_ast::{self, Lambda},
     types::{FunctionType, GenericArgs, Type},
 };
 
@@ -57,13 +57,7 @@ impl Builder<'_> {
     }
     pub(super) fn lambda_code_constant(ctxt: CtxtRef<'_>, lambda: &Lambda) -> Constant {
         let ty = Type::Function(FunctionType {
-            params: lambda
-                .captures
-                .iter()
-                .map(|capture| &capture.ty)
-                .chain(lambda.param_tys.iter())
-                .cloned()
-                .collect(),
+            params: lambda.param_tys.clone(),
             return_type: lambda.return_type.clone(),
         });
         let generics = ctxt.generics(lambda.id);
@@ -76,95 +70,5 @@ impl Builder<'_> {
             ty: Box::new(ty),
             value: crate::mir::ConstValue::Named(lambda.id, args),
         }
-    }
-
-    pub(super) fn closure_shim(
-        mir_context: &mut Context,
-        ctxt: CtxtRef<'_>,
-        id: DefId,
-        lambda: &Lambda,
-    ) -> Constant {
-        let generics = ctxt.generics(lambda.id);
-        let args = if !generics.is_empty() {
-            generics.instantiate_identity()
-        } else {
-            GenericArgs::new()
-        };
-        let constant = Constant {
-            ty: Box::new(Type::new_function(
-                std::iter::once(Type::pointer(Type::Byte))
-                    .chain(lambda.param_tys.iter().cloned())
-                    .collect(),
-                *lambda.return_type.clone(),
-            )),
-            value: crate::mir::ConstValue::ClosureShim(id, args),
-        };
-        if mir_context
-            .bodies
-            .contains_key(&BodySource::ClosureShim(id))
-        {
-            return constant;
-        }
-        /*
-           fun(x) -> x + upvar
-
-           lambda l (upvar : int, x : int) -> int = ..
-
-           closure_shim l (env : ptr[byte], x : int) -> int = let env = cast(ptr[{upvar : int}],env); return (lambda l)(env^.upvar,x);
-        */
-
-        let mut builder = Builder::new(
-            mir_context,
-            BodySource::ClosureShim(id),
-            (*lambda.return_type).clone(),
-            ctxt,
-        );
-        builder.add_param_locals(
-            std::iter::once((LocalKind::Param(None), Type::pointer(Type::Byte))).chain(
-                lambda
-                    .params
-                    .iter()
-                    .zip(lambda.param_tys.iter())
-                    .map(|(param, ty)| (LocalKind::Param(Some(param.var)), ty.clone())),
-            ),
-        );
-
-        let env_ty = Type::closure_env(lambda.captures.iter().cloned());
-        let casted_env = builder.assign_to_temp(
-            lambda.loc,
-            Type::pointer(env_ty.clone()),
-            Rvalue::Cast(
-                CastKind::PointerCast(PointerCast::RawToRaw(env_ty)),
-                Operand::Load(Place::local(Local::new(0))),
-            ),
-        );
-        builder.assign(
-            lambda.loc,
-            Place::return_place(),
-            Rvalue::Call(
-                Operand::Constant(Self::lambda_code_constant(ctxt, lambda)),
-                lambda
-                    .captures
-                    .iter()
-                    .enumerate()
-                    .map(|(i, _)| {
-                        Place::local(casted_env)
-                            .with_deref()
-                            .with_field(FieldId::new(i))
-                    })
-                    .chain(
-                        lambda
-                            .params
-                            .iter()
-                            .enumerate()
-                            .map(|(i, _)| Place::local(Local::new(i + 1))),
-                    )
-                    .map(Operand::Load)
-                    .collect(),
-            ),
-        );
-        builder.finish_block(lambda.loc, TerminatorKind::Return);
-        builder.add_finished_body();
-        constant
     }
 }

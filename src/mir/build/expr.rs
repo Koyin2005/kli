@@ -6,11 +6,11 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         self, AggregateKind, ConstValue, Constant, CopyNonOverlapping, DropInPlace, Local, Operand,
-        OverflowOp, Place, PointerCast, Rvalue, build::Builder,
+        OverflowOp, Place, Rvalue, build::Builder,
     },
     src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
-    types::{FieldName, FunctionType, Type},
+    types::{FunctionType, Type},
 };
 pub(super) enum BuiltinResult {
     Rvalue(Rvalue),
@@ -44,9 +44,7 @@ impl Builder<'_> {
                     value: ConstValue::Named(id, generic_args.clone()),
                 })
             }
-            ExprKind::Lambda(ref lambda) if lambda.captures.is_empty() => {
-                Some(Self::lambda_code_constant(self.ctxt, lambda))
-            }
+            ExprKind::Lambda(ref lambda) => Some(Self::lambda_code_constant(self.ctxt, lambda)),
             ExprKind::Const(id, ref args) => {
                 let ty = expr.ty.clone();
                 Some(Constant {
@@ -346,7 +344,8 @@ impl Builder<'_> {
             | ExprKind::Function(..)
             | ExprKind::Const(..)
             | ExprKind::VariantInit(.., None)
-            | ExprKind::String(..) => {
+            | ExprKind::String(..)
+            | ExprKind::Lambda(_) => {
                 let operand = self
                     .as_operand(expr)
                     .unwrap_or_else(|| unreachable!("should be an constant operand '{:?}' ", expr));
@@ -521,81 +520,6 @@ impl Builder<'_> {
                 Rvalue::Use(Operand::Constant(Constant::unit()))
             }
             ExprKind::AddressOf(place) => Rvalue::RawPtrTo(self.lower_place(place)),
-            ExprKind::Lambda(lambda) => {
-                let function = if lambda.captures.is_empty() {
-                    Operand::Constant(Self::lambda_code_constant(self.ctxt, lambda))
-                } else {
-                    Operand::Constant(Self::closure_shim(
-                        self.mir_context,
-                        self.ctxt,
-                        lambda.id,
-                        lambda,
-                    ))
-                };
-                if !lambda.captures.is_empty() {
-                    let env_ty = Type::closure_env(lambda.captures.iter().cloned());
-                    let env = self.assign_to_temp(
-                        expr.loc,
-                        Type::pointer(env_ty.clone()),
-                        Rvalue::Allocate {
-                            ty: env_ty,
-                            count: Operand::Constant(Constant::int(1)),
-                        },
-                    );
-                    self.assign(
-                        expr.loc,
-                        Place::local(env).with_deref(),
-                        Rvalue::Aggregate(
-                            AggregateKind::Record {
-                                field_names: lambda
-                                    .captures
-                                    .iter()
-                                    .map(|capture| capture.var.0)
-                                    .map(FieldName::Named)
-                                    .collect(),
-                            },
-                            lambda
-                                .captures
-                                .iter()
-                                .map(|capture| {
-                                    Operand::Load(Place::local(
-                                        self.body.local_for_var(capture.var.1).map_or_else(
-                                            || {
-                                                Local::new(
-                                                    self.ctxt
-                                                        .captures(lambda.id)
-                                                        .unwrap_or_default()
-                                                        .capture_index(capture.var.1)
-                                                        .unwrap(),
-                                                )
-                                            },
-                                            std::convert::identity,
-                                        ),
-                                    ))
-                                })
-                                .collect(),
-                        ),
-                    );
-
-                    let erased_env = self.assign_to_temp(
-                        expr.loc,
-                        Type::pointer(Type::Byte),
-                        Rvalue::pointer_cast(
-                            PointerCast::RawToRaw(Type::Byte),
-                            Operand::Load(Place::local(env)),
-                        ),
-                    );
-                    let param_tys = lambda.param_tys.clone();
-                    Rvalue::Aggregate(
-                        AggregateKind::Closure(param_tys, lambda.return_type.clone()),
-                        [Operand::Load(Place::local(erased_env)), function]
-                            .into_iter()
-                            .collect(),
-                    )
-                } else {
-                    Rvalue::Use(function)
-                }
-            }
             &ExprKind::BuiltinCall(builtin, _, ref args) => {
                 self.builtin_call(expr.loc, &expr.ty, builtin, args).into()
             }

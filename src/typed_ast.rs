@@ -60,7 +60,6 @@ pub struct LambdaParam {
 pub struct Lambda {
     pub id: DefId,
     pub loc: SrcLoc,
-    pub captures: Vec<Capture>,
     pub params: Vec<LambdaParam>,
     pub param_tys: Vec<Type>,
     pub return_type: Box<Type>,

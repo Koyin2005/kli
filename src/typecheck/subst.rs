@@ -177,9 +177,6 @@ impl<'a> TypeSubst<'a> {
                 }
             }
             ExprKind::Lambda(lambda) => {
-                for capture in lambda.captures.iter_mut() {
-                    self.subst_type(&mut capture.ty);
-                }
                 for ty in lambda.param_tys.iter_mut() {
                     self.subst_type(ty);
                 }

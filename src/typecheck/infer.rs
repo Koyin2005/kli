@@ -47,11 +47,7 @@ impl TypeInfer {
         args1
             .into_iter()
             .zip(args2)
-            .map(|(arg1, arg2)| {
-                Some(match (arg1, arg2) {
-                    (GenericArg(ty1), GenericArg(ty2)) => GenericArg(self.unify_ty(ty1, ty2)?),
-                })
-            })
+            .map(|(arg1, arg2)| Some(GenericArg(self.unify_ty(arg1.0, arg2.0)?)))
             .collect::<Option<GenericArgs>>()
     }
     pub fn unify_ty(&mut self, ty1: Type, ty2: Type) -> Option<Type> {
