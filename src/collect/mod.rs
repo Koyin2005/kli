@@ -260,7 +260,6 @@ impl CtxtRef<'_> {
                 | Type::Unknown
                 | Type::Infer(_)
                 | Type::Param(..)
-                | Type::RawPointer(_)
                 | Type::Int(_)
                 | Type::Function(..)
                 | Type::Array(_)

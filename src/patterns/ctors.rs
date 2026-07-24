@@ -24,7 +24,6 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Cons
         | Type::Param(..)
         | Type::Int(_)
         | Type::Function(..)
-        | Type::RawPointer(..)
         | Type::Byte
         | Type::Array(_) => vec![Constructor::NonExhaustive],
         Type::Record(_) | Type::Tuple(_) => {

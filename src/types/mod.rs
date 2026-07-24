@@ -190,7 +190,6 @@ pub enum Type {
     Function(FunctionType),
     Tuple(Vec<Type>),
     Record(IndexVec<FieldId, RecordField>),
-    RawPointer(Box<Type>),
     Array(Box<Type>),
     Named(DefId, Symbol, GenericArgs),
 }
@@ -214,7 +213,7 @@ impl Type {
     pub const fn is_builtin_scalar(&self) -> bool {
         matches!(
             self,
-            Self::Int(_) | Self::Bool | Self::Byte | Self::Char | Self::RawPointer(_)
+            Self::Int(_) | Self::Bool | Self::Byte | Self::Char 
         )
     }
     pub fn as_array(&self) -> Option<&Type> {
@@ -329,7 +328,6 @@ impl Type {
             Self::Never => true,
             Self::Record(fields) => fields.iter().any(|field| field.ty.is_uninhabited(ctxt)),
             Self::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
-            Self::RawPointer(_) => false,
             Self::Array(ty) => ty.is_uninhabited(ctxt),
             Self::Named(def_id, _, generic_args) => {
                 if ctxt.is_type_recursive(*def_id) {
@@ -360,7 +358,7 @@ impl Type {
             | Type::Byte
             | Type::Param(..)
             | Type::Never => ControlFlow::Continue(()),
-            Type::RawPointer(ty) | Self::Array(ty) => ty.visit(visit_ty),
+            Self::Array(ty) => ty.visit(visit_ty),
             Type::Function(function_type) => {
                 for param in function_type.params.iter() {
                     param.visit(visit_ty)?;
@@ -393,9 +391,6 @@ impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Byte => f.pad("byte"),
-            Type::RawPointer(ty) => {
-                write!(f, "ptr[{}]", ty)
-            }
             Type::Never => f.pad("never"),
             Type::Record(fields) => {
                 f.pad("{")?;
@@ -467,7 +462,6 @@ pub trait TypeMap {
             | Type::Infer(_)
             | Type::Param(..)
             | Type::Never => Ok(ty),
-            Type::RawPointer(ty) => Ok(Type::RawPointer(Box::new(self.map_type(*ty)?))),
             Type::Function(function_type) => {
                 Ok(Type::Function(self.map_function_type(function_type)?))
             }

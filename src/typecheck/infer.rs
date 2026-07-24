@@ -63,9 +63,6 @@ impl TypeInfer {
                 assert_eq!(name1, name2);
                 Some(Type::Param(name1, index1))
             }
-            (Type::RawPointer(ty1), Type::RawPointer(ty2)) => self
-                .unify_ty(*ty1, *ty2)
-                .map(|ty| Type::RawPointer(Box::new(ty))),
             (Type::Array(ty1), Type::Array(ty2)) => self
                 .unify_ty(*ty1, *ty2)
                 .map(|ty| Type::Array(Box::new(ty))),
@@ -139,7 +136,6 @@ impl TypeInfer {
                 | Type::Function(..)
                 | Type::Byte
                 | Type::Record(..)
-                | Type::RawPointer(_)
                 | Type::Named(..)
                 | Type::Never
                 | Type::Tuple(_)

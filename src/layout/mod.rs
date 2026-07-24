@@ -321,7 +321,6 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
                     .collect(),
             );
         }
-        Type::RawPointer(_) => Layout::pointer(!matches!(ty, Type::RawPointer(_))),
         Type::Named(id, .., args) => match ctxt.type_def(*id).kind {
             TypeDefKind::Record(fields) => {
                 return record_layout(
