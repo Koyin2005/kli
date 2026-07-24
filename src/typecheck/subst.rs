@@ -80,7 +80,6 @@ impl<'a> TypeSubst<'a> {
     }
     pub fn subst_place(&mut self, place: &mut Place) {
         match &mut place.kind {
-            PlaceKind::Deref(expr) => self.subst_expr(expr),
             PlaceKind::Field(place, _) => self.subst_place(place),
             PlaceKind::Var(..) | PlaceKind::Upvar(..) | PlaceKind::Invalid => (),
             PlaceKind::Index(expr1, expr2) => {

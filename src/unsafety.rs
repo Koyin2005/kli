@@ -53,19 +53,6 @@ impl<'ctxt> SafetyCheck<'ctxt> {
     }
 }
 impl Visitor for SafetyCheck<'_> {
-    fn visit_place(&mut self, place: &crate::typed_ast::Place) {
-        if self.in_unsafe_block {
-            return;
-        }
-        if let PlaceKind::Deref(ref value) = place.kind
-            && value.ty.as_pointer().is_some()
-        {
-            self.ctxt
-                .diag()
-                .add_diagnostic("deref of raw pointer outside unsafe context", place.loc)
-        }
-        walk_place(self, place);
-    }
     fn visit_expr(&mut self, expr: &crate::typed_ast::Expr) {
         let function = match expr.kind {
             ExprKind::Unsafe(ref expr) => {

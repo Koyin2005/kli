@@ -42,7 +42,6 @@ where
 {
     match &place.kind {
         PlaceKind::Var(_) | PlaceKind::Upvar(..) | PlaceKind::Invalid => (),
-        PlaceKind::Deref(value) => v.visit_expr(value),
         PlaceKind::Field(place, _) => v.visit_place(place),
         PlaceKind::Index(expr1, expr2) => {
             v.visit_expr(expr1);

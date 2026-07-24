@@ -42,7 +42,6 @@ pub struct Place {
 pub enum PlaceKind {
     Upvar(DefId, Var),
     Var(Var),
-    Deref(Box<Expr>),
     Field(Box<Place>, FieldId),
     Index(Box<Expr>, Box<Expr>),
     Invalid,

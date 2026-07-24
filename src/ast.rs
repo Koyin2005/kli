@@ -79,11 +79,6 @@ impl Display for BinaryOp {
     }
 }
 #[derive(Debug)]
-pub enum Place {
-    Ident(Ident),
-    Deref(Box<Expr>, SrcLoc),
-}
-#[derive(Debug)]
 pub struct Pattern {
     pub loc: SrcLoc,
     pub kind: PatternKind,
