@@ -117,10 +117,6 @@ impl Place {
         self.projections.push(PlaceProjection::ConstantIndex(index));
         self
     }
-    pub fn with_deref(mut self) -> Self {
-        self.projections.push(PlaceProjection::Deref);
-        self
-    }
     pub fn with_case_downcast(mut self, index: CaseId, name: Symbol) -> Self {
         self.projections
             .push(PlaceProjection::CaseDowncast(index, name));
