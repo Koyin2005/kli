@@ -244,6 +244,7 @@ pub enum ExprKind {
     MethodCall(Box<Expr>, Ident, Vec<Expr>),
     Array(Vec<Expr>),
     Return(Box<Expr>),
+    Index(Box<Expr>, Box<Expr>),
 }
 #[derive(Debug, Clone, Copy)]
 pub struct GenericParam {

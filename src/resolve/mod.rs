@@ -646,6 +646,10 @@ impl<'info> Resolve<'info> {
             ast::ExprKind::Field(expr, field) => {
                 res::ExprKind::Field(Box::new(self.resolve_expr(*expr)), field)
             }
+            ast::ExprKind::Index(expr, index) => res::ExprKind::Index(
+                Box::new(self.resolve_expr(*expr)),
+                Box::new(self.resolve_expr(*index)),
+            ),
             ast::ExprKind::Panic => res::ExprKind::Panic,
             ast::ExprKind::Call(callee, args) => res::ExprKind::Call(
                 Box::new(self.resolve_expr(*callee)),

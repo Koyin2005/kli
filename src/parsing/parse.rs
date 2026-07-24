@@ -591,7 +591,7 @@ impl Parser {
                         break;
                     }
                 }
-                let _ = self.expect(&TokenKind::RightParen)?;
+                self.expect(&TokenKind::RightParen)?;
                 let _ = self.expect(&TokenKind::Arrow);
                 let body = self.parse_expr()?;
                 Ok(Expr {
@@ -641,10 +641,19 @@ impl Parser {
                 }
                 TokenKind::Dot => {
                     self.advance();
-                    let name = self.expect_ident("field name")?;
-                    Expr {
-                        loc: expr.loc,
-                        kind: ExprKind::Field(Box::new(expr), name),
+                    if self.matches_token(&TokenKind::LeftBracket) {
+                        let index = self.parse_expr()?;
+                        self.expect(&TokenKind::RightBracket)?;
+                        Expr {
+                            loc: expr.loc,
+                            kind: ExprKind::Index(Box::new(expr), Box::new(index)),
+                        }
+                    } else {
+                        let name = self.expect_ident("field name")?;
+                        Expr {
+                            loc: expr.loc,
+                            kind: ExprKind::Field(Box::new(expr), name),
+                        }
                     }
                 }
                 TokenKind::Arrow => {

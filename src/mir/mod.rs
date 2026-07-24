@@ -420,9 +420,15 @@ impl SwitchTargets {
 }
 #[derive(Clone)]
 pub enum AssertKind {
+    InBounds,
     Overflow(OverflowOp),
     DivideOverflow,
     DivideByZero,
+}
+impl AssertKind {
+    pub fn negate(&self) -> bool {
+        !matches!(self, Self::InBounds)
+    }
 }
 
 pub struct Successors<'a>(SuccessorsIter<'a>);

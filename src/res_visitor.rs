@@ -93,7 +93,9 @@ pub trait Visitor {
             ExprKind::Function(_, args) | ExprKind::TypeRelativePath(_, _, args) => {
                 self.visit_generic_args(args);
             }
-            ExprKind::Binary(_, expr1, expr2) | ExprKind::While(expr1, expr2) => {
+            ExprKind::Binary(_, expr1, expr2)
+            | ExprKind::While(expr1, expr2)
+            | ExprKind::Index(expr1, expr2) => {
                 self.visit_expr(expr1);
                 self.visit_expr(expr2);
             }

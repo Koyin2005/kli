@@ -83,6 +83,10 @@ impl<'a> TypeSubst<'a> {
             PlaceKind::Deref(expr) => self.subst_expr(expr),
             PlaceKind::Field(place, _) => self.subst_place(place),
             PlaceKind::Var(..) | PlaceKind::Upvar(..) | PlaceKind::Invalid => (),
+            PlaceKind::Index(expr1, expr2) => {
+                self.subst_expr(expr1);
+                self.subst_expr(expr2);
+            }
         }
         self.subst_type(&mut place.ty);
     }

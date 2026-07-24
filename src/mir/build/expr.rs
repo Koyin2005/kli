@@ -100,6 +100,26 @@ impl Builder<'_> {
     }
     pub(super) fn lower_place(&mut self, place: &typed_ast::Place) -> Place {
         match &place.kind {
+            typed_ast::PlaceKind::Index(base, index) => {
+                let base = self.place(base);
+                let index = self.expr_into_temp(index);
+                let len = self.assign_to_temp(place.loc, Type::UINT, Rvalue::Len(base.clone()));
+                let in_bounds = self.assign_to_temp(
+                    place.loc,
+                    Type::Bool,
+                    Self::binary_op_rvalue(
+                        mir::BinaryOp::Lesser,
+                        Operand::Load(Place::local(index)),
+                        Operand::Load(Place::local(len)),
+                    ),
+                );
+                self.finish_assert_to_new_block(
+                    place.loc,
+                    Operand::Load(Place::local(in_bounds)),
+                    mir::AssertKind::InBounds,
+                );
+                base.with_index(index)
+            }
             typed_ast::PlaceKind::Var(var) => {
                 let Some(local) = self.body.local_for_var(var.1) else {
                     unreachable!("should have a local for {:?} at {:?}", var, place.loc)

@@ -44,6 +44,10 @@ where
         PlaceKind::Var(_) | PlaceKind::Upvar(..) | PlaceKind::Invalid => (),
         PlaceKind::Deref(value) => v.visit_expr(value),
         PlaceKind::Field(place, _) => v.visit_place(place),
+        PlaceKind::Index(expr1, expr2) => {
+            v.visit_expr(expr1);
+            v.visit_expr(expr2);
+        }
     }
 }
 pub fn walk_stmt<V>(v: &mut V, stmt: &Stmt)

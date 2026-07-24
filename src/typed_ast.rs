@@ -44,6 +44,7 @@ pub enum PlaceKind {
     Var(Var),
     Deref(Box<Expr>),
     Field(Box<Place>, FieldId),
+    Index(Box<Expr>, Box<Expr>),
     Invalid,
 }
 #[derive(Debug, Clone)]

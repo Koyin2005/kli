@@ -67,6 +67,21 @@ impl FunctionCtxt<'_> {
                     (Type::Unknown, typed_ast::PlaceKind::Invalid)
                 }
             }
+            ExprKind::Index(reciever, index) => {
+                let receiver = self.check_expr(reciever, None);
+                let index = self.check_expr_coerces_to(index, Some(Type::UINT));
+                let element_ty = receiver.ty.as_array().cloned().unwrap_or_else(|| {
+                    self.ctxt().diag().add_diagnostic(
+                        format!("Expected an array type but got '{}'", receiver.ty),
+                        receiver.loc,
+                    );
+                    Type::Unknown
+                });
+                (
+                    element_ty,
+                    typed_ast::PlaceKind::Index(Box::new(receiver), Box::new(index)),
+                )
+            }
             _ => {
                 self.root()
                     .ctxt()
@@ -235,7 +250,7 @@ impl FunctionCtxt<'_> {
         if !captures.is_empty() {
             self.ctxt()
                 .diag()
-                .add_diagnostic(format!("Cannot capture"), loc);
+                .add_diagnostic("Cannot capture".to_string(), loc);
         }
         typed_ast::Expr {
             ty: function,
@@ -669,7 +684,7 @@ impl FunctionCtxt<'_> {
                     }
                 }
             }
-            ExprKind::Var(_) | ExprKind::Deref(_) | ExprKind::Field(..) => {
+            ExprKind::Var(_) | ExprKind::Deref(_) | ExprKind::Field(..) | ExprKind::Index(..) => {
                 let place = self.check_place(expr, expected_ty);
                 typed_ast::Expr {
                     ty: place.ty.clone(),

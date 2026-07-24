@@ -413,10 +413,15 @@ impl<'ctxt> MirDump<'ctxt> {
                 TerminatorKind::Goto(block) => write!(self.output, "goto bb{}", block.0)?,
                 TerminatorKind::Panic => write!(self.output, "panic")?,
                 TerminatorKind::Assert(operand, kind, block) => {
-                    write!(self.output, "assert(!")?;
+                    write!(
+                        self.output,
+                        "assert({}",
+                        if kind.negate() { "!" } else { "" }
+                    )?;
                     self.write_operand(operand)?;
                     write!(self.output, ", ")?;
                     match kind {
+                        AssertKind::InBounds => write!(self.output, "\"index out of bounds\"")?,
                         AssertKind::Overflow(op) => {
                             write!(self.output, "\"Overflow in computing {op:?}\"")?
                         }

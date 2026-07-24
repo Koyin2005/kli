@@ -138,6 +138,7 @@ pub enum ExprKind {
     MethodCall(Box<Expr>, Ident, Box<[Expr]>),
     TypeRelativePath(TypeName, Ident, Box<GenericArgs>),
     Array(Vec<Expr>),
+    Index(Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug)]
