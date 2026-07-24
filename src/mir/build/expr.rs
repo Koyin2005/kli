@@ -83,14 +83,6 @@ impl Builder<'_> {
             Place::local(self.expr_into_temp(expr))
         }
     }
-    fn operand_as_place(&mut self, loc: SrcLoc, ty: Type, operand: Operand) -> Place {
-        match operand {
-            Operand::Load(place) => place,
-            Operand::Constant(_) => {
-                Place::local(self.assign_to_temp(loc, ty, Rvalue::Use(operand)))
-            }
-        }
-    }
     pub(super) fn operand(&mut self, expr: &Expr) -> Operand {
         if let Some(operand) = self.as_operand(expr) {
             operand
@@ -337,21 +329,6 @@ impl Builder<'_> {
                 mir::CastKind::Transmute(ty.clone()),
                 { operands }.swap_remove(0),
             )),
-            Builtin::PtrRead => {
-                let [ptr] = { operands }.try_into().unwrap();
-                let deref = self
-                    .operand_as_place(loc, args[0].ty.clone(), ptr)
-                    .with_deref();
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Load(deref)))
-            }
-            Builtin::PtrWrite => {
-                let [ptr, value] = { operands }.try_into().unwrap();
-                let deref = self
-                    .operand_as_place(loc, args[0].ty.clone(), ptr)
-                    .with_deref();
-                self.assign(loc, deref, Rvalue::Use(value));
-                BuiltinResult::Unit
-            }
         }
     }
     pub fn build_rvalue(&mut self, expr: &Expr) -> Rvalue {
