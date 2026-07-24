@@ -20,7 +20,9 @@ impl<'a> TypeSubst<'a> {
             | Type::Param(..)
             | Type::Never
             | Type::Byte => (),
-            Type::Array(ty, _) | Type::RawPointer(ty) => self.subst_type(ty),
+            Type::InlineArray(ty, _) | Type::Array(ty) | Type::RawPointer(ty) => {
+                self.subst_type(ty)
+            }
             Type::Function(FunctionType {
                 resource: _,
                 params,

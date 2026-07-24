@@ -141,7 +141,9 @@ impl<'a> Lower<'a> {
             TypeName::Box | TypeName::Array | TypeName::String => {
                 let id = self.ctxt.lang_items().expect(match name {
                     TypeName::String => LangItem::String,
-                    TypeName::Array => LangItem::Array,
+                    TypeName::Array => {
+                        LangItem::Array
+                    },
                     TypeName::Box => LangItem::Box,
                     _ => unreachable!("checked above"),
                 });

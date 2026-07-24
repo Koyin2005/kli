@@ -156,7 +156,8 @@ pub enum Type {
     Tuple(Vec<Type>),
     Record(IndexVec<FieldId, RecordField>),
     RawPointer(Box<Type>),
-    Array(Box<Type>, u64),
+    InlineArray(Box<Type>, u64),
+    Array(Box<Type>),
     Named(DefId, Symbol, GenericArgs),
 }
 impl Type {
@@ -196,7 +197,7 @@ impl Type {
     pub fn string(ctxt: CtxtRef<'_>) -> Self {
         let id = ctxt.lang_items().expect(LangItem::String);
         let name = ctxt.expect_ident(id).symbol;
-        Type::Named(id, name, GenericArgs::new())
+        Self::Named(id, name, GenericArgs::new())
     }
     pub fn as_named(&self) -> Option<(DefId, Symbol, GenericArgsRef<'_>)> {
         let Self::Named(id, name, args) = self else {
@@ -238,11 +239,11 @@ impl Type {
                 return_type,
             }) => match field_id {
                 id if id == FieldId::FIRST_FIELD => Some((
-                    Type::pointer(Type::Byte),
+                    Self::pointer(Type::Byte),
                     FieldName::Named(Symbol::intern("env")),
                 )),
                 id if id == FieldId::new(1) => Some((
-                    Type::function_type(
+                    Self::function_type(
                         IsResource::Data,
                         {
                             let mut params = params.clone();
@@ -272,7 +273,7 @@ impl Type {
         })
     }
     pub fn as_pointer(&self) -> Option<&Type> {
-        let Type::RawPointer(ty) = self else {
+        let Self::RawPointer(ty) = self else {
             return None;
         };
         Some(ty)
@@ -343,20 +344,20 @@ impl Type {
     }
     pub fn is_uninhabited(&self, ctxt: CtxtRef<'_>) -> bool {
         match self {
-            Type::Infer(_)
-            | Type::Unknown
-            | Type::Int(_)
-            | Type::Bool
-            | Type::Char
-            | Type::Byte
-            | Type::Param(..)
-            | Type::Function(..) => false,
-            Type::Never => true,
-            Type::Record(fields) => fields.iter().any(|field| field.ty.is_uninhabited(ctxt)),
-            Type::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
-            Type::RawPointer(_) => false,
-            Type::Array(ty, _) => ty.is_uninhabited(ctxt),
-            Type::Named(def_id, _, generic_args) => {
+            Self::Infer(_)
+            | Self::Unknown
+            | Self::Int(_)
+            | Self::Bool
+            | Self::Char
+            | Self::Byte
+            | Self::Param(..)
+            | Self::Function(..) => false,
+            Self::Never => true,
+            Self::Record(fields) => fields.iter().any(|field| field.ty.is_uninhabited(ctxt)),
+            Self::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
+            Self::RawPointer(_) => false,
+            Self::InlineArray(ty, _) | Self::Array(ty) => ty.is_uninhabited(ctxt),
+            Self::Named(def_id, _, generic_args) => {
                 if ctxt.is_type_recursive(*def_id) {
                     false
                 } else {
@@ -385,7 +386,7 @@ impl Type {
             | Type::Byte
             | Type::Param(..)
             | Type::Never => ControlFlow::Continue(()),
-            Type::RawPointer(ty) | Type::Array(ty, _) => ty.visit(visit_ty),
+            Type::RawPointer(ty) | Type::InlineArray(ty, _) | Self::Array(ty) => ty.visit(visit_ty),
             Type::Function(function_type) => {
                 for param in function_type.params.iter() {
                     param.visit(visit_ty)?;
@@ -419,7 +420,7 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::Array(ty, count) => {
+            Type::InlineArray(ty, count) => {
                 write!(f, "fixed_array[{},{}]", ty, count)
             }
             Type::Byte => f.pad("byte"),
@@ -486,6 +487,7 @@ impl Display for Type {
             Type::Named(_, name, args) => {
                 write!(f, "{}{}", name, display_generic_args(args))
             }
+            Type::Array(ty) => write!(f, "Array[{}]", ty),
         }
     }
 }
@@ -501,7 +503,9 @@ pub trait TypeMap {
             | Type::Infer(_)
             | Type::Param(..)
             | Type::Never => Ok(ty),
-            Type::Array(ty, count) => Ok(Type::Array(Box::new(self.map_type(*ty)?), count)),
+            Type::InlineArray(ty, count) => {
+                Ok(Type::InlineArray(Box::new(self.map_type(*ty)?), count))
+            }
             Type::RawPointer(ty) => Ok(Type::RawPointer(Box::new(self.map_type(*ty)?))),
             Type::Function(function_type) => {
                 Ok(Type::Function(self.map_function_type(function_type)?))
@@ -529,6 +533,7 @@ pub trait TypeMap {
                     })
                     .collect::<Result<Vec<_>, _>>()?,
             )),
+            Type::Array(ty) => Ok(Type::Array(Box::new(self.map_type(*ty)?))),
         }
     }
     fn super_map_function_type(

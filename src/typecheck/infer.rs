@@ -69,12 +69,18 @@ impl TypeInfer {
                 assert_eq!(name1, name2);
                 Some(Type::Param(name1, index1))
             }
-            (Type::Array(ty1, count1), Type::Array(ty2, count2)) if count1 == count2 => self
-                .unify_ty(*ty1, *ty2)
-                .map(|ty| Type::Array(Box::new(ty), count1)),
+            (Type::InlineArray(ty1, count1), Type::InlineArray(ty2, count2))
+                if count1 == count2 =>
+            {
+                self.unify_ty(*ty1, *ty2)
+                    .map(|ty| Type::InlineArray(Box::new(ty), count1))
+            }
             (Type::RawPointer(ty1), Type::RawPointer(ty2)) => self
                 .unify_ty(*ty1, *ty2)
                 .map(|ty| Type::RawPointer(Box::new(ty))),
+            (Type::Array(ty1), Type::Array(ty2)) => self
+                .unify_ty(*ty1, *ty2)
+                .map(|ty| Type::Array(Box::new(ty))),
             (Type::Record(fields1), Type::Record(fields2)) if fields1.len() == fields2.len() => {
                 fields1
                     .into_iter()
@@ -144,14 +150,15 @@ impl TypeInfer {
                 | Type::Unknown
                 | Type::Char
                 | Type::Param(..)
-                | Type::Array(..)
+                | Type::InlineArray(..)
                 | Type::Function(..)
                 | Type::Byte
                 | Type::Record(..)
                 | Type::RawPointer(_)
                 | Type::Named(..)
                 | Type::Never
-                | Type::Tuple(_),
+                | Type::Tuple(_)
+                | Type::Array(_),
                 _,
             ) => None,
         }

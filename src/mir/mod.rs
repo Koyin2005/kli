@@ -48,7 +48,7 @@ impl PlaceProjection {
                     .0
             }
             PlaceProjection::Index(_) | PlaceProjection::ConstantIndex(_) => {
-                let Type::Array(ty, _) = ty else {
+                let Type::InlineArray(ty, _) = ty else {
                     unreachable!("Should be an array")
                 };
                 *ty

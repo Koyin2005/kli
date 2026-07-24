@@ -175,6 +175,7 @@ pub enum LayoutKind {
         cases: IndexVec<CaseId, Layout>,
     },
     Scalar(Scalar),
+    ScalarPair(Scalar, Scalar),
 }
 
 pub enum LayoutError {
@@ -313,6 +314,16 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
                 );
             }
         },
+        Type::Array(_) => {
+            return Ok(Layout {
+                size: POINTER_SIZE.add(INT_SIZE),
+                alignment: POINTER_ALIGN,
+                kind: LayoutKind::ScalarPair(
+                    Scalar::Pointer { non_null: true },
+                    Scalar::Int64(IntegerKind::Unsigned),
+                ),
+            });
+        }
         Type::Tuple(fields) => {
             return record_layout(ctxt, fields.iter().map(Cow::Borrowed).collect());
         }
@@ -326,7 +337,7 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
             );
         }
         Type::RawPointer(_) => Layout::pointer(!matches!(ty, Type::RawPointer(_))),
-        Type::Array(ty, count) => {
+        Type::InlineArray(ty, count) => {
             let mut element_layout = calculate_layout(ctxt, ty)?;
             element_layout.size = element_layout
                 .size

@@ -303,7 +303,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 )?;
                 write!(self.output, "{}", closing_bracket)
             }
-            types::Type::Array(..) => unimplemented!(),
+            types::Type::InlineArray(..) | types::Type::Array(_) => unimplemented!(),
             types::Type::Named(def_id, name, args) => match self.ctxt.type_def(*def_id).kind {
                 TypeDefKind::Record(fields) => match value {
                     ConstValue::Record(values) => {
