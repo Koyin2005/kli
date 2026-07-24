@@ -31,6 +31,7 @@ enum NamedSymbol {
     Box,
     Opaque,
     Builtin,
+    Array
 }
 impl NamedSymbol {
     pub const fn content(self) -> &'static str {
@@ -46,6 +47,7 @@ impl NamedSymbol {
             Self::Box => "box",
             Self::Opaque => "opaque",
             Self::Builtin => "builtin",
+            Self::Array => "array"
         }
     }
 }
@@ -65,7 +67,7 @@ const fn byte_eq(b1: &[u8], b2: &[u8]) -> bool {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol(SymbolId);
 impl Symbol {
-    const NAMED_SYMBOLS: [NamedSymbol; 11] = [
+    const NAMED_SYMBOLS: [NamedSymbol; 12] = [
         NamedSymbol::Empty,
         NamedSymbol::Main,
         NamedSymbol::Std,
@@ -77,6 +79,7 @@ impl Symbol {
         NamedSymbol::Box,
         NamedSymbol::Opaque,
         NamedSymbol::Builtin,
+        NamedSymbol::Array
     ];
     const fn expect_symbol(name: NamedSymbol) -> Symbol {
         let content = name.content();
@@ -107,6 +110,7 @@ impl Symbol {
     pub const BOX: Self = Self::expect_symbol(NamedSymbol::Box);
     pub const OPAQUE: Self = Self::expect_symbol(NamedSymbol::Opaque);
     pub const BUILTIN: Self = Self::expect_symbol(NamedSymbol::Builtin);
+    pub const ARRAY : Self = Self::expect_symbol(NamedSymbol::Array);
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }

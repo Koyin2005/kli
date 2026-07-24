@@ -526,7 +526,7 @@ impl Display for Type {
             Type::Named(_, name, args) => {
                 write!(f, "{}{}", name, display_generic_args(args))
             }
-            Type::Array(ty) => write!(f, "Array[{}]", ty),
+            Type::Array(ty) => write!(f, "array[{}]", ty),
         }
     }
 }

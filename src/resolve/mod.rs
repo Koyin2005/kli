@@ -120,7 +120,7 @@ impl<'info> Resolve<'info> {
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),
             (
-                Symbol::intern("ArrayList"),
+                Symbol::intern("array"),
                 Res::TypeAlias(TypeAlias::ArrayList),
             ),
         ]);

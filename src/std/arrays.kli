@@ -10,38 +10,38 @@ fun index_out_bounds() -> never =
 @opaque
 type Array[T] = {}
 impl
-    fun empty() -> Array[T] = []
+    fun empty() -> array[T] = []
 
-    fun len(this : Array[T]) -> uint = panic
+    fun len(this : array[T]) -> uint = panic
 
     @unsafe
-    fun unsafe_get(this : Array[T], index : uint) -> T = panic
+    fun unsafe_get(this : array[T], index : uint) -> T = panic
     @unsafe
-    fun unsafe_set(this : Array[T], index : uint, value : T) -> () = panic
+    fun unsafe_set(this : array[T], index : uint, value : T) -> () = panic
     
-    fun addr_eq(this : Array[T], other : Array[T]) -> bool = panic
+    fun addr_eq(this : array[T], other : array[T]) -> bool = panic
 
-    fun get_checked(this : Array[T], index : uint) -> Option[T] = 
+    fun get_checked(this : array[T], index : uint) -> Option[T] = 
         case index < Array.len(this) of 
         | true -> Option.Some(unsafe Array.unsafe_get(this,index) end)
         | false -> Option.None
         end
     
-    fun get(this : Array[T], index : uint) -> T = 
+    fun get(this : array[T], index : uint) -> T = 
         case index < Array.len(this) of
         | true -> unsafe Array.unsafe_get(this,index) end
         | false -> index_out_bounds()
         end
 
     
-    fun set(this : Array[T], index : uint, value : T) -> () = 
+    fun set(this : array[T], index : uint, value : T) -> () = 
         case index < Array.len(this) of 
         | true -> unsafe Array.unsafe_set(this,index,value) end
         | false -> index_out_bounds()
         end
     
 
-    fun copy_from(this : Array[T], other : Array[T]) -> () = 
+    fun copy_from(this : array[T], other : array[T]) -> () = 
         case Array.addr_eq(this,other) of
         | true -> ()
         | false -> 

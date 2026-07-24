@@ -90,6 +90,16 @@ impl<'ctxt> RootCtxt<'ctxt> {
     ) -> Result<(DefId, GenericArgs), TypeError> {
         let (name_info, _) = match ty {
             Type::Named(id, name, args) => (Some((*id, *name, args.clone())), false),
+            Type::Array(ty) => (
+                self.ctxt.lang_items().get(LangItem::Array).map(|id| {
+                    (
+                        id,
+                        Symbol::ARRAY,
+                        GenericArgs::from_type((**ty).clone()),
+                    )
+                }),
+                false,
+            ),
             _ => (None, false),
         };
         let ctxt = self.ctxt();
