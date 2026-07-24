@@ -185,7 +185,7 @@ impl Type {
     pub fn as_array(&self, ctxt: CtxtRef<'_>) -> Option<&Type> {
         let (id, _, args) = self.as_named()?;
         let array_id = ctxt.lang_items().get(LangItem::Array)?;
-        let arg = (id == array_id).then(|| args.get(0))??;
+        let arg = (id == array_id).then(|| args.first())??;
         Some(arg.expect_ty())
     }
     pub fn array(ctxt: CtxtRef<'_>, element: Self) -> Option<Self> {

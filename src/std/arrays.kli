@@ -48,7 +48,7 @@ impl
         | true -> ()
         | false -> 
             do
-                let mut i = 0;
+                let mut i = 0u;
                 while i < Array.len(other) and i < Array.len(this) do
                     Array.set(this, i, Array.get(other,i));
                     i = i + 1

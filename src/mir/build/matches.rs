@@ -230,10 +230,12 @@ impl Builder<'_> {
                 true_tree,
                 false_tree,
             } => {
-                let true_block = self.switch_to_new_block();
+                let true_block = self.new_block();
+                let false_block = self.new_block();
+                self.switch_to_block(true_block);
                 self.lower_tree(loc, *true_tree, info, end_blocks);
 
-                let false_block = self.switch_to_new_block();
+                self.switch_to_block(false_block);
                 self.lower_tree(loc, *false_tree, info, end_blocks);
 
                 self.switch_to_block(start_block);
