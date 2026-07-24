@@ -541,7 +541,6 @@ pub enum StmtKind {
     Assign(Place, Box<Rvalue>),
     Print(Option<Operand>),
     CopyNonOverlapping(Box<CopyNonOverlapping>),
-    DropInPlace(Box<DropInPlace>),
 }
 define_id!(BasicBlockId);
 impl BasicBlockId {

@@ -1,5 +1,5 @@
 use crate::mir::{
-    BasicBlock, BasicBlockId, Body, Constant, CopyNonOverlapping, DropInPlace, Local, Location,
+    BasicBlock, BasicBlockId, Body, Constant, CopyNonOverlapping, Local, Location,
     Operand, Place, PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
 };
 pub enum PlaceCtxt {
@@ -27,10 +27,6 @@ pub trait Visit {
                 self.visit_operand(loc, dst);
                 self.visit_operand(loc, src);
                 self.visit_operand(loc, count);
-            }
-            StmtKind::DropInPlace(drop) => {
-                let DropInPlace { pointer_to_place } = drop.as_ref();
-                self.visit_operand(loc, pointer_to_place);
             }
         }
     }
@@ -176,10 +172,6 @@ pub trait MutVisit {
                 self.visit_operand(loc, dst);
                 self.visit_operand(loc, src);
                 self.visit_operand(loc, count);
-            }
-            StmtKind::DropInPlace(drop) => {
-                let DropInPlace { pointer_to_place } = drop.as_mut();
-                self.visit_operand(loc, pointer_to_place);
             }
         }
     }
