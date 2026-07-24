@@ -118,6 +118,17 @@ impl Visit for WellFormed<'_> {
                     loc,
                 );
             }
+            super::Rvalue::AllocateArray(element, fields) => {
+                for field in fields {
+                    let field_ty =
+                        field.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
+                    self.assert(
+                        *element == field_ty,
+                        || format!("array elements should have same type '{}'", element),
+                        loc,
+                    );
+                }
+            }
             super::Rvalue::Aggregate(aggregate_kind, fields) => match aggregate_kind {
                 super::AggregateKind::Record { field_names } => self.assert(
                     fields.len() == field_names.len(),

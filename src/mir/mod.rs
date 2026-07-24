@@ -256,6 +256,7 @@ pub enum CastKind {
 #[derive(Clone, Debug)]
 pub enum Rvalue {
     Aggregate(AggregateKind, IndexVec<FieldId, Operand>),
+    AllocateArray(Type, Vec<Operand>),
     Use(Operand),
     Call(Operand, Vec<Operand>),
     Binary(BinaryOp, Box<(Operand, Operand)>),
@@ -277,7 +278,7 @@ impl Rvalue {
             | Self::Len(_)
             | Self::DanglingPtr(_)
             | Self::Discriminant(_) => true,
-            Self::Allocate { .. } | Self::Call(..) => false,
+            Self::Allocate { .. } | Self::AllocateArray(..) | Self::Call(..) => false,
         }
     }
     pub fn pointer_cast(cast: PointerCast, operand: Operand) -> Self {
@@ -319,6 +320,7 @@ impl Rvalue {
                 BinaryOp::Lesser | BinaryOp::Greater => Type::Bool,
             },
             Rvalue::Allocate { ty, count: _ } => Type::pointer(ty.clone()),
+            Rvalue::AllocateArray(element, _) => Type::array(ctxt, element.clone()).unwrap(),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 AggregateKind::Array(ty, count) => Type::Array(Box::new(ty.clone()), *count),
                 AggregateKind::Record { field_names } => Type::Record(
