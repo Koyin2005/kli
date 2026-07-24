@@ -6,52 +6,46 @@ fun index_out_bounds() -> never =
         panic
     end
 
-@lang_item("array")
-@opaque
-type Array[T] = {}
-impl
-    fun empty() -> array[T] = []
+fun empty[T]() -> array[T] = []
 
-    fun len(this : array[T]) -> uint = panic
+fun len[T](this : array[T]) -> uint = panic
 
-    @unsafe
-    fun unsafe_get(this : array[T], index : uint) -> T = panic
-    @unsafe
-    fun unsafe_set(this : array[T], index : uint, value : T) -> () = panic
-    
-    fun addr_eq(this : array[T], other : array[T]) -> bool = panic
+@unsafe
+fun unsafe_get[T](this : array[T], index : uint) -> T = panic
+@unsafe
+fun unsafe_set[T](this : array[T], index : uint, value : T) -> () = panic
 
-    fun get_checked(this : array[T], index : uint) -> Option[T] = 
-        case index < Array.len(this) of 
-        | true -> Option.Some(unsafe Array.unsafe_get(this,index) end)
-        | false -> Option.None
-        end
-    
-    fun get(this : array[T], index : uint) -> T = 
-        case index < Array.len(this) of
-        | true -> unsafe Array.unsafe_get(this,index) end
-        | false -> index_out_bounds()
-        end
+fun addr_eq[T](this : array[T], other : array[T]) -> bool = panic
 
-    
-    fun set(this : array[T], index : uint, value : T) -> () = 
-        case index < Array.len(this) of 
-        | true -> unsafe Array.unsafe_set(this,index,value) end
-        | false -> index_out_bounds()
-        end
-    
+fun get_checked[T](this : array[T], index : uint) -> Option[T] = 
+    case index < len(this) of 
+    | true -> Option.Some(unsafe unsafe_get(this,index) end)
+    | false -> Option.None
+    end
 
-    fun copy_from(this : array[T], other : array[T]) -> () = 
-        case Array.addr_eq(this,other) of
-        | true -> ()
-        | false -> 
-            do
-                let mut i = 0u;
-                while i < Array.len(other) and i < Array.len(this) do
-                    Array.set(this, i, Array.get(other,i));
-                    i = i + 1
-                end
+fun get[T](this : array[T], index : uint) -> T = 
+    case index < len(this) of
+    | true -> unsafe unsafe_get(this,index) end
+    | false -> index_out_bounds()
+    end
+
+
+fun set[T](this : array[T], index : uint, value : T) -> () = 
+    case index < len(this) of 
+    | true -> unsafe unsafe_set(this,index,value) end
+    | false -> index_out_bounds()
+    end
+
+
+fun copy_from[T](this : array[T], other : array[T]) -> () = 
+    case addr_eq(this,other) of
+    | true -> ()
+    | false -> 
+        do
+            let mut i = 0u;
+            while i < len(other) and i < len(this) do
+                set(this, i, get(other,i));
+                i = i + 1
             end
         end
-
-end
+    end
