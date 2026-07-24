@@ -277,25 +277,6 @@ impl Visit for WellFormed<'_> {
                 }
             }
             super::Rvalue::Cast(cast_kind, operand) => match cast_kind {
-                CastKind::PointerCast(pointer_cast) => {
-                    let ctxt = self.ctxt;
-                    let (pointer_type, _) = self.assert_with_some(
-                        operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type),
-                        |ty| ty.into_pointer_type(ctxt).ok(),
-                        || "Cannot take a non pointer type",
-                        loc,
-                    );
-                    match (pointer_cast, pointer_type) {
-                        (PointerCast::RawToRaw(_), PointerType::Raw) => (),
-                        (cast, pointer_type) => {
-                            self.assert(
-                                false,
-                                || format!("Invalid pointer cast {cast:?} for {pointer_type:?}"),
-                                loc,
-                            );
-                        }
-                    }
-                }
                 CastKind::Transmute(to) => {
                     let from =
                         operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);

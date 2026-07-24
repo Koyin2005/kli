@@ -245,7 +245,6 @@ pub enum PointerCast {
 #[derive(Clone, Debug)]
 pub enum CastKind {
     Transmute(Type),
-    PointerCast(PointerCast),
 }
 #[derive(Clone, Debug)]
 pub enum Rvalue {
@@ -271,9 +270,6 @@ impl Rvalue {
             | Self::Discriminant(_) => true,
             | Self::AllocateArray(..) | Self::Call(..) => false,
         }
-    }
-    pub fn pointer_cast(cast: PointerCast, operand: Operand) -> Self {
-        Self::Cast(CastKind::PointerCast(cast), operand)
     }
 
     pub fn type_of(&self, ctxt: CtxtRef<'_>, locals: &Locals, return_type: &Type) -> Type {
@@ -327,9 +323,6 @@ impl Rvalue {
                 ),
             },
             Rvalue::Cast(cast, _) => match cast {
-                CastKind::PointerCast(cast) => match cast {
-                    PointerCast::RawToRaw(to) => Type::pointer(to.clone()),
-                },
                 CastKind::Transmute(ty) => ty.clone(),
             },
             Rvalue::Discriminant(_) => Type::UINT,

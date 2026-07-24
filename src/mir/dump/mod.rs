@@ -198,11 +198,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     CastKind::Transmute(to) => {
                         write!(self.output, "Transmute({})", to)?;
                     }
-                    CastKind::PointerCast(cast) => match cast {
-                        super::PointerCast::RawToRaw(to) => {
-                            write!(self.output, "RawToRaw({})", to)?
-                        }
-                    },
                 }
                 write!(self.output, ")(")?;
                 self.write_operand(pointer)?;
