@@ -448,6 +448,12 @@ impl Node {
             _ => None,
         }
     }
+    pub fn function_item(&self) -> Option<&Function> {
+        match self {
+            Self::Item(item) => item.function_def(),
+            _ => None,
+        }
+    }
     pub fn is_method(&self) -> bool {
         matches!(self, Self::Method(_))
     }

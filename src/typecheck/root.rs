@@ -451,12 +451,10 @@ impl<'ctxt> TypeCheck<'ctxt> {
         for (id, node) in self.ctxt.all_nodes_with_id() {
             for annotation in self.ctxt.annotations(id) {
                 let valid = match annotation.kind {
-                    res::AnnotationKind::Builtin => {
-                        node.is_function() && !node.is_method() && {
-                            let builtins = self.ctxt.builtins_module();
-                            self.ctxt.ancestors(id).any(|parent| parent == builtins)
-                        }
-                    }
+                    res::AnnotationKind::Builtin => node.function_item().is_some_and(|_| {
+                        let builtins = self.ctxt.builtins_module();
+                        self.ctxt.ancestors(id).any(|parent| parent == builtins)
+                    }),
                     res::AnnotationKind::Copy => node.is_type_def(),
                     res::AnnotationKind::Unsafe => node.is_function(),
                     res::AnnotationKind::LangItem(lang_item) => {

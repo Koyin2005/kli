@@ -320,14 +320,6 @@ impl Builder<'_> {
                 mir::CastKind::Transmute(ty.clone()),
                 { operands }.swap_remove(0),
             )),
-            Builtin::Allocate => BuiltinResult::Rvalue(Rvalue::Allocate {
-                ty: ty.as_pointer().cloned().expect("should be a pointer"),
-                count: { operands }.swap_remove(0),
-            }),
-            Builtin::Deallocate => {
-                self.push_stmt(loc, mir::StmtKind::Deallocate({ operands }.swap_remove(0)));
-                BuiltinResult::Unit
-            }
             Builtin::PtrRead => {
                 let [ptr] = { operands }.try_into().unwrap();
                 let deref = self

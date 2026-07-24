@@ -4,8 +4,6 @@ use crate::{Symbol, def_ids::DefId};
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Builtin {
-    Allocate,
-    Deallocate,
     PtrRead,
     PtrWrite,
     Transmute,
@@ -36,10 +34,8 @@ impl Builtin {
             i += 1;
         }
     };
-    pub const COUNT: usize = 11;
+    pub const COUNT: usize = 9;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
-        Builtin::Allocate,
-        Builtin::Deallocate,
         Builtin::PtrRead,
         Builtin::PtrWrite,
         Builtin::Transmute,
@@ -52,8 +48,6 @@ impl Builtin {
     ];
     pub const fn name(self) -> &'static str {
         match self {
-            Builtin::Allocate => "allocate",
-            Builtin::Deallocate => "deallocate",
             Builtin::PtrRead => "ptr_read",
             Builtin::PtrWrite => "ptr_write",
             Builtin::Transmute => "transmute",

@@ -1,11 +1,4 @@
 @builtin
-fun allocate[T](count : uint) -> ptr[T];
-
-@builtin
-@unsafe
-fun deallocate[T](p : ptr[T]) -> (); 
-
-@builtin
 @unsafe
 fun transmute[T,U](x : T) -> U;
 
