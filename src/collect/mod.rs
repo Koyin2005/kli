@@ -477,6 +477,12 @@ impl CtxtRef<'_> {
     pub fn all_items(&self) -> impl Iterator<Item = &Item> {
         self.0.nodes.iter().filter_map(Node::item)
     }
+    pub fn all_nodes(&self) -> impl Iterator<Item = &Node> {
+        self.0.nodes.iter()
+    }
+    pub fn all_nodes_with_id(&self) -> impl Iterator<Item = (DefId, &Node)> {
+        self.0.nodes.iter_enumerated()
+    }
     pub fn top_level_items(&self) -> impl Iterator<Item = &Item> {
         self.all_items()
             .filter(|item| self.parent_of(item.id).is_none())

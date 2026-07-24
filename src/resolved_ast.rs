@@ -400,13 +400,24 @@ pub enum Node {
 impl Node {
     pub fn kind(&self) -> &'static str {
         match self {
-            Node::Method(_) => "method",
-            Node::Item(item) => item.kind_str(),
-            Node::Lambda(_) => "lambda",
-            Node::Field(_) => "field",
-            Node::Case(_) => "case",
-            Node::CaseField(_) => "case field",
+            Self::Method(_) => "method",
+            Self::Item(item) => item.kind_str(),
+            Self::Lambda(_) => "lambda",
+            Self::Field(_) => "field",
+            Self::Case(_) => "case",
+            Self::CaseField(_) => "case field",
             Self::Impl(_) => "impl",
+        }
+    }
+    pub fn loc(&self) -> SrcLoc {
+        match self {
+            Self::Case(case) => case.name.loc,
+            Self::Method(method) => method.function.name.loc,
+            Self::Item(item) => item.loc,
+            Self::Lambda(lambda) => lambda.loc,
+            Self::Field(field_def) => field_def.name.loc,
+            Self::CaseField(case_field) => case_field.ty.loc,
+            Self::Impl(type_impl) => type_impl.span,
         }
     }
     pub fn item(&self) -> Option<&Item> {
@@ -414,6 +425,29 @@ impl Node {
             Self::Item(item) => Some(item),
             _ => None,
         }
+    }
+    pub fn is_type_def(&self) -> bool {
+        match self {
+            Self::Item(item) => matches!(item.kind, ItemKind::TypeDef(_)),
+            _ => false,
+        }
+    }
+    pub fn is_function(&self) -> bool {
+        match self {
+            Self::Item(item) => matches!(item.kind, ItemKind::Function(_)),
+            Self::Method(_) => true,
+            _ => false,
+        }
+    }
+    pub fn function(&self) -> Option<&Function> {
+        match self {
+            Self::Method(method) => Some(&method.function),
+            Self::Item(item) => item.function_def(),
+            _ => None,
+        }
+    }
+    pub fn is_method(&self) -> bool {
+        matches!(self, Self::Method(_))
     }
     #[track_caller]
     pub fn expect_item(&self) -> &Item {

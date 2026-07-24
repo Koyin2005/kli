@@ -448,33 +448,38 @@ impl<'ctxt> TypeCheck<'ctxt> {
         }
     }
     fn check_annotations(&self) {
-        for item in self.ctxt.all_items() {
-            for annotation in item.annotations.iter() {
+        for (id, node) in self.ctxt.all_nodes_with_id() {
+            for annotation in self.ctxt.annotations(id) {
                 let valid = match annotation.kind {
-                    res::AnnotationKind::Copy => matches!(item.kind, res::ItemKind::TypeDef(_)),
-                    res::AnnotationKind::Unsafe => matches!(item.kind, res::ItemKind::Function(_)),
+                    res::AnnotationKind::Copy => node.is_type_def(),
+                    res::AnnotationKind::Unsafe => node.is_function(),
                     res::AnnotationKind::LangItem(lang_item) => {
                         self.ctxt.std_lib_module().is_none_or(|std_lib| {
-                            self.ctxt.ancestors(item.id).any(|parent| parent == std_lib)
+                            self.ctxt.ancestors(id).any(|parent| parent == std_lib)
                         }) && match lang_item {
                             LangItem::Array
                             | LangItem::String
                             | LangItem::Box
                             | LangItem::Slice
-                            | LangItem::StringSlice => {
-                                matches!(item.kind, res::ItemKind::TypeDef(_))
-                            }
-                            LangItem::StringFromSlice => {
-                                matches!(item.kind, res::ItemKind::Function(_))
-                            }
+                            | LangItem::StringSlice => node.is_type_def(),
+                            LangItem::StringFromSlice => node.is_function(),
                         }
                     }
-                    res::AnnotationKind::Opaque => matches!(item.kind, res::ItemKind::TypeDef(_)),
+                    res::AnnotationKind::Opaque => node.is_type_def(),
                 };
                 if !valid {
                     self.ctxt.diag().add_diagnostic(
                         format!("Cannot use '{}'", annotation.kind_str()),
-                        item.loc,
+                        node.loc(),
+                    );
+                }
+
+                if let Some(function) = node.function()
+                    && function.body.is_none()
+                {
+                    self.ctxt.diag().add_diagnostic(
+                        format!("'{}' must have a body", function.name.symbol),
+                        function.name.loc,
                     );
                 }
             }
