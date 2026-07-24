@@ -4,14 +4,6 @@ fun transmute[T,U](x : T) -> U;
 
 @builtin
 @unsafe
-fun ptr_read[T](p : ptr[T]) -> T;
-
-@builtin
-@unsafe
-fun ptr_write[T](p : ptr[T], value : T) -> ();
-
-@builtin
-@unsafe
 fun memcopy[T](dst : ptr[T], src : ptr[T], count : uint) -> ();
 
 @builtin

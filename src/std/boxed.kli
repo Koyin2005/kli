@@ -1,7 +1,5 @@
 import std.refs
 import builtins.(
-    ptr_write,
-    ptr_read,
     drop_in_place
 )
 
