@@ -3,16 +3,6 @@
 fun transmute[T,U](x : T) -> U;
 
 @builtin
-@unsafe
-fun memcopy[T](dst : ptr[T], src : ptr[T], count : uint) -> ();
-
-@unsafe
-fun drop_in_place[T](p : ptr[T]) -> ();
-
-@builtin
-fun invalid_ptr[T]() ->  ptr[T];
-
-@builtin
 fun wrapping_add[T](x : T, y : T) -> T;
 
 @builtin

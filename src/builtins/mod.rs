@@ -5,10 +5,6 @@ use crate::{Symbol, def_ids::DefId};
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Builtin {
     Transmute,
-    Memcopy,
-    Offset,
-    DropInPlace,
-    InvalidPtr,
     WrappingAdd,
     OverflowingAdd,
 }
@@ -32,23 +28,15 @@ impl Builtin {
             i += 1;
         }
     };
-    pub const COUNT: usize = 7;
+    pub const COUNT: usize = 3;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
         Builtin::Transmute,
-        Builtin::Memcopy,
-        Builtin::Offset,
-        Builtin::DropInPlace,
-        Builtin::InvalidPtr,
         Builtin::WrappingAdd,
         Builtin::OverflowingAdd,
     ];
     pub const fn name(self) -> &'static str {
         match self {
             Builtin::Transmute => "transmute",
-            Builtin::Memcopy => "memcopy",
-            Builtin::Offset => "offset",
-            Builtin::DropInPlace => "drop_in_place",
-            Builtin::InvalidPtr => "invalid_ptr",
             Builtin::WrappingAdd => "wrapping_add",
             Builtin::OverflowingAdd => "overflowing_add",
         }

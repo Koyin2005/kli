@@ -5,22 +5,19 @@ use crate::{
     builtins::Builtin,
     index_vec::IndexVec,
     mir::{
-        self, AggregateKind, ConstValue, Constant, CopyNonOverlapping, DropInPlace, Local, Operand,
+        self, AggregateKind, ConstValue, Constant, Local, Operand,
         OverflowOp, Place, Rvalue, build::Builder,
     },
-    src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
     types::{FunctionType, Type},
 };
 pub(super) enum BuiltinResult {
     Rvalue(Rvalue),
-    Unit,
 }
 impl From<BuiltinResult> for Rvalue {
     fn from(value: BuiltinResult) -> Self {
         match value {
             BuiltinResult::Rvalue(value) => value,
-            BuiltinResult::Unit => Rvalue::Use(Operand::Constant(Constant::unit())),
         }
     }
 }
@@ -267,7 +264,6 @@ impl Builder<'_> {
     }
     pub(super) fn builtin_call(
         &mut self,
-        loc: SrcLoc,
         ty: &Type,
         builtin: Builtin,
         args: &[Expr],
@@ -277,9 +273,6 @@ impl Builder<'_> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
-            Builtin::InvalidPtr => {
-                BuiltinResult::Rvalue(Rvalue::DanglingPtr(ty.as_pointer().unwrap().clone()))
-            }
             Builtin::WrappingAdd => {
                 let [left, right] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Self::binary_op_rvalue(
@@ -294,35 +287,6 @@ impl Builder<'_> {
                     mir::BinaryOp::Overflow(OverflowOp::Add),
                     left,
                     right,
-                ))
-            }
-            Builtin::DropInPlace => {
-                let [pointer] = operands.try_into().unwrap();
-                self.push_stmt(
-                    loc,
-                    mir::StmtKind::DropInPlace(Box::new(DropInPlace {
-                        pointer_to_place: pointer,
-                    })),
-                );
-                BuiltinResult::Unit
-            }
-            Builtin::Memcopy => {
-                let [dst, src, count] = operands.try_into().unwrap();
-                self.push_stmt(
-                    loc,
-                    mir::StmtKind::CopyNonOverlapping(Box::new(CopyNonOverlapping {
-                        dst,
-                        src,
-                        count,
-                    })),
-                );
-                BuiltinResult::Unit
-            }
-            Builtin::Offset => {
-                let [first, second] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Binary(
-                    mir::BinaryOp::Offset,
-                    Box::new((first, second)),
                 ))
             }
             Builtin::Transmute => BuiltinResult::Rvalue(Rvalue::Cast(
@@ -518,7 +482,7 @@ impl Builder<'_> {
             }
             ExprKind::AddressOf(place) => Rvalue::RawPtrTo(self.lower_place(place)),
             &ExprKind::BuiltinCall(builtin, _, ref args) => {
-                self.builtin_call(expr.loc, &expr.ty, builtin, args).into()
+                self.builtin_call(&expr.ty, builtin, args).into()
             }
             ExprKind::Array(fields) => {
                 let ty = expr.ty.as_array().unwrap().clone();

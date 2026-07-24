@@ -68,11 +68,10 @@ impl Builder<'_> {
                 self.switch_to_block(loop_end);
             }
             ExprKind::BuiltinCall(builtin, _, args) => {
-                match self.builtin_call(expr.loc, &expr.ty, *builtin, args) {
+                match self.builtin_call(&expr.ty, *builtin, args) {
                     BuiltinResult::Rvalue(value) => {
                         self.assign_to_temp(expr.loc, expr.ty.clone(), value);
                     }
-                    BuiltinResult::Unit => (),
                 }
             }
             ExprKind::NeverToAny(value) => {
