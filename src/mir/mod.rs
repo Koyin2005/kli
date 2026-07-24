@@ -259,12 +259,11 @@ pub enum Rvalue {
     Use(Operand),
     Call(Operand, Vec<Operand>),
     Binary(BinaryOp, Box<(Operand, Operand)>),
-    RawPtrTo(Place),
+    AddrOf(Place),
     Allocate { ty: Type, count: Operand },
     Cast(CastKind, Operand),
     Len(Place),
     Discriminant(Place),
-    DanglingPtr(Type),
 }
 impl Rvalue {
     pub fn can_remove_if_unused(&self) -> bool {
@@ -273,9 +272,8 @@ impl Rvalue {
             | Self::Binary(..)
             | Self::Cast(..)
             | Self::Use(_)
-            | Self::RawPtrTo(_)
+            | Self::AddrOf(_)
             | Self::Len(_)
-            | Self::DanglingPtr(_)
             | Self::Discriminant(_) => true,
             Self::Allocate { .. } | Self::AllocateArray(..) | Self::Call(..) => false,
         }
@@ -353,8 +351,7 @@ impl Rvalue {
                 CastKind::Transmute(ty) => ty.clone(),
             },
             Rvalue::Discriminant(_) => Type::UINT,
-            Rvalue::RawPtrTo(place) => Type::pointer(place.type_of(ctxt, locals, return_type)),
-            Rvalue::DanglingPtr(ty) => Type::pointer(ty.clone()),
+            Rvalue::AddrOf(_) => Type::UINT,
         }
     }
 }

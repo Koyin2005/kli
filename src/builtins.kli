@@ -3,6 +3,12 @@
 fun transmute[T,U](x : T) -> U;
 
 @builtin
+fun array_len[T](a : array[T]) -> uint;
+
+@builtin
+fun array_addr[T](a : array[T]) -> uint;
+
+@builtin
 fun wrapping_add[T](x : T, y : T) -> T;
 
 @builtin

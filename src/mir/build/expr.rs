@@ -5,8 +5,8 @@ use crate::{
     builtins::Builtin,
     index_vec::IndexVec,
     mir::{
-        self, AggregateKind, ConstValue, Constant, Local, Operand,
-        OverflowOp, Place, Rvalue, build::Builder,
+        self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Rvalue,
+        build::Builder,
     },
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
     types::{FunctionType, Type},
@@ -273,6 +273,20 @@ impl Builder<'_> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::Len => {
+                let [operand] = operands.try_into().unwrap();
+                let Operand::Load(place) = operand else {
+                    unreachable!()
+                };
+                BuiltinResult::Rvalue(Rvalue::Len(place))
+            }
+            Builtin::ArrayAddr => {
+                let [operand] = operands.try_into().unwrap();
+                let Operand::Load(place) = operand else {
+                    unreachable!()
+                };
+                BuiltinResult::Rvalue(Rvalue::AddrOf(place))
+            }
             Builtin::WrappingAdd => {
                 let [left, right] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Self::binary_op_rvalue(
@@ -480,7 +494,7 @@ impl Builder<'_> {
                 self.expr_stmt(expr);
                 Rvalue::Use(Operand::Constant(Constant::unit()))
             }
-            ExprKind::AddressOf(place) => Rvalue::RawPtrTo(self.lower_place(place)),
+            ExprKind::AddressOf(place) => Rvalue::AddrOf(self.lower_place(place)),
             &ExprKind::BuiltinCall(builtin, _, ref args) => {
                 self.builtin_call(&expr.ty, builtin, args).into()
             }

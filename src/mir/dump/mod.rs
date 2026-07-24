@@ -110,9 +110,6 @@ impl<'ctxt> MirDump<'ctxt> {
     }
     fn write_rvalue(&mut self, rvalue: &Rvalue) -> std::io::Result<()> {
         match rvalue {
-            Rvalue::DanglingPtr(ty) => {
-                write!(self.output, "dangling_ptr[{}]", ty)?;
-            }
             Rvalue::Use(operand) => {
                 self.write_operand(operand)?;
             }
@@ -216,7 +213,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(pointer)?;
                 write!(self.output, ")")?;
             }
-            Rvalue::RawPtrTo(place) => {
+            Rvalue::AddrOf(place) => {
                 write!(self.output, "raw_ptr_to(")?;
                 self.write_place(place)?;
                 write!(self.output, ")")?;

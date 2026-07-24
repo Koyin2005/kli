@@ -1,4 +1,5 @@
 import std.optional.Option
+import builtins
 
 fun index_out_bounds() -> never = 
     do
@@ -8,9 +9,9 @@ fun index_out_bounds() -> never =
 
 fun empty[T]() -> array[T] = []
 
-fun len[T](this : array[T]) -> uint = panic
+fun len[T](this : array[T]) -> uint = builtins.array_len(this)
 
-fun addr_eq[T](this : array[T], other : array[T]) -> bool = panic
+fun addr_eq[T](this : array[T], other : array[T]) -> bool = builtins.array_addr(this) == builtins.array_addr(other)
 
 fun get_checked[T](this : array[T], index : uint) -> Option[T] = 
     case index < len(this) of 

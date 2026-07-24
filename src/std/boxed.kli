@@ -1,7 +1,4 @@
 import std.refs
-import builtins.(
-    drop_in_place
-)
 
 @opaque
 @lang_item("box")

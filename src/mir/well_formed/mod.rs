@@ -102,7 +102,6 @@ impl Visit for WellFormed<'_> {
         self.super_visit_rvalue(loc, rvalue);
         let loc = self.body.src_info(loc);
         match rvalue {
-            super::Rvalue::DanglingPtr(_) => {}
             super::Rvalue::Discriminant(place) => {
                 self.assert(
                     if let Type::Named(id, _, _) =
@@ -213,7 +212,7 @@ impl Visit for WellFormed<'_> {
                 super::AggregateKind::Tuple => (),
             },
             super::Rvalue::Use(_) => (),
-            super::Rvalue::RawPtrTo(_) => {}
+            super::Rvalue::AddrOf(_) => {}
             super::Rvalue::Call(operand, operands) => {
                 let callee = operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
                 let FunctionType { params, .. } = self.assert_with_some(

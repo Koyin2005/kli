@@ -5,6 +5,8 @@ use crate::{Symbol, def_ids::DefId};
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Builtin {
     Transmute,
+    Len,
+    ArrayAddr,
     WrappingAdd,
     OverflowingAdd,
 }
@@ -28,9 +30,11 @@ impl Builtin {
             i += 1;
         }
     };
-    pub const COUNT: usize = 3;
+    pub const COUNT: usize = 5;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
         Builtin::Transmute,
+        Builtin::Len,
+        Builtin::ArrayAddr,
         Builtin::WrappingAdd,
         Builtin::OverflowingAdd,
     ];
@@ -39,6 +43,8 @@ impl Builtin {
             Builtin::Transmute => "transmute",
             Builtin::WrappingAdd => "wrapping_add",
             Builtin::OverflowingAdd => "overflowing_add",
+            Builtin::ArrayAddr => "array_addr",
+            Builtin::Len => "array_len",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
