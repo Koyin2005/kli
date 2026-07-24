@@ -135,7 +135,11 @@ impl<'a> Lower<'a> {
                 };
                 Type::Array(Box::new(ty))
             }
-            TypeName::Box | TypeName::String => {
+            TypeName::String => {
+                _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
+                Type::String
+            },
+            TypeName::Box  => {
                 let id = self.ctxt.lang_items().expect(match name {
                     TypeName::String => LangItem::String,
                     TypeName::Array => LangItem::Array,
