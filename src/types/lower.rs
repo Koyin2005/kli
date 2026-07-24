@@ -191,7 +191,6 @@ impl<'a> Lower<'a> {
                 let params = self.lower_types(&mut params.iter()).collect();
                 let return_type = self.lower_type(return_type);
                 Type::Function(FunctionType {
-                    resource: *is_resource,
                     params,
                     return_type: Box::new(return_type),
                 })

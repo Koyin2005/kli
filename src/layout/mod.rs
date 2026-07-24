@@ -299,21 +299,7 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
         Type::Byte => Layout::BYTE,
         Type::Never => Layout::zst().uninhabited(),
         Type::Param(_, _) => return Err(LayoutError::TooGeneric),
-        Type::Function(function_type) => match function_type.resource {
-            IsResource::Data => Layout::pointer(true),
-            IsResource::Resource => {
-                return record_layout(
-                    ctxt,
-                    IndexVec::from_vec(vec![
-                        Cow::Owned(Type::pointer(Type::Byte)),
-                        Cow::Owned(Type::new_function(
-                            function_type.params.clone(),
-                            (*function_type.return_type).clone(),
-                        )),
-                    ]),
-                );
-            }
-        },
+        Type::Function(function_type) => Layout::pointer(true),
         Type::Array(_) => {
             return Ok(Layout {
                 size: POINTER_SIZE.add(INT_SIZE),

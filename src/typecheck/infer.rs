@@ -100,8 +100,7 @@ impl TypeInfer {
                     .map(Type::Tuple)
             }
             (Type::Function(function1), Type::Function(function2))
-                if function1.params.len() == function2.params.len()
-                    && function1.resource == function2.resource =>
+                if function1.params.len() == function2.params.len() =>
             {
                 let params = function1
                     .params
@@ -111,7 +110,6 @@ impl TypeInfer {
                     .collect::<Option<Vec<_>>>()?;
                 let return_ty = self.unify_ty(*function1.return_type, *function2.return_type)?;
                 Some(Type::Function(FunctionType {
-                    resource: function1.resource,
                     params,
                     return_type: Box::new(return_ty),
                 }))

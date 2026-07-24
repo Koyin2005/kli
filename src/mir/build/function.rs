@@ -1,5 +1,4 @@
 use crate::{
-    ast::IsResource,
     collect::CtxtRef,
     def_ids::DefId,
     mir::{
@@ -58,7 +57,6 @@ impl Builder<'_> {
     }
     pub(super) fn lambda_code_constant(ctxt: CtxtRef<'_>, lambda: &Lambda) -> Constant {
         let ty = Type::Function(FunctionType {
-            resource: IsResource::Data,
             params: lambda
                 .captures
                 .iter()

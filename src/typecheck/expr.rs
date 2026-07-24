@@ -229,7 +229,6 @@ impl FunctionCtxt<'_> {
             Some(&lambda.body),
         );
         let function = Type::Function(FunctionType {
-            resource: lambda.resource,
             params: sig.params.clone(),
             return_type: Box::new(sig.return_type.clone()),
         });
@@ -325,7 +324,6 @@ impl FunctionCtxt<'_> {
         {
             let generic_args = root.lower_generic_args_for(*variant_id, loc, generic_args);
             let Type::Function(FunctionType {
-                resource: _,
                 params,
                 return_type,
             }) = ctxt.type_of(*variant_id).bind(&generic_args)
@@ -349,7 +347,6 @@ impl FunctionCtxt<'_> {
             let callee_type = self.root().simplify_type(callee.ty.clone());
             let (params, return_type) = match callee_type {
                 Type::Function(FunctionType {
-                    resource: _,
                     params,
                     return_type,
                 }) => (params, Some(*return_type)),

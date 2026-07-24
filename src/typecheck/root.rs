@@ -91,13 +91,10 @@ impl<'ctxt> RootCtxt<'ctxt> {
         let (name_info, _) = match ty {
             Type::Named(id, name, args) => (Some((*id, *name, args.clone())), false),
             Type::Array(ty) => (
-                self.ctxt.lang_items().get(LangItem::Array).map(|id| {
-                    (
-                        id,
-                        Symbol::ARRAY,
-                        GenericArgs::from_type((**ty).clone()),
-                    )
-                }),
+                self.ctxt
+                    .lang_items()
+                    .get(LangItem::Array)
+                    .map(|id| (id, Symbol::ARRAY, GenericArgs::from_type((**ty).clone()))),
                 false,
             ),
             _ => (None, false),

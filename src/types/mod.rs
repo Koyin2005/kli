@@ -82,7 +82,6 @@ impl FunctionSig {
     }
     pub fn into_function_type(self) -> FunctionType {
         FunctionType {
-            resource: IsResource::Data,
             params: self.params,
             return_type: Box::new(self.return_type),
         }
@@ -90,21 +89,12 @@ impl FunctionSig {
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct FunctionType {
-    pub resource: IsResource,
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
 }
 impl FunctionType {
     pub fn new_data(params: Vec<Type>, return_type: Type) -> Self {
         Self {
-            resource: IsResource::Data,
-            params,
-            return_type: Box::new(return_type),
-        }
-    }
-    pub fn new_resource(params: Vec<Type>, return_type: Type) -> Self {
-        Self {
-            resource: IsResource::Resource,
             params,
             return_type: Box::new(return_type),
         }
@@ -263,7 +253,6 @@ impl Type {
     }
     pub fn new_function(params: Vec<Self>, return_ty: Self) -> Self {
         Self::Function(FunctionType {
-            resource: IsResource::Data,
             params,
             return_type: Box::new(return_ty),
         })
@@ -276,29 +265,6 @@ impl Type {
             Self::Tuple(fields) => fields
                 .get(field_id.into_usize())
                 .map(|ty| (ty.clone(), FieldName::Index(field_id))),
-            Self::Function(FunctionType {
-                resource: IsResource::Resource,
-                params,
-                return_type,
-            }) => match field_id {
-                id if id == FieldId::FIRST_FIELD => Some((
-                    Self::pointer(Type::Byte),
-                    FieldName::Named(Symbol::intern("env")),
-                )),
-                id if id == FieldId::new(1) => Some((
-                    Self::function_type(
-                        IsResource::Data,
-                        {
-                            let mut params = params.clone();
-                            params.insert(0, Self::pointer(Type::Byte));
-                            params
-                        },
-                        (**return_type).clone(),
-                    ),
-                    FieldName::Named(Symbol::intern("code")),
-                )),
-                _ => None,
-            },
             &Self::Named(id, _, ref args) => ctxt
                 .type_def(id)
                 .fields()
@@ -310,7 +276,6 @@ impl Type {
     }
     pub fn function_type(resource: IsResource, params: Vec<Self>, return_type: Self) -> Self {
         Self::Function(FunctionType {
-            resource,
             params,
             return_type: Box::new(return_type),
         })
@@ -500,7 +465,6 @@ impl Display for Type {
             Type::Infer(_) => f.pad("_"),
             &Type::Param(name, _) => write!(f, "{}", name),
             Type::Function(FunctionType {
-                resource,
                 params,
                 return_type,
             }) => {
@@ -513,11 +477,7 @@ impl Display for Type {
                     write!(f, "{}", param)?;
                     first = false;
                 }
-                f.pad(match *resource {
-                    IsResource::Data => ") -> ",
-                    IsResource::Resource => ") => ",
-                })?;
-                write!(f, "{}", return_type)
+                write!(f, ") -> {}", return_type)
             }
             Type::Named(_, name, args) => {
                 write!(f, "{}{}", name, display_generic_args(args))

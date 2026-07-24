@@ -175,13 +175,7 @@ impl Visit for WellFormed<'_> {
                     );
                     let code = code.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
                     self.assert(
-                        matches!(
-                            code,
-                            Type::Function(FunctionType {
-                                resource: IsResource::Data,
-                                ..
-                            })
-                        ),
+                        matches!(code, Type::Function(FunctionType { .. })),
                         || "code should be function pointer",
                         loc,
                     );
@@ -223,20 +217,13 @@ impl Visit for WellFormed<'_> {
             super::Rvalue::RawPtrTo(_) => {}
             super::Rvalue::Call(operand, operands) => {
                 let callee = operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                let FunctionType {
-                    resource, params, ..
-                } = self.assert_with_some(
+                let FunctionType { params, .. } = self.assert_with_some(
                     callee,
                     |ty| match ty {
                         Type::Function(function_type) => Some(function_type),
                         _ => None,
                     },
                     || "Can only call function types",
-                    loc,
-                );
-                self.assert(
-                    resource == IsResource::Data,
-                    || "Can only call data functions",
                     loc,
                 );
                 let operand_tys = operands

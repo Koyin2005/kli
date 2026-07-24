@@ -393,21 +393,10 @@ impl Builder<'_> {
             ),
             ExprKind::Call(callee, args) => match &callee.ty {
                 Type::Function(function_ty) => {
-                    let FunctionType { resource, .. } = function_ty;
+                    let FunctionType { .. } = function_ty;
                     let callee_value = self.operand(callee);
                     let arg_values = args.iter().map(|arg| self.operand(arg)).collect::<Vec<_>>();
-                    match resource {
-                        IsResource::Data => Rvalue::Call(callee_value, arg_values),
-                        IsResource::Resource => {
-                            let closure_place =
-                                self.operand_as_place(callee.loc, callee.ty.clone(), callee_value);
-                            let env = closure_place.clone().with_field(FieldId::new(0));
-                            let code = closure_place.clone().with_field(FieldId::new(1));
-                            let mut arg_values = arg_values;
-                            arg_values.insert(0, Operand::Load(env));
-                            Rvalue::Call(Operand::Load(code), arg_values)
-                        }
-                    }
+                    Rvalue::Call(callee_value, arg_values)
                 }
                 _ => unreachable!("Can't call non function at {:?}", expr.loc),
             },
