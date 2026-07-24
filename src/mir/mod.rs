@@ -516,10 +516,6 @@ pub struct CopyNonOverlapping {
     pub count: Operand,
 }
 #[derive(Clone)]
-pub struct DropInPlace {
-    pub pointer_to_place: Operand,
-}
-#[derive(Clone)]
 pub enum StmtKind {
     Noop,
     Assign(Place, Box<Rvalue>),

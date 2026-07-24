@@ -282,21 +282,11 @@ impl Type {
     pub fn as_pointer(&self) -> Option<&Type> {
         None
     }
-    pub fn pointer(ty: Self) -> Self {
-        Self::RawPointer(Box::new(ty))
-    }
     pub fn pair(first: Type, second: Type) -> Self {
         Self::tuple([first, second])
     }
     pub fn tuple(field_tys: impl IntoIterator<Item = Self>) -> Self {
         Self::Tuple(field_tys.into_iter().collect())
-    }
-    pub fn into_pointer_type(self, ctxt: CtxtRef<'_>) -> Result<(PointerType, Self), Self> {
-        match self {
-            Self::RawPointer(ty) => Ok((PointerType::Raw, *ty)),
-            Self::Named(..) => Ok((PointerType::Box, self.into_box(ctxt)?)),
-            _ => Err(self),
-        }
     }
     pub fn into_box(self, ctxt: CtxtRef<'_>) -> Result<Self, Self> {
         if self.as_box(ctxt).is_none() {
@@ -318,23 +308,6 @@ impl Type {
             return None;
         }
         Some(args.first()?.expect_ty())
-    }
-    pub fn pointer_kind(&self, ctxt: CtxtRef<'_>) -> Option<PointerType> {
-        match self {
-            Self::RawPointer(_) => Some(PointerType::Raw),
-            Self::Named(..) if self.as_box(ctxt).is_some() => Some(PointerType::Box),
-            _ => None,
-        }
-    }
-    pub fn pointer_type(pointer: PointerType, pointee: Self, ctxt: CtxtRef<'_>) -> Self {
-        match pointer {
-            PointerType::Box => {
-                let id = ctxt.lang_items().expect(LangItem::Box);
-                let name = ctxt.expect_ident(id).symbol;
-                Self::Named(id, name, GenericArgs::from_type(pointee))
-            }
-            PointerType::Raw => Self::pointer(pointee),
-        }
     }
     pub fn is_resource(&self, ctxt: CtxtRef<'_>) -> bool {
         _ = ctxt;
