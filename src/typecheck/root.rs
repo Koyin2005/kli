@@ -451,6 +451,12 @@ impl<'ctxt> TypeCheck<'ctxt> {
         for (id, node) in self.ctxt.all_nodes_with_id() {
             for annotation in self.ctxt.annotations(id) {
                 let valid = match annotation.kind {
+                    res::AnnotationKind::Builtin => {
+                        node.is_function() && !node.is_method() && {
+                            let builtins = self.ctxt.builtins_module();
+                            self.ctxt.ancestors(id).any(|parent| parent == builtins)
+                        }
+                    }
                     res::AnnotationKind::Copy => node.is_type_def(),
                     res::AnnotationKind::Unsafe => node.is_function(),
                     res::AnnotationKind::LangItem(lang_item) => {
@@ -476,6 +482,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
 
                 if let Some(function) = node.function()
                     && function.body.is_none()
+                    && self.ctxt.builtins().builtin_for(id).is_none()
                 {
                     self.ctxt.diag().add_diagnostic(
                         format!("'{}' must have a body", function.name.symbol),

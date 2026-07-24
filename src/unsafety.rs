@@ -91,11 +91,12 @@ impl Visitor for SafetyCheck<'_> {
                     );
                 }
                 let id = self.ctxt.builtins().expect_id(builtin);
-                if is_unsafe(self.ctxt, id) {
-                    id
-                } else {
-                    return walk_expr(self, expr);
+
+                walk_expr(self, expr);
+                if !is_unsafe(self.ctxt, id) {
+                    return;
                 }
+                id
             }
             ExprKind::Function(id, _) if is_unsafe(self.ctxt, id) => id,
             _ => return walk_expr(self, expr),

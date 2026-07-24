@@ -1,27 +1,37 @@
+@builtin
 fun allocate[T](count : uint) -> ptr[T];
 
+@builtin
 @unsafe
 fun deallocate[T](p : ptr[T]) -> (); 
 
+@builtin
 @unsafe
 fun transmute[T,U](x : T) -> U;
 
+@builtin
 @unsafe
 fun ptr_read[T](p : ptr[T]) -> T;
 
+@builtin
 @unsafe
 fun ptr_write[T](p : ptr[T], value : T) -> ();
 
+@builtin
 @unsafe
 fun memcopy[T](dst : ptr[T], src : ptr[T], count : uint) -> ();
 
+@builtin
 fun offset[T](p : ptr[T], offset: int) -> ptr[T];
 
 @unsafe
 fun drop_in_place[T](p : ptr[T]) -> ();
 
+@builtin
 fun invalid_ptr[T]() ->  ptr[T];
 
+@builtin
 fun wrapping_add[T](x : T, y : T) -> T;
 
+@builtin
 fun overflowing_add[T](x : T, y : T) -> (bool, T);

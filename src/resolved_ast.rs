@@ -322,6 +322,7 @@ pub enum AnnotationKind {
     Unsafe,
     LangItem(LangItem),
     Opaque,
+    Builtin,
 }
 #[derive(Debug)]
 pub struct Annotation {
@@ -335,6 +336,7 @@ impl Annotation {
             AnnotationKind::LangItem(_) => "lang_item",
             AnnotationKind::Opaque => "opaque",
             AnnotationKind::Unsafe => "unsafe",
+            AnnotationKind::Builtin => "builtin",
         }
     }
 }

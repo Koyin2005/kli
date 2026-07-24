@@ -209,6 +209,7 @@ pub struct GlobalContext {
     builtins: Builtins,
     std_lib: Cache<(), Option<DefId>>,
     ty_cache: Cache<DefId, Scheme<Type>>,
+    builtin: Cache<(), DefId>,
     config: Config,
 }
 impl GlobalContext {
@@ -569,6 +570,21 @@ impl CtxtRef<'_> {
     pub fn builtins(&self) -> &Builtins {
         &self.0.builtins
     }
+    pub fn builtins_module(self) -> DefId {
+        self.0.builtin.compute((), |()| {
+            self.top_level_items()
+                .find_map(|item| {
+                    let ItemKind::Module(ref module) = item.kind else {
+                        return None;
+                    };
+                    if module.name.symbol != Symbol::BUILTINS {
+                        return None;
+                    }
+                    Some(item.id)
+                })
+                .expect("should always have builtins module")
+        })
+    }
     pub fn std_lib_module(self) -> Option<DefId> {
         self.0.std_lib.compute((), |()| {
             self.top_level_items().find_map(|item| {
@@ -685,6 +701,7 @@ pub fn build_global_context(
         nodes,
         diag,
         builtins,
+        builtin: Default::default(),
         std_lib: Default::default(),
         ty_cache: Default::default(),
     }

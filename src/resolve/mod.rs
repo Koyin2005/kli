@@ -995,6 +995,15 @@ impl<'info> Resolve<'info> {
                             }
                             res::AnnotationKind::Opaque
                         }
+                        Symbol::BUILTIN => {
+                            if !annotation.fields.is_empty() {
+                                self.diag.add_diagnostic(
+                                    format!("too many fields for '{}'", annotation.name.symbol),
+                                    annotation.loc,
+                                );
+                            }
+                            res::AnnotationKind::Builtin
+                        }
                         _ => {
                             self.diag.add_diagnostic(
                                 format!("unknown annotation {}", annotation.name.symbol),
