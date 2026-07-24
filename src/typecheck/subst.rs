@@ -58,7 +58,7 @@ impl<'a> TypeSubst<'a> {
     }
     pub fn subst_generic_arg(&mut self, arg: &mut GenericArg) {
         match arg {
-            GenericArg::Type(ty) => {
+            GenericArg(ty) => {
                 self.subst_type(ty);
             }
         }

@@ -57,14 +57,14 @@ impl<'a> Lower<'a> {
                     (None, None) => break,
                     (Some(arg), Some(kind)) => match (arg, kind) {
                         (res::GenericArg::Type(ty), GenericKind::Type) => {
-                            GenericArg::Type(self.lower_type(ty))
+                            GenericArg::from_type(self.lower_type(ty))
                         }
                     },
                     (Some(arg), None) => match arg {
-                        res::GenericArg::Type(ty) => GenericArg::Type(self.lower_type(ty)),
+                        res::GenericArg::Type(ty) => GenericArg::from_type(self.lower_type(ty)),
                     },
                     (None, Some(kind)) => match kind {
-                        GenericKind::Type => GenericArg::Type(Type::Unknown),
+                        GenericKind::Type => GenericArg::from_type(Type::Unknown),
                     },
                 };
                 args.push(arg);
@@ -124,12 +124,9 @@ impl<'a> Lower<'a> {
             }
             TypeName::Ptr => {
                 let args = self.lower_generic_args_with(Generics::default(), 1, loc, args);
-                let ty = if let Ok([GenericArg::Type(ty)]) = <[_; _]>::try_from(args) {
+                let ty = if let Ok([GenericArg(ty)]) = <[_; _]>::try_from(args) {
                     ty
                 } else {
-                    self.ctxt
-                        .diag()
-                        .add_diagnostic("Expected a 'type' generic arg for 'ptr'", loc);
                     Type::Unknown
                 };
                 Type::pointer(ty)

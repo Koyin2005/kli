@@ -177,14 +177,14 @@ impl Generics {
     pub fn instantiate(&self, infer: &mut TypeInfer, loc: SrcLoc) -> GenericArgs {
         self.kinds()
             .map(|kind| match kind {
-                GenericKind::Type => GenericArg::Type(Type::Infer(infer.fresh_ty(loc))),
+                GenericKind::Type => GenericArg(Type::Infer(infer.fresh_ty(loc))),
             })
             .collect()
     }
     pub fn instantiate_unknown(&self) -> GenericArgs {
         self.kinds()
             .map(|kind| match kind {
-                GenericKind::Type => GenericArg::Type(Type::Unknown),
+                GenericKind::Type => GenericArg(Type::Unknown),
             })
             .collect()
     }
@@ -193,7 +193,7 @@ impl Generics {
             .iter()
             .enumerate()
             .map(|(i, param)| match param.kind {
-                GenericKind::Type => GenericArg::Type(Type::Param(param.name, i)),
+                GenericKind::Type => GenericArg(Type::Param(param.name, i)),
             })
             .collect()
     }

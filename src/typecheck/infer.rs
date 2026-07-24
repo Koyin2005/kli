@@ -49,9 +49,7 @@ impl TypeInfer {
             .zip(args2)
             .map(|(arg1, arg2)| {
                 Some(match (arg1, arg2) {
-                    (GenericArg::Type(ty1), GenericArg::Type(ty2)) => {
-                        GenericArg::Type(self.unify_ty(ty1, ty2)?)
-                    }
+                    (GenericArg(ty1), GenericArg(ty2)) => GenericArg(self.unify_ty(ty1, ty2)?),
                 })
             })
             .collect::<Option<GenericArgs>>()

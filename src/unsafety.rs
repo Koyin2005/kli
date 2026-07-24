@@ -77,12 +77,8 @@ impl Visitor for SafetyCheck<'_> {
             }
             ExprKind::BuiltinCall(builtin, ref args, _) => {
                 if let Builtin::Transmute = builtin
-                    && let Some(
-                        [
-                            crate::types::GenericArg::Type(ty1),
-                            crate::types::GenericArg::Type(ty2),
-                        ],
-                    ) = &args.as_array()
+                    && let Some([crate::types::GenericArg(ty1), crate::types::GenericArg(ty2)]) =
+                        &args.as_array()
                     && !transmutable(self.ctxt, ty1, ty2)
                 {
                     self.ctxt.diag().add_diagnostic(

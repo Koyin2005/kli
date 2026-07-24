@@ -20,7 +20,7 @@ impl<T: TypeMappable> Scheme<T> {
                 let Type::Param(_, index) = ty else {
                     return self.super_map_type(ty);
                 };
-                let Some(GenericArg::Type(ty)) = self.0.get(index).cloned() else {
+                let Some(GenericArg(ty)) = self.0.get(index).cloned() else {
                     return Ok(Type::Unknown);
                 };
                 Ok(ty)

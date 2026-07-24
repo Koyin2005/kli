@@ -30,19 +30,19 @@ pub struct GenericParam {
     pub kind: GenericKind,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum GenericArg {
-    Type(Type),
-}
+pub struct GenericArg(pub Type);
 impl GenericArg {
+    pub const fn from_type(ty: Type) -> Self {
+        Self(ty)
+    }
     pub fn expect_ty(&self) -> &Type {
-        let GenericArg::Type(ty) = self;
-        ty
+        &self.0
     }
 }
 impl TypeMappable for GenericArg {
     fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         match self {
-            Self::Type(ty) => Ok(GenericArg::Type(ty.apply_map(m)?)),
+            Self(ty) => Ok(GenericArg::from_type(ty.apply_map(m)?)),
         }
     }
 }
@@ -61,9 +61,7 @@ impl Display for DisplayGenericArgs<'_> {
                 if !first {
                     write!(f, ",")?;
                 }
-                match arg {
-                    GenericArg::Type(ty) => write!(f, "{}", ty),
-                }?;
+                write!(f, "{}", arg.0)?;
                 first = false;
             }
             write!(f, "]")
@@ -141,7 +139,7 @@ impl GenericArgs {
         Self(vec![arg])
     }
     pub fn from_type(arg: Type) -> Self {
-        Self(vec![GenericArg::Type(arg)])
+        Self(vec![GenericArg::from_type(arg)])
     }
     pub fn combine(mut self, rest: Self) -> Self {
         self.0.extend(rest);
@@ -349,8 +347,7 @@ impl Type {
         let Self::Named(_, _, args) = self else {
             return Err(self);
         };
-        let [arg] = args.try_into().unwrap();
-        let GenericArg::Type(ty) = arg;
+        let [GenericArg(ty)] = args.try_into().unwrap();
         Ok(ty)
     }
     pub fn as_box(&self, ctxt: CtxtRef<'_>) -> Option<&Type> {
@@ -362,9 +359,7 @@ impl Type {
         if id != box_id {
             return None;
         }
-        let arg = args.first()?;
-        let GenericArg::Type(ty) = arg;
-        Some(ty)
+        Some(args.first()?.expect_ty())
     }
     pub fn pointer_kind(&self, ctxt: CtxtRef<'_>) -> Option<PointerType> {
         match self {
@@ -455,9 +450,7 @@ impl Type {
             }
             Type::Named(.., generic_args) => {
                 for arg in &**generic_args {
-                    match arg {
-                        GenericArg::Type(ty) => ty.visit(visit_ty)?,
-                    }
+                    arg.0.visit(visit_ty)?;
                 }
                 ControlFlow::Continue(())
             }
@@ -574,11 +567,7 @@ pub trait TypeMap {
                 id,
                 name,
                 args.into_iter()
-                    .map(|arg| {
-                        Ok(match arg {
-                            GenericArg::Type(ty) => GenericArg::Type(self.map_type(ty)?),
-                        })
-                    })
+                    .map(|arg| arg.apply_map(self))
                     .collect::<Result<GenericArgs, _>>()?,
             )),
             Type::Array(ty) => Ok(Type::Array(Box::new(self.map_type(*ty)?))),
