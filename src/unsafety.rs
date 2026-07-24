@@ -3,8 +3,8 @@ use crate::{
     builtins::Builtin,
     def_ids::DefId,
     resolved_ast::AnnotationKind,
-    typed_ast::{ExprKind, Function,},
-    typed_ast_visitor::{Visitor, walk_expr,},
+    typed_ast::{ExprKind, Function},
+    typed_ast_visitor::{Visitor, walk_expr},
     types::Type,
 };
 

@@ -4,8 +4,7 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, CastKind,
-        ConstValue, LocalKind, Operand, Place, PlaceProjection,
-        Rvalue, StmtKind, TerminatorKind,
+        ConstValue, LocalKind, Operand, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
     },
     typed_ast::FieldId,
     types::{self, display_generic_args},

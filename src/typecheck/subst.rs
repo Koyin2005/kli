@@ -1,9 +1,18 @@
 use crate::{
     typecheck::infer::TypeInfer,
     typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
-    types::{FunctionType, GenericArg, Type},
+    types::{GenericArgs, Type, visit::VisitMut},
 };
 
+impl VisitMut for TypeSubst<'_> {
+    fn visit_type(&mut self, ty: &mut Type) {
+        if let Type::Infer(var) = ty {
+            *ty = self.infer.simplify_type(Type::Infer(*var));
+            return;
+        }
+        self.super_visit_type(ty);
+    }
+}
 pub struct TypeSubst<'a> {
     infer: &'a mut TypeInfer,
 }
@@ -12,53 +21,10 @@ impl<'a> TypeSubst<'a> {
         Self { infer }
     }
     pub fn subst_type(&mut self, ty: &mut Type) {
-        match ty {
-            Type::Bool
-            | Type::Int(_)
-            | Type::Unknown
-            | Type::Char
-            | Type::Param(..)
-            | Type::Never
-            | Type::Byte => (),
-            Type::Array(ty) => self.subst_type(ty),
-            Type::Function(FunctionType {
-                params,
-                return_type,
-            }) => {
-                for param in params {
-                    self.subst_type(param);
-                }
-                self.subst_type(return_type);
-            }
-            Type::Record(fields) => {
-                for field in fields {
-                    self.subst_type(&mut field.ty);
-                }
-            }
-            Type::Tuple(fields) => {
-                for field in fields {
-                    self.subst_type(field);
-                }
-            }
-            Type::Infer(var) => *ty = self.infer.simplify_type(Type::Infer(*var)),
-            Type::Named(_, _, args) => {
-                for arg in &mut **args {
-                    self.subst_generic_arg(arg);
-                }
-            }
-        }
+        self.visit_type(ty);
     }
-    pub fn subst_generic_args(&mut self, args: &mut [GenericArg]) {
-        for arg in args {
-            self.subst_generic_arg(arg);
-        }
-    }
-    pub fn subst_generic_arg(&mut self, arg: &mut GenericArg) {
-        match arg {
-            GenericArg(ty) => {
-                self.subst_type(ty);
-            }
-        }
+    pub fn subst_generic_args(&mut self, args: &mut GenericArgs) {
+        self.visit_generic_args(args);
     }
     pub fn subst_pattern(&mut self, pattern: &mut Pattern) {
         match &mut pattern.kind {
@@ -110,9 +76,7 @@ impl<'a> TypeSubst<'a> {
                 self.subst_expr(&mut block.expr);
             }
             ExprKind::Const(_, args) => {
-                for arg in &mut **args {
-                    self.subst_generic_arg(arg);
-                }
+                self.subst_generic_args(args);
             }
             ExprKind::NeverToAny(expr) => {
                 self.subst_expr(expr);
@@ -135,9 +99,7 @@ impl<'a> TypeSubst<'a> {
                 }
             }
             ExprKind::VariantInit(.., args, expr) => {
-                for arg in &mut **args {
-                    self.subst_generic_arg(arg);
-                }
+                self.subst_generic_args(args);
                 if let Some(expr) = expr {
                     self.subst_expr(expr)
                 }
@@ -164,14 +126,10 @@ impl<'a> TypeSubst<'a> {
                 }
             }
             ExprKind::Function(.., args) => {
-                for arg in &mut **args {
-                    self.subst_generic_arg(arg);
-                }
+                self.subst_generic_args(args);
             }
             ExprKind::BuiltinCall(_, generic_args, args) => {
-                for arg in &mut **generic_args {
-                    self.subst_generic_arg(arg);
-                }
+                self.subst_generic_args(generic_args);
                 for expr in args {
                     self.subst_expr(expr);
                 }

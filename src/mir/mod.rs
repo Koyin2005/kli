@@ -254,7 +254,7 @@ impl Rvalue {
             | Self::AddrOf(_)
             | Self::Len(_)
             | Self::Discriminant(_) => true,
-            | Self::AllocateArray(..) | Self::Call(..) => false,
+            Self::AllocateArray(..) | Self::Call(..) => false,
         }
     }
 

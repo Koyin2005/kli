@@ -22,8 +22,8 @@ use crate::{
     typecheck::infer::TypeInfer,
     typed_ast::FieldId,
     types::{
-        CaseId, FunctionSig, GenericArg, GenericArgs, GenericArgsRef, GenericKind, GenericParam,
-        Type, lower::Lower,
+        self, CaseId, FunctionSig, GenericArg, GenericArgs, GenericArgsRef, GenericKind,
+        GenericParam, Type, lower::Lower,
     },
 };
 
@@ -252,46 +252,40 @@ impl CtxtRef<'_> {
         self.expect_item(id).expect_type_def()
     }
     pub fn is_type_recursive(self, id: DefId) -> bool {
-        fn is_ty_recursive(ctxt: CtxtRef<'_>, ty: &Type, seen_ids: &mut HashSet<DefId>) -> bool {
-            match ty {
-                Type::Bool
-                | Type::Byte
-                | Type::Char
-                | Type::Unknown
-                | Type::Infer(_)
-                | Type::Param(..)
-                | Type::Int(_)
-                | Type::Function(..)
-                | Type::Array(_)
-                | Type::Never => false,
-                Type::Record(fields) => fields
-                    .iter()
-                    .any(|field| is_ty_recursive(ctxt, &field.ty, seen_ids)),
-                Type::Tuple(fields) => fields
-                    .iter()
-                    .any(|field| is_ty_recursive(ctxt, field, seen_ids)),
-                Type::Named(id, _, args) => {
-                    if !seen_ids.insert(*id) {
-                        return true;
-                    }
-                    for field in ctxt.type_def(*id).all_fields() {
-                        if is_ty_recursive(ctxt, &field.type_of(args, ctxt), seen_ids) {
-                            return true;
+        use types::visit::Visit;
+        struct RecursiveIndirection<'a>(CtxtRef<'a>, HashSet<DefId>, bool);
+        impl<'a> Visit for RecursiveIndirection<'a> {
+            fn visit_type(&mut self, ty: &Type) {
+                if self.2 {
+                    return;
+                }
+                match ty {
+                    Type::Named(id, _, args) => {
+                        if !self.1.insert(*id) {
+                            self.2 = true;
+                            return;
+                        }
+                        for field in self.0.type_def(*id).all_fields() {
+                            if self.2 {
+                                return;
+                            }
+                            self.visit_type(&field.type_of(args, self.0));
                         }
                     }
-                    false
+                    Type::Array(_) => (),
+                    _ => self.super_visit_type(ty),
                 }
             }
         }
-        is_ty_recursive(
-            self,
-            &Type::Named(
-                id,
-                self.expect_type(id).name.symbol,
-                self.generics(id).instantiate_identity(),
-            ),
-            &mut HashSet::new(),
-        )
+        let ty = Type::Named(
+            id,
+            self.expect_type(id).name.symbol,
+            self.generics(id).instantiate_identity(),
+        );
+        let seen = HashSet::new();
+        let mut r = RecursiveIndirection(self, seen, false);
+        r.visit_type(&ty);
+        r.2
     }
 
     pub fn span(self, id: DefId) -> SrcLoc {

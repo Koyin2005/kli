@@ -1,6 +1,6 @@
 use crate::mir::{
-    BasicBlock, BasicBlockId, Body, Constant, Local, Location,
-    Operand, Place, PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
+    BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Place, PlaceBase,
+    PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
 };
 pub enum PlaceCtxt {
     Read,

@@ -4,8 +4,7 @@ use crate::{
     collect::{CtxtRef, TypeDefKind},
     diagnostics::emit_fatal_diagnostic,
     mir::{
-        BinaryOp, Body, CastKind, Location, Stmt,
-        StmtKind, TerminatorKind,
+        BinaryOp, Body, CastKind, Location, Stmt, StmtKind, TerminatorKind,
         visitor::{PlaceCtxt, Visit},
     },
     src_loc::SrcLoc,

@@ -14,6 +14,7 @@ use crate::{
 };
 define_id!(CaseId);
 pub mod lower;
+pub mod visit;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GenericKind {
     Type,
@@ -206,10 +207,7 @@ impl Type {
     }
 
     pub const fn is_builtin_scalar(&self) -> bool {
-        matches!(
-            self,
-            Self::Int(_) | Self::Bool | Self::Byte | Self::Char 
-        )
+        matches!(self, Self::Int(_) | Self::Bool | Self::Byte | Self::Char)
     }
     pub fn as_array(&self) -> Option<&Type> {
         let Type::Array(element) = self else {
