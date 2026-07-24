@@ -94,9 +94,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 PlaceProjection::ConstantIndex(index) => {
                     let _ = write!(&mut output, ".[{}]", index);
                 }
-                PlaceProjection::Deref => {
-                    output.push('^');
-                }
                 PlaceProjection::Index(index) => {
                     let _ = write!(&mut output, ".[_{}]", index.0);
                 }

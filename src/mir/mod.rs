@@ -10,7 +10,7 @@ use crate::{
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
     typed_ast::FieldId,
-    types::{CaseId, FieldName, GenericArgs, IntegerKind, PointerType, Type},
+    types::{CaseId, FieldName, GenericArgs, IntegerKind, Type},
 };
 pub mod basic_blocks;
 pub mod build;
@@ -29,19 +29,10 @@ pub enum PlaceProjection {
     ConstantIndex(u32),
     Index(Local),
     CaseDowncast(CaseId, Symbol),
-    Deref,
 }
 impl PlaceProjection {
     pub fn apply_projection_to_type(self, ty: Type, ctxt: CtxtRef<'_>) -> Type {
         match self {
-            PlaceProjection::Deref => ty
-                .into_pointer_type(ctxt)
-                .ok()
-                .and_then(|(pointer, ty)| match pointer {
-                    PointerType::Raw => Some(ty),
-                    _ => None,
-                })
-                .expect("should be a pointer type"),
             PlaceProjection::Field(field) => {
                 ty.field_info(field, ctxt)
                     .unwrap_or_else(|| panic!("should be a type with fields but got '{ty}'"))

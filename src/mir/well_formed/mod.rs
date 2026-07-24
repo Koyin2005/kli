@@ -4,12 +4,12 @@ use crate::{
     collect::{CtxtRef, TypeDefKind},
     diagnostics::emit_fatal_diagnostic,
     mir::{
-        BinaryOp, Body, CastKind, Location, PointerCast, Stmt,
+        BinaryOp, Body, CastKind, Location, Stmt,
         StmtKind, TerminatorKind,
         visitor::{PlaceCtxt, Visit},
     },
     src_loc::SrcLoc,
-    types::{FunctionType, PointerType, Type},
+    types::{FunctionType, Type},
     unsafety,
 };
 pub struct WellFormed<'ctxt> {
@@ -80,17 +80,6 @@ impl Visit for WellFormed<'_> {
                             _ => None,
                         },
                         || "Cannot take an index for non-array",
-                        loc,
-                    )
-                }
-                super::PlaceProjection::Deref => {
-                    ty = self.assert_with_some(
-                        ty,
-                        |ty| match ty {
-                            Type::RawPointer(ty) => Some(*ty),
-                            _ => None,
-                        },
-                        || "Cannot deref non pointer or non ref",
                         loc,
                     )
                 }
