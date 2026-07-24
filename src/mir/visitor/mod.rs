@@ -94,9 +94,6 @@ pub trait Visit {
             Rvalue::AddrOf(place) => {
                 self.visit_place(PlaceCtxt::Write, loc, place);
             }
-            Rvalue::Allocate { ty: _, count } => {
-                self.visit_operand(loc, count);
-            }
             Rvalue::Cast(_, operand) => {
                 self.visit_operand(loc, operand);
             }
@@ -246,9 +243,6 @@ pub trait MutVisit {
             }
             Rvalue::AddrOf(place) => {
                 self.visit_place(loc, place);
-            }
-            Rvalue::Allocate { ty: _, count } => {
-                self.visit_operand(loc, count);
             }
             Rvalue::Cast(_, operand) => {
                 self.visit_operand(loc, operand);

@@ -207,13 +207,6 @@ impl<'ctxt> RootCtxt<'ctxt> {
     pub(super) fn var_name(&self, var: VarId) -> Symbol {
         self.variables.borrow()[&var].name
     }
-
-    pub(super) fn non_deref_error(&self, ty: &Type, loc: SrcLoc) -> Type {
-        self.ctxt
-            .diag()
-            .add_diagnostic(format!("Cannot deref '{}'", ty), loc);
-        Type::Unknown
-    }
 }
 pub enum Coercion {
     Equal(Type),

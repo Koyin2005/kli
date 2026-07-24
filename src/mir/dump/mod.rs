@@ -126,11 +126,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(right)?;
                 write!(self.output, ")")?;
             }
-            Rvalue::Allocate { ty, count } => {
-                write!(self.output, "allocate[{ty}](")?;
-                self.write_operand(count)?;
-                write!(self.output, ")")?;
-            }
             Rvalue::Len(place) => {
                 write!(self.output, "len(")?;
                 self.write_place(place)?;

@@ -14,7 +14,7 @@ use crate::{
         root::{FunctionCtxt, TypeCheck},
     },
     typed_ast::{self, Capture, FieldId, RecordFieldInit},
-    types::{FieldName, FunctionSig, FunctionType, GenericArgs, PointerType, RecordField, Type},
+    types::{FieldName, FunctionSig, FunctionType, GenericArgs, RecordField, Type},
 };
 
 impl FunctionCtxt<'_> {

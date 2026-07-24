@@ -233,7 +233,6 @@ pub enum BinaryOp {
     Unchecked(OverflowOp),
     Wrapping(OverflowOp),
     Greater,
-    Offset,
     Divide,
     Equals,
     BitwiseAnd,
@@ -256,7 +255,6 @@ pub enum Rvalue {
     Call(Operand, Vec<Operand>),
     Binary(BinaryOp, Box<(Operand, Operand)>),
     AddrOf(Place),
-    Allocate { ty: Type, count: Operand },
     Cast(CastKind, Operand),
     Len(Place),
     Discriminant(Place),
@@ -271,7 +269,7 @@ impl Rvalue {
             | Self::AddrOf(_)
             | Self::Len(_)
             | Self::Discriminant(_) => true,
-            Self::Allocate { .. } | Self::AllocateArray(..) | Self::Call(..) => false,
+            | Self::AllocateArray(..) | Self::Call(..) => false,
         }
     }
     pub fn pointer_cast(cast: PointerCast, operand: Operand) -> Self {
@@ -296,23 +294,11 @@ impl Rvalue {
                 BinaryOp::Unchecked(_) | BinaryOp::Wrapping(_) => {
                     left_and_right.0.type_of(ctxt, locals, return_type)
                 }
-                BinaryOp::Offset => {
-                    let (left, _) = left_and_right.as_ref();
-                    let (PointerType::Raw, ty) = left
-                        .type_of(ctxt, locals, return_type)
-                        .into_pointer_type(ctxt)
-                        .unwrap()
-                    else {
-                        unreachable!("should be a raw pointer")
-                    };
-                    Type::pointer(ty)
-                }
                 BinaryOp::BitwiseAnd => Type::Bool,
                 BinaryOp::Divide => left_and_right.0.type_of(ctxt, locals, return_type),
                 BinaryOp::Equals => Type::Bool,
                 BinaryOp::Lesser | BinaryOp::Greater => Type::Bool,
             },
-            Rvalue::Allocate { ty, count: _ } => Type::pointer(ty.clone()),
             Rvalue::AllocateArray(element, _) => Type::array(element.clone()),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 AggregateKind::Record { field_names } => Type::Record(

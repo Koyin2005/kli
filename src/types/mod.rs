@@ -280,10 +280,7 @@ impl Type {
         })
     }
     pub fn as_pointer(&self) -> Option<&Type> {
-        let Self::RawPointer(ty) = self else {
-            return None;
-        };
-        Some(ty)
+        None
     }
     pub fn pointer(ty: Self) -> Self {
         Self::RawPointer(Box::new(ty))

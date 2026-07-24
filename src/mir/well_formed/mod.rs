@@ -263,8 +263,7 @@ impl Visit for WellFormed<'_> {
                         left,
                         right,
                     ) if left == right && left.is_integer() && right.is_integer() => (),
-                    (BinaryOp::BitwiseAnd, Type::Bool, Type::Bool)
-                    | (BinaryOp::Offset, Type::RawPointer(_), Type::INT) => (),
+                    (BinaryOp::BitwiseAnd, Type::Bool, Type::Bool) => (),
                     (BinaryOp::Equals, left, right) => self.assert(
                         left == right,
                         || format!("Cannot equate '{}' and '{}'", left, right),
@@ -277,7 +276,6 @@ impl Visit for WellFormed<'_> {
                     ),
                 }
             }
-            super::Rvalue::Allocate { .. } => (),
             super::Rvalue::Cast(cast_kind, operand) => match cast_kind {
                 CastKind::PointerCast(pointer_cast) => {
                     let ctxt = self.ctxt;
