@@ -14,11 +14,6 @@ use crate::{
 };
 define_id!(CaseId);
 pub mod lower;
-#[derive(Clone, Debug)]
-pub enum PointerType {
-    Box,
-    Raw,
-}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GenericKind {
     Type,
@@ -277,9 +272,6 @@ impl Type {
             params,
             return_type: Box::new(return_type),
         })
-    }
-    pub fn as_pointer(&self) -> Option<&Type> {
-        None
     }
     pub fn pair(first: Type, second: Type) -> Self {
         Self::tuple([first, second])

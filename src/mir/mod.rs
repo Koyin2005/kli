@@ -229,10 +229,6 @@ pub enum BinaryOp {
     Lesser,
 }
 #[derive(Clone, Debug)]
-pub enum PointerCast {
-    RawToRaw(Type),
-}
-#[derive(Clone, Debug)]
 pub enum CastKind {
     Transmute(Type),
 }
