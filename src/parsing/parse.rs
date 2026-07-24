@@ -624,13 +624,6 @@ impl Parser {
                         kind: ExprKind::Call(Box::new(expr), args),
                     }
                 }
-                TokenKind::Caret => {
-                    self.advance();
-                    Expr {
-                        loc: expr.loc,
-                        kind: ExprKind::Deref(Box::new(expr)),
-                    }
-                }
                 TokenKind::Dot => {
                     self.advance();
                     if self.matches_token(&TokenKind::LeftBracket) {

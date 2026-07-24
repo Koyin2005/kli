@@ -121,7 +121,6 @@ pub enum ExprKind {
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Panic,
     Lambda(Rc<Lambda>),
-    Deref(Box<Expr>),
     Assign(Box<Expr>, Box<Expr>),
     For(Box<ForExpr>),
     Case(Box<Expr>, Box<[CaseArm]>),

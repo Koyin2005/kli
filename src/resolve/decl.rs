@@ -28,7 +28,6 @@ impl DeclareInBody<'_, '_> {
             | ast::ExprKind::Path(..) => (),
             ast::ExprKind::Annotate(expr, _)
             | ast::ExprKind::Unsafe(expr)
-            | ast::ExprKind::Deref(expr)
             | ast::ExprKind::Field(expr, _) => self.declare_in_exprs(expr),
             ast::ExprKind::Print(expr) => {
                 if let Some(expr) = expr {

@@ -33,24 +33,6 @@ impl FunctionCtxt<'_> {
                     typed_ast::PlaceKind::Var(var)
                 },
             ),
-            ExprKind::Deref(value) => {
-                let value = self.check_expr(value, None);
-                (
-                    match self
-                        .root()
-                        .simplify_type(value.ty.clone())
-                        .into_pointer_type(self.root().ctxt())
-                    {
-                        Ok((PointerType::Raw, ty)) => ty.clone(),
-                        Ok((p, ty)) => self.root().non_deref_error(
-                            &Type::pointer_type(p, ty, self.root().ctxt()),
-                            value.loc,
-                        ),
-                        Err(ty) => self.root().non_deref_error(&ty, value.loc),
-                    },
-                    typed_ast::PlaceKind::Deref(Box::new(value)),
-                )
-            }
             ExprKind::Field(receiver, field) => {
                 let receiver = self.check_place(receiver, None);
                 if let Some((id, named_info, field_ty)) =
@@ -684,7 +666,7 @@ impl FunctionCtxt<'_> {
                     }
                 }
             }
-            ExprKind::Var(_) | ExprKind::Deref(_) | ExprKind::Field(..) | ExprKind::Index(..) => {
+            ExprKind::Var(_) | ExprKind::Field(..) | ExprKind::Index(..) => {
                 let place = self.check_place(expr, expected_ty);
                 typed_ast::Expr {
                     ty: place.ty.clone(),

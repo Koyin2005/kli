@@ -649,9 +649,6 @@ impl<'info> Resolve<'info> {
                 Box::new(self.resolve_expr(*callee)),
                 args.into_iter().map(|arg| self.resolve_expr(arg)).collect(),
             ),
-            ast::ExprKind::Deref(value) => {
-                res::ExprKind::Deref(Box::new(self.resolve_expr(*value)))
-            }
             ast::ExprKind::Binary(op, left, right) => res::ExprKind::Binary(
                 op,
                 Box::new(self.resolve_expr(*left)),
