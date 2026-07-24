@@ -186,22 +186,6 @@ impl Visit for WellFormed<'_> {
                         loc,
                     );
                 }
-                super::AggregateKind::Array(ty, count) => {
-                    self.assert(
-                        fields.len() == (*count).try_into().unwrap(),
-                        || format!("array requires '{}' fields", count),
-                        loc,
-                    );
-                    for field in fields {
-                        let field_ty =
-                            field.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                        self.assert(
-                            field_ty == *ty,
-                            || "array field must have same type as array",
-                            loc,
-                        );
-                    }
-                }
                 super::AggregateKind::Variant(id, index, args) => {
                     let type_def = self.ctxt.type_def(*id);
                     let case_def = type_def.case(*index);

@@ -146,9 +146,7 @@ impl<'ctxt> MirDump<'ctxt> {
             }
             Rvalue::Aggregate(kind, fields) => {
                 match kind {
-                    AggregateKind::Array(..)
-                    | AggregateKind::Record { .. }
-                    | AggregateKind::Tuple => (),
+                    AggregateKind::Record { .. } | AggregateKind::Tuple => (),
                     AggregateKind::Closure(params, return_type) => {
                         write!(self.output, "Closure((")?;
                         self.write_with_coma_sep(params, |this, param| {
@@ -166,13 +164,12 @@ impl<'ctxt> MirDump<'ctxt> {
                     }
                 };
                 let (open_bracket, close_bracket) = match kind {
-                    AggregateKind::Array(_, _) => ('[', ']'),
                     AggregateKind::Variant(..) | AggregateKind::Tuple => ('(', ')'),
                     _ => ('{', '}'),
                 };
                 let ctxt = self.ctxt;
                 let write_field_name = move |this: &mut MirDump<'_>, i: FieldId| match kind {
-                    AggregateKind::Tuple | AggregateKind::Array(..) => Ok(()),
+                    AggregateKind::Tuple => Ok(()),
                     AggregateKind::Record { field_names } => {
                         write!(this.output, "{} = ", field_names[i])
                     }

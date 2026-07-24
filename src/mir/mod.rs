@@ -224,7 +224,6 @@ pub enum AggregateKind {
     Closure(Vec<Type>, Box<Type>),
     NamedRecord(DefId, GenericArgs),
     Variant(DefId, CaseId, GenericArgs),
-    Array(Type, u64),
 }
 #[derive(Debug, Clone, Copy)]
 pub enum OverflowOp {
@@ -322,7 +321,6 @@ impl Rvalue {
             Rvalue::Allocate { ty, count: _ } => Type::pointer(ty.clone()),
             Rvalue::AllocateArray(element, _) => Type::array(ctxt, element.clone()).unwrap(),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
-                AggregateKind::Array(ty, count) => Type::Array(Box::new(ty.clone()), *count),
                 AggregateKind::Record { field_names } => Type::Record(
                     field_names
                         .iter()
