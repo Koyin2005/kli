@@ -150,7 +150,6 @@ pub enum ExprKind {
     Case(Box<Expr>, Vec<CaseArm>),
     Assign(Box<Place>, Box<Expr>),
     Lambda(Box<Lambda>),
-    AddressOf(Box<Place>),
     Tuple(Box<[Expr]>),
     Array(Box<[Expr]>),
     NamedRecord(DefId, GenericArgs, Box<[RecordFieldInit]>),

@@ -129,7 +129,6 @@ pub enum ExprKind {
     Call(Box<Expr>, Box<[Expr]>),
     Record(Vec<FieldInit>),
     VariantCase(DefId, Box<GenericArgs>),
-    AddressOf(Box<Expr>),
     Field(Box<Expr>, Ident),
     NamedRecord(TypeName, Box<GenericArgs>, Box<[FieldInit]>),
     While(Box<Expr>, Box<Expr>),

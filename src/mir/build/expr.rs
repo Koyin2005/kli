@@ -249,7 +249,6 @@ impl Builder<'_> {
             | ExprKind::Lambda(_)
             | ExprKind::BuiltinCall(..)
             | ExprKind::Const(..)
-            | ExprKind::AddressOf(..)
             | ExprKind::NamedRecord(..)
             | ExprKind::While(..)
             | ExprKind::Tuple(..)
@@ -494,7 +493,6 @@ impl Builder<'_> {
                 self.expr_stmt(expr);
                 Rvalue::Use(Operand::Constant(Constant::unit()))
             }
-            ExprKind::AddressOf(place) => Rvalue::AddrOf(self.lower_place(place)),
             &ExprKind::BuiltinCall(builtin, _, ref args) => {
                 self.builtin_call(&expr.ty, builtin, args).into()
             }

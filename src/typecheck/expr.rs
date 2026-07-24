@@ -712,23 +712,6 @@ impl FunctionCtxt<'_> {
                 kind: typed_ast::ExprKind::Panic,
                 ty: Type::Never,
             },
-            ExprKind::AddressOf(place) => {
-                let place = self.check_place(
-                    place,
-                    if let Some(ref ty) = expected_ty
-                        && let Type::RawPointer(ty) = ty
-                    {
-                        Some((**ty).clone())
-                    } else {
-                        None
-                    },
-                );
-                typed_ast::Expr {
-                    ty: Type::pointer(place.ty.clone()),
-                    loc,
-                    kind: typed_ast::ExprKind::AddressOf(Box::new(place)),
-                }
-            }
             ExprKind::Binary(binary_op, left, right) => {
                 self.check_binary_op(loc, *binary_op, left, right, expected_ty.as_ref())
             }

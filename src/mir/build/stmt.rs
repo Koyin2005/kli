@@ -93,7 +93,6 @@ impl Builder<'_> {
             | ExprKind::Lambda(..)
             | ExprKind::Const(..)
             | ExprKind::VariantInit(..)
-            | ExprKind::AddressOf(..)
             | ExprKind::NamedRecord(..)
             | ExprKind::Logic(..)
             | ExprKind::Tuple(..)

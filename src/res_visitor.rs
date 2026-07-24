@@ -147,7 +147,6 @@ pub trait Visitor {
                 }
             }
             ExprKind::VariantCase(_, generic_args) => self.visit_generic_args(generic_args),
-            ExprKind::AddressOf(place) => self.visit_expr(place),
         }
     }
     fn visit_pattern(&mut self, pattern: &Pattern) {
