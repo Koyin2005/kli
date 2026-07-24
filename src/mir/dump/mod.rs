@@ -214,7 +214,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, ")")?;
             }
             Rvalue::AddrOf(place) => {
-                write!(self.output, "raw_ptr_to(")?;
+                write!(self.output, "addr_of(")?;
                 self.write_place(place)?;
                 write!(self.output, ")")?;
             }

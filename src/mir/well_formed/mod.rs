@@ -212,7 +212,16 @@ impl Visit for WellFormed<'_> {
                 super::AggregateKind::Tuple => (),
             },
             super::Rvalue::Use(_) => (),
-            super::Rvalue::AddrOf(_) => {}
+            super::Rvalue::AddrOf(place) => {
+                self.assert(
+                    matches!(
+                        place.type_of(self.ctxt, &self.body.locals, &self.body.return_type),
+                        Type::Array(_)
+                    ),
+                    || "Expected an array".to_string(),
+                    loc,
+                );
+            }
             super::Rvalue::Call(operand, operands) => {
                 let callee = operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
                 let FunctionType { params, .. } = self.assert_with_some(
