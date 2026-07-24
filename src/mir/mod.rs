@@ -319,7 +319,7 @@ impl Rvalue {
                 BinaryOp::Lesser | BinaryOp::Greater => Type::Bool,
             },
             Rvalue::Allocate { ty, count: _ } => Type::pointer(ty.clone()),
-            Rvalue::AllocateArray(element, _) => Type::array(ctxt, element.clone()).unwrap(),
+            Rvalue::AllocateArray(element, _) => Type::array(element.clone()),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 AggregateKind::Record { field_names } => Type::Record(
                     field_names

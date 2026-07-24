@@ -906,7 +906,7 @@ impl FunctionCtxt<'_> {
                 )
             }
             ExprKind::Array(fields) => {
-                let element_ty = expected_ty.as_ref().and_then(|ty| ty.as_array(self.ctxt()));
+                let element_ty = expected_ty.as_ref().and_then(Type::as_array);
                 let mut coercion = Coercion::new(element_ty.cloned(), self);
                 for field in fields {
                     coercion.check_expr(field);
@@ -916,12 +916,7 @@ impl FunctionCtxt<'_> {
                     self.root().type_annotations_needed(loc);
                     Type::Unknown
                 });
-                let ty = Type::array(self.ctxt(), element_ty).unwrap_or_else(|| {
-                    self.ctxt()
-                        .diag()
-                        .add_diagnostic("Expected array type".to_string(), loc);
-                    Type::Unknown
-                });
+                let ty = Type::array(element_ty);
                 make_expr(
                     ty,
                     typed_ast::ExprKind::Array(elements.into_boxed_slice()),

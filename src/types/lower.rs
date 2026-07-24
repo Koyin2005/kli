@@ -135,7 +135,16 @@ impl<'a> Lower<'a> {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::Never
             }
-            TypeName::Box | TypeName::Array | TypeName::String => {
+            TypeName::Array => {
+                let args = self.lower_generic_args_with(Generics::default(), 1, loc, args);
+                let ty = if let Ok([GenericArg(ty)]) = <[_; _]>::try_from(args) {
+                    ty
+                } else {
+                    Type::Unknown
+                };
+                Type::Array(Box::new(ty))
+            }
+            TypeName::Box | TypeName::String => {
                 let id = self.ctxt.lang_items().expect(match name {
                     TypeName::String => LangItem::String,
                     TypeName::Array => LangItem::Array,

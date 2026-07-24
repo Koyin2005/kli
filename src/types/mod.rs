@@ -229,16 +229,14 @@ impl Type {
             Self::Int(_) | Self::Bool | Self::Byte | Self::Char | Self::RawPointer(_)
         )
     }
-    pub fn as_array(&self, ctxt: CtxtRef<'_>) -> Option<&Type> {
-        let (id, _, args) = self.as_named()?;
-        let array_id = ctxt.lang_items().get(LangItem::Array)?;
-        let arg = (id == array_id).then(|| args.first())??;
-        Some(arg.expect_ty())
+    pub fn as_array(&self) -> Option<&Type> {
+        let Type::Array(element) = self else {
+            return None;
+        };
+        Some(element)
     }
-    pub fn array(ctxt: CtxtRef<'_>, element: Self) -> Option<Self> {
-        let id = ctxt.lang_items().get(LangItem::Array)?;
-        let name = ctxt.ident(id)?.symbol;
-        Some(Type::Named(id, name, GenericArgs::from_type(element)))
+    pub fn array(element: Self) -> Self {
+        Self::Array(Box::new(element))
     }
     pub fn string(ctxt: CtxtRef<'_>) -> Self {
         let id = ctxt.lang_items().expect(LangItem::String);

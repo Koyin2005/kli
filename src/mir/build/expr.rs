@@ -613,7 +613,7 @@ impl Builder<'_> {
                 self.builtin_call(expr.loc, &expr.ty, builtin, args).into()
             }
             ExprKind::Array(fields) => {
-                let ty = expr.ty.as_array(self.ctxt).unwrap().clone();
+                let ty = expr.ty.as_array().unwrap().clone();
                 Rvalue::AllocateArray(ty, fields.iter().map(|field| self.operand(field)).collect())
             }
         }
