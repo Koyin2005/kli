@@ -8,8 +8,7 @@ fun index_out_bounds() -> never =
 
 @lang_item("array")
 @opaque
-type Array[T] = {
-}
+type Array[T] = {}
 impl
     fun empty() -> Array[T] = []
 
