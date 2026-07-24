@@ -20,17 +20,11 @@ fun get_checked[T](this : array[T], index : uint) -> Option[T] =
     end
 
 fun get[T](this : array[T], index : uint) -> T = 
-    case index < len(this) of
-    | true -> (this).[index]
-    | false -> index_out_bounds()
-    end
+    (this).[index]
 
 
 fun set[T](this : array[T], index : uint, value : T) -> () = 
-    case index < len(this) of 
-    | true -> (this).[index] = value
-    | false -> index_out_bounds()
-    end
+    (this).[index] = value
 
 
 fun copy_from[T](this : array[T], other : array[T]) -> () = 
