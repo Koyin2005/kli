@@ -2,7 +2,8 @@ use crate::{
     Symbol,
     collect::{CtxtRef, TypeDefKind},
     def_ids::DefId,
-    types::Type,
+    index_vec::IndexVec,
+    types::{CaseId, Type},
 };
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Constructor {
@@ -15,10 +16,17 @@ pub enum Constructor {
     Missing,
 }
 
-pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Constructor> {
+pub enum ConstructorSet {
+    Bool,
+    Never,
+    NonExhaustive,
+    Record,
+    Cases(IndexVec<CaseId, Symbol>),
+}
+pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> ConstructorSet {
     match ty {
-        Type::Bool => vec![Constructor::Bool(true), Constructor::Bool(false)],
-        Type::Never => Vec::new(),
+        Type::Bool => ConstructorSet::Bool,
+        Type::Never => ConstructorSet::Never,
         Type::Char
         | Type::Unknown
         | Type::Param(..)
@@ -26,14 +34,12 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Cons
         | Type::Function(..)
         | Type::Byte
         | Type::Array(_)
-        | Type::String => vec![Constructor::NonExhaustive],
-        Type::Record(_) | Type::Tuple(_) => {
-            vec![Constructor::Record]
-        }
+        | Type::String => ConstructorSet::NonExhaustive,
+        Type::Record(_) | Type::Tuple(_) => ConstructorSet::Record,
         Type::Infer(_) => unreachable!("Cannot have infer here"),
         Type::Named(id, _, args) => {
             if !ctxt.same_module(*id, from) && ctxt.is_opaque(*id) {
-                return vec![Constructor::NonExhaustive];
+                return ConstructorSet::NonExhaustive;
             }
             match ctxt.type_def(*id).kind {
                 TypeDefKind::Record(ref fields) => {
@@ -41,23 +47,24 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Cons
                         .iter()
                         .any(|field| field.type_of(args, ctxt).is_uninhabited(ctxt))
                     {
-                        return vec![];
+                        return ConstructorSet::Never;
                     }
-                    vec![Constructor::Record]
+                    ConstructorSet::Record
                 }
-                TypeDefKind::Variant(ref cases) => cases
-                    .iter()
-                    .filter_map(|case| {
-                        if let Some(field) = case.field
-                            && field.type_of(args, ctxt).is_uninhabited(ctxt)
-                        {
-                            None
-                        } else {
-                            Some(case.name)
-                        }
-                    })
-                    .map(Constructor::Case)
-                    .collect(),
+                TypeDefKind::Variant(ref cases) => ConstructorSet::Cases(
+                    cases
+                        .iter()
+                        .filter_map(|case| {
+                            if let Some(field) = case.field
+                                && field.type_of(args, ctxt).is_uninhabited(ctxt)
+                            {
+                                None
+                            } else {
+                                Some(case.name)
+                            }
+                        })
+                        .collect(),
+                ),
             }
         }
     }

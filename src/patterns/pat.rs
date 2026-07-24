@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use crate::{
     collect::CtxtRef,
     def_ids::DefId,
-    patterns::ctors::{Constructor, constructors_of_ty, fields_of},
+    patterns::ctors::{Constructor, ConstructorSet, constructors_of_ty, fields_of},
     types::Type,
 };
 #[derive(Clone)]
@@ -139,27 +139,15 @@ fn specialize(constructor: Constructor, fields: &[Type], matrix: Vec<Vec<Pat>>) 
         .collect()
 }
 fn split_constructors(
-    ty: &Type,
-    all_constructors: Vec<Constructor>,
+    constructors: ConstructorSet,
     seen_constructors: HashSet<Constructor>,
 ) -> (Vec<Constructor>, Vec<Constructor>) {
     let mut seen = Vec::new();
     let mut missing = Vec::new();
-    let had_non_exhaustive = all_constructors.contains(&Constructor::NonExhaustive);
-    if had_non_exhaustive {
-        missing.push(Constructor::NonExhaustive);
-    }
-    match ty {
-        Type::Infer(_) | Type::Unknown => (),
-        Type::Never => (),
-        Type::Int(_)
-        | Type::Char
-        | Type::Byte
-        | Type::Param(..)
-        | Type::Function(..)
-        | Type::Array(_)
-        | Type::String => {}
-        Type::Bool => {
+    match constructors {
+        ConstructorSet::Never => {}
+        ConstructorSet::NonExhaustive => missing.push(Constructor::NonExhaustive),
+        ConstructorSet::Bool => {
             let is_true = seen_constructors.contains(&Constructor::Bool(true));
             let is_false = seen_constructors.contains(&Constructor::Bool(false));
             if is_true {
@@ -173,33 +161,20 @@ fn split_constructors(
                 missing.push(Constructor::Bool(false));
             }
         }
-        Type::Record(_) | Type::Tuple(_) => {
+        ConstructorSet::Record => {
             if seen_constructors.contains(&Constructor::Record) {
                 seen.push(Constructor::Record);
             } else {
                 missing.push(Constructor::Record);
             }
         }
-        Type::Named(..) => {
-            if !had_non_exhaustive {
-                for ctor in all_constructors {
-                    match ctor {
-                        Constructor::Record => {
-                            if seen_constructors.contains(&Constructor::Record) {
-                                seen.push(Constructor::Record)
-                            } else {
-                                missing.push(Constructor::Record);
-                            }
-                        }
-                        Constructor::Case(_) => {
-                            if seen_constructors.contains(&ctor) {
-                                seen.push(ctor)
-                            } else {
-                                missing.push(ctor);
-                            }
-                        }
-                        _ => continue,
-                    }
+        ConstructorSet::Cases(cases) => {
+            for case in cases {
+                let ctor = Constructor::Case(case);
+                if seen_constructors.contains(&ctor) {
+                    seen.push(ctor)
+                } else {
+                    missing.push(ctor);
                 }
             }
         }
@@ -221,7 +196,6 @@ fn missing_patterns_inner(
     };
     let all_constructors = constructors_of_ty(from_id, ctxt, head);
     let (mut constructors, missing_ctors) = split_constructors(
-        head,
         all_constructors,
         matrix
             .iter()
