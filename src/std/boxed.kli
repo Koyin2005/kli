@@ -1,9 +1,7 @@
 import std.refs
 import builtins.(
-    allocate,
     ptr_write,
     ptr_read,
-    deallocate,
     drop_in_place
 )
 
