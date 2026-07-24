@@ -353,11 +353,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     }
                     writeln!(self.output, ")")?;
                 }
-                StmtKind::Deallocate(value) => {
-                    write!(self.output, "deallocate(")?;
-                    self.write_operand(value)?;
-                    writeln!(self.output, ")")?;
-                }
                 StmtKind::DropInPlace(drop) => {
                     let DropInPlace { pointer_to_place } = drop.as_ref();
                     write!(self.output, "drop_in_place(")?;

@@ -540,7 +540,6 @@ pub enum StmtKind {
     Noop,
     Assign(Place, Box<Rvalue>),
     Print(Option<Operand>),
-    Deallocate(Operand),
     CopyNonOverlapping(Box<CopyNonOverlapping>),
     DropInPlace(Box<DropInPlace>),
 }

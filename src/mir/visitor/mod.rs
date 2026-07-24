@@ -14,7 +14,6 @@ pub trait Visit {
     fn super_visit_stmt(&mut self, loc: Location, stmt: &Stmt) {
         match &stmt.kind {
             StmtKind::Noop => (),
-            StmtKind::Deallocate(operand) => self.visit_operand(loc, operand),
             StmtKind::Assign(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
             }
@@ -164,7 +163,6 @@ pub trait MutVisit {
     fn super_visit_stmt(&mut self, loc: Location, stmt: &mut Stmt) {
         match &mut stmt.kind {
             StmtKind::Noop => (),
-            StmtKind::Deallocate(operand) => self.visit_operand(loc, operand),
             StmtKind::Assign(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
             }
