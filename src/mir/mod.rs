@@ -283,8 +283,8 @@ impl Rvalue {
             }
             Rvalue::Binary(op, left_and_right) => match op {
                 BinaryOp::Overflow(_) => Type::pair(
-                    Type::Bool,
                     left_and_right.0.type_of(ctxt, locals, return_type),
+                    Type::Bool,
                 ),
                 BinaryOp::Unchecked(_) | BinaryOp::Wrapping(_) => {
                     left_and_right.0.type_of(ctxt, locals, return_type)
@@ -557,7 +557,7 @@ pub enum BodySource {
     ClosureShim(DefId),
 }
 impl BodySource {
-    fn def_id(self) -> DefId {
+    pub fn def_id(self) -> DefId {
         match self {
             Self::ClosureShim(id) => id,
             Self::Function(id) => id,
@@ -589,6 +589,10 @@ pub struct Body {
     pub block_info: BasicBlocks,
 }
 impl Body {
+    pub fn param_types(&self) -> impl Iterator<Item = Type> {
+        self.params_iter()
+            .map(|param| self.locals[param].ty.clone())
+    }
     pub fn params_iter(&self) -> impl Iterator<Item = Local> {
         self.locals
             .iter_enumerated()

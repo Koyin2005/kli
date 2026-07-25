@@ -464,21 +464,21 @@ impl Builder<'_> {
                 };
                 let checked_result = self.assign_to_temp(
                     expr.loc,
-                    Type::pair(Type::Bool, expr.ty.clone()),
+                    Type::pair(expr.ty.clone(), Type::Bool),
                     Rvalue::Binary(
                         mir::BinaryOp::Overflow(overflow_op),
                         Box::new((left_operand, right_operand)),
                     ),
                 );
                 let overflow =
-                    Operand::Load(Place::local(checked_result).with_field(FieldId::new(0)));
+                    Operand::Load(Place::local(checked_result).with_field(FieldId::new(1)));
                 self.finish_assert_to_new_block(
                     expr.loc,
                     overflow,
                     mir::AssertKind::Overflow(overflow_op),
                 );
                 let result =
-                    Operand::Load(Place::local(checked_result).with_field(FieldId::new(1)));
+                    Operand::Load(Place::local(checked_result).with_field(FieldId::new(0)));
                 Rvalue::Use(result)
             }
             ExprKind::Block(..)

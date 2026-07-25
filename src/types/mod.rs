@@ -169,6 +169,11 @@ pub enum IntegerKind {
     Signed,
     Unsigned,
 }
+impl IntegerKind {
+    pub const fn is_signed(self) -> bool {
+        matches!(self, Self::Signed)
+    }
+}
 
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub enum Type {

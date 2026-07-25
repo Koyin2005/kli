@@ -1,12 +1,16 @@
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
+    fs::OpenOptions,
+    io::Write,
     path::Path,
+    process::Command,
 };
 
 use kli::{
     Symbol,
     ast::{self, Module, ModuleId},
+    codegen::CodegenRoot,
     config::{Config, Feature, config},
     mir::{self, passes::passes},
     monomorph::collect::{Instance, InstanceCollector, InstanceKind},
@@ -298,13 +302,23 @@ fn main() {
             pass.run(ctxt, body);
         });
     }
-    if ctxt.config().has_feature(Feature::OutputInstances)
-        && let Some((main, _)) = ctxt.main_function()
-    {
+    if let Some((main, _)) = ctxt.main_function() {
         let instances = InstanceCollector::new(&mir_context)
             .collect(Instance::non_generic(InstanceKind::Function(main)));
-        for instance in &instances {
-            println!("{:?}", instance);
+        if ctxt.config().has_feature(Feature::OutputInstances) {
+            for instance in &instances {
+                println!("{:?}", instance);
+            }
         }
+        let obj = CodegenRoot::new(ctxt, instances).codegen_functions(&mir_context);
+        {
+            let mut f = OpenOptions::new().write(true).open("foo.o").unwrap();
+            let _ = f.write(&obj.emit().unwrap());
+        }
+        Command::new("objdump")
+            .arg("-d")
+            .arg("foo.o")
+            .spawn()
+            .unwrap();
     }
 }

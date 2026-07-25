@@ -93,7 +93,6 @@ impl Align {
 pub enum TagEncoding {
     Uninhabited,
     Field { offset: Size, scalar: Scalar },
-    Data { offset: Size },
 }
 #[derive(Clone, Debug)]
 pub struct VariantLayout {
@@ -165,6 +164,16 @@ pub enum Scalar {
     Uint32,
     Int64(IntegerKind),
 }
+impl Scalar {
+    pub fn size(self) -> Size {
+        match self {
+            Scalar::Byte | Scalar::Bool => Size::BYTE,
+            Scalar::Pointer { non_null: _ } => POINTER_SIZE,
+            Scalar::Uint32 => Size::BYTE.mul(4),
+            Scalar::Int64(_) => INT_SIZE,
+        }
+    }
+}
 #[derive(Clone, Debug)]
 pub enum LayoutKind {
     Aggregate(IndexVec<FieldId, FieldLayout>),
@@ -181,6 +190,15 @@ pub enum LayoutError {
     TooGeneric,
     Unknown,
     TooBig,
+}
+impl std::fmt::Debug for LayoutError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TooBig => write!(f, "too big"),
+            Self::Unknown => write!(f, "could not compute unknown layout"),
+            Self::TooGeneric => write!(f, "do not know the layout of generic type"),
+        }
+    }
 }
 
 fn variant_layout(

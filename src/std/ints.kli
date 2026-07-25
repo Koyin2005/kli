@@ -2,12 +2,12 @@ import std.optional.Option
 
 fun wrapping_add(x : int, y : int) -> int = builtins.wrapping_add(x,y)
 
-fun overflowing_add(x : int, y : int) -> (bool,int) = builtins.overflowing_add(x,y)
+fun overflowing_add(x : int, y : int) -> (int,bool) = builtins.overflowing_add(x,y)
 
 fun checked_add(x : int, y : int) -> Option[int] = do 
     case builtins.overflowing_add(x,y) of 
-    | (false,_) -> Option.None
-    | (true,res) -> Option.Some(res)
+    | (_,false) -> Option.None
+    | (res,true) -> Option.Some(res)
     end
 end
 

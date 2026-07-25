@@ -15,4 +15,4 @@ fun array_addr[T](a : array[T]) -> uint;
 fun wrapping_add[T](x : T, y : T) -> T;
 
 @builtin
-fun overflowing_add[T](x : T, y : T) -> (bool, T);
+fun overflowing_add[T](x : T, y : T) -> (T, bool);
