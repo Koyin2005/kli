@@ -1,15 +1,7 @@
 import std.refs
 
-@opaque
-@lang_item("box")
-type Box[T] = { }
-impl 
+fun alloc[T](value : T) -> Box[T] = builtins.box_alloc(value)
 
-    fun alloc(value : T) -> Box[T] = panic
+fun get[T](this : Box[T]) -> T = this^
 
-    fun get(value : Box[T]) -> T = panic
-
-    fun set(this : Box[T], value : T) -> () = panic
-
-
-end
+fun set[T](this : Box[T], value : T) -> () = this^ = value

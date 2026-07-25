@@ -100,6 +100,9 @@ impl<'ctxt> MirDump<'ctxt> {
                     let current = std::mem::take(&mut output);
                     let _ = write!(&mut output, "({} as {})", current, name);
                 }
+                PlaceProjection::Deref => {
+                    _ = write!(&mut output, "^");
+                }
             };
         }
         write!(self.output, "{}", output)
@@ -114,6 +117,11 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_with_coma_sep(elements, |this, element| this.write_operand(element))?;
                 write!(self.output, "]")?;
             }
+            Rvalue::AllocateBox(ty, operand) => {
+                write!(self.output, "Box[{}](", ty)?;
+                self.write_operand(operand)?;
+                write!(self.output, ")")?;
+            }
             Rvalue::Binary(op, operands) => {
                 let (left, right) = &**operands;
                 write!(self.output, "{:?}(", op)?;
@@ -123,12 +131,12 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, ")")?;
             }
             Rvalue::Len(place) => {
-                write!(self.output, "len(")?;
+                write!(self.output, "Len(")?;
                 self.write_place(place)?;
                 write!(self.output, ")")?;
             }
             Rvalue::Discriminant(place) => {
-                write!(self.output, "discriminant(")?;
+                write!(self.output, "Discriminant(")?;
                 self.write_place(place)?;
                 write!(self.output, ")")?;
             }

@@ -82,6 +82,17 @@ impl Visit for WellFormed<'_> {
                         loc,
                     )
                 }
+                super::PlaceProjection::Deref => {
+                    ty = self.assert_with_some(
+                        ty,
+                        |ty| match ty {
+                            Type::Box(ty) => Some(*ty),
+                            _ => None,
+                        },
+                        || "Cannot deref non box",
+                        loc,
+                    )
+                }
             }
         }
     }
@@ -90,6 +101,13 @@ impl Visit for WellFormed<'_> {
         self.super_visit_rvalue(loc, rvalue);
         let loc = self.body.src_info(loc);
         match rvalue {
+            super::Rvalue::AllocateBox(ty, operand) => {
+                self.assert(
+                    *ty == operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type),
+                    || "Same type",
+                    loc,
+                );
+            }
             super::Rvalue::Discriminant(place) => {
                 self.assert(
                     if let Type::Named(id, _, _) =

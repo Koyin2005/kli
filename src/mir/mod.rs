@@ -29,6 +29,7 @@ pub enum PlaceProjection {
     ConstantIndex(u32),
     Index(Local),
     CaseDowncast(CaseId, Symbol),
+    Deref,
 }
 impl PlaceProjection {
     pub fn apply_projection_to_type(self, ty: Type, ctxt: CtxtRef<'_>) -> Type {
@@ -41,6 +42,12 @@ impl PlaceProjection {
             PlaceProjection::Index(_) | PlaceProjection::ConstantIndex(_) => {
                 let Type::Array(ty) = ty else {
                     unreachable!("Should be an array")
+                };
+                *ty
+            }
+            PlaceProjection::Deref => {
+                let Type::Box(ty) = ty else {
+                    unreachable!("Should be a box")
                 };
                 *ty
             }
@@ -102,6 +109,10 @@ impl Place {
     }
     pub fn with_index(mut self, index: Local) -> Self {
         self.projections.push(PlaceProjection::Index(index));
+        self
+    }
+    pub fn with_deref(mut self) -> Self {
+        self.projections.push(PlaceProjection::Deref);
         self
     }
     pub fn with_constant_index(mut self, index: u32) -> Self {
@@ -236,6 +247,7 @@ pub enum CastKind {
 pub enum Rvalue {
     Aggregate(AggregateKind, IndexVec<FieldId, Operand>),
     AllocateArray(Type, Vec<Operand>),
+    AllocateBox(Type, Operand),
     Use(Operand),
     Call(Operand, Vec<Operand>),
     Binary(BinaryOp, Box<(Operand, Operand)>),
@@ -254,12 +266,13 @@ impl Rvalue {
             | Self::AddrOf(_)
             | Self::Len(_)
             | Self::Discriminant(_) => true,
-            Self::AllocateArray(..) | Self::Call(..) => false,
+            Self::AllocateArray(..) | Self::AllocateBox(..) | Self::Call(..) => false,
         }
     }
 
     pub fn type_of(&self, ctxt: CtxtRef<'_>, locals: &Locals, return_type: &Type) -> Type {
         match self {
+            Rvalue::AllocateBox(ty, _) => Type::Box(Box::new(ty.clone())),
             Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),
             Rvalue::Len(_) => Type::UINT,
             Rvalue::Call(operand, _) => {

@@ -99,9 +99,10 @@ pub trait Visitor {
                 self.visit_expr(expr1);
                 self.visit_expr(expr2);
             }
-            ExprKind::Unsafe(expr) | ExprKind::Field(expr, _) | ExprKind::Return(expr) => {
-                self.visit_expr(expr)
-            }
+            ExprKind::Unsafe(expr)
+            | ExprKind::Field(expr, _)
+            | ExprKind::Return(expr)
+            | ExprKind::Deref(expr) => self.visit_expr(expr),
             ExprKind::Assign(place, expr) => {
                 self.visit_expr(place);
                 self.visit_expr(expr);

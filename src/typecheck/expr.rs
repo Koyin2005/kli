@@ -49,6 +49,25 @@ impl FunctionCtxt<'_> {
                     (Type::Unknown, typed_ast::PlaceKind::Invalid)
                 }
             }
+            ExprKind::Deref(boxed_value) => {
+                let boxed_value = self.check_expr(
+                    boxed_value,
+                    expected_ty
+                        .as_ref()
+                        .map(|ty| Type::Box(Box::new(ty.clone()))),
+                );
+                let ty = if let Type::Box(ref ty) = boxed_value.ty {
+                    (**ty).clone()
+                } else {
+                    self.ctxt().diag().add_diagnostic(
+                        format!("Expected 'box' but got '{}'", boxed_value.ty),
+                        place.loc,
+                    );
+                    Type::Unknown
+                };
+
+                (ty, typed_ast::PlaceKind::Deref(Box::new(boxed_value)))
+            }
             ExprKind::Index(reciever, index) => {
                 let receiver = self.check_expr(reciever, None);
                 let index = self.check_expr_coerces_to(index, Some(Type::UINT));
@@ -666,7 +685,7 @@ impl FunctionCtxt<'_> {
                     }
                 }
             }
-            ExprKind::Var(_) | ExprKind::Field(..) | ExprKind::Index(..) => {
+            ExprKind::Var(_) | ExprKind::Field(..) | ExprKind::Index(..) | ExprKind::Deref(_) => {
                 let place = self.check_place(expr, expected_ty);
                 typed_ast::Expr {
                     ty: place.ty.clone(),

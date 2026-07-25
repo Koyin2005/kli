@@ -272,7 +272,7 @@ impl CtxtRef<'_> {
                             self.visit_type(&field.type_of(args, self.0));
                         }
                     }
-                    Type::Array(_) => (),
+                    Type::Array(_) | Type::Box(_) => (),
                     _ => self.super_visit_type(ty),
                 }
             }

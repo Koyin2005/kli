@@ -602,6 +602,10 @@ impl<'info> Resolve<'info> {
                 let expr = self.resolve_expr(*expr);
                 res::ExprKind::Unsafe(Box::new(expr))
             }
+            ast::ExprKind::Deref(value) => {
+                let expr = self.resolve_expr(*value);
+                res::ExprKind::Deref(Box::new(expr))
+            }
             ast::ExprKind::Block(block) => self.in_scope(|this| {
                 res::ExprKind::Block(Box::new(res::BlockBody {
                     stmts: block

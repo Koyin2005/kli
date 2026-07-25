@@ -109,6 +109,7 @@ impl Builder<'_> {
                 );
                 base.with_index(index)
             }
+            typed_ast::PlaceKind::Deref(base) => self.place(base).with_deref(),
             typed_ast::PlaceKind::Var(var) => {
                 let Some(local) = self.body.local_for_var(var.1) else {
                     unreachable!("should have a local for {:?} at {:?}", var, place.loc)
@@ -271,6 +272,11 @@ impl Builder<'_> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::BoxAlloc => {
+                let [operand] = operands.try_into().unwrap();
+                let Type::Box(ty) = ty else { unreachable!() };
+                BuiltinResult::Rvalue(Rvalue::AllocateBox((**ty).clone(), operand))
+            }
             Builtin::Len => {
                 let [operand] = operands.try_into().unwrap();
                 let Operand::Load(place) = operand else {

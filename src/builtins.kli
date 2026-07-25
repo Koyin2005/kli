@@ -1,4 +1,7 @@
 @builtin
+fun box_alloc[T](value : T) -> Box[T];
+
+@builtin
 @unsafe
 fun transmute[T,U](x : T) -> U;
 

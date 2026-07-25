@@ -58,7 +58,9 @@ pub trait Visit {
         match rvalue {
             Rvalue::Discriminant(place) => self.visit_place(PlaceCtxt::Read, loc, place),
             Rvalue::Len(place) => self.visit_place(PlaceCtxt::Read, loc, place),
-            Rvalue::Use(operand) => self.visit_operand(loc, operand),
+            Rvalue::Use(operand) | Rvalue::AllocateBox(_, operand) => {
+                self.visit_operand(loc, operand)
+            }
             Rvalue::Aggregate(_, fields) => {
                 for field in fields {
                     self.visit_operand(loc, field);
@@ -93,6 +95,7 @@ pub trait Visit {
             PlaceProjection::ConstantIndex(_) | PlaceProjection::Field(_) => (),
             PlaceProjection::Index(local) => self.visit_local(PlaceCtxt::Read, loc, local),
             PlaceProjection::CaseDowncast(..) => (),
+            PlaceProjection::Deref => (),
         }
     }
     fn super_visit_local(&mut self, _: PlaceCtxt, _loc: Location, _local: Local) {}
@@ -197,7 +200,9 @@ pub trait MutVisit {
         match rvalue {
             Rvalue::Discriminant(place) => self.visit_place(loc, place),
             Rvalue::Len(place) => self.visit_place(loc, place),
-            Rvalue::Use(operand) => self.visit_operand(loc, operand),
+            Rvalue::Use(operand) | Rvalue::AllocateBox(_, operand) => {
+                self.visit_operand(loc, operand)
+            }
             Rvalue::Aggregate(_, fields) => {
                 for field in fields {
                     self.visit_operand(loc, field);
@@ -232,6 +237,7 @@ pub trait MutVisit {
             PlaceProjection::ConstantIndex(_) | PlaceProjection::Field(_) => (),
             PlaceProjection::Index(local) => self.visit_local(loc, local),
             PlaceProjection::CaseDowncast(..) => (),
+            PlaceProjection::Deref => (),
         }
     }
     fn super_visit_local(&mut self, _loc: Location, _local: &mut Local) {}
