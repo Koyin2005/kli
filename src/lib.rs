@@ -26,3 +26,4 @@ mod lang_items;
 pub mod layout;
 mod res_visitor;
 pub mod unsafety;
+pub mod codegen;
