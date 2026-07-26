@@ -71,7 +71,7 @@ pub fn passes() -> &'static [&'static dyn MirPass] {
     ]
 }
 
-pub fn preorderder(
+pub fn preorder(
     blocks: &IndexVec<BasicBlockId, BasicBlock>,
 ) -> Vec<(Option<BasicBlockId>, BasicBlockId)> {
     let mut stack = VecDeque::from([(None, BasicBlockId::ENTRY)]);

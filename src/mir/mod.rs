@@ -231,7 +231,6 @@ pub enum OverflowOp {
 #[derive(Debug, Clone, Copy)]
 pub enum BinaryOp {
     Overflow(OverflowOp),
-    Unchecked(OverflowOp),
     Wrapping(OverflowOp),
     Greater,
     Divide,
@@ -286,9 +285,7 @@ impl Rvalue {
                     left_and_right.0.type_of(ctxt, locals, return_type),
                     Type::Bool,
                 ),
-                BinaryOp::Unchecked(_) | BinaryOp::Wrapping(_) => {
-                    left_and_right.0.type_of(ctxt, locals, return_type)
-                }
+                BinaryOp::Wrapping(_) => left_and_right.0.type_of(ctxt, locals, return_type),
                 BinaryOp::BitwiseAnd => Type::Bool,
                 BinaryOp::Divide => left_and_right.0.type_of(ctxt, locals, return_type),
                 BinaryOp::Equals => Type::Bool,

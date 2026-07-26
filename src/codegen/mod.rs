@@ -1,17 +1,18 @@
-use std::collections::HashMap;
+use std::{cell::Cell, collections::HashMap};
 
 use crate::{
     CtxtRef,
     codegen::backend_repr::{BackendRepr, backend_repr},
     index_vec::IndexVec,
-    layout::{self, Align, LayoutKind, Scalar, Size},
+    layout::{self, Align, LayoutKind, Scalar, Size, TagEncoding},
     mir::{
-        self, BasicBlockId, BinaryOp, ConstValue, Constant, Locals, Operand, OverflowOp, Place,
-        PlaceBase, traversal::reachable,
+        self, AggregateKind, BasicBlockId, BinaryOp, ConstValue, Constant, Locals, Operand,
+        OverflowOp, Place, PlaceBase, traversal::reachable,
     },
     monomorph::collect::{Instance, InstanceKind},
     scheme::Scheme,
-    types::{self, FunctionSig, GenericArgsRef, Type},
+    typed_ast::FieldId,
+    types::{self, CaseId, FunctionSig, GenericArgsRef, IntegerKind, Type},
 };
 use cranelift::{
     codegen::{
@@ -20,6 +21,7 @@ use cranelift::{
             self, AbiParam, InstBuilder, InstBuilderBase, MemFlagsData, Signature, TrapCode,
             immediates::Offset32,
         },
+        settings::Configurable,
     },
     frontend,
 };
@@ -29,61 +31,84 @@ mod backend_repr;
 fn scalar_to_cranelift_type(scalar: layout::Scalar) -> codegen::ir::Type {
     match scalar {
         layout::Scalar::Bool | layout::Scalar::Byte => codegen::ir::types::I8,
-        layout::Scalar::Int64(_) => codegen::ir::types::I64,
+        layout::Scalar::Int64(_) => PTR_IR_TYPE,
         layout::Scalar::Uint32 => codegen::ir::types::I32,
         layout::Scalar::Pointer { non_null: _ } => codegen::ir::types::I64,
     }
 }
-#[derive(PartialEq, Eq, Clone, Copy)]
-enum ReturnMode {
+fn pass_mode_to_cranelift_types(mode: PassMode) -> impl Iterator<Item = codegen::ir::Type> {
+    match mode {
+        PassMode::ByPair(first, second, _) => [
+            Some(scalar_to_cranelift_type(first)),
+            Some(scalar_to_cranelift_type(second)),
+        ],
+        PassMode::Void => [None, None],
+        PassMode::ByPtr => [Some(PTR_IR_TYPE), None],
+        PassMode::ByValue(scalar) => [Some(scalar_to_cranelift_type(scalar)), None],
+    }
+    .into_iter()
+    .flatten()
+}
+const PTR_IR_TYPE: codegen::ir::Type = codegen::ir::types::I64;
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+enum PassMode {
     Void,
     ByPtr,
     ByValue(Scalar),
-    ByPair(Scalar, Scalar),
+    ByPair(Scalar, Scalar, Size),
 }
-fn signature(
-    ctxt: CtxtRef<'_>,
-    function_sig: &FunctionSig,
-) -> (ReturnMode, codegen::ir::Signature) {
+impl PassMode {
+    const fn new(repr: BackendRepr) -> PassMode {
+        match repr {
+            BackendRepr::Memory => PassMode::ByPtr,
+            BackendRepr::Scalar(scalar) => PassMode::ByValue(scalar),
+            BackendRepr::ZeroSized => PassMode::Void,
+            BackendRepr::ScalarPair {
+                first,
+                second,
+                second_offset,
+            } => PassMode::ByPair(first, second, second_offset),
+        }
+    }
+}
+fn call_abi(ctxt: CtxtRef<'_>, function_sig: &FunctionSig) -> CallAbi {
+    let params = function_sig
+        .params
+        .iter()
+        .map(|param| PassMode::new(backend_repr(&ctxt.layout_of(param).unwrap())))
+        .collect();
+    let ret = PassMode::new(backend_repr(
+        &ctxt.layout_of(&function_sig.return_type).unwrap(),
+    ));
+    CallAbi { params, ret }
+}
+fn signature(abi: &CallAbi) -> codegen::ir::Signature {
     let mut sig = codegen::ir::Signature::new(codegen::isa::CallConv::Fast);
-
-    let return_ty_layout = ctxt.layout_of(&function_sig.return_type).unwrap();
-    let return_mode = match return_ty_layout.kind {
-        _ if return_ty_layout.size == Size::ZERO => ReturnMode::Void,
-        LayoutKind::ScalarPair(first, second) => ReturnMode::ByPair(first, second),
-        LayoutKind::Scalar(first) => {
-            sig.returns
-                .push(AbiParam::new(scalar_to_cranelift_type(first)));
-            ReturnMode::ByValue(first)
-        }
-        _ => {
-            sig.params.push(AbiParam::new(ir::types::I64));
-            ReturnMode::ByPtr
-        }
-    };
-    sig.params.extend(
-        function_sig
-            .params
-            .iter()
-            .flat_map(
-                |param| match backend_repr(&ctxt.layout_of(param).unwrap()) {
-                    BackendRepr::Scalar(scalar) => [Some(scalar_to_cranelift_type(scalar)), None],
-                    BackendRepr::ScalarPair(first, second) => [
-                        Some(scalar_to_cranelift_type(first)),
-                        Some(scalar_to_cranelift_type(second)),
-                    ],
-                    BackendRepr::ZeroSized => [None, None],
-                },
-            )
-            .flatten()
-            .map(codegen::ir::AbiParam::new),
-    );
-    (return_mode, sig)
+    if matches!(abi.ret, PassMode::ByPtr) {
+        sig.params.push(AbiParam::new(PTR_IR_TYPE));
+    }
+    for param in abi.params.iter() {
+        sig.params
+            .extend(pass_mode_to_cranelift_types(*param).map(AbiParam::new));
+    }
+    if !matches!(abi.ret, PassMode::ByPtr) {
+        sig.returns
+            .extend(pass_mode_to_cranelift_types(abi.ret).map(AbiParam::new));
+    }
+    sig
+}
+struct CallAbi {
+    params: Vec<PassMode>,
+    ret: PassMode,
 }
 struct FunctionInfo {
     sig: Signature,
-    mode: ReturnMode,
+    abi: CallAbi,
+
     id: FuncId,
+}
+struct RuntimeFunctions {
+    panic: FuncId,
 }
 struct FunctionMap {
     functions: HashMap<Instance, FunctionInfo>,
@@ -96,14 +121,16 @@ pub struct CodegenRoot<'c> {
 }
 
 impl<'a> CodegenRoot<'a> {
-    pub fn new<'b>(
+    pub fn new(
         ctxt: CtxtRef<'a>,
         instances: impl IntoIterator<Item = Instance>,
     ) -> CodegenRoot<'a> {
         let triple = target_lexicon::Triple::host();
+        let mut builder = codegen::settings::builder();
+        builder.set("opt_level", "speed_and_size").unwrap();
         let isa = codegen::isa::lookup(triple)
             .unwrap()
-            .finish(codegen::settings::Flags::new(codegen::settings::builder()))
+            .finish(codegen::settings::Flags::new(builder))
             .unwrap();
         let obj_builder = cranelift_object::ObjectBuilder::new(
             isa,
@@ -113,7 +140,7 @@ impl<'a> CodegenRoot<'a> {
         .unwrap();
         let module = cranelift_object::ObjectModule::new(obj_builder);
         Self {
-            ctxt: ctxt,
+            ctxt,
             map: FunctionMap {
                 functions: HashMap::new(),
             },
@@ -135,11 +162,12 @@ impl<'a> CodegenRoot<'a> {
             };
             let function = &mir_ctxt.bodies[&instance.body_src()];
             let sig = Scheme::new(FunctionSig::new(
-                function.param_types().map(|param| param).collect(),
+                function.param_types().collect(),
                 function.return_type.clone(),
             ))
             .bind(&instance.args);
-            let (mode, sig) = signature(self.ctxt, &sig);
+            let abi = call_abi(self.ctxt, &sig);
+            let sig = signature(&abi);
             self.map.functions.insert(
                 instance.clone(),
                 FunctionInfo {
@@ -148,24 +176,55 @@ impl<'a> CodegenRoot<'a> {
                         .declare_function(&name, cranelift_module::Linkage::Local, &sig)
                         .unwrap(),
                     sig,
-                    mode,
+                    abi,
                 },
             );
         }
         let mut ctxt = codegen::Context::new();
         let mut f_ctxt = frontend::FunctionBuilderContext::new();
+        //Declare panic function
+        let panic_function = self
+            .module
+            .declare_function(
+                "panic",
+                cranelift_module::Linkage::Local,
+                &ir::Signature::new(self.module.target_config().default_call_conv),
+            )
+            .unwrap();
+        {
+            let mut builder = frontend::FunctionBuilder::new(&mut ctxt.func, &mut f_ctxt);
+            let entry = builder.create_block();
+            builder.switch_to_block(entry);
+            builder.ins().trap(TrapCode::user(1).unwrap());
+            builder.seal_block(entry);
+            builder.finalize(self.module.target_config());
+            println!("{:?}", ctxt.func);
+            self.module
+                .define_function(panic_function, &mut ctxt)
+                .unwrap();
+            self.module.clear_context(&mut ctxt);
+        }
+        let runtime = RuntimeFunctions {
+            panic: panic_function,
+        };
+
         for instance in self.instances {
             let FunctionInfo {
                 ref sig,
-                mode: _,
+                ref abi,
                 id,
                 ..
             } = self.map.functions[&instance];
-            let sig = sig.clone();
-            ctxt.func.signature = sig;
+            {
+                let sig = sig.clone();
+                ctxt.func.signature = sig;
+            }
             let body = &mir_ctxt.bodies[&instance.body_src()];
             let mut builder = frontend::FunctionBuilder::new(&mut ctxt.func, &mut f_ctxt);
             let block_map = BlockMap::new(body, &mut builder);
+            for param in sig.params.iter() {
+                builder.append_block_param(block_map.entry(), param.value_type);
+            }
             FunctionCodegen::new(
                 self.ctxt,
                 builder,
@@ -173,10 +232,13 @@ impl<'a> CodegenRoot<'a> {
                 &instance.args,
                 &mut self.module,
                 &self.map,
+                abi,
+                &block_map,
+                &runtime,
             )
-            .codgen(body, &block_map);
+            .codgen(body);
             println!("{:?}", ctxt.func);
-            let _ = self.module.define_function(id, &mut ctxt).unwrap();
+            self.module.define_function(id, &mut ctxt).unwrap();
             self.module.clear_context(&mut ctxt);
         }
         self.module.finish()
@@ -196,7 +258,7 @@ impl OperandValue {
     pub fn force_immediate_value(
         &self,
         cg: &mut FunctionCodegen<'_, impl Module>,
-    ) -> Option<codegen::ir::Value> {
+    ) -> Option<ScalarValue> {
         match self.kind {
             OperandValueKind::Indirect(ref place) => cg.load_place_value(place),
             OperandValueKind::ZeroSized => None,
@@ -204,33 +266,183 @@ impl OperandValue {
         }
     }
 }
+#[derive(Debug, Clone, Copy)]
+pub(super) enum ScalarValue {
+    Single(codegen::ir::Value),
+    Pair([codegen::ir::Value; 2], Size),
+}
+impl ScalarValue {
+    pub const fn pair(first: codegen::ir::Value, second: codegen::ir::Value, offset: Size) -> Self {
+        Self::Pair([first, second], offset)
+    }
+    pub fn first_value(&self) -> codegen::ir::Value {
+        match *self {
+            Self::Pair([first, _], ..) => first,
+            Self::Single(value) => value,
+        }
+    }
+    pub fn into_iter(self) -> impl Iterator<Item = codegen::ir::Value> {
+        let (first, second) = match self {
+            Self::Pair([first, second], _) => (first, Some(second)),
+            Self::Single(value) => (value, None),
+        };
+        std::iter::once(first).chain(second)
+    }
+    pub fn as_slice(&self) -> &[codegen::ir::Value] {
+        match self {
+            Self::Pair(values, _) => values,
+            ScalarValue::Single(value) => std::slice::from_ref(value),
+        }
+    }
+}
 #[derive(Debug)]
 enum OperandValueKind {
     Indirect(PlaceValue),
     ZeroSized,
-    Value(codegen::ir::Value),
+    Value(ScalarValue),
+}
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
+enum ScalarType {
+    Single(Scalar),
+    Pair(Scalar, Scalar, Size),
 }
 #[derive(Clone, Debug)]
 struct PlaceValue {
     ty: Type,
-    align: Align,
+    layout: layout::Layout,
     base_ptr: codegen::ir::Value,
     offset: i32,
-    scalar: Option<Scalar>,
+    scalar: Option<ScalarType>,
+}
+impl PlaceValue {
+    fn new(ptr: codegen::ir::Value, layout: layout::Layout, ty: Type) -> Self {
+        Self::new_with_offset(ptr, layout, ty, 0)
+    }
+    fn new_with_offset(
+        ptr: codegen::ir::Value,
+        layout: layout::Layout,
+        ty: Type,
+        offset: i32,
+    ) -> Self {
+        Self {
+            scalar: match backend_repr(&layout) {
+                BackendRepr::Scalar(scalar) => Some(ScalarType::Single(scalar)),
+                BackendRepr::ScalarPair {
+                    first,
+                    second,
+                    second_offset,
+                } => Some(ScalarType::Pair(first, second, second_offset)),
+                _ => None,
+            },
+            layout,
+            ty,
+            base_ptr: ptr,
+            offset,
+        }
+    }
+    fn align(&self) -> Align {
+        self.layout.alignment
+    }
+    fn ptr_and_offset(&self) -> (codegen::ir::Value, i32) {
+        (self.base_ptr, self.offset)
+    }
+    fn project_downcast(self, ctxt: CtxtRef<'_>, case: CaseId) -> Self {
+        let Type::Named(id, _, args) = self.ty else {
+            unreachable!("Should be named")
+        };
+
+        let ty = ctxt.type_def(id).case(case).payload_type(&args, ctxt);
+        let layout = match self.layout.kind {
+            LayoutKind::Variant { tag, ref cases } => {
+                let (size, align) = match tag {
+                    layout::TagEncoding::Field { scalar } => (scalar.size(), scalar.align()),
+                    layout::TagEncoding::Uninhabited => (Size::ZERO, Align::BYTE),
+                };
+                layout::Layout::prefixed_by(size, align, cases[case].clone())
+            }
+            _ => unreachable!(),
+        };
+        Self::new_with_offset(self.base_ptr, layout, ty, self.offset)
+    }
+    fn project_field(self, ctxt: CtxtRef<'_>, field: FieldId) -> Self {
+        let (ty, offset, layout) = match self.layout.kind {
+            LayoutKind::Aggregate(field_layouts, ref field_positions) => (
+                self.ty.field_info(field, ctxt).unwrap().0,
+                {
+                    let offset = field_positions[field].in_bytes();
+                    let offset: i32 = offset.try_into().unwrap();
+                    offset
+                } + self.offset,
+                { field_layouts }.swap_remove(0).layout,
+            ),
+            LayoutKind::Variant { tag, cases } if field == FieldId::FIRST_FIELD => (
+                if cases.len() < 256 {
+                    Type::Byte
+                } else {
+                    Type::UINT
+                },
+                0,
+                match tag {
+                    TagEncoding::Field { scalar } => layout::Layout::from_scalar(scalar),
+                    TagEncoding::Uninhabited => layout::Layout::zst(),
+                },
+            ),
+            _ => unreachable!("invalid field layout"),
+        };
+        let scalar = match layout.kind {
+            LayoutKind::Scalar(scalar) => Some(ScalarType::Single(scalar)),
+            LayoutKind::ScalarPair(first, second, offset) => {
+                Some(ScalarType::Pair(first, second, offset))
+            }
+            _ => None,
+        };
+        Self {
+            ty,
+            layout,
+            base_ptr: self.base_ptr,
+            offset,
+            scalar,
+        }
+    }
+    fn ptr(&self, builder: &mut FunctionCodegen<'_, impl Module>) -> ir::Value {
+        if self.offset == 0 {
+            return self.base_ptr;
+        }
+        let src_offset = builder.builder.ins().build_imm_const(
+            ir::types::I64,
+            ir::immediates::Imm64::new(self.offset as i64),
+            false,
+        );
+        let (src, _) = builder
+            .builder
+            .ins()
+            .uadd_overflow(self.base_ptr, src_offset);
+        src
+    }
 }
 struct CodegenLocalInfo {
     ty: types::Type,
     kind: LocalKind,
 }
+enum ReturnSlot {
+    Arg,
+    Local(ir::StackSlot),
+    Void,
+}
 pub struct FunctionCodegen<'r, M: Module> {
     ctxt: CtxtRef<'r>,
     builder: cranelift::frontend::FunctionBuilder<'r>,
     local_info: IndexVec<mir::Local, CodegenLocalInfo>,
-    return_value_info: CodegenLocalInfo,
+    return_ty: Type,
+    abi: &'r CallAbi,
+    return_slot: ReturnSlot,
     functions: &'r FunctionMap,
     args: GenericArgsRef<'r>,
     target_config: codegen::isa::TargetFrontendConfig,
     module: &'r mut M,
+    block_map: &'r BlockMap,
+    runtime_functions: &'r RuntimeFunctions,
+    panic_block: Cell<Option<ir::Block>>,
 }
 
 impl<'a, M: Module> FunctionCodegen<'a, M> {
@@ -241,12 +453,18 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         args: GenericArgsRef<'a>,
         module: &'a mut M,
         functions: &'a FunctionMap,
+        abi: &'a CallAbi,
+        block_map: &'a BlockMap,
+        runtime_functions: &'a RuntimeFunctions,
     ) -> Self {
         Self {
+            runtime_functions,
+            block_map,
             target_config: module.target_config(),
             module,
             functions,
-            ctxt: ctxt,
+            ctxt,
+            panic_block: Cell::default(),
             local_info: body
                 .locals
                 .iter()
@@ -269,23 +487,22 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     }
                 })
                 .collect(),
-            return_value_info: {
-                let ty = Scheme::new(body.return_type.clone()).bind(args);
-                let layout = ctxt.layout_of(&ty).unwrap();
-                let repr = backend_repr(&layout);
-                CodegenLocalInfo {
-                    ty,
-                    kind: match repr {
-                        BackendRepr::ZeroSized => LocalKind::ZeroSized,
-                        _ => LocalKind::Memory(builder.create_sized_stack_slot(
-                            codegen::ir::StackSlotData::new(
-                                codegen::ir::StackSlotKind::ExplicitSlot,
-                                layout.size.in_bytes().try_into().unwrap(),
-                                layout.alignment.in_bytes().try_into().unwrap(),
-                            ),
-                        )),
-                    },
+            return_ty: Scheme::new(body.return_type.clone()).bind(args),
+            abi,
+            return_slot: match abi.ret {
+                PassMode::ByValue(_) | PassMode::ByPair(..) => {
+                    let layout = ctxt
+                        .layout_of(&Scheme::new(body.return_type.clone()).bind(args))
+                        .unwrap();
+                    let slot = builder.create_sized_stack_slot(codegen::ir::StackSlotData::new(
+                        codegen::ir::StackSlotKind::ExplicitSlot,
+                        layout.size.in_bytes().try_into().unwrap(),
+                        layout.alignment.in_bytes().try_into().unwrap(),
+                    ));
+                    ReturnSlot::Local(slot)
                 }
+                PassMode::ByPtr => ReturnSlot::Arg,
+                PassMode::Void => ReturnSlot::Void,
             },
             args,
             builder,
@@ -299,154 +516,209 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             Offset32::new(dst_place.offset),
         );
     }
+    fn store_immediate_pair(
+        &mut self,
+        dst_place: PlaceValue,
+        first: ir::Value,
+        second: ir::Value,
+        offset: Size,
+    ) {
+        self.builder.ins().store(
+            MemFlagsData::new(),
+            first,
+            dst_place.base_ptr,
+            Offset32::new(dst_place.offset),
+        );
+        let second_offset: i32 = offset.in_bytes().try_into().unwrap();
+        let second_offset = dst_place.offset + second_offset;
+        self.builder.ins().store(
+            MemFlagsData::new(),
+            second,
+            dst_place.base_ptr,
+            Offset32::new(second_offset),
+        );
+    }
+    fn copy(&mut self, place: PlaceValue, dst_place: PlaceValue) {
+        let size = self.ctxt.layout_of(&dst_place.ty).unwrap().size;
+        let src = place.ptr(self);
+        let dst = place.ptr(self);
+        self.builder.emit_small_memory_copy(
+            self.target_config,
+            dst,
+            src,
+            size.in_bytes(),
+            dst_place.align().in_bytes() as u8,
+            place.align().in_bytes() as u8,
+            false,
+            MemFlagsData::new(),
+        );
+    }
+    fn store_scalar(&mut self, place: PlaceValue, value: ScalarValue) {
+        match value {
+            ScalarValue::Pair([first, second], offset) => {
+                self.store_immediate_pair(place, first, second, offset);
+            }
+            ScalarValue::Single(value) => {
+                self.store_immediate(place, value);
+            }
+        }
+    }
+    fn store_operand_with_place(&mut self, dst_place: PlaceValue, value: OperandValue) {
+        match value.kind {
+            OperandValueKind::ZeroSized => (),
+            OperandValueKind::Indirect(place) => {
+                self.copy(place, dst_place);
+            }
+            OperandValueKind::Value(value) => self.store_scalar(dst_place, value),
+        }
+    }
     fn store_value(&mut self, place: &mir::Place, value: OperandValue) {
         let Ok(dst_place) = self.eval_addr_of_place(place) else {
             return;
         };
-        let size = self.ctxt.layout_of(&value.ty).unwrap().size;
-        match value.kind {
-            OperandValueKind::ZeroSized => (),
-            OperandValueKind::Indirect(place) => {
-                let src_offset = self.builder.ins().build_imm_const(
-                    ir::types::I64,
-                    ir::immediates::Imm64::new(place.offset as i64),
-                    false,
-                );
-                let (src, _) = self.builder.ins().uadd_overflow(place.base_ptr, src_offset);
-                let dst_offset = self.builder.ins().build_imm_const(
-                    ir::types::I64,
-                    ir::immediates::Imm64::new(dst_place.offset as i64),
-                    false,
-                );
-                let (dst, _) = self
-                    .builder
-                    .ins()
-                    .uadd_overflow(dst_place.base_ptr, dst_offset);
-                self.builder.emit_small_memory_copy(
-                    self.target_config,
-                    dst,
-                    src,
-                    size.in_bytes(),
-                    dst_place.align.in_bytes() as u8,
-                    place.align.in_bytes() as u8,
-                    false,
-                    MemFlagsData::new(),
-                );
-            }
-            OperandValueKind::Value(value) => {
-                self.store_immediate(dst_place, value);
-            }
-        }
+        self.store_operand_with_place(dst_place, value);
     }
     fn store_operand(&mut self, place: &mir::Place, operand: &mir::Operand) {
         let operand = self.eval_operand(operand);
         self.store_value(place, operand);
     }
-    fn load_place_value(&mut self, place: &PlaceValue) -> Option<ir::Value> {
-        let &PlaceValue {
-            ty: _,
-            align: _,
-            base_ptr,
-            offset,
-            scalar,
-        } = place;
-        Some(self.builder.ins().load(
-            scalar_to_cranelift_type(scalar?),
-            ir::MemFlagsData::new(),
-            base_ptr,
-            Offset32::new(offset),
-        ))
+    fn load_place_value(&mut self, place: &PlaceValue) -> Option<ScalarValue> {
+        let (base_ptr, offset) = place.ptr_and_offset();
+        let scalar = place.scalar?;
+        match scalar {
+            ScalarType::Single(single) => Some(ScalarValue::Single(self.builder.ins().load(
+                scalar_to_cranelift_type(single),
+                ir::MemFlagsData::new(),
+                base_ptr,
+                Offset32::new(offset),
+            ))),
+            ScalarType::Pair(first, second, second_offset) => {
+                let first_value = self.builder.ins().load(
+                    scalar_to_cranelift_type(first),
+                    ir::MemFlagsData::new(),
+                    base_ptr,
+                    Offset32::new(offset),
+                );
+                let second_offset_in_bytes: i32 = second_offset.in_bytes().try_into().unwrap();
+                let second_value = self.builder.ins().load(
+                    scalar_to_cranelift_type(second),
+                    ir::MemFlagsData::new(),
+                    base_ptr,
+                    Offset32::new(offset + second_offset_in_bytes),
+                );
+                Some(ScalarValue::pair(first_value, second_value, second_offset))
+            }
+        }
     }
     fn eval_addr_of_place(&mut self, place: &mir::Place) -> Result<PlaceValue, Type> {
-        let local_info = match place.base {
-            PlaceBase::Local(local) => &self.local_info[local],
-            PlaceBase::ReturnPlace => &self.return_value_info,
-        };
-        let ty = local_info.ty.clone();
-        let base_kind = local_info.kind;
-        let mut ptr = match base_kind {
-            LocalKind::Memory(addr) => {
-                self.builder
-                    .ins()
-                    .stack_addr(ir::types::I64, addr, Offset32::new(0))
+        let (ty, ptr) = match place.base {
+            PlaceBase::Local(local) => {
+                let local_info = &self.local_info[local];
+                let ty = local_info.ty.clone();
+                let base_kind = local_info.kind;
+                let ptr = match base_kind {
+                    LocalKind::Memory(addr) => {
+                        self.builder
+                            .ins()
+                            .stack_addr(PTR_IR_TYPE, addr, Offset32::new(0))
+                    }
+
+                    LocalKind::ZeroSized => return Err(ty),
+                };
+                (ty, ptr)
             }
-            LocalKind::ZeroSized => return Err(ty),
+            PlaceBase::ReturnPlace => {
+                let ty = self.return_ty.clone();
+                let ptr = match self.return_slot {
+                    ReturnSlot::Arg => self.builder.block_params(self.block_map.entry())[0],
+                    ReturnSlot::Local(return_slot) => {
+                        self.builder
+                            .ins()
+                            .stack_addr(PTR_IR_TYPE, return_slot, Offset32::new(0))
+                    }
+                    ReturnSlot::Void => return Err(ty),
+                };
+                (ty, ptr)
+            }
         };
-        let mut offset = 0;
-        let mut ty = ty;
+        let layout = self.ctxt.layout_of(&ty).unwrap();
+        let mut place_value = PlaceValue::new(ptr, layout, ty);
         for projection in place.projections.iter() {
-            let layout = self.ctxt.layout_of(&ty).unwrap();
-            (ptr, offset) = match *projection {
+            place_value = match *projection {
                 mir::PlaceProjection::Field(field_id) => {
-                    let offset = match layout.kind {
-                        LayoutKind::Aggregate(fields) => fields[field_id].offset.in_bytes() as i32,
-                        kind => unreachable!("{:?}", kind),
-                    };
-                    (ptr, offset)
+                    place_value.project_field(self.ctxt, field_id)
                 }
                 mir::PlaceProjection::ConstantIndex(_) => todo!("Constant index"),
                 mir::PlaceProjection::Index(_) => todo!("Array index"),
-                mir::PlaceProjection::CaseDowncast(..) => (ptr, offset),
-                mir::PlaceProjection::Deref => (
-                    self.load_place_value(&PlaceValue {
-                        ty: projection.apply_projection_to_type(ty.clone(), self.ctxt),
-                        align: layout.alignment,
-                        base_ptr: ptr,
-                        offset: 0,
-                        scalar: Some(Scalar::Pointer { non_null: true }),
-                    })
-                    .unwrap(),
-                    0,
-                ),
+                mir::PlaceProjection::CaseDowncast(case, ..) => {
+                    place_value.project_downcast(self.ctxt, case)
+                }
+                mir::PlaceProjection::Deref => {
+                    let ty = projection.apply_projection_to_type(place_value.ty.clone(), self.ctxt);
+                    let layout = self.ctxt.layout_of(&ty).unwrap();
+                    PlaceValue::new(
+                        self.load_place_value(&PlaceValue {
+                            ty: ty.clone(),
+                            layout: layout.clone(),
+                            base_ptr: ptr,
+                            offset: 0,
+                            scalar: Some(ScalarType::Single(Scalar::Pointer { non_null: true })),
+                        })
+                        .unwrap()
+                        .first_value(),
+                        layout,
+                        ty,
+                    )
+                }
             };
-            ty = projection.apply_projection_to_type(ty, self.ctxt);
         }
 
-        Ok(PlaceValue {
-            scalar: if let BackendRepr::Scalar(scalar) =
-                backend_repr(&self.ctxt.layout_of(&ty).unwrap())
-            {
-                Some(scalar)
-            } else {
-                None
+        Ok(place_value)
+    }
+    fn build_int_const(&mut self, ty: &Type, value: i128) -> codegen::ir::Value {
+        let (ty, value, signed) = match ty {
+            Type::Bool | Type::Byte => (
+                codegen::ir::types::I8,
+                codegen::ir::immediates::Imm64::new(value as i64),
+                false,
+            ),
+            Type::Int(kind) => (
+                codegen::ir::types::I64,
+                codegen::ir::immediates::Imm64::new(value as i64),
+                kind.is_signed(),
+            ),
+            _ => unreachable!(),
+        };
+        self.builder.ins().build_imm_const(ty, value, signed)
+    }
+    fn build_const(&mut self, constant: &Constant) -> OperandValue {
+        OperandValue {
+            ty: (*constant.ty).clone(),
+            kind: match constant.value {
+                mir::ConstValue::ZeroSized => OperandValueKind::ZeroSized,
+                mir::ConstValue::Named(..) => todo!(),
+                mir::ConstValue::ClosureShim(..) => todo!(),
+                mir::ConstValue::Scalar(value) => OperandValueKind::Value(ScalarValue::Single(
+                    self.build_int_const(&constant.ty, value),
+                )),
+                mir::ConstValue::Variant(case, ref data) => {
+                    if data.is_some() {
+                        todo!("Handle constant data variants")
+                    }
+                    let (id, _, _) = constant.ty.as_named().unwrap();
+                    let (ty, value) = self.ctxt.type_def(id).case_value(case);
+                    OperandValueKind::Value(ScalarValue::Single(
+                        self.build_int_const(&ty.into_type(), value.into()),
+                    ))
+                }
+                mir::ConstValue::Record(..) => todo!(),
+                mir::ConstValue::String(..) => todo!(),
             },
-            align: self.ctxt.layout_of(&ty).unwrap().alignment,
-            ty,
-            base_ptr: ptr,
-            offset: offset,
-        })
+        }
     }
     fn eval_operand(&mut self, operand: &mir::Operand) -> OperandValue {
         match operand {
-            Operand::Constant(constant) => OperandValue {
-                ty: *constant.ty.clone(),
-                kind: match constant.value {
-                    mir::ConstValue::ZeroSized => OperandValueKind::ZeroSized,
-                    mir::ConstValue::Named(..) => todo!(),
-                    mir::ConstValue::ClosureShim(..) => todo!(),
-                    mir::ConstValue::Scalar(value) => {
-                        let (ty, value, signed) = match &*constant.ty {
-                            Type::Bool | Type::Byte => (
-                                codegen::ir::types::I8,
-                                codegen::ir::immediates::Imm64::new(value as i64),
-                                false,
-                            ),
-                            Type::Int(kind) => (
-                                codegen::ir::types::I64,
-                                codegen::ir::immediates::Imm64::new(value as i64),
-                                kind.is_signed(),
-                            ),
-                            _ => unreachable!(),
-                        };
-                        OperandValueKind::Value(
-                            self.builder.ins().build_imm_const(ty, value, signed),
-                        )
-                    }
-                    mir::ConstValue::Variant(..) => todo!(),
-                    mir::ConstValue::Record(..) => todo!(),
-                    mir::ConstValue::String(..) => todo!(),
-                },
-            },
+            Operand::Constant(constant) => self.build_const(constant),
             Operand::Load(place) => match self.eval_addr_of_place(place) {
                 Ok(place) => OperandValue {
                     ty: place.ty.clone(),
@@ -461,140 +733,370 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
     }
     fn explode_args(
         &mut self,
-        return_place: Option<&Place>,
+        return_place: Option<PlaceValue>,
+        abi: &CallAbi,
         args: Vec<OperandValue>,
     ) -> Vec<ir::Value> {
-        args.into_iter()
-            .chain(return_place.map_or(None, |place| {
-                let place = self.eval_addr_of_place(place).ok()?;
-                Some(OperandValue {
-                    ty: place.ty.clone(),
-                    kind: OperandValueKind::Indirect(place),
+        let args = args
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, arg)| {
+                let OperandValueKind::Indirect(ref place) = arg.kind else {
+                    return Some(arg);
+                };
+                let Some(_) = place.scalar else {
+                    return Some(arg);
+                };
+                let pass_mode = abi.params[i];
+                let (PassMode::ByValue(_) | PassMode::ByPair(..)) = pass_mode else {
+                    return Some(arg);
+                };
+                arg.force_immediate_value(self).map(|value| OperandValue {
+                    ty: arg.ty.clone(),
+                    kind: OperandValueKind::Value(value),
                 })
-            }))
+            })
+            .collect::<Vec<_>>();
+        return_place
+            .map(|place| OperandValue {
+                ty: place.ty.clone(),
+                kind: OperandValueKind::Indirect(place),
+            })
+            .into_iter()
+            .chain(args)
             .flat_map(|arg| match arg.kind {
                 OperandValueKind::ZeroSized => None,
                 OperandValueKind::Value(value) => Some(value),
-                OperandValueKind::Indirect(value) => self.load_place_value(&value),
+                OperandValueKind::Indirect(value) => Some(ScalarValue::Single(value.ptr(self))),
             })
+            .flat_map(ScalarValue::into_iter)
             .collect()
+    }
+    fn store_return_value(
+        &mut self,
+        values: Vec<ir::Value>,
+        ret_place: Option<PlaceValue>,
+        abi: &CallAbi,
+    ) {
+        let Some(ret_place) = ret_place else { return };
+        match values.as_slice() {
+            [] => (),
+            [value] => self.store_immediate(ret_place, *value),
+            &[first, second] => {
+                let PassMode::ByPair(_, _, offset) = abi.ret else {
+                    unreachable!("can only have two values with scalar pair ret")
+                };
+                self.store_immediate_pair(ret_place, first, second, offset);
+            }
+            _ => unreachable!(),
+        }
+    }
+    fn codegen_direct_call(
+        &mut self,
+        ret_place: Option<PlaceValue>,
+        abi: &CallAbi,
+        id: FuncId,
+        args: &[ir::Value],
+    ) {
+        let func = self.module.declare_func_in_func(id, self.builder.func);
+        let call = self.builder.ins().call(func, args);
+        let values = self.builder.inst_results(call).to_vec();
+        self.store_return_value(values, ret_place, abi);
+    }
+    fn codegen_call(
+        &mut self,
+        place: &mir::Place,
+        callee: &mir::Operand,
+        locals: &Locals,
+        args: &[Operand],
+    ) {
+        let Type::Function(sig) =
+            Scheme::new(callee.type_of(self.ctxt, locals, &self.return_ty)).bind(self.args)
+        else {
+            unreachable!()
+        };
+        let callee = match callee {
+            Operand::Constant(Constant {
+                ty: _,
+                value: ConstValue::Named(id, args),
+            }) => Ok((*id, args)),
+            _ => Err(self.eval_operand(callee)),
+        };
+        let args: Vec<OperandValue> = args
+            .iter()
+            .map(|operand| self.eval_operand(operand))
+            .collect();
+        let abi = call_abi(
+            self.ctxt,
+            &FunctionSig {
+                params: sig.params,
+                return_type: *sig.return_type,
+            },
+        );
+        let ret_place = self.eval_addr_of_place(place).ok();
+        let args = self.explode_args(
+            (abi.ret == PassMode::ByPtr)
+                .then(|| ret_place.clone())
+                .flatten(),
+            &abi,
+            args,
+        );
+        match callee {
+            Ok((id, generic_args)) => {
+                let function = Instance {
+                    args: generic_args.clone(),
+                    kind: InstanceKind::Function(id),
+                };
+                let id = self.functions.functions[&function].id;
+                self.codegen_direct_call(ret_place, &abi, id, &args);
+            }
+            Err(value) => {
+                let callee = value.force_immediate_value(self).unwrap().first_value();
+                let sig = signature(&abi);
+                let sig = self.builder.func.import_signature(sig);
+                let results = self.builder.ins().call_indirect(sig, callee, &args);
+                let values = self.builder.inst_results(results).to_vec();
+                self.store_return_value(values, ret_place, &abi);
+            }
+        };
+    }
+    fn build_overflow_op(
+        &mut self,
+        op: OverflowOp,
+        kind: IntegerKind,
+        left: codegen::ir::Value,
+        right: codegen::ir::Value,
+    ) -> (codegen::ir::Value, codegen::ir::Value) {
+        let signed = matches!(kind, IntegerKind::Signed);
+        match op {
+            OverflowOp::Add => {
+                if signed {
+                    self.builder.ins().sadd_overflow(left, right)
+                } else {
+                    self.builder.ins().uadd_overflow(left, right)
+                }
+            }
+            OverflowOp::Multiply => {
+                if signed {
+                    self.builder.ins().smul_overflow(left, right)
+                } else {
+                    self.builder.ins().umul_overflow(left, right)
+                }
+            }
+            OverflowOp::Subtract => {
+                if signed {
+                    self.builder.ins().ssub_overflow(left, right)
+                } else {
+                    self.builder.ins().usub_overflow(left, right)
+                }
+            }
+        }
     }
     fn assign(&mut self, place: &mir::Place, value: &mir::Rvalue, locals: &Locals) {
         match value {
-            mir::Rvalue::Aggregate(..) => todo!("aggr"),
+            mir::Rvalue::Aggregate(kind, fields) => match kind {
+                AggregateKind::Tuple => {
+                    for (id, field) in fields.iter_enumerated() {
+                        self.store_operand(&place.clone().with_field(id), field);
+                    }
+                }
+                AggregateKind::Variant(id, case, args) => {
+                    let type_def = self.ctxt.type_def(*id);
+                    let ty =
+                        Scheme::new(Type::Named(*id, type_def.name, args.clone())).bind(self.args);
+
+                    let name = type_def.case(*case).name;
+                    let payload_place = place.clone().with_case_downcast(*case, name);
+                    for (id, field) in fields.iter_enumerated() {
+                        self.store_operand(&payload_place.clone().with_field(id), field);
+                    }
+                    let LayoutKind::Variant { tag, .. } = self.ctxt.layout_of(&ty).unwrap().kind
+                    else {
+                        unreachable!()
+                    };
+                    let Some(dst_place) = self.eval_addr_of_place(place).ok() else {
+                        return;
+                    };
+                    match tag {
+                        layout::TagEncoding::Field { .. } => {
+                            let (id, ..) = dst_place.ty.as_named().unwrap();
+                            let (_, value) = self.ctxt.type_def(id).case_value(*case);
+                            let tag = dst_place.project_field(self.ctxt, FieldId::FIRST_FIELD);
+                            let discr = self.build_int_const(&tag.ty, value.into());
+                            self.store_immediate(tag, discr);
+                        }
+                        layout::TagEncoding::Uninhabited => (),
+                    }
+                }
+                _ => todo!("{:?}", kind),
+            },
             mir::Rvalue::AllocateArray(_, _) => todo!("alloc array"),
             mir::Rvalue::AllocateBox(_, _) => todo!("alloc box"),
             mir::Rvalue::Use(operand) => {
                 self.store_operand(place, operand);
             }
-            mir::Rvalue::Call(operand, operands) => {
-                let Type::Function(sig) =
-                    Scheme::new(operand.type_of(self.ctxt, locals, &self.return_value_info.ty))
-                        .bind(self.args)
-                else {
-                    unreachable!()
-                };
-                let callee = match operand {
-                    Operand::Constant(Constant {
-                        ty: _,
-                        value: ConstValue::Named(id, args),
-                    }) => Ok((*id, args)),
-                    _ => Err(self.eval_operand(operand)),
-                };
-                let args: Vec<OperandValue> = operands
-                    .iter()
-                    .map(|operand| self.eval_operand(operand))
-                    .collect();
-                let (return_mode, sig) = signature(
-                    self.ctxt,
-                    &FunctionSig {
-                        params: sig.params,
-                        return_type: *sig.return_type,
-                    },
-                );
-                let args =
-                    self.explode_args((return_mode == ReturnMode::ByPtr).then(|| place), args);
-                let values = match callee {
-                    Ok((id, generic_args)) => {
-                        let function = Instance {
-                            args: generic_args.clone(),
-                            kind: InstanceKind::Function(id),
-                        };
-                        let func = self.module.declare_func_in_func(
-                            self.functions.functions[&function].id,
-                            self.builder.func,
-                        );
-                        let call = self.builder.ins().call(func, &args);
-                        self.builder.inst_results(call).to_vec()
-                    }
-                    Err(value) => {
-                        let callee = value.force_immediate_value(self).unwrap();
-                        let sig = self.builder.func.import_signature(sig);
-                        let results = self.builder.ins().call_indirect(sig, callee, &args);
-                        self.builder.inst_results(results).to_vec()
-                    }
-                };
-                let Ok(place) = self.eval_addr_of_place(place) else {
-                    return;
-                };
-                match return_mode {
-                    ReturnMode::ByPtr | ReturnMode::Void => (),
-                    ReturnMode::ByPair(..) => {
-                        todo!("scalar pair")
-                    }
-                    ReturnMode::ByValue(_) => {
-                        self.store_immediate(place, values[0]);
-                    }
-                }
+            mir::Rvalue::Call(callee, args) => {
+                self.codegen_call(place, callee, locals, args);
             }
             mir::Rvalue::Binary(binary_op, operands) => {
                 let (left, right) = &**operands;
-                let left_value = self.eval_operand(left);
-                let left_value = left_value.force_immediate_value(self).unwrap();
-                let right_value = self.eval_operand(right);
-                let right_value = right_value.force_immediate_value(self).unwrap();
+                let left_operand = self.eval_operand(left);
+                let left_value = left_operand
+                    .force_immediate_value(self)
+                    .unwrap()
+                    .first_value();
+                let right_operand = self.eval_operand(right);
+                let right_value = right_operand
+                    .force_immediate_value(self)
+                    .unwrap()
+                    .first_value();
                 let (left, right) = match binary_op {
                     BinaryOp::Overflow(op) => {
-                        let (left, right) = match op {
-                            OverflowOp::Add => {
-                                self.builder.ins().uadd_overflow(left_value, right_value)
-                            }
-                            _ => todo!("{:?}", op),
+                        let Type::Int(kind) = left_operand.ty else {
+                            unreachable!()
                         };
+                        let (left, right) =
+                            self.build_overflow_op(*op, kind, left_value, right_value);
                         (left, Some(right))
                     }
-                    _ => todo!("{:?}", binary_op),
+                    BinaryOp::Wrapping(op) => {
+                        let Type::Int(kind) = left_operand.ty else {
+                            unreachable!()
+                        };
+                        let (left, _) = self.build_overflow_op(*op, kind, left_value, right_value);
+                        (left, None)
+                    }
+                    BinaryOp::Greater => todo!(),
+                    BinaryOp::Divide => todo!(),
+                    BinaryOp::Equals => todo!(),
+                    BinaryOp::BitwiseAnd => todo!(),
+                    BinaryOp::Lesser => todo!(),
                 };
-                if let Some(_) = right {
-                    todo!("Store properly")
-                } else {
-                    let Type::Tuple(fields) =
-                        place.type_of(self.ctxt, locals, &self.return_value_info.ty)
-                    else {
+                let place = self.eval_addr_of_place(place).unwrap();
+                if let Some(right) = right {
+                    let Type::Tuple(fields) = place.ty.clone() else {
                         unreachable!()
                     };
-                    self.store_value(
-                        place,
-                        OperandValue {
-                            ty: { fields }.swap_remove(0),
-                            kind: OperandValueKind::Value(left),
-                        },
-                    );
+                    let Some(&Type::Int(_)) = fields.first() else {
+                        unreachable!()
+                    };
+                    let offset = layout::INT_SIZE;
+                    self.store_immediate_pair(place, left, right, offset);
+                } else {
+                    self.store_immediate(place, left);
                 }
             }
             mir::Rvalue::AddrOf(_) => todo!("Get addr of"),
             mir::Rvalue::Cast(..) => todo!("Transmutation"),
             mir::Rvalue::Len(_) => todo!("Len"),
-            mir::Rvalue::Discriminant(_) => todo!("Discriminant"),
+            mir::Rvalue::Discriminant(variant_place) => {
+                let Ok(dst_place) = self.eval_addr_of_place(place) else {
+                    unreachable!()
+                };
+                let tag_value = match self.eval_addr_of_place(variant_place) {
+                    Ok(place) => place.project_field(self.ctxt, FieldId::FIRST_FIELD),
+                    Err(_) => {
+                        return;
+                    }
+                };
+                let extend = !tag_value.ty.is_integer();
+                let value = self.load_place_value(&tag_value).unwrap().first_value();
+                let value = if extend {
+                    self.builder.ins().uextend(ir::types::I64, value)
+                } else {
+                    value
+                };
+                self.store_immediate(dst_place, value);
+            }
         }
     }
-    fn codgen(mut self, body: &'_ mir::Body, block_map: &'_ BlockMap) {
-        for (id, block) in block_map.blocks.iter_enumerated() {
-            let Some(bb) = *block else {
+    fn store_params(&mut self, body: &'_ mir::Body) {
+        let abi = self.abi;
+        let param_values = {
+            let mut param_values = Vec::new();
+            let mut param_index = if abi.ret != PassMode::ByPtr {
+                0usize
+            } else {
+                1usize
+            };
+            for &mode in abi.params.iter() {
+                let curr_param = param_index;
+                param_values.push((
+                    curr_param,
+                    match mode {
+                        PassMode::Void => None,
+                        PassMode::ByPair(first, second, offset) => {
+                            param_index += 2;
+                            Some(ScalarType::Pair(first, second, offset))
+                        }
+                        PassMode::ByPtr => {
+                            param_index += 1;
+                            Some(ScalarType::Single(Scalar::Pointer { non_null: true }))
+                        }
+                        PassMode::ByValue(scalar) => {
+                            param_index += 1;
+                            Some(ScalarType::Single(scalar))
+                        }
+                    },
+                ));
+            }
+            param_values
+        };
+        for (i, local) in body.params_iter().enumerate() {
+            if matches!(self.local_info[local].kind, LocalKind::Memory(_))
+                && let Ok(place) = self.eval_addr_of_place(&Place::local(local))
+            {
+                let (param_index, scalar_ty) = param_values[i];
+                let Some(scalar_ty) = scalar_ty else {
+                    continue;
+                };
+                let value = match scalar_ty {
+                    ScalarType::Single(_) => ScalarValue::Single(
+                        self.builder.block_params(self.block_map.entry())[param_index],
+                    ),
+                    ScalarType::Pair(.., offset) => ScalarValue::pair(
+                        self.builder.block_params(self.block_map.entry())[param_index],
+                        self.builder.block_params(self.block_map.entry())[param_index + 1],
+                        offset,
+                    ),
+                };
+                self.store_scalar(place, value);
+            }
+        }
+    }
+    fn codegen_panic_terminator(&mut self) {
+        if let Some(panic_block) = &self.panic_block.get() {
+            self.builder.ins().jump(*panic_block, &[]);
+        } else {
+            let panic_block = self.builder.create_block();
+            self.builder.set_cold_block(panic_block);
+            self.builder.ins().jump(panic_block, &[]);
+            self.builder.switch_to_block(panic_block);
+            self.codegen_direct_call(
+                None,
+                &CallAbi {
+                    params: Vec::new(),
+                    ret: PassMode::Void,
+                },
+                self.runtime_functions.panic,
+                &[],
+            );
+            self.builder.ins().trap(TrapCode::user(1).unwrap());
+            self.panic_block.set(Some(panic_block));
+        };
+    }
+    fn codgen(mut self, body: &'_ mir::Body) {
+        let block_map = self.block_map;
+
+        for (id, &block) in block_map.blocks.iter_enumerated() {
+            let Some(bb) = block else {
                 continue;
             };
             let block = &body.block_info.blocks()[id];
             self.builder.switch_to_block(bb);
+            if id == BasicBlockId::ENTRY {
+                self.store_params(body);
+            }
             for stmt in block.stmts.iter() {
                 match &stmt.kind {
                     mir::StmtKind::Noop => (),
@@ -607,7 +1109,10 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             match &block.expect_terminator().kind {
                 mir::TerminatorKind::Assert(operand, assert_kind, basic_block_id) => {
                     let value = self.eval_operand(operand);
-                    let value = value.force_immediate_value(&mut self).unwrap();
+                    let value = value
+                        .force_immediate_value(&mut self)
+                        .unwrap()
+                        .first_value();
                     let code = TrapCode::user(1).unwrap();
                     if assert_kind.negate() {
                         self.builder.ins().trapnz(value, code);
@@ -618,38 +1123,53 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                         .ins()
                         .jump(block_map.blocks[*basic_block_id].unwrap(), &[]);
                 }
-                mir::TerminatorKind::Switch(..) => todo!(),
+                mir::TerminatorKind::Switch(operand, targets) => {
+                    let operand = self.eval_operand(operand);
+                    let value = operand
+                        .force_immediate_value(&mut self)
+                        .unwrap()
+                        .first_value();
+                    let otherwise_block = block_map.blocks[targets.otherwise].unwrap();
+                    let mut switch = frontend::Switch::new();
+                    for target in targets.targets.iter() {
+                        switch.set_entry(
+                            u128::from_ne_bytes(target.value.to_ne_bytes()),
+                            block_map.blocks[target.target].unwrap(),
+                        );
+                    }
+                    switch.emit(&mut self.builder, value, otherwise_block);
+                }
                 mir::TerminatorKind::Unreachable => {
                     self.builder.ins().trap(TrapCode::user(1).unwrap());
                 }
                 mir::TerminatorKind::Return => {
-                    let rvalue = self
-                        .eval_addr_of_place(&Place::return_place())
-                        .ok()
-                        .and_then(|ref place| self.load_place_value(place));
+                    let rvalue = self.eval_addr_of_place(&Place::return_place()).ok();
                     let mode = self.functions.functions[&Instance {
                         args: self.args.iter().cloned().collect(),
                         kind: InstanceKind::Function(body.src.def_id()),
                     }]
-                        .mode;
+                        .abi
+                        .ret;
                     let rvals = match mode {
-                        ReturnMode::Void => Vec::new(),
-                        ReturnMode::ByPair(..) => todo!("by pair"),
-                        ReturnMode::ByValue(_) => {
-                            vec![rvalue.unwrap()]
-                        }
-                        ReturnMode::ByPtr => {
-                            todo!("by ptr")
+                        PassMode::Void | PassMode::ByPtr => None,
+                        PassMode::ByPair(..) | PassMode::ByValue(_) => {
+                            rvalue.and_then(|ref place| self.load_place_value(place))
                         }
                     };
-                    self.builder.ins().return_(rvals.as_slice());
+                    if let Some(return_value) = rvals {
+                        self.builder.ins().return_(return_value.as_slice());
+                    } else {
+                        self.builder.ins().return_(&[]);
+                    };
                 }
                 mir::TerminatorKind::Goto(basic_block_id) => {
                     self.builder
                         .ins()
                         .jump(block_map.blocks[*basic_block_id].unwrap(), &[]);
                 }
-                mir::TerminatorKind::Panic => todo!(),
+                mir::TerminatorKind::Panic => {
+                    self.codegen_panic_terminator();
+                }
             }
         }
 
@@ -662,6 +1182,9 @@ struct BlockMap {
     blocks: IndexVec<BasicBlockId, Option<codegen::ir::Block>>,
 }
 impl BlockMap {
+    fn entry(&self) -> codegen::ir::Block {
+        self.blocks[BasicBlockId::ENTRY].unwrap()
+    }
     fn new(body: &'_ mir::Body, builder: &mut frontend::FunctionBuilder) -> Self {
         let reachable = reachable(&body.block_info);
         let block_map = IndexVec::<BasicBlockId, _>::from_iter(

@@ -201,13 +201,19 @@ impl Builder<'_> {
                 );
             }
             MatchBranch::VariantSwitch(place, arms, otherwise_branch) => {
+                let (id, _, _) = place
+                    .type_of(self.ctxt, &self.body.locals, &self.body.return_type)
+                    .as_named()
+                    .unwrap();
+                let type_def = self.ctxt.type_def(id);
                 let targets = arms
                     .into_iter()
                     .map(|(value, arm)| {
+                        let (_, value) = type_def.case_value(value);
                         let block = self.switch_to_new_block();
                         self.lower_tree(loc, arm, info, end_blocks);
                         SwitchTarget {
-                            value: value.into_usize().try_into().unwrap(),
+                            value: value.into(),
                             target: block,
                         }
                     })

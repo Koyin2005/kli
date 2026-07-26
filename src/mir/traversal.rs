@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     index_vec::IndexVec,
-    mir::{self, BasicBlockId, Successors, basic_blocks::BasicBlocks, passes::preorderder},
+    mir::{self, BasicBlockId, Successors, basic_blocks::BasicBlocks, passes::preorder},
 };
 
 #[derive(Clone, Debug)]
@@ -90,7 +90,7 @@ fn link(
     ancestors[node] = Some(parent);
 }
 pub fn dominators(bbs: &BasicBlocks) -> DominatorTree {
-    let dfs = preorderder(bbs.blocks());
+    let dfs = preorder(bbs.blocks());
     let dfs_num = dfs
         .iter()
         .enumerate()
@@ -192,7 +192,7 @@ pub fn postorder(bbs: &'_ BasicBlocks) -> Postorder<'_> {
 }
 
 pub fn reachable(blocks: &BasicBlocks) -> HashSet<BasicBlockId> {
-    preorderder(blocks.blocks())
+    preorder(blocks.blocks())
         .into_iter()
         .map(|(_, node)| node)
         .collect()

@@ -12,6 +12,22 @@ use crate::{
 define_id!(CaseId);
 pub mod lower;
 pub mod visit;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TagType {
+    Byte,
+    Uint,
+    Never,
+}
+impl TagType {
+    pub fn into_type(self) -> Type {
+        match self {
+            Self::Never => Type::Never,
+            Self::Byte => Type::Byte,
+            Self::Uint => Type::UINT,
+        }
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GenericKind {
     Type,

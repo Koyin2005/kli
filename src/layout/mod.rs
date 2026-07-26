@@ -5,7 +5,7 @@ use crate::{
     collect::TypeDefKind,
     index_vec::IndexVec,
     typed_ast::FieldId,
-    types::{CaseId, IntegerKind, Type},
+    types::{CaseId, IntegerKind, TagType, Type},
 };
 
 pub const BITS_IN_BYTE: u8 = 8;
@@ -92,7 +92,7 @@ impl Align {
 #[derive(Clone, Copy, Debug)]
 pub enum TagEncoding {
     Uninhabited,
-    Field { offset: Size, scalar: Scalar },
+    Field { scalar: Scalar },
 }
 #[derive(Clone, Debug)]
 pub struct VariantLayout {
@@ -100,7 +100,7 @@ pub struct VariantLayout {
 }
 #[derive(Clone, Debug)]
 pub struct FieldLayout {
-    pub offset: Size,
+    pub field: FieldId,
     pub layout: Layout,
 }
 #[derive(Clone, Debug)]
@@ -115,6 +115,24 @@ impl Layout {
         alignment: Align::BYTE,
         kind: LayoutKind::Scalar(Scalar::Byte),
     };
+    ///Produces an aggregate with only layout as its field, but
+    /// is prefixed by prefix size
+    pub fn prefixed_by(prefix: Size, align: Align, layout: Self) -> Self {
+        let align = align.max(layout.alignment);
+        let total_size = prefix.add(layout.size).align_to(align);
+        let offset = prefix.align_to(align);
+        Self {
+            size: total_size,
+            alignment: layout.alignment,
+            kind: LayoutKind::Aggregate(
+                vec![FieldLayout {
+                    field: FieldId::FIRST_FIELD,
+                    layout,
+                }],
+                IndexVec::from_vec(vec![offset]),
+            ),
+        }
+    }
     pub const fn pointer(non_null: bool) -> Self {
         Self {
             size: POINTER_SIZE,
@@ -134,11 +152,18 @@ impl Layout {
         };
         matches!(tag, TagEncoding::Uninhabited)
     }
+    pub const fn from_scalar(scalar: Scalar) -> Self {
+        Self {
+            size: scalar.size(),
+            alignment: scalar.align(),
+            kind: LayoutKind::Scalar(scalar),
+        }
+    }
     pub const fn zst() -> Self {
         Self {
             size: Size::ZERO,
             alignment: Align::BYTE,
-            kind: LayoutKind::Aggregate(IndexVec::new()),
+            kind: LayoutKind::Aggregate(Vec::new(), IndexVec::new()),
         }
     }
     pub const fn uninhabited(&self) -> Self {
@@ -147,7 +172,6 @@ impl Layout {
             alignment: self.alignment,
             kind: LayoutKind::Variant {
                 tag: TagEncoding::Uninhabited,
-                data_offset: Size::ZERO,
                 cases: IndexVec::new(),
             },
         }
@@ -165,7 +189,7 @@ pub enum Scalar {
     Int64(IntegerKind),
 }
 impl Scalar {
-    pub fn size(self) -> Size {
+    pub const fn size(self) -> Size {
         match self {
             Scalar::Byte | Scalar::Bool => Size::BYTE,
             Scalar::Pointer { non_null: _ } => POINTER_SIZE,
@@ -173,17 +197,24 @@ impl Scalar {
             Scalar::Int64(_) => INT_SIZE,
         }
     }
+    pub const fn align(self) -> Align {
+        match self {
+            Self::Bool | Self::Byte => Align::BYTE,
+            Self::Uint32 => Align::FOUR_BYTE,
+            Self::Int64(_) => INT_ALIGN,
+            Self::Pointer { non_null: _ } => POINTER_ALIGN,
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub enum LayoutKind {
-    Aggregate(IndexVec<FieldId, FieldLayout>),
+    Aggregate(Vec<FieldLayout>, IndexVec<FieldId, Size>),
     Variant {
         tag: TagEncoding,
-        data_offset: Size,
         cases: IndexVec<CaseId, Layout>,
     },
     Scalar(Scalar),
-    ScalarPair(Scalar, Scalar),
+    ScalarPair(Scalar, Scalar, Size),
 }
 
 pub enum LayoutError {
@@ -203,6 +234,7 @@ impl std::fmt::Debug for LayoutError {
 
 fn variant_layout(
     ctxt: CtxtRef<'_>,
+    tag_type: TagType,
     cases: IndexVec<CaseId, Option<Type>>,
 ) -> Result<Layout, LayoutError> {
     if cases.is_empty() {
@@ -218,7 +250,7 @@ fn variant_layout(
             }
         })
         .collect::<Result<IndexVec<CaseId, _>, _>>()?;
-    let (tag_size, tag_scalar, tag_align) = if cases.len() < 256usize {
+    let (tag_size, tag_scalar, tag_align) = if let TagType::Byte | TagType::Never = tag_type {
         (Size::BYTE, Scalar::Byte, Align::BYTE)
     } else {
         (INT_SIZE, Scalar::Int64(IntegerKind::Unsigned), INT_ALIGN)
@@ -233,23 +265,13 @@ fn variant_layout(
         )
         .unwrap();
 
-    let (tag_offset, data_offset, max_align) = if tag_align < biggest_size.alignment {
-        /* tag data */
-        (Size::ZERO, tag_size, biggest_size.alignment)
-    } else {
-        /*data tag */
-        (biggest_size.size, Size::ZERO, tag_align)
-    };
+    let max_align = tag_align.max(biggest_size.alignment);
 
     Ok(Layout {
         size: tag_size.add(biggest_size.size).align_to(max_align),
         alignment: max_align,
         kind: LayoutKind::Variant {
-            tag: TagEncoding::Field {
-                offset: tag_offset,
-                scalar: tag_scalar,
-            },
-            data_offset,
+            tag: TagEncoding::Field { scalar: tag_scalar },
             cases: case_layouts,
         },
     })
@@ -260,23 +282,22 @@ fn aggregate_layout(mut field_layouts: Vec<(FieldId, Layout)>) -> Result<Layout,
 
     let mut offset = Size::ZERO;
     let min_align = field_layouts[0].1.alignment;
-    let mut layouts = IndexVec::<FieldId, _>::from_value(
-        field_layouts.len(),
-        FieldLayout {
-            offset,
-            layout: Layout::zst(),
-        },
-    );
-    for (field, layout) in field_layouts {
-        let align = layout.alignment;
-        let size = layout.size;
-        layouts[field] = FieldLayout { offset, layout };
-        offset = offset.add(size).align_to(align);
-    }
+    let mut field_positions = IndexVec::from_value(field_layouts.len(), Size::ZERO);
+    let layouts = field_layouts
+        .into_iter()
+        .map(|(field, layout)| {
+            let align = layout.alignment;
+            let size = layout.size;
+            field_positions[field] = offset;
+            let layout = FieldLayout { field, layout };
+            offset = offset.add(size).align_to(align);
+            layout
+        })
+        .collect();
     Ok(Layout {
         size: offset,
         alignment: min_align,
-        kind: LayoutKind::Aggregate(layouts),
+        kind: LayoutKind::Aggregate(layouts, field_positions),
     })
 }
 fn record_layout(
@@ -324,6 +345,7 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
                 kind: LayoutKind::ScalarPair(
                     Scalar::Pointer { non_null: true },
                     Scalar::Int64(IntegerKind::Unsigned),
+                    POINTER_SIZE,
                 ),
             });
         }
@@ -350,8 +372,10 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
                 );
             }
             TypeDefKind::Variant(cases) => {
+                let tag_ty = ctxt.type_def(*id).tag_type();
                 return variant_layout(
                     ctxt,
+                    tag_ty,
                     cases
                         .into_iter()
                         .map(|case| case.field.map(|field| field.type_of(args, ctxt)))

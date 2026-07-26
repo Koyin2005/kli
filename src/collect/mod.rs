@@ -23,7 +23,7 @@ use crate::{
     typed_ast::FieldId,
     types::{
         self, CaseId, FunctionSig, GenericArg, GenericArgs, GenericArgsRef, GenericKind,
-        GenericParam, Type, lower::Lower,
+        GenericParam, TagType, Type, lower::Lower,
     },
 };
 
@@ -85,9 +85,18 @@ pub struct TypeDefInfo {
     pub kind: TypeDefKind,
 }
 impl TypeDefInfo {
-    pub fn case_value(&self, case: CaseId) -> u32 {
-        _ = self;
-        case.into_usize() as u32
+    #[track_caller]
+    pub fn tag_type(&self) -> TagType {
+        let cases = self.expect_cases();
+        if cases.len() < 256 {
+            TagType::Byte
+        } else {
+            TagType::Uint
+        }
+    }
+    #[track_caller]
+    pub fn case_value(&self, case: CaseId) -> (TagType, u32) {
+        (self.tag_type(), case.into_usize().try_into().unwrap())
     }
     #[track_caller]
     pub fn case_with_id(&self, id: DefId) -> (CaseId, &Case) {

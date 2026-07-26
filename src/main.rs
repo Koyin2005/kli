@@ -318,7 +318,7 @@ fn main() {
         Command::new("objdump")
             .arg("-d")
             .arg("foo.o")
-            .spawn()
+            .output()
             .unwrap();
     }
 }

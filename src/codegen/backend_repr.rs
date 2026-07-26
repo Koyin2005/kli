@@ -1,9 +1,14 @@
-use crate::layout::{self, Scalar, TagEncoding};
+use crate::layout::{self, Scalar, Size, TagEncoding};
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BackendRepr {
     Scalar(Scalar),
-    ScalarPair(Scalar, Scalar),
+    ScalarPair {
+        first: Scalar,
+        second: Scalar,
+        second_offset: Size,
+    },
     ZeroSized,
+    Memory,
 }
 
 pub fn backend_repr(layout: &layout::Layout) -> BackendRepr {
@@ -11,16 +16,33 @@ pub fn backend_repr(layout: &layout::Layout) -> BackendRepr {
         return BackendRepr::ZeroSized;
     }
     match layout.kind {
-        layout::LayoutKind::Aggregate(_) => BackendRepr::Scalar(Scalar::Pointer { non_null: true }),
-        layout::LayoutKind::Variant {
-            tag,
-            data_offset,
-            ref cases,
-        } => {
+        layout::LayoutKind::Aggregate(ref field_layouts, ref field_offsets) => {
+            let non_zst_fields = field_layouts
+                .iter()
+                .filter(|field| !field.layout.is_zst())
+                .collect::<Vec<_>>();
+            match non_zst_fields.as_slice() {
+                [first, second]
+                    if let Some(first) = first.layout.as_scalar()
+                        && let second_offset = field_offsets[second.field]
+                        && let Some(second) = second.layout.as_scalar() =>
+                {
+                    return BackendRepr::ScalarPair {
+                        first,
+                        second,
+                        second_offset,
+                    };
+                }
+                [single] => return backend_repr(&single.layout),
+                _ => (),
+            }
+            BackendRepr::Memory
+        }
+        layout::LayoutKind::Variant { tag, ref cases } => {
             let case_reprs = cases.iter().map(backend_repr).collect::<Vec<_>>();
-            let (tag_repr, tag_offset) = match tag {
-                TagEncoding::Uninhabited => (BackendRepr::ZeroSized, layout::Size::ZERO),
-                TagEncoding::Field { offset, scalar } => (BackendRepr::Scalar(scalar), offset),
+            let tag_repr = match tag {
+                TagEncoding::Uninhabited => BackendRepr::ZeroSized,
+                TagEncoding::Field { scalar } => BackendRepr::Scalar(scalar),
             };
             if case_reprs
                 .iter()
@@ -28,27 +50,46 @@ pub fn backend_repr(layout: &layout::Layout) -> BackendRepr {
             {
                 return tag_repr;
             }
-            let (first, rest) = match case_reprs.as_slice() {
+            match case_reprs.as_slice() {
                 [] => return tag_repr,
                 [single] => return *single,
-                [first, rest @ ..] => (first, rest),
+                _ => (),
             };
-            if let BackendRepr::Scalar(scalar) = *first
-                && let BackendRepr::Scalar(tag_repr) = tag_repr
-                && rest.iter().all(|rest| rest == first)
-            {
-                return if tag_offset > data_offset {
-                    BackendRepr::ScalarPair(scalar, tag_repr)
-                } else {
-                    BackendRepr::ScalarPair(tag_repr, scalar)
+            if let BackendRepr::Scalar(tag_repr) = tag_repr {
+                let mut biggest = None::<Scalar>;
+                for &repr in &case_reprs {
+                    let scalar = match repr {
+                        BackendRepr::Memory | BackendRepr::ScalarPair { .. } => {
+                            return BackendRepr::Memory;
+                        }
+                        BackendRepr::Scalar(single) => single,
+                        BackendRepr::ZeroSized => continue,
+                    };
+                    let curr_size = if let Some(biggest) = biggest {
+                        biggest.size()
+                    } else {
+                        Size::ZERO
+                    };
+                    if curr_size < scalar.size() {
+                        biggest = Some(scalar);
+                    }
+                }
+                let (first, second, second_offset) = (tag_repr, biggest.unwrap(), tag_repr.size());
+
+                return BackendRepr::ScalarPair {
+                    first,
+                    second,
+                    second_offset,
                 };
             }
 
-            BackendRepr::Scalar(Scalar::Pointer { non_null: true })
+            BackendRepr::Memory
         }
         layout::LayoutKind::Scalar(scalar) => BackendRepr::Scalar(scalar),
-        layout::LayoutKind::ScalarPair(scalar1, scalar2) => {
-            BackendRepr::ScalarPair(scalar1, scalar2)
-        }
+        layout::LayoutKind::ScalarPair(first, second, second_offset) => BackendRepr::ScalarPair {
+            first,
+            second,
+            second_offset,
+        },
     }
 }

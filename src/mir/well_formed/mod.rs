@@ -239,7 +239,6 @@ impl Visit for WellFormed<'_> {
                         BinaryOp::BitwiseAnd
                         | BinaryOp::Divide
                         | BinaryOp::Overflow(_)
-                        | BinaryOp::Unchecked(_)
                         | BinaryOp::Wrapping(_)
                         | BinaryOp::Lesser
                         | BinaryOp::Greater,
