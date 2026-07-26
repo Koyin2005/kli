@@ -158,7 +158,7 @@ impl<'a> CodegenRoot<'a> {
             {
                 "main".to_string()
             } else {
-                format!("f_{i}")
+                format!("f_{}_{i}",self.ctxt.display(instance.body_src().def_id()))
             };
             let function = &mir_ctxt.bodies[&instance.body_src()];
             let sig = Scheme::new(FunctionSig::new(
