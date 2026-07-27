@@ -2,4 +2,4 @@
 /tests
 /grammar.bnf
 /builtins.kli
-foo.o
+/foo.o
