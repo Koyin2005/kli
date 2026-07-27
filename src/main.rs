@@ -1,8 +1,6 @@
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
-    fs::OpenOptions,
-    io::Write,
     path::Path,
     process::Command,
 };
@@ -312,8 +310,7 @@ fn main() {
         }
         let obj = CodegenRoot::new(ctxt, instances).codegen_functions(&mir_context);
         {
-            let mut f = OpenOptions::new().write(true).open("foo.o").unwrap();
-            let _ = f.write(&obj.emit().unwrap());
+            std::fs::write("foo.o",obj.emit().unwrap()).unwrap();
         }
         Command::new("objdump")
             .arg("-d")
