@@ -1,15 +1,9 @@
 use std::borrow::Cow;
 
 use crate::{
-    collect::{CtxtRef, TypeDefKind},
-    diagnostics::emit_fatal_diagnostic,
-    mir::{
-        BinaryOp, Body, CastKind, Location, Stmt, StmtKind, TerminatorKind,
-        visitor::{PlaceCtxt, Visit},
-    },
-    src_loc::SrcLoc,
-    types::{FunctionType, Type},
-    unsafety,
+    collect::{CtxtRef, TypeDefKind}, diagnostics::emit_fatal_diagnostic, mir::{
+        BinaryOp, Body, CastKind, IntegerCast, Location, Stmt, StmtKind, TerminatorKind, visitor::{PlaceCtxt, Visit},
+    }, src_loc::SrcLoc, types::{FunctionType, Type}, unsafety,
 };
 pub struct WellFormed<'ctxt> {
     ctxt: CtxtRef<'ctxt>,
@@ -267,6 +261,19 @@ impl Visit for WellFormed<'_> {
                         || format!("Cannot transmute {} into {}", from, to),
                         loc,
                     );
+                },
+                CastKind::IntegerCast(kind) => {
+                    match kind{
+                        IntegerCast::ZeroExtendByteTo(kind) => {
+                            let from =
+                                operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
+                            self.assert(
+                                from == Type::Byte,
+                                || format!("Cannot extend {} into {}", from, Type::Int(*kind)),
+                                loc,
+                            );
+                        }
+                    }
                 }
             },
             super::Rvalue::Len(place) => {

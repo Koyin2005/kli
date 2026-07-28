@@ -182,6 +182,9 @@ impl<'ctxt> MirDump<'ctxt> {
                 match cast {
                     CastKind::Transmute(to) => {
                         write!(self.output, "Transmute({})", to)?;
+                    },
+                    CastKind::IntegerCast(kind) => {
+                        write!(self.output,"IntegerCast({:?})",kind)?;
                     }
                 }
                 write!(self.output, ")(")?;

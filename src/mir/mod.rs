@@ -238,8 +238,13 @@ pub enum BinaryOp {
     Lesser,
 }
 #[derive(Clone, Debug)]
+pub enum IntegerCast {
+    ZeroExtendByteTo(IntegerKind)
+}
+#[derive(Clone, Debug)]
 pub enum CastKind {
     Transmute(Type),
+    IntegerCast(IntegerCast)
 }
 #[derive(Clone, Debug)]
 pub enum Rvalue {
@@ -316,6 +321,7 @@ impl Rvalue {
             },
             Rvalue::Cast(cast, _) => match cast {
                 CastKind::Transmute(ty) => ty.clone(),
+                CastKind::IntegerCast(IntegerCast::ZeroExtendByteTo(kind)) => Type::Int(*kind),
             },
             Rvalue::Discriminant(_) => Type::UINT,
             Rvalue::AddrOf(_) => Type::UINT,

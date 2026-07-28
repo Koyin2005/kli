@@ -272,6 +272,11 @@ impl Builder<'_> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::ZeroExtend => {
+                let [operand] = operands.try_into().unwrap();
+                let Type::Int(kind) = ty else { unreachable!() };
+                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendByteTo(*kind)), operand))
+            }
             Builtin::BoxAlloc => {
                 let [operand] = operands.try_into().unwrap();
                 let Type::Box(ty) = ty else { unreachable!() };

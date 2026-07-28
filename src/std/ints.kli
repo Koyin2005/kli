@@ -70,3 +70,5 @@ fun as_bool(x : int) -> Option[bool] =
     | _ -> Option.None
     end
 
+
+fun extend_byte_to_uint(x : byte) -> uint = builtins.extend(x)

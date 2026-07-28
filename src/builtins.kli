@@ -16,3 +16,6 @@ fun wrapping_add[T](x : T, y : T) -> T;
 
 @builtin
 fun overflowing_add[T](x : T, y : T) -> (T, bool);
+
+@builtin
+fun zero_extend[T,U](x : T) -> T;
