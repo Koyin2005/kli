@@ -1,6 +1,7 @@
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
+    io::{self, Write},
     path::Path,
     process::Command,
 };
@@ -312,10 +313,18 @@ fn main() {
         {
             std::fs::write("foo.o", obj.emit().unwrap()).unwrap();
         }
-        Command::new("objdump")
-            .arg("-d")
+        let output = Command::new("gcc")
+            .arg("kli_rt.c")
+            .arg("-o")
+            .arg("output")
             .arg("foo.o")
             .output()
             .unwrap();
+        io::stdout().write(&output.stdout).unwrap();
+        io::stderr().write(&output.stderr).unwrap();
+
+        let output = Command::new(r".\output.exe").output().unwrap();
+        io::stdout().write(&output.stdout).unwrap();
+        io::stderr().write(&output.stderr).unwrap();
     }
 }

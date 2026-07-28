@@ -22,11 +22,12 @@ pub fn backend_repr(layout: &layout::Layout) -> BackendRepr {
                 .filter(|field| !field.layout.is_zst())
                 .collect::<Vec<_>>();
             match non_zst_fields.as_slice() {
-                [first, second]
-                    if let Some(first) = first.layout.as_scalar()
-                        && let second_offset = field_offsets[second.field]
-                        && let Some(second) = second.layout.as_scalar() =>
+                [first_field, second_field]
+                    if let Some(first) = first_field.layout.as_scalar()
+                        && let Some(second) = second_field.layout.as_scalar()
+                        && let second_offset = field_offsets[second_field.field].offset =>
                 {
+                    
                     return BackendRepr::ScalarPair {
                         first,
                         second,

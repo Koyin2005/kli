@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, cmp::max};
 
 use crate::{
     CtxtRef,
@@ -16,7 +16,7 @@ pub const INT_SIZE: Size = Size::BYTE.mul(8);
 pub const INT_ALIGN: Align = Align::from_bytes(8).unwrap();
 
 /// Size of an allocation in bytes
-#[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash, Debug,Default)]
 #[repr(transparent)]
 pub struct Size(u64);
 impl Size {
@@ -132,7 +132,10 @@ impl Layout {
                     field: FieldId::FIRST_FIELD,
                     layout,
                 }],
-                IndexVec::from_vec(vec![offset]),
+                IndexVec::from_vec(vec![FieldOffset{
+                    index_in_memory:0,
+                    offset
+                }]),
             ),
         }
     }
@@ -209,9 +212,14 @@ impl Scalar {
         }
     }
 }
+#[derive(Clone, Debug,PartialEq, Eq,Default)]
+pub struct FieldOffset{
+    pub index_in_memory : usize,
+    pub offset : Size
+}
 #[derive(Clone, Debug)]
 pub enum LayoutKind {
-    Aggregate(Vec<FieldLayout>, IndexVec<FieldId, Size>),
+    Aggregate(Vec<FieldLayout>, IndexVec<FieldId, FieldOffset>),
     Variant {
         tag: TagEncoding,
         cases: IndexVec<CaseId, Layout>,
@@ -281,25 +289,28 @@ fn variant_layout(
 }
 
 fn aggregate_layout(mut field_layouts: Vec<(FieldId, Layout)>) -> Result<Layout, LayoutError> {
-    field_layouts.sort_by_key(|(_, layout)| layout.alignment);
+    field_layouts.sort_by_key(|(_, layout)| std::cmp::Reverse(layout.alignment));
 
     let mut offset = Size::ZERO;
-    let min_align = field_layouts[0].1.alignment;
-    let mut field_positions = IndexVec::from_value(field_layouts.len(), Size::ZERO);
+    let mut max_align = field_layouts.get(0).map_or(POINTER_ALIGN, |(_,layout)| layout.alignment);
+    let mut field_positions = IndexVec::from_value(field_layouts.len(), FieldOffset::default());
     let layouts = field_layouts
         .into_iter()
-        .map(|(field, layout)| {
-            let align = layout.alignment;
+        .enumerate()
+        .map(|(i,(field, layout))| {
+            let current_align = layout.alignment;
+            max_align = max(current_align, max_align);
             let size = layout.size;
-            field_positions[field] = offset;
+            offset = offset.align_to(max_align);
+            field_positions[field] =  FieldOffset { index_in_memory: i, offset };
             let layout = FieldLayout { field, layout };
-            offset = offset.add(size).align_to(align);
+            offset = offset.add(size).align_to(max_align);
             layout
         })
         .collect();
     Ok(Layout {
-        size: offset,
-        alignment: min_align,
+        size: offset.align_to(max_align),
+        alignment: max_align,
         kind: LayoutKind::Aggregate(layouts, field_positions),
     })
 }

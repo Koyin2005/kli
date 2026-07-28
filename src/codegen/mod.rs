@@ -116,6 +116,7 @@ struct FunctionInfo {
 struct RuntimeFunctions {
     panic: FuncId,
     alloc: FuncId,
+    print_int: FuncId,
 }
 struct FunctionMap {
     functions: HashMap<Instance, FunctionInfo>,
@@ -189,14 +190,17 @@ impl<'a> CodegenRoot<'a> {
     }
     pub fn codegen_functions(mut self, mir_ctxt: &mir::Context) -> cranelift_object::ObjectProduct {
         for (i, instance) in self.instances.iter().enumerate() {
-            let name = if self
+            let (name, linkage) = if self
                 .ctxt
                 .main_function()
                 .is_some_and(|(id, _)| id == instance.body_src().def_id())
             {
-                "main".to_string()
+                ("main".to_string(), cranelift_module::Linkage::Export)
             } else {
-                format!("f_{}_{i}", self.ctxt.display(instance.body_src().def_id()))
+                (
+                    format!("f_{}_{i}", self.ctxt.display(instance.body_src().def_id())),
+                    cranelift_module::Linkage::Local,
+                )
             };
             let function = &mir_ctxt.bodies[&instance.body_src()];
             let sig = Scheme::new(FunctionSig::new(
@@ -209,10 +213,7 @@ impl<'a> CodegenRoot<'a> {
             self.map.functions.insert(
                 instance.clone(),
                 FunctionInfo {
-                    id: self
-                        .module
-                        .declare_function(&name, cranelift_module::Linkage::Local, &sig)
-                        .unwrap(),
+                    id: self.module.declare_function(&name, linkage, &sig).unwrap(),
                     sig,
                     abi,
                 },
@@ -285,9 +286,16 @@ impl<'a> CodegenRoot<'a> {
             );
             alloc
         };
+        let print_int =
+            self.declare_function("kli_print_int", cranelift_module::Linkage::Import, &{
+                let mut sig = ir::Signature::new(self.module.target_config().default_call_conv);
+                sig.params.push(AbiParam::new(ir::types::I64));
+                sig
+            });
         let runtime = RuntimeFunctions {
             panic: panic_function,
             alloc: allocate_function,
+            print_int,
         };
 
         for instance in self.instances {
@@ -451,11 +459,11 @@ impl PlaceValue {
             LayoutKind::Aggregate(field_layouts, ref field_positions) => (
                 self.ty.field_info(field, ctxt).unwrap().0,
                 {
-                    let offset = field_positions[field].in_bytes();
+                    let offset = field_positions[field].offset.in_bytes();
                     let offset: i32 = offset.try_into().unwrap();
                     offset
                 } + self.offset,
-                { field_layouts }.swap_remove(0).layout,
+                { field_layouts }.swap_remove(field_positions[field].index_in_memory).layout,
             ),
             LayoutKind::Variant { tag, cases } if field == FieldId::FIRST_FIELD => (
                 if cases.len() < 256 {
@@ -918,6 +926,11 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             &[size_val, align],
         )
     }
+    fn codegen_direct_call_no_return(&mut self, id: FuncId, args: &[ir::Value]) {
+        let func = self.module.declare_func_in_func(id, self.builder.func);
+        let call = self.builder.ins().call(func, args);
+        self.builder.inst_results(call);
+    }
     fn codegen_direct_call_single_scalar_return(
         &mut self,
         id: FuncId,
@@ -1339,17 +1352,36 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     mir::StmtKind::Assign(place, rvalue) => {
                         self.assign(place, rvalue, &body.locals);
                     }
-                    mir::StmtKind::Print(_) => todo!("print"),
+                    mir::StmtKind::Print(operand) => {
+                        if let Some(operand) = operand {
+                            let operand = self.eval_operand(operand);
+                            if !matches!(operand.ty, Type::Int(_)) {
+                                todo!("non int print?")
+                            }
+                            let value = operand
+                                .force_immediate_value(&mut self)
+                                .unwrap()
+                                .first_value();
+                            self.codegen_direct_call_no_return(
+                                self.runtime_functions.print_int,
+                                &[value],
+                            );
+                        } else {
+                            todo!("just println")
+                        }
+                    }
                 }
             }
             match &block.expect_terminator().kind {
                 mir::TerminatorKind::Assert(operand, assert_kind, basic_block_id) => {
                     let value = self.eval_operand(operand);
+                    println!("Assert {:?}",value);
                     let value = value
                         .force_immediate_value(&mut self)
                         .unwrap()
                         .first_value();
                     let code = TrapCode::user(1).unwrap();
+                    //If it negates than we are asserting !operand instead of operand
                     if assert_kind.negate() {
                         self.builder.ins().trapnz(value, code);
                     } else {
