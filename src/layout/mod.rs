@@ -16,7 +16,7 @@ pub const INT_SIZE: Size = Size::BYTE.mul(8);
 pub const INT_ALIGN: Align = Align::from_bytes(8).unwrap();
 
 /// Size of an allocation in bytes
-#[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash, Debug,Default)]
+#[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash, Debug, Default)]
 #[repr(transparent)]
 pub struct Size(u64);
 impl Size {
@@ -132,9 +132,9 @@ impl Layout {
                     field: FieldId::FIRST_FIELD,
                     layout,
                 }],
-                IndexVec::from_vec(vec![FieldOffset{
-                    index_in_memory:0,
-                    offset
+                IndexVec::from_vec(vec![FieldOffset {
+                    index_in_memory: 0,
+                    offset,
                 }]),
             ),
         }
@@ -212,10 +212,10 @@ impl Scalar {
         }
     }
 }
-#[derive(Clone, Debug,PartialEq, Eq,Default)]
-pub struct FieldOffset{
-    pub index_in_memory : usize,
-    pub offset : Size
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct FieldOffset {
+    pub index_in_memory: usize,
+    pub offset: Size,
 }
 #[derive(Clone, Debug)]
 pub enum LayoutKind {
@@ -292,17 +292,22 @@ fn aggregate_layout(mut field_layouts: Vec<(FieldId, Layout)>) -> Result<Layout,
     field_layouts.sort_by_key(|(_, layout)| std::cmp::Reverse(layout.alignment));
 
     let mut offset = Size::ZERO;
-    let mut max_align = field_layouts.get(0).map_or(POINTER_ALIGN, |(_,layout)| layout.alignment);
+    let mut max_align = field_layouts
+        .get(0)
+        .map_or(POINTER_ALIGN, |(_, layout)| layout.alignment);
     let mut field_positions = IndexVec::from_value(field_layouts.len(), FieldOffset::default());
     let layouts = field_layouts
         .into_iter()
         .enumerate()
-        .map(|(i,(field, layout))| {
+        .map(|(i, (field, layout))| {
             let current_align = layout.alignment;
             max_align = max(current_align, max_align);
             let size = layout.size;
             offset = offset.align_to(max_align);
-            field_positions[field] =  FieldOffset { index_in_memory: i, offset };
+            field_positions[field] = FieldOffset {
+                index_in_memory: i,
+                offset,
+            };
             let layout = FieldLayout { field, layout };
             offset = offset.add(size).align_to(max_align);
             layout

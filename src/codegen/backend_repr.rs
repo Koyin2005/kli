@@ -27,7 +27,6 @@ pub fn backend_repr(layout: &layout::Layout) -> BackendRepr {
                         && let Some(second) = second_field.layout.as_scalar()
                         && let second_offset = field_offsets[second_field.field].offset =>
                 {
-                    
                     return BackendRepr::ScalarPair {
                         first,
                         second,
