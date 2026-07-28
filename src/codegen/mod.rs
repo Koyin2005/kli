@@ -82,10 +82,16 @@ fn call_abi(ctxt: CtxtRef<'_>, function_sig: &FunctionSig) -> CallAbi {
     ));
     CallAbi { params, ret }
 }
-fn signature(abi: &CallAbi) -> codegen::ir::Signature {
-    let mut sig = codegen::ir::Signature::new(codegen::isa::CallConv::Fast);
+fn signature(
+    abi: &CallAbi,
+    target_config: codegen::isa::TargetFrontendConfig,
+) -> codegen::ir::Signature {
+    let mut sig = codegen::ir::Signature::new(target_config.default_call_conv);
     if matches!(abi.ret, PassMode::ByPtr) {
-        sig.params.push(AbiParam::special(PTR_IR_TYPE,ir::ArgumentPurpose::StructReturn));
+        sig.params.push(AbiParam::special(
+            PTR_IR_TYPE,
+            ir::ArgumentPurpose::StructReturn,
+        ));
     }
     for param in abi.params.iter() {
         sig.params
@@ -197,7 +203,7 @@ impl<'a> CodegenRoot<'a> {
             ))
             .bind(&instance.args);
             let abi = call_abi(self.ctxt, &sig);
-            let sig = signature(&abi);
+            let sig = signature(&abi, self.module.target_config());
             self.map.functions.insert(
                 instance.clone(),
                 FunctionInfo {
@@ -931,7 +937,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             }
             Err(value) => {
                 let callee = value.force_immediate_value(self).unwrap().first_value();
-                let sig = signature(&abi);
+                let sig = signature(&abi, self.module.target_config());
                 let sig = self.builder.func.import_signature(sig);
                 let results = self.builder.ins().call_indirect(sig, callee, &args);
                 let values = self.builder.inst_results(results).to_vec();

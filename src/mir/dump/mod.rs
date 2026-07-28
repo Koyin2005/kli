@@ -197,7 +197,7 @@ impl<'ctxt> MirDump<'ctxt> {
         Ok(())
     }
     fn write_constant(&mut self, ty: &types::Type, value: &ConstValue) -> std::io::Result<()> {
-        if let ConstValue::Named(id, args)  = value {
+        if let ConstValue::Named(id, args) = value {
             return write!(
                 self.output,
                 "{}{}",
