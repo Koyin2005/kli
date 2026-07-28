@@ -163,21 +163,23 @@ impl<'a> CodegenRoot<'a> {
     ) -> FuncId {
         self.module.declare_function(name, linkage, sig).unwrap()
     }
+    #[track_caller]
     fn make_function(
         &mut self,
         ctxt: &mut codegen::Context,
         f_ctxt: &mut frontend::FunctionBuilderContext,
         name: &str,
         linkage: cranelift_module::Linkage,
-        sig: &ir::Signature,
-        build_function: impl FnOnce(&mut frontend::FunctionBuilder, ir::Block),
+        sig: ir::Signature,
+        build_function: impl FnOnce(&mut Self, &mut frontend::FunctionBuilder, ir::Block),
     ) -> FuncId {
-        let function = self.declare_function(name, linkage, sig);
+        let function = self.declare_function(name, linkage, &sig);
         {
+            ctxt.func.signature = sig.clone();
             let mut builder = frontend::FunctionBuilder::new(&mut ctxt.func, f_ctxt);
             let entry = builder.create_block();
             builder.switch_to_block(entry);
-            build_function(&mut builder, entry);
+            build_function(self, &mut builder, entry);
             builder.finalize(self.module.target_config());
             println!("{:?}", ctxt.func);
             self.module.define_function(function, ctxt).unwrap();
@@ -224,20 +226,65 @@ impl<'a> CodegenRoot<'a> {
             &mut f_ctxt,
             "panic",
             cranelift_module::Linkage::Export,
-            &ir::Signature::new(self.module.target_config().default_call_conv),
-            |builder, entry| {
+            ir::Signature::new(self.module.target_config().default_call_conv),
+            |_, builder, entry| {
                 builder.ins().trap(TrapCode::user(1).unwrap());
                 builder.seal_block(entry);
             },
         );
-        let allocate_function =
-            self.declare_function("malloc", cranelift_module::Linkage::Import, &{
+        let allocate_function = {
+            let malloc = self.declare_function("malloc", cranelift_module::Linkage::Import, &{
                 let mut sig = ir::Signature::new(self.module.target_config().default_call_conv);
                 sig.params.push(AbiParam::new(ir::types::I64));
                 sig.returns.push(AbiParam::new(PTR_IR_TYPE));
                 sig
             });
+            let alloc = self.make_function(
+                &mut ctxt,
+                &mut f_ctxt,
+                "kli_alloc",
+                cranelift_module::Linkage::Export,
+                {
+                    let mut sig = ir::Signature::new(self.module.target_config().default_call_conv);
+                    sig.params.push(AbiParam::new(ir::types::I64));
+                    sig.params.push(AbiParam::new(ir::types::I64));
+                    sig.returns.push(AbiParam::new(PTR_IR_TYPE));
+                    sig
+                },
+                |this, builder, entry| {
+                    /* Essentially this should be:
+                        if size == 0 then return invalid_but_aligned_ptr;
+                        let ptr = malloc(size);
+                        if ptr == null then panic()
+                        return ptr
+                    */
 
+                    builder.append_block_param(entry, ir::types::I64);
+                    builder.append_block_param(entry, ir::types::I64);
+                    let &[size_arg, align_arg] = builder.block_params(entry).as_array().unwrap();
+                    let malloc = this.module.declare_func_in_func(malloc, builder.func);
+                    let non_zero_size_block = builder.create_block();
+                    let zero_size_block = builder.create_block();
+
+                    builder
+                        .ins()
+                        .brif(size_arg, non_zero_size_block, &[], zero_size_block, &[]);
+                    builder.seal_block(entry);
+
+                    builder.switch_to_block(non_zero_size_block);
+                    builder.ins().return_(&[align_arg]);
+                    builder.seal_block(non_zero_size_block);
+
+                    builder.switch_to_block(zero_size_block);
+                    let ptr = builder.ins().call(malloc, &[size_arg]);
+                    let ptr = builder.inst_results(ptr)[0];
+                    builder.ins().trapz(ptr, TrapCode::unwrap_user(1));
+                    builder.ins().return_(&[ptr]);
+                    builder.seal_block(zero_size_block);
+                },
+            );
+            alloc
+        };
         let runtime = RuntimeFunctions {
             panic: panic_function,
             alloc: allocate_function,
@@ -864,8 +911,12 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         let ty_layout = self.ctxt.layout_of(&ty).unwrap();
 
         let total_size = ty_layout.size.mul(count).in_bytes();
+        let align = self.build_int_const(&Type::UINT, ty_layout.alignment.in_bytes().into());
         let size_val = self.build_int_const(&Type::UINT, total_size.into());
-        self.codegen_direct_call_single_scalar_return(self.runtime_functions.alloc, &[size_val])
+        self.codegen_direct_call_single_scalar_return(
+            self.runtime_functions.alloc,
+            &[size_val, align],
+        )
     }
     fn codegen_direct_call_single_scalar_return(
         &mut self,
