@@ -88,6 +88,9 @@ impl Align {
     pub const fn in_bytes(self) -> u64 {
         2u64.pow(self.0 as u32)
     }
+    pub const fn pow_of_2(self) -> u8 {
+        self.0
+    }
 }
 #[derive(Clone, Copy, Debug)]
 pub enum TagEncoding {

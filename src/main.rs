@@ -310,7 +310,7 @@ fn main() {
         }
         let obj = CodegenRoot::new(ctxt, instances).codegen_functions(&mir_context);
         {
-            std::fs::write("foo.o",obj.emit().unwrap()).unwrap();
+            std::fs::write("foo.o", obj.emit().unwrap()).unwrap();
         }
         Command::new("objdump")
             .arg("-d")

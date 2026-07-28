@@ -158,7 +158,7 @@ impl<'a> CodegenRoot<'a> {
             {
                 "main".to_string()
             } else {
-                format!("f_{}_{i}",self.ctxt.display(instance.body_src().def_id()))
+                format!("f_{}_{i}", self.ctxt.display(instance.body_src().def_id()))
             };
             let function = &mir_ctxt.bodies[&instance.body_src()];
             let sig = Scheme::new(FunctionSig::new(
@@ -480,7 +480,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                                 codegen::ir::StackSlotData::new(
                                     codegen::ir::StackSlotKind::ExplicitSlot,
                                     layout.size.in_bytes().try_into().unwrap(),
-                                    layout.alignment.in_bytes().try_into().unwrap(),
+                                    layout.alignment.pow_of_2(),
                                 ),
                             )),
                         },
@@ -497,7 +497,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     let slot = builder.create_sized_stack_slot(codegen::ir::StackSlotData::new(
                         codegen::ir::StackSlotKind::ExplicitSlot,
                         layout.size.in_bytes().try_into().unwrap(),
-                        layout.alignment.in_bytes().try_into().unwrap(),
+                        layout.alignment.pow_of_2(),
                     ));
                     ReturnSlot::Local(slot)
                 }
@@ -892,10 +892,105 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             }
         }
     }
+    fn codgen_binary_op(
+        &mut self,
+        place: &mir::Place,
+        binary_op: mir::BinaryOp,
+        left: &Operand,
+        right: &Operand,
+    ) {
+        let left_operand = self.eval_operand(left);
+        let left_value = left_operand
+            .force_immediate_value(self)
+            .unwrap()
+            .first_value();
+        let right_operand = self.eval_operand(right);
+        let right_value = right_operand
+            .force_immediate_value(self)
+            .unwrap()
+            .first_value();
+        let (left, right) = match binary_op {
+            BinaryOp::Overflow(op) => {
+                let Type::Int(kind) = left_operand.ty else {
+                    unreachable!()
+                };
+                let (left, right) = self.build_overflow_op(op, kind, left_value, right_value);
+                (left, Some(right))
+            }
+            BinaryOp::Wrapping(op) => {
+                let Type::Int(kind) = left_operand.ty else {
+                    unreachable!()
+                };
+                let (left, _) = self.build_overflow_op(op, kind, left_value, right_value);
+                (left, None)
+            }
+            BinaryOp::Divide => {
+                let Type::Int(kind) = left_operand.ty else {
+                    unreachable!()
+                };
+                (
+                    match kind {
+                        IntegerKind::Signed => self.builder.ins().sdiv(left_value, right_value),
+                        IntegerKind::Unsigned => self.builder.ins().udiv(left_value, right_value),
+                    },
+                    None,
+                )
+            }
+            BinaryOp::Greater => {
+                let Type::Int(kind) = left_operand.ty else {
+                    unreachable!()
+                };
+                (
+                    self.builder.ins().icmp(
+                        match kind {
+                            IntegerKind::Signed => ir::condcodes::IntCC::SignedGreaterThan,
+                            IntegerKind::Unsigned => ir::condcodes::IntCC::UnsignedGreaterThan,
+                        },
+                        left_value,
+                        right_value,
+                    ),
+                    None,
+                )
+            }
+            BinaryOp::Lesser => {
+                let Type::Int(kind) = left_operand.ty else {
+                    unreachable!()
+                };
+                (
+                    self.builder.ins().icmp(
+                        match kind {
+                            IntegerKind::Signed => ir::condcodes::IntCC::SignedLessThan,
+                            IntegerKind::Unsigned => ir::condcodes::IntCC::UnsignedLessThan,
+                        },
+                        left_value,
+                        right_value,
+                    ),
+                    None,
+                )
+            }
+            BinaryOp::Equals => todo!(),
+            BinaryOp::BitwiseAnd => todo!(),
+        };
+        let place = self.eval_addr_of_place(place).unwrap();
+        if let Some(right) = right {
+            let Type::Tuple(fields) = place.ty.clone() else {
+                unreachable!()
+            };
+            let Some(&Type::Int(_)) = fields.first() else {
+                unreachable!()
+            };
+            let offset = layout::INT_SIZE;
+            self.store_immediate_pair(place, left, right, offset);
+        } else {
+            self.store_immediate(place, left);
+        }
+    }
     fn assign(&mut self, place: &mir::Place, value: &mir::Rvalue, locals: &Locals) {
         match value {
             mir::Rvalue::Aggregate(kind, fields) => match kind {
-                AggregateKind::Tuple => {
+                AggregateKind::Tuple
+                | AggregateKind::NamedRecord(..)
+                | AggregateKind::Record { field_names: _ } => {
                     for (id, field) in fields.iter_enumerated() {
                         self.store_operand(&place.clone().with_field(id), field);
                     }
@@ -928,7 +1023,6 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                         layout::TagEncoding::Uninhabited => (),
                     }
                 }
-                _ => todo!("{:?}", kind),
             },
             mir::Rvalue::AllocateArray(_, _) => todo!("alloc array"),
             mir::Rvalue::AllocateBox(_, _) => todo!("alloc box"),
@@ -940,51 +1034,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             }
             mir::Rvalue::Binary(binary_op, operands) => {
                 let (left, right) = &**operands;
-                let left_operand = self.eval_operand(left);
-                let left_value = left_operand
-                    .force_immediate_value(self)
-                    .unwrap()
-                    .first_value();
-                let right_operand = self.eval_operand(right);
-                let right_value = right_operand
-                    .force_immediate_value(self)
-                    .unwrap()
-                    .first_value();
-                let (left, right) = match binary_op {
-                    BinaryOp::Overflow(op) => {
-                        let Type::Int(kind) = left_operand.ty else {
-                            unreachable!()
-                        };
-                        let (left, right) =
-                            self.build_overflow_op(*op, kind, left_value, right_value);
-                        (left, Some(right))
-                    }
-                    BinaryOp::Wrapping(op) => {
-                        let Type::Int(kind) = left_operand.ty else {
-                            unreachable!()
-                        };
-                        let (left, _) = self.build_overflow_op(*op, kind, left_value, right_value);
-                        (left, None)
-                    }
-                    BinaryOp::Greater => todo!(),
-                    BinaryOp::Divide => todo!(),
-                    BinaryOp::Equals => todo!(),
-                    BinaryOp::BitwiseAnd => todo!(),
-                    BinaryOp::Lesser => todo!(),
-                };
-                let place = self.eval_addr_of_place(place).unwrap();
-                if let Some(right) = right {
-                    let Type::Tuple(fields) = place.ty.clone() else {
-                        unreachable!()
-                    };
-                    let Some(&Type::Int(_)) = fields.first() else {
-                        unreachable!()
-                    };
-                    let offset = layout::INT_SIZE;
-                    self.store_immediate_pair(place, left, right, offset);
-                } else {
-                    self.store_immediate(place, left);
-                }
+                self.codgen_binary_op(place, *binary_op, left, right);
             }
             mir::Rvalue::AddrOf(_) => todo!("Get addr of"),
             mir::Rvalue::Cast(..) => todo!("Transmutation"),
