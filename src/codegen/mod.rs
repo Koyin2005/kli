@@ -85,7 +85,7 @@ fn call_abi(ctxt: CtxtRef<'_>, function_sig: &FunctionSig) -> CallAbi {
 fn signature(abi: &CallAbi) -> codegen::ir::Signature {
     let mut sig = codegen::ir::Signature::new(codegen::isa::CallConv::Fast);
     if matches!(abi.ret, PassMode::ByPtr) {
-        sig.params.push(AbiParam::new(PTR_IR_TYPE));
+        sig.params.push(AbiParam::special(PTR_IR_TYPE,ir::ArgumentPurpose::StructReturn));
     }
     for param in abi.params.iter() {
         sig.params
