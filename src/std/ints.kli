@@ -71,4 +71,5 @@ fun as_bool(x : int) -> Option[bool] =
     end
 
 
-fun extend_byte_to_uint(x : byte) -> uint = builtins.extend(x)
+fun extend_byte_to_uint(x : byte) -> uint = builtins.zero_extend(x)
+fun extend_byte_to_int(x : byte) -> int = builtins.zero_extend(x)

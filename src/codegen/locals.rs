@@ -3,14 +3,22 @@ use std::collections::{HashMap, hash_map::Entry};
 use cranelift::{codegen, frontend};
 
 use crate::{
-    CtxtRef, codegen::{
-        PassMode, backend_repr::{BackendRepr, backend_repr}, scalar_to_cranelift_type,
-    }, index_vec::IndexVec, layout::{Scalar, Size}, mir::{self, Local, PlaceBase, visitor::Visit}, scheme::Scheme, types::{self, GenericArgsRef},
+    CtxtRef,
+    codegen::{
+        PassMode,
+        backend_repr::{BackendRepr, backend_repr},
+        scalar_to_cranelift_type,
+    },
+    index_vec::IndexVec,
+    layout::{Scalar, Size},
+    mir::{self, Local, PlaceBase, visitor::Visit},
+    scheme::Scheme,
+    types::{self, GenericArgsRef},
 };
 #[derive(Clone, Copy)]
 pub enum ReturnSlot {
     Arg,
-    Scalar(Scalar,cranelift::frontend::Variable),
+    Scalar(Scalar, cranelift::frontend::Variable),
     Local(cranelift::codegen::ir::StackSlot),
     Void,
 }
@@ -29,11 +37,11 @@ pub enum LocalKind {
 }
 
 pub struct Locals {
-    return_slot : ReturnSlot,
+    return_slot: ReturnSlot,
     info: IndexVec<Local, CodegenLocalInfo>,
 }
 impl Locals {
-    pub fn return_slot(&self) -> ReturnSlot{
+    pub fn return_slot(&self) -> ReturnSlot {
         self.return_slot
     }
     pub fn new(
@@ -41,14 +49,17 @@ impl Locals {
         args: GenericArgsRef,
         ctxt: CtxtRef<'_>,
         builder: &mut frontend::FunctionBuilder,
-        ret_mode : PassMode,
+        ret_mode: PassMode,
     ) -> Self {
         let ssa = Ssa::new(body);
         Self {
-            return_slot:match ret_mode {
+            return_slot: match ret_mode {
                 PassMode::ByValue(single) if ssa.is_local_ssa(PlaceBase::ReturnPlace) => {
-                    ReturnSlot::Scalar(single, builder.declare_var(scalar_to_cranelift_type(single)))
-                },
+                    ReturnSlot::Scalar(
+                        single,
+                        builder.declare_var(scalar_to_cranelift_type(single)),
+                    )
+                }
                 PassMode::ByValue(_) | PassMode::ByPair(..) => {
                     let layout = ctxt
                         .layout_of(&Scheme::new(body.return_type.clone()).bind(args))
@@ -74,7 +85,9 @@ impl Locals {
                         ty,
                         kind: match repr {
                             BackendRepr::ZeroSized => LocalKind::ZeroSized,
-                            BackendRepr::Scalar(scalar) if ssa.is_local_ssa(PlaceBase::Local(id)) => {
+                            BackendRepr::Scalar(scalar)
+                                if ssa.is_local_ssa(PlaceBase::Local(id)) =>
+                            {
                                 LocalKind::Scalar(
                                     scalar,
                                     builder.declare_var(scalar_to_cranelift_type(scalar)),
@@ -111,7 +124,7 @@ impl Locals {
 
 pub struct Ssa {
     is_ssa: IndexVec<Local, bool>,
-    is_return_slot_ssa : bool
+    is_return_slot_ssa: bool,
 }
 impl Ssa {
     pub fn new(body: &mir::Body) -> Self {
@@ -143,12 +156,16 @@ impl Ssa {
         let mut visit = SsaVisitor::default();
         visit.visit_body(body);
         Self {
-            is_return_slot_ssa:visit.assignments.get(&PlaceBase::ReturnPlace).is_none_or(|count| matches!(count,AssignCount::Once)),
+            is_return_slot_ssa: visit
+                .assignments
+                .get(&PlaceBase::ReturnPlace)
+                .is_none_or(|count| matches!(count, AssignCount::Once)),
             is_ssa: body
                 .locals
                 .indices()
                 .map(|local| {
-                    let Some(AssignCount::Many) = visit.assignments.get(&PlaceBase::Local(local)) else {
+                    let Some(AssignCount::Many) = visit.assignments.get(&PlaceBase::Local(local))
+                    else {
                         return true;
                     };
                     false
@@ -158,9 +175,9 @@ impl Ssa {
     }
 
     pub fn is_local_ssa(&self, base: PlaceBase) -> bool {
-        match base{
+        match base {
             PlaceBase::Local(local) => self.is_ssa[local],
-            PlaceBase::ReturnPlace => self.is_return_slot_ssa
+            PlaceBase::ReturnPlace => self.is_return_slot_ssa,
         }
     }
 }

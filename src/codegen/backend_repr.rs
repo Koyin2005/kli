@@ -10,7 +10,6 @@ pub enum BackendRepr {
     ZeroSized,
     Memory,
 }
-
 pub fn backend_repr(layout: &layout::Layout) -> BackendRepr {
     if layout.is_zst() {
         return BackendRepr::ZeroSized;

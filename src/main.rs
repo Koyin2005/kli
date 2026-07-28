@@ -320,11 +320,11 @@ fn main() {
             .arg("foo.o")
             .output()
             .unwrap();
-        io::stdout().write(&output.stdout).unwrap();
-        io::stderr().write(&output.stderr).unwrap();
+        io::stdout().write_all(&output.stdout).unwrap();
+        io::stderr().write_all(&output.stderr).unwrap();
 
         let output = Command::new(r".\output.exe").output().unwrap();
-        io::stdout().write(&output.stdout).unwrap();
-        io::stderr().write(&output.stderr).unwrap();
+        io::stdout().write_all(&output.stdout).unwrap();
+        io::stderr().write_all(&output.stderr).unwrap();
     }
 }

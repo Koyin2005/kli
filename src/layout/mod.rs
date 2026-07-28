@@ -92,21 +92,21 @@ impl Align {
         self.0
     }
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug,PartialEq, Eq)]
 pub enum TagEncoding {
     Uninhabited,
     Field { scalar: Scalar },
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq, Eq)]
 pub struct VariantLayout {
     pub field: FieldLayout,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq, Eq)]
 pub struct FieldLayout {
     pub field: FieldId,
     pub layout: Layout,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq, Eq)]
 pub struct Layout {
     pub size: Size,
     pub alignment: Align,
@@ -217,7 +217,7 @@ pub struct FieldOffset {
     pub index_in_memory: usize,
     pub offset: Size,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug,PartialEq, Eq)]
 pub enum LayoutKind {
     Aggregate(Vec<FieldLayout>, IndexVec<FieldId, FieldOffset>),
     Variant {
@@ -293,7 +293,7 @@ fn aggregate_layout(mut field_layouts: Vec<(FieldId, Layout)>) -> Result<Layout,
 
     let mut offset = Size::ZERO;
     let mut max_align = field_layouts
-        .get(0)
+    .first()
         .map_or(POINTER_ALIGN, |(_, layout)| layout.alignment);
     let mut field_positions = IndexVec::from_value(field_layouts.len(), FieldOffset::default());
     let layouts = field_layouts

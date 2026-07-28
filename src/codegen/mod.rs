@@ -1,12 +1,21 @@
 use std::{cell::Cell, collections::HashMap};
 
 use crate::{
-    CtxtRef, codegen::{
-        backend_repr::{BackendRepr, backend_repr}, locals::{LocalKind, ReturnSlot},
-    }, index_vec::IndexVec, layout::{self, Align, LayoutKind, Scalar, Size, TagEncoding}, mir::{
+    CtxtRef,
+    codegen::{
+        backend_repr::{BackendRepr, backend_repr},
+        locals::{LocalKind, ReturnSlot},
+    },
+    index_vec::IndexVec,
+    layout::{self, Align, LayoutKind, Scalar, Size, TagEncoding},
+    mir::{
         self, AggregateKind, BasicBlockId, BinaryOp, ConstValue, Constant, Locals, Operand,
         OverflowOp, Place, PlaceBase, PlaceProjection, traversal::reachable,
-    }, monomorph::collect::{Instance, InstanceKind}, scheme::Scheme, typed_ast::FieldId, types::{CaseId, FunctionSig, GenericArgsRef, IntegerKind, Type},
+    },
+    monomorph::collect::{Instance, InstanceKind},
+    scheme::Scheme,
+    typed_ast::FieldId,
+    types::{CaseId, FunctionSig, GenericArgsRef, IntegerKind, Type},
 };
 use cranelift::{
     codegen::{
@@ -235,7 +244,7 @@ impl<'a> CodegenRoot<'a> {
                 sig.returns.push(AbiParam::new(PTR_IR_TYPE));
                 sig
             });
-            let alloc = self.make_function(
+            self.make_function(
                 &mut ctxt,
                 &mut f_ctxt,
                 "kli_alloc",
@@ -278,8 +287,7 @@ impl<'a> CodegenRoot<'a> {
                     builder.ins().return_(&[ptr]);
                     builder.seal_block(zero_size_block);
                 },
-            );
-            alloc
+            )
         };
         let print_int =
             self.declare_function("kli_print_int", cranelift_module::Linkage::Import, &{
@@ -534,12 +542,12 @@ impl MemPlace {
             ir::immediates::Imm64::new(self.offset as i64),
             false,
         );
-        let src = builder.builder.ins().uadd_overflow_trap(
+        builder.builder.ins().uadd_overflow_trap(
             self.base_ptr,
             src_offset,
             TrapCode::unwrap_user(1),
-        );
-        src
+        )
+        
     }
     fn offset_by(&self, value: i32) -> Self {
         Self {
@@ -586,7 +594,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             functions,
             ctxt,
             panic_block: Cell::default(),
-            local_info: locals::Locals::new(body, args, ctxt, &mut builder,abi.ret),
+            local_info: locals::Locals::new(body, args, ctxt, &mut builder, abi.ret),
             return_ty: Scheme::new(body.return_type.clone()).bind(args),
             abi,
             args,
@@ -838,7 +846,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             PlaceBase::ReturnPlace => {
                 let ty = self.return_ty.clone();
                 let ptr = match self.local_info.return_slot() {
-                    ReturnSlot::Scalar(single,variable) => {
+                    ReturnSlot::Scalar(single, variable) => {
                         return Ok(CodegenPlace::Ssa(ty, single, variable));
                     }
                     ReturnSlot::Arg => self.builder.block_params(self.block_map.entry())[0],
@@ -1029,7 +1037,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         }
     }
     fn codgen_alloc_call(&mut self, ty: &Type, count: u64) -> ir::Value {
-        let ty_layout = self.ctxt.layout_of(&ty).unwrap();
+        let ty_layout = self.ctxt.layout_of(ty).unwrap();
 
         let total_size = ty_layout.size.mul(count).in_bytes();
         let align = self.build_int_const(&Type::UINT, ty_layout.alignment.in_bytes().into());
@@ -1351,7 +1359,64 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 let ptr = self.load_place(&array_place).unwrap().first_value();
                 self.store_immediate(place, ptr);
             }
-            mir::Rvalue::Cast(..) => todo!("Transmutation"),
+            mir::Rvalue::Cast(kind, operand) => match kind {
+                mir::CastKind::Transmute(to) => {
+                    //Zero sized transmutes are no ops
+                    let Ok(dst_place) = self.eval_place(place) else {
+                        return;
+                    };
+                    /*  
+                        We need to reinterpret out 'from' value based of its byte representation,
+                        so we store it in memory and then copy that value as a 'to'
+                    */
+                    let operand = self.eval_operand(operand);
+                    let to_ty = Scheme::new(to.clone()).bind(self.args);
+                    let to_layout = self.ctxt.layout_of(&to_ty).unwrap();
+
+                    let from_layout = self.ctxt.layout_of(&operand.ty).unwrap();
+                    match (backend_repr(&from_layout),backend_repr(&to_layout)){
+                        (BackendRepr::Scalar(from),BackendRepr::Scalar(to)) => {
+                            let from = scalar_to_cranelift_type(from);
+                            let to = scalar_to_cranelift_type(to);
+                            let mut value = operand.force_immediate_value(self).unwrap().first_value();
+                            if from != to{
+                                value = self.builder.ins().bitcast(to, MemFlagsData::new(), value);
+                            }
+                            self.store_immediate(dst_place, value);
+                            return;
+                        },
+                        _ if from_layout == to_layout => {
+                            self.store_value(place, operand);
+                            return;
+                        }
+                        _ => ()
+                    }
+
+                    let intermidiate_slot = self.builder.create_sized_stack_slot(
+                        ir::StackSlotData::new(ir::StackSlotKind::ExplicitSlot, to_layout.size.in_bytes().try_into().unwrap(), to_layout.alignment.pow_of_2()));
+                    let intermidiate_slot = self.builder.ins().stack_addr(PTR_IR_TYPE, intermidiate_slot, Offset32::new(0));
+
+                    let transmuted_place = MemPlace::new(intermidiate_slot, to_layout, to_ty);
+                    self.store_operand_with_mem_place(transmuted_place.clone(),operand);
+                    self.copy(CodegenPlace::MemPlace(transmuted_place), dst_place);
+                },
+                mir::CastKind::IntegerCast(cast) => match cast {
+                    mir::IntegerCast::ZeroExtendByteTo(kind) => {
+                        let ty = ir::types::I64;
+                        let value = self
+                            .eval_operand(operand)
+                            .force_immediate_value(self)
+                            .unwrap()
+                            .first_value();
+                        let value = match kind {
+                            IntegerKind::Unsigned => self.builder.ins().uextend(ty, value),
+                            IntegerKind::Signed => self.builder.ins().uextend(ty, value),
+                        };
+                        let place = self.eval_place(place).unwrap();
+                        self.store_immediate(place, value);
+                    }
+                },
+            },
             mir::Rvalue::Len(array_place) => {
                 let place = self.eval_place(place).unwrap();
                 let len_place = self.eval_place(array_place).unwrap();
@@ -1429,8 +1494,10 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             param_values
         };
         for (i, local) in body.params_iter().enumerate() {
-            if matches!(self.local_info.info_for(local).kind, LocalKind::Memory(_)|LocalKind::Scalar(..))
-                && let Ok(place) = self.eval_place(&Place::local(local))
+            if matches!(
+                self.local_info.info_for(local).kind,
+                LocalKind::Memory(_) | LocalKind::Scalar(..)
+            ) && let Ok(place) = self.eval_place(&Place::local(local))
             {
                 let (param_index, scalar_ty) = param_values[i];
                 let Some(scalar_ty) = scalar_ty else {
