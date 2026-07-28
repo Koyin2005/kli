@@ -109,6 +109,7 @@ struct FunctionInfo {
 }
 struct RuntimeFunctions {
     panic: FuncId,
+    alloc: FuncId,
 }
 struct FunctionMap {
     functions: HashMap<Instance, FunctionInfo>,
@@ -148,7 +149,36 @@ impl<'a> CodegenRoot<'a> {
             instances: instances.into_iter().collect(),
         }
     }
-
+    fn declare_function(
+        &mut self,
+        name: &str,
+        linkage: cranelift_module::Linkage,
+        sig: &ir::Signature,
+    ) -> FuncId {
+        self.module.declare_function(name, linkage, sig).unwrap()
+    }
+    fn make_function(
+        &mut self,
+        ctxt: &mut codegen::Context,
+        f_ctxt: &mut frontend::FunctionBuilderContext,
+        name: &str,
+        linkage: cranelift_module::Linkage,
+        sig: &ir::Signature,
+        build_function: impl FnOnce(&mut frontend::FunctionBuilder, ir::Block),
+    ) -> FuncId {
+        let function = self.declare_function(name, linkage, sig);
+        {
+            let mut builder = frontend::FunctionBuilder::new(&mut ctxt.func, f_ctxt);
+            let entry = builder.create_block();
+            builder.switch_to_block(entry);
+            build_function(&mut builder, entry);
+            builder.finalize(self.module.target_config());
+            println!("{:?}", ctxt.func);
+            self.module.define_function(function, ctxt).unwrap();
+            self.module.clear_context(ctxt);
+        }
+        function
+    }
     pub fn codegen_functions(mut self, mir_ctxt: &mir::Context) -> cranelift_object::ObjectProduct {
         for (i, instance) in self.instances.iter().enumerate() {
             let name = if self
@@ -183,29 +213,28 @@ impl<'a> CodegenRoot<'a> {
         let mut ctxt = codegen::Context::new();
         let mut f_ctxt = frontend::FunctionBuilderContext::new();
         //Declare panic function
-        let panic_function = self
-            .module
-            .declare_function(
-                "panic",
-                cranelift_module::Linkage::Local,
-                &ir::Signature::new(self.module.target_config().default_call_conv),
-            )
-            .unwrap();
-        {
-            let mut builder = frontend::FunctionBuilder::new(&mut ctxt.func, &mut f_ctxt);
-            let entry = builder.create_block();
-            builder.switch_to_block(entry);
-            builder.ins().trap(TrapCode::user(1).unwrap());
-            builder.seal_block(entry);
-            builder.finalize(self.module.target_config());
-            println!("{:?}", ctxt.func);
-            self.module
-                .define_function(panic_function, &mut ctxt)
-                .unwrap();
-            self.module.clear_context(&mut ctxt);
-        }
+        let panic_function = self.make_function(
+            &mut ctxt,
+            &mut f_ctxt,
+            "panic",
+            cranelift_module::Linkage::Export,
+            &ir::Signature::new(self.module.target_config().default_call_conv),
+            |builder, entry| {
+                builder.ins().trap(TrapCode::user(1).unwrap());
+                builder.seal_block(entry);
+            },
+        );
+        let allocate_function =
+            self.declare_function("malloc", cranelift_module::Linkage::Import, &{
+                let mut sig = ir::Signature::new(self.module.target_config().default_call_conv);
+                sig.params.push(AbiParam::new(ir::types::I64));
+                sig.returns.push(AbiParam::new(PTR_IR_TYPE));
+                sig
+            });
+
         let runtime = RuntimeFunctions {
             panic: panic_function,
+            alloc: allocate_function,
         };
 
         for instance in self.instances {
@@ -249,7 +278,7 @@ enum LocalKind {
     ZeroSized,
     Memory(codegen::ir::StackSlot),
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct OperandValue {
     ty: Type,
     kind: OperandValueKind,
@@ -295,7 +324,7 @@ impl ScalarValue {
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum OperandValueKind {
     Indirect(PlaceValue),
     ZeroSized,
@@ -413,11 +442,21 @@ impl PlaceValue {
             ir::immediates::Imm64::new(self.offset as i64),
             false,
         );
-        let (src, _) = builder
-            .builder
-            .ins()
-            .uadd_overflow(self.base_ptr, src_offset);
+        let src = builder.builder.ins().uadd_overflow_trap(
+            self.base_ptr,
+            src_offset,
+            TrapCode::unwrap_user(1),
+        );
         src
+    }
+    fn offset_by(&self, value: i32) -> Self {
+        Self {
+            ty: self.ty.clone(),
+            layout: self.layout.clone(),
+            base_ptr: self.base_ptr,
+            offset: self.offset + value,
+            scalar: self.scalar,
+        }
     }
 }
 struct CodegenLocalInfo {
@@ -541,7 +580,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
     fn copy(&mut self, place: PlaceValue, dst_place: PlaceValue) {
         let size = self.ctxt.layout_of(&dst_place.ty).unwrap().size;
         let src = place.ptr(self);
-        let dst = place.ptr(self);
+        let dst = dst_place.ptr(self);
         self.builder.emit_small_memory_copy(
             self.target_config,
             dst,
@@ -648,8 +687,33 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 mir::PlaceProjection::Field(field_id) => {
                     place_value.project_field(self.ctxt, field_id)
                 }
-                mir::PlaceProjection::ConstantIndex(_) => todo!("Constant index"),
-                mir::PlaceProjection::Index(_) => todo!("Array index"),
+                mir::PlaceProjection::ConstantIndex(index) => {
+                    let ptr_value = self.load_place_value(&place_value).unwrap().first_value();
+                    PlaceValue {
+                        ty: place_value.ty,
+                        layout: place_value.layout,
+                        base_ptr: ptr_value,
+                        offset: index.try_into().unwrap(),
+                        scalar: place_value.scalar,
+                    }
+                }
+                mir::PlaceProjection::Index(local) => {
+                    let ptr_value = self.load_place_value(&place_value).unwrap().first_value();
+                    let index_place = self.eval_addr_of_place(&mir::Place::local(local)).unwrap();
+                    let index_value = self.load_place_value(&index_place).unwrap().first_value();
+                    let offset_ptr = self.builder.ins().uadd_overflow_trap(
+                        ptr_value,
+                        index_value,
+                        TrapCode::unwrap_user(1),
+                    );
+                    PlaceValue {
+                        ty: place_value.ty,
+                        layout: place_value.layout,
+                        base_ptr: offset_ptr,
+                        offset: 0,
+                        scalar: place_value.scalar,
+                    }
+                }
                 mir::PlaceProjection::CaseDowncast(case, ..) => {
                     place_value.project_downcast(self.ctxt, case)
                 }
@@ -697,7 +761,6 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             kind: match constant.value {
                 mir::ConstValue::ZeroSized => OperandValueKind::ZeroSized,
                 mir::ConstValue::Named(..) => todo!(),
-                mir::ConstValue::ClosureShim(..) => todo!(),
                 mir::ConstValue::Scalar(value) => OperandValueKind::Value(ScalarValue::Single(
                     self.build_int_const(&constant.ty, value),
                 )),
@@ -790,6 +853,22 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             }
             _ => unreachable!(),
         }
+    }
+    fn codgen_alloc_call(&mut self, ty: &Type, count: u64) -> ir::Value {
+        let ty_layout = self.ctxt.layout_of(&ty).unwrap();
+
+        let total_size = ty_layout.size.mul(count).in_bytes();
+        let size_val = self.build_int_const(&Type::UINT, total_size.into());
+        self.codegen_direct_call_single_scalar_return(self.runtime_functions.alloc, &[size_val])
+    }
+    fn codegen_direct_call_single_scalar_return(
+        &mut self,
+        id: FuncId,
+        args: &[ir::Value],
+    ) -> ir::Value {
+        let func = self.module.declare_func_in_func(id, self.builder.func);
+        let call = self.builder.ins().call(func, args);
+        self.builder.inst_results(call)[0]
     }
     fn codegen_direct_call(
         &mut self,
@@ -968,8 +1047,13 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     None,
                 )
             }
-            BinaryOp::Equals => todo!(),
-            BinaryOp::BitwiseAnd => todo!(),
+            BinaryOp::Equals => (
+                self.builder
+                    .ins()
+                    .icmp(ir::condcodes::IntCC::Equal, left_value, right_value),
+                None,
+            ),
+            BinaryOp::BitwiseAnd => (self.builder.ins().band(left_value, right_value), None),
         };
         let place = self.eval_addr_of_place(place).unwrap();
         if let Some(right) = right {
@@ -1024,8 +1108,42 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     }
                 }
             },
-            mir::Rvalue::AllocateArray(_, _) => todo!("alloc array"),
-            mir::Rvalue::AllocateBox(_, _) => todo!("alloc box"),
+            mir::Rvalue::AllocateArray(ty, fields) => {
+                let ty = Scheme::new(ty.clone()).bind(self.args);
+                let ty_layout = self.ctxt.layout_of(&ty).unwrap();
+                let len: u64 = fields.len().try_into().unwrap();
+                let ptr = self.codgen_alloc_call(&ty, len);
+                let place_value = PlaceValue::new(ptr, ty_layout.clone(), ty.clone());
+                for (i, operand) in fields.iter().enumerate() {
+                    let i: u64 = i.try_into().unwrap();
+                    let offset: u64 = ty_layout.size.in_bytes() * i;
+                    let offset: i32 = offset.try_into().unwrap();
+                    let value = self.eval_operand(operand);
+                    self.store_operand_with_place(place_value.offset_by(offset), value);
+                }
+                let len_value = self.build_int_const(&Type::UINT, len.into());
+                self.store_value(
+                    place,
+                    OperandValue {
+                        ty: Type::array(ty),
+                        kind: OperandValueKind::Value(ScalarValue::pair(
+                            ptr,
+                            len_value,
+                            layout::POINTER_SIZE,
+                        )),
+                    },
+                );
+            }
+            mir::Rvalue::AllocateBox(ty, operand) => {
+                let ty = Scheme::new(ty.clone()).bind(self.args);
+                let ptr = self.codgen_alloc_call(&ty, 1);
+                let value = self.eval_operand(operand);
+                let box_inner_ptr = PlaceValue::new(ptr, self.ctxt.layout_of(&ty).unwrap(), ty);
+                self.store_operand_with_place(box_inner_ptr.clone(), value.clone());
+                let box_inner_ptr_value = self.load_place_value(&box_inner_ptr).unwrap();
+                let place = self.eval_addr_of_place(place).unwrap();
+                self.store_scalar(place, box_inner_ptr_value);
+            }
             mir::Rvalue::Use(operand) => {
                 self.store_operand(place, operand);
             }
@@ -1036,9 +1154,20 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 let (left, right) = &**operands;
                 self.codgen_binary_op(place, *binary_op, left, right);
             }
-            mir::Rvalue::AddrOf(_) => todo!("Get addr of"),
+            mir::Rvalue::AddrOf(array_place) => {
+                let place = self.eval_addr_of_place(place).unwrap();
+                let array_place = self.eval_addr_of_place(array_place).unwrap();
+                let ptr = self.load_place_value(&array_place).unwrap().first_value();
+                self.store_immediate(place, ptr);
+            }
             mir::Rvalue::Cast(..) => todo!("Transmutation"),
-            mir::Rvalue::Len(_) => todo!("Len"),
+            mir::Rvalue::Len(array_place) => {
+                let place = self.eval_addr_of_place(place).unwrap();
+                let len_place = self.eval_addr_of_place(array_place).unwrap();
+                let len_place =
+                    len_place.offset_by(layout::POINTER_SIZE.in_bytes().try_into().unwrap());
+                self.copy(len_place, place);
+            }
             mir::Rvalue::Discriminant(variant_place) => {
                 let Ok(dst_place) = self.eval_addr_of_place(place) else {
                     unreachable!()

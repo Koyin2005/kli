@@ -54,9 +54,6 @@ impl<'ctxt> MirDump<'ctxt> {
             BodySource::Lambda(lambda) => {
                 write!(self.output, "lambda {}", self.ctxt.display(lambda))?;
             }
-            BodySource::ClosureShim(lambda) => {
-                write!(self.output, "lambda_shim {}", self.ctxt.display(lambda))?;
-            }
         }
         writeln!(self.output, "() -> {}", body.return_type)?;
         for (local, info) in body.locals.iter_enumerated() {
@@ -200,7 +197,7 @@ impl<'ctxt> MirDump<'ctxt> {
         Ok(())
     }
     fn write_constant(&mut self, ty: &types::Type, value: &ConstValue) -> std::io::Result<()> {
-        if let ConstValue::Named(id, args) | ConstValue::ClosureShim(id, args) = value {
+        if let ConstValue::Named(id, args)  = value {
             return write!(
                 self.output,
                 "{}{}",
@@ -241,14 +238,6 @@ impl<'ctxt> MirDump<'ctxt> {
                         self.output,
                         "{}{}",
                         self.ctxt.display_path_for(*id),
-                        display_generic_args(args)
-                    )
-                }
-                ConstValue::ClosureShim(id, args) => {
-                    write!(
-                        self.output,
-                        "closure_shim {}{}",
-                        self.ctxt.display(*id),
                         display_generic_args(args)
                     )
                 }

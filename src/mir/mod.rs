@@ -138,7 +138,6 @@ impl Place {
 pub enum ConstValue {
     ZeroSized,
     Named(DefId, GenericArgs),
-    ClosureShim(DefId, GenericArgs),
     Scalar(i128),
     Variant(CaseId, Option<Box<Constant>>),
     Record(Box<[Constant]>),
@@ -551,12 +550,10 @@ impl BasicBlock {
 pub enum BodySource {
     Function(DefId),
     Lambda(DefId),
-    ClosureShim(DefId),
 }
 impl BodySource {
     pub fn def_id(self) -> DefId {
         match self {
-            Self::ClosureShim(id) => id,
             Self::Function(id) => id,
             Self::Lambda(id) => id,
         }
