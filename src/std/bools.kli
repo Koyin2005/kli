@@ -10,5 +10,12 @@ fun as_int(x : bool) -> int =
     | false -> 0
     end
 
+
+fun as_uint(x : bool) -> uint = 
+    case x of 
+    | true -> 1
+    | false -> 0
+    end
+
 fun as_byte(x : bool) -> byte = 
     unsafe builtins.transmute(x) end

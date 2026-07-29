@@ -212,7 +212,7 @@ impl<'a> CodegenRoot<'a> {
                 function.return_type.clone(),
             ))
             .bind(&instance.args);
-        println!("{:?}",instance);
+            println!("{:?}", instance);
             let abi = call_abi(self.ctxt, &sig);
             let sig = signature(&abi, self.module.target_config());
             self.map.functions.insert(
@@ -881,14 +881,17 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             kind: match constant.value {
                 mir::ConstValue::ZeroSized => OperandValueKind::ZeroSized,
                 mir::ConstValue::Named(id, ref args) => {
-                    let kind =InstanceKind::Function(id);
+                    let kind = InstanceKind::Function(id);
                     let function = Instance {
                         args: args.clone(),
                         kind,
                     };
-                    let func_id = self.functions.functions.get(&function).unwrap_or_else(||{
-                        panic!("not found {:?}",function)
-                    }).id;
+                    let func_id = self
+                        .functions
+                        .functions
+                        .get(&function)
+                        .unwrap_or_else(|| panic!("not found {:?}", function))
+                        .id;
                     let function = self.module.declare_func_in_func(func_id, self.builder.func);
                     OperandValueKind::Value(ScalarValue::Single(
                         self.builder.ins().func_addr(PTR_IR_TYPE, function),
@@ -989,16 +992,22 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             _ => unreachable!(),
         }
     }
-    fn codgen_alloc_call(&mut self, ty: &Type, count: u64) -> ir::Value {
-        let ty_layout = self.ctxt.layout_of(ty).unwrap();
-
-        let total_size = ty_layout.size.mul(count).in_bytes();
-        let align = self.build_int_const(&Type::UINT, ty_layout.alignment.in_bytes().into());
-        let size_val = self.build_int_const(&Type::UINT, total_size.into());
+    fn codegen_alloc_call(
+        &mut self,
+        size_in_bytes: ir::Value,
+        align_in_bytes: ir::Value,
+    ) -> ir::Value {
         self.codegen_direct_call_single_scalar_return(
             self.runtime_functions.alloc,
-            &[size_val, align],
+            &[size_in_bytes, align_in_bytes],
         )
+    }
+    fn codgen_static_size_alloc_call(&mut self, ty: &Type, count: u64) -> ir::Value {
+        let ty_layout = self.ctxt.layout_of(ty).unwrap();
+        let total_size = ty_layout.size.mul(count).in_bytes();
+        let size_val = self.build_int_const(&Type::UINT, total_size.into());
+        let align = self.build_int_const(&Type::UINT, ty_layout.alignment.in_bytes().into());
+        self.codegen_alloc_call(size_val, align)
     }
     fn codegen_direct_call_no_return(&mut self, id: FuncId, args: &[ir::Value]) {
         let func = self.module.declare_func_in_func(id, self.builder.func);
@@ -1070,9 +1079,12 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     args: generic_args.clone(),
                     kind: InstanceKind::Function(id),
                 };
-                let id = self.functions.functions.get(&function).unwrap_or_else(||{
-                    panic!("not found {:?}",function)
-                }).id;
+                let id = self
+                    .functions
+                    .functions
+                    .get(&function)
+                    .unwrap_or_else(|| panic!("not found {:?}", function))
+                    .id;
                 self.codegen_direct_call(ret_place, &abi, id, &args);
             }
             Err(value) => {
@@ -1262,11 +1274,108 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     }
                 }
             },
+            mir::Rvalue::Repeat { ty, value, count } => {
+                let ty = Scheme::new(ty.clone()).bind(self.args);
+                let ty_layout = self.ctxt.layout_of(&ty).unwrap();
+
+                let byte_size = self.build_int_const(&Type::UINT, ty_layout.size.in_bytes().into());
+                let byte_align =
+                    self.build_int_const(&Type::UINT, ty_layout.alignment.in_bytes().into());
+                let value = self.eval_operand(value);
+                let count = self
+                    .eval_operand(count)
+                    .force_immediate_value(self)
+                    .unwrap()
+                    .first_value();
+                let byte_size = self.builder.ins().imul(byte_size, count);
+
+                let ptr = self.codegen_alloc_call(byte_size, byte_align);
+                if ty_layout.is_zst() {
+                    let place = self.eval_place(place).unwrap();
+                    self.store_immediate_pair(place, ptr, count, layout::POINTER_SIZE);
+                    return;
+                }
+                if ty_layout.size == Size::BYTE {
+                    let value = value.force_immediate_value(self).unwrap().first_value();
+                    self.builder
+                        .call_memset(self.target_config, ptr, value, byte_size);
+                    let place = self.eval_place(place).unwrap();
+                    self.store_immediate_pair(place, ptr, count, layout::POINTER_SIZE);
+                    return;
+                }
+                /*
+                   let ptr = kli_alloc(size,align);
+                   let mut i = 0;
+                   while i < count{
+                       offset(ptr,i)^ = value;
+                       i = i + 1;
+                   }
+                */
+                let loop_condition = self.builder.create_block();
+                let loop_body = self.builder.create_block();
+                let loop_end = self.builder.create_block();
+                let loop_count = self.builder.declare_var(ir::types::I64);
+                {
+                    let zero_value = self.build_int_const(&Type::UINT, 0);
+                    self.builder.def_var(loop_count, zero_value);
+                    self.builder.ins().jump(loop_condition, &[]);
+                }
+
+                {
+                    self.builder.switch_to_block(loop_condition);
+                    let current_loop_count = self.builder.use_var(loop_count);
+                    let loop_count_lesser_than_len = self.builder.ins().icmp(
+                        ir::condcodes::IntCC::UnsignedLessThan,
+                        current_loop_count,
+                        count,
+                    );
+                    self.builder.ins().brif(
+                        loop_count_lesser_than_len,
+                        loop_body,
+                        [],
+                        loop_end,
+                        [],
+                    );
+                }
+                {
+                    self.builder.switch_to_block(loop_body);
+                    let var_use = self.builder.use_var(loop_count);
+                    let element_size : i64 = ty_layout.size.in_bytes().try_into().unwrap();
+                    let new_offset = self.builder.ins().imul_imm_u(var_use, element_size);
+                    let ptr = self.builder.ins().iadd(ptr, new_offset);
+                    let place_value = MemPlace::new(ptr, ty_layout.clone(), ty.clone());
+                    self.store_operand_with_mem_place(place_value, value);
+
+                    let one_value = self.build_int_const(&Type::UINT, 1);
+                    let new_val = self.builder.ins().iadd(var_use, one_value);
+                    self.builder.def_var(loop_count, new_val);
+
+                    self.builder.ins().jump(loop_condition, []);
+                }
+                self.builder.switch_to_block(loop_end);
+                let place = self.eval_place(place).unwrap();
+                self.store_immediate_pair(place, ptr, count, layout::POINTER_SIZE);
+            }
             mir::Rvalue::AllocateArray(ty, fields) => {
                 let ty = Scheme::new(ty.clone()).bind(self.args);
                 let ty_layout = self.ctxt.layout_of(&ty).unwrap();
                 let len: u64 = fields.len().try_into().unwrap();
-                let ptr = self.codgen_alloc_call(&ty, len);
+                let ptr = self.codgen_static_size_alloc_call(&ty, len);
+                if ty_layout.is_zst() || fields.is_empty() {
+                    let len_value = self.build_int_const(&Type::UINT, len.into());
+                    self.store_value(
+                        place,
+                        OperandValue {
+                            ty: Type::array(ty),
+                            kind: OperandValueKind::Value(ScalarValue::pair(
+                                ptr,
+                                len_value,
+                                layout::POINTER_SIZE,
+                            )),
+                        },
+                    );
+                    return;
+                }
                 let place_value = MemPlace::new(ptr, ty_layout.clone(), ty.clone());
                 for (i, operand) in fields.iter().enumerate() {
                     let i: u64 = i.try_into().unwrap();
@@ -1290,7 +1399,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             }
             mir::Rvalue::AllocateBox(ty, operand) => {
                 let ty = Scheme::new(ty.clone()).bind(self.args);
-                let ptr = self.codgen_alloc_call(&ty, 1);
+                let ptr = self.codgen_static_size_alloc_call(&ty, 1);
                 let value = self.eval_operand(operand);
                 let box_inner_ptr = MemPlace::new(ptr, self.ctxt.layout_of(&ty).unwrap(), ty);
                 self.store_operand_with_mem_place(box_inner_ptr.clone(), value.clone());

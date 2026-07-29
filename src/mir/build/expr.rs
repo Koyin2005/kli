@@ -272,6 +272,14 @@ impl Builder<'_> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::ArrayRepeat => {
+                let [value, count] = operands.try_into().unwrap();
+                let Type::UINT = args[1].ty else {
+                    unreachable!()
+                };
+                let ty = ty.as_array().unwrap().clone();
+                BuiltinResult::Rvalue(Rvalue::Repeat { ty, value, count })
+            }
             Builtin::ZeroExtend => {
                 let [operand] = operands.try_into().unwrap();
                 let Type::Int(kind) = ty else { unreachable!() };

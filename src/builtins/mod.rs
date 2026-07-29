@@ -11,6 +11,7 @@ pub enum Builtin {
     WrappingAdd,
     OverflowingAdd,
     ZeroExtend,
+    ArrayRepeat,
 }
 impl Builtin {
     const _NO_REPEATS: () = {
@@ -32,7 +33,7 @@ impl Builtin {
             i += 1;
         }
     };
-    pub const COUNT: usize = 7;
+    pub const COUNT: usize = 8;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
         Builtin::BoxAlloc,
         Builtin::Transmute,
@@ -41,6 +42,7 @@ impl Builtin {
         Builtin::WrappingAdd,
         Builtin::OverflowingAdd,
         Builtin::ZeroExtend,
+        Builtin::ArrayRepeat,
     ];
     pub const fn name(self) -> &'static str {
         match self {
@@ -51,6 +53,7 @@ impl Builtin {
             Builtin::Len => "array_len",
             Builtin::BoxAlloc => "box_alloc",
             Builtin::ZeroExtend => "zero_extend",
+            Builtin::ArrayRepeat => "array_repeat",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {

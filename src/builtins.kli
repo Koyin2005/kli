@@ -19,3 +19,6 @@ fun overflowing_add[T](x : T, y : T) -> (T, bool);
 
 @builtin
 fun zero_extend[T,U](x : T) -> U;
+
+@builtin
+fun array_repeat[T](value : T, count : uint) -> array[T];

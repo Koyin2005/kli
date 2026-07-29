@@ -77,6 +77,14 @@ pub trait Visit {
                     self.visit_operand(loc, operand);
                 }
             }
+            Rvalue::Repeat {
+                ty: _,
+                value,
+                count,
+            } => {
+                self.visit_operand(loc, value);
+                self.visit_operand(loc, count);
+            }
             Rvalue::Binary(_, operands) => {
                 let (left, right) = operands.as_ref();
                 self.visit_operand(loc, left);
@@ -207,6 +215,14 @@ pub trait MutVisit {
                 for field in fields {
                     self.visit_operand(loc, field);
                 }
+            }
+            Rvalue::Repeat {
+                ty: _,
+                value,
+                count,
+            } => {
+                self.visit_operand(loc, value);
+                self.visit_operand(loc, count);
             }
             Rvalue::AllocateArray(_, elements) => {
                 for element in elements {

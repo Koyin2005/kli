@@ -32,14 +32,9 @@ impl Builder<'_> {
         ctxt: CtxtRef,
         mir_context: &mut Context,
         function: &typed_ast::Function,
-        src : BodySource
+        src: BodySource,
     ) {
-        let mut builder = Builder::new(
-            mir_context,
-            src,
-            function.return_type.clone(),
-            ctxt,
-        );
+        let mut builder = Builder::new(mir_context, src, function.return_type.clone(), ctxt);
         builder.add_param_locals(
             function
                 .params

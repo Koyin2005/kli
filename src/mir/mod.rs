@@ -1,7 +1,17 @@
 use std::{collections::HashMap, fmt::Display};
 
 use crate::{
-    Symbol, collect::CtxtRef, def_ids::DefId, define_id, index_vec::IndexVec, mir::basic_blocks::BasicBlocks, monomorph::collect::InstanceKind, resolved_ast::{Var, VarId}, src_loc::SrcLoc, typed_ast::FieldId, types::{CaseId, FieldName, GenericArgs, IntegerKind, Type},
+    Symbol,
+    collect::CtxtRef,
+    def_ids::DefId,
+    define_id,
+    index_vec::IndexVec,
+    mir::basic_blocks::BasicBlocks,
+    monomorph::collect::InstanceKind,
+    resolved_ast::{Var, VarId},
+    src_loc::SrcLoc,
+    typed_ast::FieldId,
+    types::{CaseId, FieldName, GenericArgs, IntegerKind, Type},
 };
 pub mod basic_blocks;
 pub mod build;
@@ -240,6 +250,11 @@ pub enum CastKind {
 #[derive(Clone, Debug)]
 pub enum Rvalue {
     Aggregate(AggregateKind, IndexVec<FieldId, Operand>),
+    Repeat {
+        ty: Type,
+        value: Operand,
+        count: Operand,
+    },
     AllocateArray(Type, Vec<Operand>),
     AllocateBox(Type, Operand),
     Use(Operand),
@@ -260,7 +275,20 @@ impl Rvalue {
             | Self::AddrOf(_)
             | Self::Len(_)
             | Self::Discriminant(_) => true,
-            Self::AllocateArray(..) | Self::AllocateBox(..) | Self::Call(..) => false,
+            Self::Repeat {
+                ty: _,
+                value: _,
+                count:
+                    Operand::Constant(Constant {
+                        value: ConstValue::Scalar(value),
+                        ..
+                    }),
+            } => *value == 0,
+
+            Self::AllocateArray(..)
+            | Self::AllocateBox(..)
+            | Self::Call(..)
+            | Self::Repeat { .. } => false,
         }
     }
 
@@ -286,7 +314,9 @@ impl Rvalue {
                 BinaryOp::Equals => Type::Bool,
                 BinaryOp::Lesser | BinaryOp::Greater => Type::Bool,
             },
-            Rvalue::AllocateArray(element, _) => Type::array(element.clone()),
+            Rvalue::AllocateArray(element, _) | Rvalue::Repeat { ty: element, .. } => {
+                Type::array(element.clone())
+            }
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 AggregateKind::Record { field_names } => Type::Record(
                     field_names
@@ -553,8 +583,8 @@ impl BodySource {
             Self::Function(id) => id,
         }
     }
-    pub fn as_instance(self) -> InstanceKind{
-        match self{
+    pub fn as_instance(self) -> InstanceKind {
+        match self {
             Self::Function(id) => InstanceKind::Function(id),
         }
     }

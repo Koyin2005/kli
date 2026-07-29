@@ -13,6 +13,8 @@ fun len[T](this : array[T]) -> uint = builtins.array_len(this)
 
 fun addr_eq[T](this : array[T], other : array[T]) -> bool = builtins.array_addr(this) == builtins.array_addr(other)
 
+fun repeat[T](count : uint, value : T) -> array[T] = builtins.array_repeat(value,count)
+
 fun get_checked[T](this : array[T], index : uint) -> Option[T] = 
     case index < len(this) of 
     | true -> Option.Some((this).[index])
