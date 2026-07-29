@@ -239,12 +239,12 @@ pub enum BinaryOp {
 }
 #[derive(Clone, Debug)]
 pub enum IntegerCast {
-    ZeroExtendByteTo(IntegerKind)
+    ZeroExtendByteTo(IntegerKind),
 }
 #[derive(Clone, Debug)]
 pub enum CastKind {
     Transmute(Type),
-    IntegerCast(IntegerCast)
+    IntegerCast(IntegerCast),
 }
 #[derive(Clone, Debug)]
 pub enum Rvalue {

@@ -10,7 +10,7 @@ use crate::{
         scalar_to_cranelift_type,
     },
     index_vec::IndexVec,
-    layout::{Scalar, Size},
+    layout::Scalar,
     mir::{self, Local, PlaceBase, visitor::Visit},
     scheme::Scheme,
     types::{self, GenericArgsRef},
@@ -26,13 +26,6 @@ pub enum ReturnSlot {
 pub enum LocalKind {
     ZeroSized,
     Scalar(Scalar, cranelift::frontend::Variable),
-    ScalarPair(
-        Scalar,
-        Scalar,
-        Size,
-        cranelift::frontend::Variable,
-        cranelift::frontend::Variable,
-    ),
     Memory(cranelift::codegen::ir::StackSlot),
 }
 
@@ -93,17 +86,6 @@ impl Locals {
                                     builder.declare_var(scalar_to_cranelift_type(scalar)),
                                 )
                             }
-                            BackendRepr::ScalarPair {
-                                first,
-                                second,
-                                second_offset,
-                            } if ssa.is_local_ssa(PlaceBase::Local(id)) => LocalKind::ScalarPair(
-                                first,
-                                second,
-                                second_offset,
-                                builder.declare_var(scalar_to_cranelift_type(first)),
-                                builder.declare_var(scalar_to_cranelift_type(second)),
-                            ),
                             _ => LocalKind::Memory(builder.create_sized_stack_slot(
                                 codegen::ir::StackSlotData::new(
                                     codegen::ir::StackSlotKind::ExplicitSlot,

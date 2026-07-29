@@ -10,7 +10,7 @@ use crate::{
     layout::{self, Align, LayoutKind, Scalar, Size, TagEncoding},
     mir::{
         self, AggregateKind, BasicBlockId, BinaryOp, ConstValue, Constant, Locals, Operand,
-        OverflowOp, Place, PlaceBase, PlaceProjection, traversal::reachable,
+        OverflowOp, Place, PlaceBase, traversal::reachable,
     },
     monomorph::collect::{Instance, InstanceKind},
     scheme::Scheme,
@@ -248,7 +248,7 @@ impl<'a> CodegenRoot<'a> {
                 &mut ctxt,
                 &mut f_ctxt,
                 "kli_alloc",
-                cranelift_module::Linkage::Export,
+                cranelift_module::Linkage::Hidden,
                 {
                     let mut sig = ir::Signature::new(self.module.target_config().default_call_conv);
                     sig.params.push(AbiParam::new(ir::types::I64));
@@ -276,16 +276,16 @@ impl<'a> CodegenRoot<'a> {
                         .brif(size_arg, non_zero_size_block, &[], zero_size_block, &[]);
                     builder.seal_block(entry);
 
-                    builder.switch_to_block(non_zero_size_block);
-                    builder.ins().return_(&[align_arg]);
-                    builder.seal_block(non_zero_size_block);
-
                     builder.switch_to_block(zero_size_block);
+                    builder.ins().return_(&[align_arg]);
+                    builder.seal_block(zero_size_block);
+
+                    builder.switch_to_block(non_zero_size_block);
                     let ptr = builder.ins().call(malloc, &[size_arg]);
                     let ptr = builder.inst_results(ptr)[0];
                     builder.ins().trapz(ptr, TrapCode::unwrap_user(1));
                     builder.ins().return_(&[ptr]);
-                    builder.seal_block(zero_size_block);
+                    builder.seal_block(non_zero_size_block);
                 },
             )
         };
@@ -398,14 +398,6 @@ enum ScalarType {
 #[derive(Debug, Clone)]
 enum CodegenPlace {
     Ssa(Type, Scalar, frontend::Variable),
-    SsaPair(
-        Type,
-        Scalar,
-        Scalar,
-        Size,
-        frontend::Variable,
-        frontend::Variable,
-    ),
     MemPlace(MemPlace),
 }
 impl CodegenPlace {
@@ -413,16 +405,12 @@ impl CodegenPlace {
         match self {
             Self::MemPlace(place) => place.scalar,
             Self::Ssa(_, scalar, _) => Some(ScalarType::Single(*scalar)),
-            Self::SsaPair(_, first, second, offset, ..) => {
-                Some(ScalarType::Pair(*first, *second, *offset))
-            }
         }
     }
     fn type_of(&self) -> Type {
         match &self {
             CodegenPlace::MemPlace(place) => place.ty.clone(),
             CodegenPlace::Ssa(ty, ..) => ty.clone(),
-            CodegenPlace::SsaPair(ty, ..) => ty.clone(),
         }
     }
 
@@ -547,9 +535,8 @@ impl MemPlace {
             src_offset,
             TrapCode::unwrap_user(1),
         )
-        
     }
-    fn offset_by(&self, value: i32) -> Self {
+    fn offset_in_bytes(&self, value: i32) -> Self {
         Self {
             ty: self.ty.clone(),
             layout: self.layout.clone(),
@@ -605,9 +592,6 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         match dst_place {
             CodegenPlace::MemPlace(place) => self.store_immediate_mem(place, value),
             CodegenPlace::Ssa(.., var) => self.store_var_imm(var, value),
-            CodegenPlace::SsaPair(.., first_var, _) => {
-                self.store_var_imm(first_var, value);
-            }
         }
     }
 
@@ -621,10 +605,6 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         match dst_place {
             CodegenPlace::MemPlace(place) => {
                 self.store_immediate_pair_mem(place, first, second, offset)
-            }
-            CodegenPlace::SsaPair(.., first_var, second_var) => {
-                self.store_var_imm(first_var, first);
-                self.store_var_imm(second_var, second);
             }
             CodegenPlace::Ssa(..) => {
                 unreachable!()
@@ -693,13 +673,6 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             CodegenPlace::Ssa(.., var) => {
                 self.store_var_imm(var, value.first_value());
             }
-            CodegenPlace::SsaPair(.., first_var, second_var) => {
-                let ScalarValue::Pair([first, second], _) = value else {
-                    panic!("Expected pair of value")
-                };
-                self.store_var_imm(first_var, first);
-                self.store_var_imm(second_var, second);
-            }
         }
     }
     fn store_scalar_mem(&mut self, place: MemPlace, value: ScalarValue) {
@@ -734,7 +707,6 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 return;
             }
             CodegenPlace::Ssa(.., variable) => (variable, None),
-            CodegenPlace::SsaPair(.., first_var, second_var) => (first_var, Some(second_var)),
         };
         let value = value.force_immediate_value(self).unwrap();
         if let Some(second_var) = second_var {
@@ -755,11 +727,6 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         match &place {
             CodegenPlace::MemPlace(place) => self.load_place_mem(place),
             CodegenPlace::Ssa(.., var) => Some(ScalarValue::Single(self.builder.use_var(*var))),
-            CodegenPlace::SsaPair(.., offset, first_var, second_var) => Some(ScalarValue::pair(
-                self.builder.use_var(*first_var),
-                self.builder.use_var(*second_var),
-                *offset,
-            )),
         }
     }
     fn load_place_mem(&mut self, place: &MemPlace) -> Option<ScalarValue> {
@@ -807,39 +774,6 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     LocalKind::Scalar(scalar, var) => {
                         return Ok(CodegenPlace::Ssa(ty, scalar, var));
                     }
-                    LocalKind::ScalarPair(
-                        first_scalar,
-                        second_scalar,
-                        offset,
-                        first_var,
-                        second_var,
-                    ) => {
-                        let mut projections = place.projections.iter();
-                        if let Some(projection) = projections.next() {
-                            let PlaceProjection::Field(field) = *projection else {
-                                unreachable!()
-                            };
-                            let (scalar, var) = match field.into_usize() {
-                                0 => (first_scalar, first_var),
-                                1 => (second_scalar, second_var),
-                                _ => unreachable!(),
-                            };
-                            return Ok(CodegenPlace::Ssa(
-                                projection.apply_projection_to_type(ty, self.ctxt),
-                                scalar,
-                                var,
-                            ));
-                        }
-                        assert!(projections.next().is_none());
-                        return Ok(CodegenPlace::SsaPair(
-                            ty,
-                            first_scalar,
-                            second_scalar,
-                            offset,
-                            first_var,
-                            second_var,
-                        ));
-                    }
                 };
                 (ty, ptr)
             }
@@ -881,18 +815,23 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     let ptr_value = self.load_place_mem(&place_value).unwrap().first_value();
                     let index_place = self.eval_place(&mir::Place::local(local)).unwrap();
                     let index_value = self.load_place(&index_place).unwrap().first_value();
+
+                    let ty = projection.apply_projection_to_type(place_value.ty, self.ctxt);
+                    let layout = self.ctxt.layout_of(&ty).unwrap();
+
+                    let size_value =
+                        self.build_int_const(&index_place.type_of(), layout.size.in_bytes().into());
+                    let (offset, overflow) =
+                        self.builder.ins().umul_overflow(index_value, size_value);
+                    self.builder
+                        .ins()
+                        .trapnz(overflow, TrapCode::unwrap_user(1));
                     let offset_ptr = self.builder.ins().uadd_overflow_trap(
                         ptr_value,
-                        index_value,
+                        offset,
                         TrapCode::unwrap_user(1),
                     );
-                    MemPlace {
-                        ty: place_value.ty,
-                        layout: place_value.layout,
-                        base_ptr: offset_ptr,
-                        offset: 0,
-                        scalar: place_value.scalar,
-                    }
+                    MemPlace::new(offset_ptr, layout, ty)
                 }
                 mir::PlaceProjection::CaseDowncast(case, ..) => {
                     place_value.project_downcast(self.ctxt, case)
@@ -1298,7 +1237,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                                     let discr = self.build_int_const(&tag.ty, value.into());
                                     self.store_immediate_mem(tag, discr);
                                 }
-                                CodegenPlace::Ssa(..) | CodegenPlace::SsaPair(..) => {
+                                CodegenPlace::Ssa(..) => {
                                     todo!("Ssa variants")
                                 }
                             }
@@ -1318,7 +1257,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     let offset: u64 = ty_layout.size.in_bytes() * i;
                     let offset: i32 = offset.try_into().unwrap();
                     let value = self.eval_operand(operand);
-                    self.store_operand_with_mem_place(place_value.offset_by(offset), value);
+                    self.store_operand_with_mem_place(place_value.offset_in_bytes(offset), value);
                 }
                 let len_value = self.build_int_const(&Type::UINT, len.into());
                 self.store_value(
@@ -1365,7 +1304,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     let Ok(dst_place) = self.eval_place(place) else {
                         return;
                     };
-                    /*  
+                    /*
                         We need to reinterpret out 'from' value based of its byte representation,
                         so we store it in memory and then copy that value as a 'to'
                     */
@@ -1374,32 +1313,41 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     let to_layout = self.ctxt.layout_of(&to_ty).unwrap();
 
                     let from_layout = self.ctxt.layout_of(&operand.ty).unwrap();
-                    match (backend_repr(&from_layout),backend_repr(&to_layout)){
-                        (BackendRepr::Scalar(from),BackendRepr::Scalar(to)) => {
+                    match (backend_repr(&from_layout), backend_repr(&to_layout)) {
+                        (BackendRepr::Scalar(from), BackendRepr::Scalar(to)) => {
                             let from = scalar_to_cranelift_type(from);
                             let to = scalar_to_cranelift_type(to);
-                            let mut value = operand.force_immediate_value(self).unwrap().first_value();
-                            if from != to{
+                            let mut value =
+                                operand.force_immediate_value(self).unwrap().first_value();
+                            if from != to {
                                 value = self.builder.ins().bitcast(to, MemFlagsData::new(), value);
                             }
                             self.store_immediate(dst_place, value);
                             return;
-                        },
+                        }
                         _ if from_layout == to_layout => {
                             self.store_value(place, operand);
                             return;
                         }
-                        _ => ()
+                        _ => (),
                     }
 
-                    let intermidiate_slot = self.builder.create_sized_stack_slot(
-                        ir::StackSlotData::new(ir::StackSlotKind::ExplicitSlot, to_layout.size.in_bytes().try_into().unwrap(), to_layout.alignment.pow_of_2()));
-                    let intermidiate_slot = self.builder.ins().stack_addr(PTR_IR_TYPE, intermidiate_slot, Offset32::new(0));
+                    let intermidiate_slot =
+                        self.builder.create_sized_stack_slot(ir::StackSlotData::new(
+                            ir::StackSlotKind::ExplicitSlot,
+                            to_layout.size.in_bytes().try_into().unwrap(),
+                            to_layout.alignment.pow_of_2(),
+                        ));
+                    let intermidiate_slot = self.builder.ins().stack_addr(
+                        PTR_IR_TYPE,
+                        intermidiate_slot,
+                        Offset32::new(0),
+                    );
 
                     let transmuted_place = MemPlace::new(intermidiate_slot, to_layout, to_ty);
-                    self.store_operand_with_mem_place(transmuted_place.clone(),operand);
+                    self.store_operand_with_mem_place(transmuted_place.clone(), operand);
                     self.copy(CodegenPlace::MemPlace(transmuted_place), dst_place);
-                },
+                }
                 mir::CastKind::IntegerCast(cast) => match cast {
                     mir::IntegerCast::ZeroExtendByteTo(kind) => {
                         let ty = ir::types::I64;
@@ -1423,11 +1371,8 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 let len_place = match len_place {
                     CodegenPlace::MemPlace(len_place) => {
                         let len_place = len_place
-                            .offset_by(layout::POINTER_SIZE.in_bytes().try_into().unwrap());
+                            .offset_in_bytes(layout::POINTER_SIZE.in_bytes().try_into().unwrap());
                         CodegenPlace::MemPlace(len_place)
-                    }
-                    CodegenPlace::SsaPair(ty, first, _, _, var, _) => {
-                        CodegenPlace::Ssa(ty, first, var)
                     }
                     CodegenPlace::Ssa(..) => unreachable!("Arrays never ssa"),
                 };
@@ -1442,7 +1387,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                         CodegenPlace::MemPlace(place) => {
                             place.project_field(self.ctxt, FieldId::FIRST_FIELD)
                         }
-                        CodegenPlace::Ssa(..) | CodegenPlace::SsaPair(..) => {
+                        CodegenPlace::Ssa(..) => {
                             todo!("Handle ssa discriminant")
                         }
                     },
@@ -1560,7 +1505,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                         if let Some(operand) = operand {
                             let operand = self.eval_operand(operand);
                             if !matches!(operand.ty, Type::Int(_)) {
-                                todo!("non int print?")
+                                todo!("non int print {:?}", operand.ty)
                             }
                             let value = operand
                                 .force_immediate_value(&mut self)

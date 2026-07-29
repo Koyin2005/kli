@@ -10,7 +10,7 @@ pub enum Builtin {
     ArrayAddr,
     WrappingAdd,
     OverflowingAdd,
-    ZeroExtend
+    ZeroExtend,
 }
 impl Builtin {
     const _NO_REPEATS: () = {
@@ -40,7 +40,7 @@ impl Builtin {
         Builtin::ArrayAddr,
         Builtin::WrappingAdd,
         Builtin::OverflowingAdd,
-        Builtin::ZeroExtend
+        Builtin::ZeroExtend,
     ];
     pub const fn name(self) -> &'static str {
         match self {
@@ -50,7 +50,7 @@ impl Builtin {
             Builtin::ArrayAddr => "array_addr",
             Builtin::Len => "array_len",
             Builtin::BoxAlloc => "box_alloc",
-            Builtin::ZeroExtend => "zero_extend"
+            Builtin::ZeroExtend => "zero_extend",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
