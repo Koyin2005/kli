@@ -11,12 +11,11 @@ pub fn backend_repr(layout: &layout::Layout) -> BackendRepr {
     }
     match layout.kind {
         layout::LayoutKind::Aggregate(ref field_layouts, ..) => {
-            let mut non_zst_fields = field_layouts
-                .iter()
-                .filter(|field| !field.layout.is_zst());
+            let mut non_zst_fields = field_layouts.iter().filter(|field| !field.layout.is_zst());
 
             if let Some(first_field) = non_zst_fields.next()
-            && non_zst_fields.next().is_none(){
+                && non_zst_fields.next().is_none()
+            {
                 return backend_repr(&first_field.layout);
             }
             BackendRepr::Memory

@@ -53,6 +53,11 @@ impl TypeMappable for GenericArg {
         }
     }
 }
+impl std::fmt::Display for GenericArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", display_generic_args(self))
+    }
+}
 pub fn display_generic_args<'a>(args: &'a [GenericArg]) -> DisplayGenericArgs<'a> {
     DisplayGenericArgs(args)
 }

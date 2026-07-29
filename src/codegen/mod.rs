@@ -9,8 +9,8 @@ use crate::{
     index_vec::IndexVec,
     layout::{self, Align, LayoutKind, Scalar, Size, TagEncoding},
     mir::{
-        self, AggregateKind, BasicBlockId, BinaryOp, ConstValue, Constant, Locals, Operand,
-        OverflowOp, Place, PlaceBase, traversal::reachable,
+        self, AggregateKind, AssertKind, BasicBlockId, BinaryOp, ConstValue, Constant, Locals,
+        Operand, OverflowOp, Place, PlaceBase, traversal::reachable,
     },
     monomorph::collect::{Instance, InstanceKind},
     scheme::Scheme,
@@ -320,6 +320,11 @@ impl<'a> CodegenRoot<'a> {
             for param in sig.params.iter() {
                 builder.append_block_param(block_map.entry(), param.value_type);
             }
+            println!(
+                "building {} {}",
+                self.ctxt.display_path_for(instance.body_src().def_id()),
+                instance.args
+            );
             FunctionCodegen::new(
                 self.ctxt,
                 builder,
@@ -394,7 +399,7 @@ enum OperandValueKind {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
 enum ScalarType {
-    Single(Scalar)
+    Single(Scalar),
 }
 
 #[derive(Debug, Clone)]
@@ -490,17 +495,7 @@ impl MemPlace {
                 kind, self.ty
             ),
         };
-        let scalar = match layout.kind {
-            LayoutKind::Scalar(scalar) => Some(ScalarType::Single(scalar)),
-            _ => None,
-        };
-        Self {
-            ty,
-            layout,
-            base_ptr: self.base_ptr,
-            offset,
-            scalar,
-        }
+        Self::new_with_offset(self.base_ptr, layout, ty,offset)
     }
     fn ptr(&self, builder: &mut FunctionCodegen<'_, impl Module>) -> ir::Value {
         if self.offset == 0 {
@@ -630,6 +625,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             (CodegenPlace::MemPlace(place), CodegenPlace::MemPlace(dst_place)) => {
                 self.memcopy(place, dst_place)
             }
+
             (ref place, dst_place) => {
                 let Some(value) = self.load_place(place) else {
                     return;
@@ -687,23 +683,15 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         let Ok(dst_place) = self.eval_place(place) else {
             return;
         };
-        let (first_var, second_var) = match dst_place {
+        let first_var = match dst_place {
             CodegenPlace::MemPlace(place) => {
                 self.store_operand_with_mem_place(place, value);
                 return;
             }
-            CodegenPlace::Ssa(.., variable) => (variable, None),
+            CodegenPlace::Ssa(.., variable) =>variable,
         };
         let value = value.force_immediate_value(self).unwrap();
-        if let Some(second_var) = second_var {
-            let ScalarValue::Pair([first, second], _) = value else {
-                unreachable!()
-            };
-            self.store_var_imm(first_var, first);
-            self.store_var_imm(second_var, second);
-        } else {
-            self.store_var_imm(first_var, value.first_value());
-        }
+        self.store_var_imm(first_var, value.first_value());
     }
     fn store_operand(&mut self, place: &mir::Place, operand: &mir::Operand) {
         let operand = self.eval_operand(operand);
@@ -728,13 +716,23 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         }
     }
     #[track_caller]
-    fn layout_for(&self, ty: &Type) -> layout::Layout{
+    fn layout_for(&self, ty: &Type) -> layout::Layout {
         self.ctxt.layout_of(ty).expect("should be monoed enough")
     }
-    fn load_array_ptr(&mut self, place: MemPlace) -> codegen::ir::Value{
-        let (ptr,offset) = place.ptr_and_offset();
-        let ptr = self.builder.ins().load(PTR_IR_TYPE, MemFlagsData::new(), ptr, offset);
-        ptr
+    fn load_array_ptr(&mut self, place: MemPlace) -> codegen::ir::Value {
+        let (ptr, offset) = place.ptr_and_offset();
+        self
+            .builder
+            .ins()
+            .load(PTR_IR_TYPE, MemFlagsData::new(), ptr, offset)
+    }
+    fn load_array_len(&mut self, place: MemPlace) -> codegen::ir::Value {
+        let place = place.offset_in_bytes(layout::POINTER_SIZE.in_bytes_i32());
+        let (ptr, offset) = place.ptr_and_offset();
+        self
+            .builder
+            .ins()
+            .load(ir::types::I64, MemFlagsData::new(), ptr, offset)
     }
     fn eval_place(&mut self, place: &mir::Place) -> Result<CodegenPlace, Type> {
         let (ty, ptr, projections) = match place.base {
@@ -806,9 +804,9 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     let ty = projection.apply_projection_to_type(place_value.ty.clone(), self.ctxt);
                     let layout = self.layout_for(&ty);
                     let ptr_value = self.load_array_ptr(place_value.clone());
-                    let index : u64 = index.into();
-                    let offset : i32 = (index * layout.size.in_bytes()).try_into().unwrap();
-                    MemPlace::new_with_offset(ptr_value, layout, ty,offset)
+                    let index: u64 = index.into();
+                    let offset: i32 = (index * layout.size.in_bytes()).try_into().unwrap();
+                    MemPlace::new_with_offset(ptr_value, layout, ty, offset)
                 }
                 mir::PlaceProjection::Index(local) => {
                     let ty = projection.apply_projection_to_type(place_value.ty.clone(), self.ctxt);
@@ -901,18 +899,24 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 let (tag_ty, value) = self.ctxt.type_def(id).case_value(case);
                 let layout = self.layout_for(&ty);
                 match backend_repr(&layout) {
-                    BackendRepr::Scalar(_) => OperandValueKind::Value(ScalarValue::Single(self.build_int_const(&tag_ty.into_type(), value.into()))),
+                    BackendRepr::Scalar(_) => OperandValueKind::Value(ScalarValue::Single(
+                        self.build_int_const(&tag_ty.into_type(), value.into()),
+                    )),
                     BackendRepr::ZeroSized => unreachable!(),
                     BackendRepr::Memory => {
-                        let mut bytes : Box<[u8]> = std::iter::repeat_n(0, layout.size.in_bytes_usize()).collect();
-                         if value < 256{
+                        let mut bytes: Box<[u8]> =
+                            std::iter::repeat_n(0, layout.size.in_bytes_usize()).collect();
+                        if value < 256 {
                             bytes[0] = value as u8;
-                        }
-                        else  {
+                        } else {
                             todo!("really big")
                         };
                         let ptr = self.alloc_constant(bytes);
-                        OperandValueKind::Indirect(CodegenPlace::MemPlace(MemPlace::new(ptr, layout, ty.clone())))
+                        OperandValueKind::Indirect(CodegenPlace::MemPlace(MemPlace::new(
+                            ptr,
+                            layout,
+                            ty.clone(),
+                        )))
                     }
                 }
             }
@@ -925,11 +929,8 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         };
         OperandValue { ty, kind }
     }
-    fn alloc_constant(&mut self, bytes: Box<[u8]>) -> ir::Value{
-        
-        let data = self
-            .constants
-            .constant_for(self.module, bytes);
+    fn alloc_constant(&mut self, bytes: Box<[u8]>) -> ir::Value {
+        let data = self.constants.constant_for(self.module, bytes);
         let data = self.module.declare_data_in_func(data, self.builder.func);
         self.builder.ins().symbol_value(PTR_IR_TYPE, data)
     }
@@ -973,29 +974,19 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     };
                     all_args.push(mem_place.ptr(self));
                 }
-                (
-                    OperandValueKind::Indirect(codegen_place),
-                    PassMode::ByValue(_) ,
-                ) => {
+                (OperandValueKind::Indirect(codegen_place), PassMode::ByValue(_)) => {
                     let value = self.load_place(&codegen_place).unwrap();
                     all_args.extend(value.into_iter());
                 }
                 (OperandValueKind::ZeroSized, _) | (_, PassMode::ByPtr) => unreachable!(),
-                (
-                    OperandValueKind::Value(scalar_value),
-                    PassMode::ByValue(_) ,
-                ) => {
+                (OperandValueKind::Value(scalar_value), PassMode::ByValue(_)) => {
                     all_args.extend(scalar_value.into_iter());
                 }
             }
         }
         all_args
     }
-    fn store_return_value(
-        &mut self,
-        values: Vec<ir::Value>,
-        ret_place: Option<CodegenPlace>,
-    ) {
+    fn store_return_value(&mut self, values: Vec<ir::Value>, ret_place: Option<CodegenPlace>) {
         let Some(ret_place) = ret_place else { return };
         match values.as_slice() {
             [] => (),
@@ -1095,8 +1086,13 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     &abi,
                     args,
                 );
-                debug_assert_eq!(flattened_args.len(),signature(&abi, self.target_config).params.len(),"{}",self.ctxt.display_path_for(def_id));
-                self.codegen_direct_call(ret_place,id, &flattened_args);
+                debug_assert_eq!(
+                    flattened_args.len(),
+                    signature(&abi, self.target_config).params.len(),
+                    "{}",
+                    self.ctxt.display_path_for(def_id)
+                );
+                self.codegen_direct_call(ret_place, id, &flattened_args);
             }
             Err(value) => {
                 let callee = value.force_immediate_value(self).unwrap().first_value();
@@ -1249,6 +1245,17 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             self.store_immediate(place, left);
         }
     }
+    fn codgen_box(&mut self, place: &mir::Place, ty: &Type, operand: &mir::Operand) {
+        let ty = Scheme::new(ty.clone()).bind(self.args);
+        let ptr = self.codgen_static_size_alloc_call(&ty, 1);
+        let value = self.eval_operand(operand);
+        let box_inner_ptr = MemPlace::new(ptr, self.layout_for(&ty), ty);
+        self.store_operand_with_mem_place(box_inner_ptr.clone(), value.clone());
+
+        let place = self.eval_place(place).unwrap();
+        let box_ptr = box_inner_ptr.ptr(self);
+        self.store_immediate(place, box_ptr);
+    }
     fn assign(&mut self, place: &mir::Place, value: &mir::Rvalue, locals: &Locals) {
         match value {
             mir::Rvalue::Aggregate(kind, fields) => match kind {
@@ -1269,8 +1276,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     for (id, field) in fields.iter_enumerated() {
                         self.store_operand(&payload_place.clone().with_field(id), field);
                     }
-                    let LayoutKind::Variant { tag, .. } = self.layout_for(&ty).kind
-                    else {
+                    let LayoutKind::Variant { tag, .. } = self.layout_for(&ty).kind else {
                         unreachable!()
                     };
                     let Some(dst_place) = self.eval_place(place).ok() else {
@@ -1420,14 +1426,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 );
             }
             mir::Rvalue::AllocateBox(ty, operand) => {
-                let ty = Scheme::new(ty.clone()).bind(self.args);
-                let ptr = self.codgen_static_size_alloc_call(&ty, 1);
-                let value = self.eval_operand(operand);
-                let box_inner_ptr = MemPlace::new(ptr, self.layout_for(&ty), ty);
-                self.store_operand_with_mem_place(box_inner_ptr.clone(), value.clone());
-
-                let place = self.eval_place(place).unwrap();
-                self.copy(place, CodegenPlace::MemPlace(box_inner_ptr));
+                self.codgen_box(place, ty, operand);
             }
             mir::Rvalue::Use(operand) => {
                 self.store_operand(place, operand);
@@ -1442,7 +1441,11 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             mir::Rvalue::AddrOf(array_place) => {
                 let place = self.eval_place(place).unwrap();
                 let array_place = self.eval_place(array_place).unwrap();
-                self.copy(place, array_place);
+                let CodegenPlace::MemPlace(array_place) = array_place else {
+                    unreachable!()
+                };
+                let addr = self.load_array_ptr(array_place);
+                self.store_immediate(place, addr);
             }
             mir::Rvalue::Cast(kind, operand) => match kind {
                 mir::CastKind::Transmute(to) => {
@@ -1513,16 +1516,12 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             },
             mir::Rvalue::Len(array_place) => {
                 let place = self.eval_place(place).unwrap();
-                let len_place = self.eval_place(array_place).unwrap();
-                let len_place = match len_place {
-                    CodegenPlace::MemPlace(len_place) => {
-                        let len_place = len_place
-                            .offset_in_bytes(layout::POINTER_SIZE.in_bytes_i32());
-                        CodegenPlace::MemPlace(len_place)
-                    }
-                    CodegenPlace::Ssa(..) => unreachable!("Arrays never ssa"),
+                let array_place = self.eval_place(array_place).unwrap();
+                let CodegenPlace::MemPlace(array_place) = array_place else {
+                    unreachable!("arrays never ssa")
                 };
-                self.copy(len_place, place);
+                let len_value = self.load_array_len(array_place);
+                self.store_immediate(place, len_value);
             }
             mir::Rvalue::Discriminant(variant_place) => {
                 let Ok(dst_place) = self.eval_place(place) else {
@@ -1536,7 +1535,9 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                             (value, !tag_place.ty.is_integer())
                         }
                         CodegenPlace::Ssa(ty, .., var) => {
-                            (self.builder.use_var(var), ty.is_integer())
+                            let (id, ..) = ty.as_named().unwrap();
+                            let tag_ty = self.ctxt.type_def(id).tag_type().into_type();
+                            (self.builder.use_var(var), !tag_ty.is_integer())
                         }
                     },
                     Err(_) => {
@@ -1581,10 +1582,10 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             param_values
         };
         for (i, local) in body.params_iter().enumerate() {
-            if matches!(
-                self.local_info.info_for(local).kind,
-                LocalKind::Memory(_) | LocalKind::Scalar(..)
-            ) && let Ok(place) = self.eval_place(&Place::local(local))
+            let local_kind = self.local_info.info_for(local).kind;
+            let ty = self.local_info.info_for(local).ty.clone();
+            if matches!(local_kind, LocalKind::Memory(_) | LocalKind::Scalar(..))
+                && let Ok(place) = self.eval_place(&Place::local(local))
             {
                 let (param_index, scalar_ty) = param_values[i];
                 let Some(scalar_ty) = scalar_ty else {
@@ -1595,7 +1596,23 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                         self.builder.block_params(self.block_map.entry())[param_index],
                     ),
                 };
-                self.store_scalar(place, value);
+                match local_kind {
+                    LocalKind::Memory(_) => {
+                        let layout = self.layout_for(&ty);
+                        println!("{} {} {:?}", param_index, ty, backend_repr(&layout));
+                        if let BackendRepr::Memory = backend_repr(&layout) {
+                            let ptr = value.first_value();
+                            let src_place = MemPlace::new(ptr, layout, ty);
+                            self.copy(CodegenPlace::MemPlace(src_place), place);
+                        } else {
+                            self.store_scalar(place, value);
+                        }
+                    }
+                    LocalKind::Scalar(_) => {
+                        self.store_scalar(place, value);
+                    }
+                    _ => (),
+                }
             }
         }
     }
@@ -1607,11 +1624,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             self.builder.set_cold_block(panic_block);
             self.builder.ins().jump(panic_block, &[]);
             self.builder.switch_to_block(panic_block);
-            self.codegen_direct_call(
-                None,
-                self.runtime_functions.panic,
-                &[],
-            );
+            self.codegen_direct_call(None, self.runtime_functions.panic, &[]);
             self.builder.ins().trap(TrapCode::user(1).unwrap());
             self.panic_block.set(Some(panic_block));
         };
@@ -1674,11 +1687,23 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                                     );
                                 }
                                 Type::String => {
-                                    let values = operand.force_immediate_value(&mut self).unwrap();
-                                    let values = values.as_slice();
+                                    let (first_val, second_val) = match operand.kind {
+                                        OperandValueKind::Indirect(CodegenPlace::MemPlace(
+                                            place,
+                                        )) => {
+                                            let first_val = self.load_array_ptr(place.clone());
+                                            let second_val = self.load_array_len(place);
+                                            (first_val, second_val)
+                                        }
+                                        OperandValueKind::Value(ScalarValue::Pair(
+                                            [first, second],
+                                            _,
+                                        )) => (first, second),
+                                        _ => unreachable!("{:?}", operand.kind),
+                                    };
                                     self.codegen_direct_void_call(
                                         self.runtime_functions.print_string,
-                                        values,
+                                        &[first_val, second_val],
                                     );
                                 }
                                 ref ty => todo!("print for {} {:?}", ty, ty),
@@ -1702,14 +1727,48 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                         .first_value();
                     let code = TrapCode::user(1).unwrap();
                     //If it negates than we are asserting !operand instead of operand
-                    if assert_kind.negate() {
-                        self.builder.ins().trapnz(value, code);
+                    let assert_success = if assert_kind.negate() {
+                        let cond_value = self.build_int_const(&Type::Bool, 0);
+                        self.builder
+                            .ins()
+                            .icmp(ir::condcodes::IntCC::Equal, value, cond_value)
                     } else {
-                        self.builder.ins().trapz(value, code);
-                    }
-                    self.builder
-                        .ins()
-                        .jump(block_map.blocks[*basic_block_id].unwrap(), &[]);
+                        let cond_value = self.build_int_const(&Type::Bool, 0);
+                        self.builder
+                            .ins()
+                            .icmp(ir::condcodes::IntCC::NotEqual, value, cond_value)
+                    };
+                    let fail_block = self.builder.create_block();
+                    self.builder.ins().brif(
+                        assert_success,
+                        block_map.blocks[*basic_block_id].unwrap(),
+                        &[],
+                        fail_block,
+                        &[],
+                    );
+
+                    self.builder.switch_to_block(fail_block);
+                    let (first, second) = self.build_string_value(match *assert_kind {
+                        AssertKind::DivideByZero => {
+                            "attempted to compute division by 0".to_string()
+                        }
+                        AssertKind::InBounds => {
+                            "attempted to access out of bounds index".to_string()
+                        }
+                        AssertKind::Overflow(op) => format!("failed to compute '{}' due to overflow",match op{
+                            OverflowOp::Add => '+',
+                            OverflowOp::Multiply => '*',
+                            OverflowOp::Subtract => '-'
+                        }),
+                        AssertKind::DivideOverflow => {
+                            "attempted to compute overflowing division".to_string()
+                        }
+                    });
+                    self.codegen_direct_void_call(
+                        self.runtime_functions.print_string,
+                        &[first, second],
+                    );
+                    self.builder.ins().trap(code);
                 }
                 mir::TerminatorKind::Switch(operand, targets) => {
                     let operand = self.eval_operand(operand);
@@ -1738,17 +1797,20 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     }]
                         .abi
                         .ret;
-                    let rvals = match mode {
-                        PassMode::Void | PassMode::ByPtr => None,
-                        PassMode::ByValue(_) => {
-                            rvalue.and_then(|ref place| self.load_place(place))
+
+                    match mode {
+                        //Don't do anything
+                        PassMode::Void | PassMode::ByPtr => {
+                            self.builder.ins().return_(&[]);
                         }
-                    };
-                    if let Some(return_value) = rvals {
-                        self.builder.ins().return_(return_value.as_slice());
-                    } else {
-                        self.builder.ins().return_(&[]);
-                    };
+                        //Write return value to pointer
+                        //Just return
+                        PassMode::ByValue(_) => {
+                            let rvalue = rvalue.unwrap();
+                            let value = self.load_place(&rvalue).unwrap();
+                            self.builder.ins().return_(value.as_slice());
+                        }
+                    }
                 }
                 mir::TerminatorKind::Goto(basic_block_id) => {
                     self.builder

@@ -47,9 +47,7 @@ impl Locals {
         Self {
             return_slot: match ret_mode {
                 PassMode::ByValue(single) if ssa.is_local_ssa(PlaceBase::ReturnPlace) => {
-                    ReturnSlot::Scalar(
-                        builder.declare_var(scalar_to_cranelift_type(single)),
-                    )
+                    ReturnSlot::Scalar(builder.declare_var(scalar_to_cranelift_type(single)))
                 }
                 PassMode::ByValue(_) => {
                     let layout = ctxt
@@ -72,26 +70,21 @@ impl Locals {
                     let ty = Scheme::new(local.ty.clone()).bind(args);
                     let layout = ctxt.layout_of(&ty).unwrap();
                     let repr = backend_repr(&layout);
-                    CodegenLocalInfo {
-                        ty,
-                        kind: match repr {
-                            BackendRepr::ZeroSized => LocalKind::ZeroSized,
-                            BackendRepr::Scalar(scalar)
-                                if ssa.is_local_ssa(PlaceBase::Local(id)) =>
-                            {
-                                LocalKind::Scalar(
-                                    builder.declare_var(scalar_to_cranelift_type(scalar)),
-                                )
-                            }
-                            _ => LocalKind::Memory(builder.create_sized_stack_slot(
-                                codegen::ir::StackSlotData::new(
-                                    codegen::ir::StackSlotKind::ExplicitSlot,
-                                    layout.size.in_bytes().try_into().unwrap(),
-                                    layout.alignment.pow_of_2(),
-                                ),
-                            )),
-                        },
-                    }
+                    let kind = match repr {
+                        BackendRepr::ZeroSized => LocalKind::ZeroSized,
+                        BackendRepr::Scalar(scalar) if ssa.is_local_ssa(PlaceBase::Local(id)) => {
+                            println!("local scalar {}", ty);
+                            LocalKind::Scalar(builder.declare_var(scalar_to_cranelift_type(scalar)))
+                        }
+                        _ => LocalKind::Memory(builder.create_sized_stack_slot(
+                            codegen::ir::StackSlotData::new(
+                                codegen::ir::StackSlotKind::ExplicitSlot,
+                                layout.size.in_bytes().try_into().unwrap(),
+                                layout.alignment.pow_of_2(),
+                            ),
+                        )),
+                    };
+                    CodegenLocalInfo { ty, kind }
                 })
                 .collect(),
         }

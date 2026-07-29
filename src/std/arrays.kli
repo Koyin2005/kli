@@ -35,8 +35,8 @@ fun copy_from[T](this : array[T], other : array[T]) -> () =
     | false -> 
         do
             let mut i = 0u;
-            while i < len(other) and i < len(this) do
-                set(this, i, get(other,i));
+            while i < builtins.array_len(this) and i < builtins.array_len(other) do
+                (this).[i] = (other).[i];
                 i = i + 1
             end
         end
