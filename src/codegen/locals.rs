@@ -10,7 +10,6 @@ use crate::{
         scalar_to_cranelift_type,
     },
     index_vec::IndexVec,
-    layout::Scalar,
     mir::{self, Local, PlaceBase, visitor::Visit},
     scheme::Scheme,
     types::{self, GenericArgsRef},
@@ -18,14 +17,14 @@ use crate::{
 #[derive(Clone, Copy)]
 pub enum ReturnSlot {
     Arg,
-    Scalar(Scalar, cranelift::frontend::Variable),
+    Scalar(cranelift::frontend::Variable),
     Local(cranelift::codegen::ir::StackSlot),
     Void,
 }
 #[derive(Clone, Copy)]
 pub enum LocalKind {
     ZeroSized,
-    Scalar(Scalar, cranelift::frontend::Variable),
+    Scalar(cranelift::frontend::Variable),
     Memory(cranelift::codegen::ir::StackSlot),
 }
 
@@ -49,11 +48,10 @@ impl Locals {
             return_slot: match ret_mode {
                 PassMode::ByValue(single) if ssa.is_local_ssa(PlaceBase::ReturnPlace) => {
                     ReturnSlot::Scalar(
-                        single,
                         builder.declare_var(scalar_to_cranelift_type(single)),
                     )
                 }
-                PassMode::ByValue(_) | PassMode::ByPair(..) => {
+                PassMode::ByValue(_) => {
                     let layout = ctxt
                         .layout_of(&Scheme::new(body.return_type.clone()).bind(args))
                         .unwrap();
@@ -82,7 +80,6 @@ impl Locals {
                                 if ssa.is_local_ssa(PlaceBase::Local(id)) =>
                             {
                                 LocalKind::Scalar(
-                                    scalar,
                                     builder.declare_var(scalar_to_cranelift_type(scalar)),
                                 )
                             }

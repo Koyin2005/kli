@@ -48,7 +48,7 @@ impl PlaceProjection {
             }
             PlaceProjection::Deref => {
                 let Type::Box(ty) = ty else {
-                    unreachable!("Should be a box")
+                    unreachable!("Should be a box but got {}", ty)
                 };
                 *ty
             }

@@ -9,6 +9,6 @@ void kli_print_int(uint64_t value) {
 }
 
 void kli_print_string(uint8_t *ptr, size_t len){
-    printf("%.s\n",len,ptr);
+    printf("%.*s\n",len,ptr);
     fflush(stdout);
 }

@@ -3,7 +3,8 @@ use std::collections::{HashSet, VecDeque};
 use crate::{
     def_ids::DefId,
     mir::{BodySource, ConstValue, Constant, Context, Location, visitor::Visit},
-    types::GenericArgs,
+    scheme::Scheme,
+    types::{GenericArgs, GenericArgsRef},
 };
 
 type FunctionId = DefId;
@@ -49,12 +50,17 @@ impl<'ctxt> InstanceCollector<'ctxt> {
         while let Some(instance) = unvisited.pop_front() {
             struct Collector<'unv> {
                 v: &'unv mut VecDeque<Instance>,
+                args: GenericArgsRef<'unv>,
             }
             impl Visit for Collector<'_> {
                 fn visit_constant(&mut self, _: Location, constant: &Constant) {
                     let new_instance = match constant.value {
                         ConstValue::Named(id, ref args) => Some(Instance {
-                            args: args.clone(),
+                            args: args
+                                .iter()
+                                .cloned()
+                                .map(|arg| Scheme::new(arg).bind(self.args))
+                                .collect(),
                             kind: InstanceKind::Function(id),
                         }),
                         _ => None,
@@ -69,7 +75,10 @@ impl<'ctxt> InstanceCollector<'ctxt> {
             }
             self.instances.push(instance.clone());
             let body = self.ctxt.expect_body(instance.body_src());
-            let mut collector = Collector { v: &mut unvisited };
+            let mut collector = Collector {
+                v: &mut unvisited,
+                args: &instance.args,
+            };
             for (id, block) in body.block_info.blocks().iter_enumerated() {
                 collector.visit_block(id, block);
             }

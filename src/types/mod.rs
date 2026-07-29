@@ -6,7 +6,6 @@ use crate::{
     def_ids::DefId,
     define_id,
     index_vec::IndexVec,
-    lang_items::LangItem,
     typed_ast::{Capture, FieldId},
 };
 define_id!(CaseId);
@@ -238,10 +237,8 @@ impl Type {
     pub fn array(element: Self) -> Self {
         Self::Array(Box::new(element))
     }
-    pub fn string(ctxt: CtxtRef<'_>) -> Self {
-        let id = ctxt.lang_items().expect(LangItem::String);
-        let name = ctxt.expect_ident(id).symbol;
-        Self::Named(id, name, GenericArgs::new())
+    pub fn string(_: CtxtRef<'_>) -> Self {
+        Type::String
     }
     pub fn as_named(&self) -> Option<(DefId, Symbol, GenericArgsRef<'_>)> {
         let Self::Named(id, name, args) = self else {
@@ -538,6 +535,19 @@ impl<T: TypeMappable> TypeMappable for Box<T> {
     }
 }
 
+impl TypeMappable for GenericArgs {
+    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error>
+    where
+        Self: Sized,
+    {
+        Ok(GenericArgs(
+            self.0
+                .into_iter()
+                .map(|arg| arg.apply_map(m))
+                .collect::<Result<Vec<_>, _>>()?,
+        ))
+    }
+}
 pub const LIST_PTR_FIELD: FieldId = FieldId::new(0);
 pub const LIST_CAPICITY_FIELD: FieldId = FieldId::new(1);
 pub const LIST_LEN_FIELD: FieldId = FieldId::new(2);

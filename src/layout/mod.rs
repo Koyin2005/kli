@@ -64,6 +64,38 @@ impl Size {
     pub const fn in_bytes(self) -> u64 {
         self.0
     }
+    #[track_caller]
+    pub const fn in_bytes_u32(self) -> u32 {
+        if self.0 < u32::MAX as u64{
+            self.0 as _
+        } else {
+            panic!("expected this value to be less than u32::MAX")
+        }
+    }
+    #[track_caller]
+    pub const fn in_bytes_i32(self) -> i32 {
+        if self.0 < i32::MAX as u64{
+            self.0 as i32
+        } else {
+            panic!("expected this value to be less than i32::MAX")
+        }
+    }
+    #[track_caller]
+    pub const fn in_bytes_i64(self) -> i64 {
+        if self.0 < i64::MAX as u64{
+            self.0 as _
+        } else {
+            panic!("expected this value to be less than i64::MAX")
+        }
+    }
+    #[track_caller]
+    pub const fn in_bytes_usize(self) -> usize {
+        if self.0 < usize::MAX as u64{
+            self.0 as _
+        } else {
+            panic!("expected this value to be less than usize::MAX")
+        }
+    }
 
     #[track_caller]
     pub const fn in_bits(self) -> u64 {
@@ -225,7 +257,6 @@ pub enum LayoutKind {
         cases: IndexVec<CaseId, Layout>,
     },
     Scalar(Scalar),
-    ScalarPair(Scalar, Scalar, Size),
 }
 
 pub enum LayoutError {
@@ -323,12 +354,6 @@ fn record_layout(
     ctxt: CtxtRef<'_>,
     fields: IndexVec<FieldId, Cow<'_, Type>>,
 ) -> Result<Layout, LayoutError> {
-    if fields.is_empty() {
-        return Ok(Layout::zst());
-    }
-    if let Some([field]) = fields.as_slice().as_array() {
-        return calculate_layout(ctxt, field);
-    }
     let field_layouts = fields
         .iter_enumerated()
         .map(|(i, field)| Ok((i, calculate_layout(ctxt, field)?)))
@@ -357,17 +382,12 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
         Type::Never => Layout::zst().uninhabited(),
         Type::Param(_, _) => return Err(LayoutError::TooGeneric),
         Type::Function(_) | Type::Box(_) => Layout::pointer(true),
-        Type::Array(_) | Type::String => {
-            return Ok(Layout {
-                size: POINTER_SIZE.add(INT_SIZE),
-                alignment: POINTER_ALIGN,
-                kind: LayoutKind::ScalarPair(
-                    Scalar::Pointer { non_null: true },
-                    Scalar::Int64(IntegerKind::Unsigned),
-                    POINTER_SIZE,
-                ),
-            });
-        }
+        Type::Array(_) | Type::String  => {
+            return aggregate_layout(vec![
+                (FieldId::new(0),Layout::pointer(true)),
+                (FieldId::new(0),Layout::from_scalar(Scalar::Int64(IntegerKind::Unsigned))),
+            ]);
+        },
         Type::Tuple(fields) => {
             return record_layout(ctxt, fields.iter().map(Cow::Borrowed).collect());
         }

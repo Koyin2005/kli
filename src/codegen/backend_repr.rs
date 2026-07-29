@@ -1,12 +1,7 @@
-use crate::layout::{self, Scalar, Size, TagEncoding};
+use crate::layout::{self, Scalar, TagEncoding};
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BackendRepr {
     Scalar(Scalar),
-    ScalarPair {
-        first: Scalar,
-        second: Scalar,
-        second_offset: Size,
-    },
     ZeroSized,
     Memory,
 }
@@ -15,25 +10,14 @@ pub fn backend_repr(layout: &layout::Layout) -> BackendRepr {
         return BackendRepr::ZeroSized;
     }
     match layout.kind {
-        layout::LayoutKind::Aggregate(ref field_layouts, ref field_offsets) => {
-            let non_zst_fields = field_layouts
+        layout::LayoutKind::Aggregate(ref field_layouts, ..) => {
+            let mut non_zst_fields = field_layouts
                 .iter()
-                .filter(|field| !field.layout.is_zst())
-                .collect::<Vec<_>>();
-            match non_zst_fields.as_slice() {
-                [first_field, second_field]
-                    if let Some(first) = first_field.layout.as_scalar()
-                        && let Some(second) = second_field.layout.as_scalar()
-                        && let second_offset = field_offsets[second_field.field].offset =>
-                {
-                    return BackendRepr::ScalarPair {
-                        first,
-                        second,
-                        second_offset,
-                    };
-                }
-                [single] => return backend_repr(&single.layout),
-                _ => (),
+                .filter(|field| !field.layout.is_zst());
+
+            if let Some(first_field) = non_zst_fields.next()
+            && non_zst_fields.next().is_none(){
+                return backend_repr(&first_field.layout);
             }
             BackendRepr::Memory
         }
@@ -54,41 +38,8 @@ pub fn backend_repr(layout: &layout::Layout) -> BackendRepr {
                 [single] => return *single,
                 _ => (),
             };
-            if let BackendRepr::Scalar(tag_repr) = tag_repr {
-                let mut biggest = None::<Scalar>;
-                for &repr in &case_reprs {
-                    let scalar = match repr {
-                        BackendRepr::Memory | BackendRepr::ScalarPair { .. } => {
-                            return BackendRepr::Memory;
-                        }
-                        BackendRepr::Scalar(single) => single,
-                        BackendRepr::ZeroSized => continue,
-                    };
-                    let curr_size = if let Some(biggest) = biggest {
-                        biggest.size()
-                    } else {
-                        Size::ZERO
-                    };
-                    if curr_size < scalar.size() {
-                        biggest = Some(scalar);
-                    }
-                }
-                let (first, second, second_offset) = (tag_repr, biggest.unwrap(), tag_repr.size());
-
-                return BackendRepr::ScalarPair {
-                    first,
-                    second,
-                    second_offset,
-                };
-            }
-
             BackendRepr::Memory
         }
         layout::LayoutKind::Scalar(scalar) => BackendRepr::Scalar(scalar),
-        layout::LayoutKind::ScalarPair(first, second, second_offset) => BackendRepr::ScalarPair {
-            first,
-            second,
-            second_offset,
-        },
     }
 }
