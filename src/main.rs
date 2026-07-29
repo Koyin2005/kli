@@ -273,7 +273,7 @@ fn main() {
         if ctxt.builtins().builtin_for(id).is_some() {
             continue;
         }
-        mir::build::Builder::build_from_function(ctxt, &mut mir_context, id, function);
+        mir::build::Builder::build_from_function(ctxt, &mut mir_context,function, mir::BodySource::Function(id));
     }
     let pass_args = ctxt
         .config()

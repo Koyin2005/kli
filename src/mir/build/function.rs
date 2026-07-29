@@ -1,6 +1,5 @@
 use crate::{
     collect::CtxtRef,
-    def_ids::DefId,
     mir::{
         BodySource, Constant, Context, LocalKind, Place, TerminatorKind, build::Builder,
         visitor::Visit, well_formed::WellFormed,
@@ -32,12 +31,12 @@ impl Builder<'_> {
     pub fn build_from_function(
         ctxt: CtxtRef,
         mir_context: &mut Context,
-        id: DefId,
         function: &typed_ast::Function,
+        src : BodySource
     ) {
         let mut builder = Builder::new(
             mir_context,
-            BodySource::Function(id),
+            src,
             function.return_type.clone(),
             ctxt,
         );

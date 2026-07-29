@@ -1,16 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
 use crate::{
-    Symbol,
-    collect::CtxtRef,
-    def_ids::DefId,
-    define_id,
-    index_vec::IndexVec,
-    mir::basic_blocks::BasicBlocks,
-    resolved_ast::{Var, VarId},
-    src_loc::SrcLoc,
-    typed_ast::FieldId,
-    types::{CaseId, FieldName, GenericArgs, IntegerKind, Type},
+    Symbol, collect::CtxtRef, def_ids::DefId, define_id, index_vec::IndexVec, mir::basic_blocks::BasicBlocks, monomorph::collect::InstanceKind, resolved_ast::{Var, VarId}, src_loc::SrcLoc, typed_ast::FieldId, types::{CaseId, FieldName, GenericArgs, IntegerKind, Type},
 };
 pub mod basic_blocks;
 pub mod build;
@@ -555,13 +546,16 @@ impl BasicBlock {
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum BodySource {
     Function(DefId),
-    Lambda(DefId),
 }
 impl BodySource {
     pub fn def_id(self) -> DefId {
         match self {
             Self::Function(id) => id,
-            Self::Lambda(id) => id,
+        }
+    }
+    pub fn as_instance(self) -> InstanceKind{
+        match self{
+            Self::Function(id) => InstanceKind::Function(id),
         }
     }
     pub fn is_child_of(self, name: Symbol, ctxt: CtxtRef) -> bool {

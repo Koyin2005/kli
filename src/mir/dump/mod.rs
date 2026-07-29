@@ -51,9 +51,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     write!(self.output, "fun {}", self.ctxt.display(f))?;
                 }
             }
-            BodySource::Lambda(lambda) => {
-                write!(self.output, "lambda {}", self.ctxt.display(lambda))?;
-            }
         }
         writeln!(self.output, "() -> {}", body.return_type)?;
         for (local, info) in body.locals.iter_enumerated() {

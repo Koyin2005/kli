@@ -9,7 +9,6 @@ use crate::{
 type FunctionId = DefId;
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum InstanceKind {
-    Lambda(DefId),
     Function(FunctionId),
 }
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -27,7 +26,6 @@ impl Instance {
     pub fn body_src(&self) -> BodySource {
         match self.kind {
             InstanceKind::Function(function) => BodySource::Function(function),
-            InstanceKind::Lambda(lambda_id) => BodySource::Lambda(lambda_id),
         }
     }
 }

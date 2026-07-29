@@ -212,6 +212,7 @@ impl<'a> CodegenRoot<'a> {
                 function.return_type.clone(),
             ))
             .bind(&instance.args);
+        println!("{:?}",instance);
             let abi = call_abi(self.ctxt, &sig);
             let sig = signature(&abi, self.module.target_config());
             self.map.functions.insert(
@@ -879,7 +880,20 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             ty: (*constant.ty).clone(),
             kind: match constant.value {
                 mir::ConstValue::ZeroSized => OperandValueKind::ZeroSized,
-                mir::ConstValue::Named(..) => todo!(),
+                mir::ConstValue::Named(id, ref args) => {
+                    let kind =InstanceKind::Function(id);
+                    let function = Instance {
+                        args: args.clone(),
+                        kind,
+                    };
+                    let func_id = self.functions.functions.get(&function).unwrap_or_else(||{
+                        panic!("not found {:?}",function)
+                    }).id;
+                    let function = self.module.declare_func_in_func(func_id, self.builder.func);
+                    OperandValueKind::Value(ScalarValue::Single(
+                        self.builder.ins().func_addr(PTR_IR_TYPE, function),
+                    ))
+                }
                 mir::ConstValue::Scalar(value) => OperandValueKind::Value(ScalarValue::Single(
                     self.build_int_const(&constant.ty, value),
                 )),
@@ -1056,7 +1070,9 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     args: generic_args.clone(),
                     kind: InstanceKind::Function(id),
                 };
-                let id = self.functions.functions[&function].id;
+                let id = self.functions.functions.get(&function).unwrap_or_else(||{
+                    panic!("not found {:?}",function)
+                }).id;
                 self.codegen_direct_call(ret_place, &abi, id, &args);
             }
             Err(value) => {
@@ -1524,7 +1540,6 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             match &block.expect_terminator().kind {
                 mir::TerminatorKind::Assert(operand, assert_kind, basic_block_id) => {
                     let value = self.eval_operand(operand);
-                    println!("Assert {:?}", value);
                     let value = value
                         .force_immediate_value(&mut self)
                         .unwrap()
@@ -1563,7 +1578,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     let rvalue = self.eval_place(&Place::return_place()).ok();
                     let mode = self.functions.functions[&Instance {
                         args: self.args.iter().cloned().collect(),
-                        kind: InstanceKind::Function(body.src.def_id()),
+                        kind: body.src.as_instance(),
                     }]
                         .abi
                         .ret;
