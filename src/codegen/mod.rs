@@ -10,8 +10,8 @@ use crate::{
     index_vec::IndexVec,
     layout::{self, Align, LayoutKind, Scalar, Size, TagEncoding},
     mir::{
-        self, AggregateKind, AssertKind, BasicBlockId, BinaryOp, ConstValue, Constant, Locals,
-        Operand, OverflowOp, Place, PlaceBase, traversal::reachable,
+        self, AggregateKind, AssertKind, BasicBlockId, BinaryOp, ConstValue, Constant, Operand,
+        OverflowOp, Place, PlaceBase, traversal::reachable,
     },
     monomorph::collect::{Instance, InstanceKind},
     scheme::Scheme,
@@ -395,14 +395,20 @@ struct OperandValue {
     kind: OperandValueKind,
 }
 impl OperandValue {
-    pub fn force_immediate_value(
+    #[track_caller]
+    pub fn expect_immediate(
         &self,
         cg: &mut FunctionCodegen<'_, impl Module>,
-    ) -> Option<ScalarValue> {
+    ) -> codegen::ir::Value {
         match self.kind {
-            OperandValueKind::Indirect(ref place) => cg.load_place(place),
-            OperandValueKind::ZeroSized => None,
-            OperandValueKind::Value(value) => Some(value),
+            OperandValueKind::Indirect(ref place) => cg
+                .load_place(place)
+                .unwrap_or_else(|| panic!("expected an immediate but got '{}'", place.type_of()))
+                .first_value(),
+            OperandValueKind::ZeroSized => {
+                panic!("expected an immediate but got 'zero sized {}'", self.ty)
+            }
+            OperandValueKind::Value(value) => value.first_value(),
         }
     }
 }
@@ -732,10 +738,12 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 self.store_operand_with_mem_place(place, value);
                 return;
             }
-            CodegenPlace::Ssa(.., variable) => variable,
+            CodegenPlace::Ssa(_, variable) => {
+                variable
+            }
         };
-        let value = value.force_immediate_value(self).unwrap();
-        self.store_var_imm(first_var, value.first_value());
+        let value = value.expect_immediate(self);
+        self.store_var_imm(first_var, value);
     }
     fn store_operand(&mut self, place: &mir::Place, operand: &mir::Operand) {
         let operand = self.eval_operand(operand);
@@ -811,6 +819,9 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                                         break 'a value;
                                     }
                                 }
+                            }
+                            if let BackendRepr::ZeroSized = backend_repr(&self.layout_for(&ty)){
+                                return Err(ty);
                             }
                         }
                         return Ok(CodegenPlace::Ssa(ty, var));
@@ -890,7 +901,6 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 }
             };
         }
-
         Ok(CodegenPlace::MemPlace(place_value))
     }
     fn build_int_const(&mut self, ty: &Type, value: i128) -> codegen::ir::Value {
@@ -1053,15 +1063,13 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         let align = self.build_int_const(&Type::UINT, ty_layout.alignment.in_bytes().into());
         self.codegen_alloc_call(size_val, align)
     }
-    fn print_string(&mut self, ptr: ir::Value, len: ir::Value){
+    fn print_string(&mut self, ptr: ir::Value, len: ir::Value) {
         let print_string = self.runtime_functions.print_string;
         self.codegen_direct_void_call(print_string, &[ptr, len]);
-
     }
-    fn print_newline(&mut self){
+    fn print_newline(&mut self) {
         let print_newline = self.runtime_functions.print_newline;
         self.codegen_direct_void_call(print_newline, &[]);
-
     }
     fn print_string_newline(&mut self, ptr: ir::Value, len: ir::Value) {
         self.print_string(ptr, len);
@@ -1092,24 +1100,19 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         let values = self.builder.inst_results(call).to_vec();
         self.store_return_value(values, ret_place);
     }
-    fn codegen_call(
-        &mut self,
-        place: &mir::Place,
-        callee: &mir::Operand,
-        locals: &Locals,
-        args: &[Operand],
-    ) {
-        let Type::Function(sig) =
-            Scheme::new(callee.type_of(self.ctxt, locals, &self.return_ty)).bind(self.args)
-        else {
-            unreachable!()
-        };
-        let callee = match callee {
+    fn codegen_call(&mut self, place: &mir::Place, callee: &mir::Operand, args: &[Operand]) {
+        let (ty, callee) = match callee {
             Operand::Constant(Constant {
-                ty: _,
+                ty,
                 value: ConstValue::Named(id, args),
-            }) => Ok((*id, args)),
-            _ => Err(self.eval_operand(callee)),
+            }) => (Scheme::new((**ty).clone()).bind(self.args), Ok((*id, args))),
+            _ => {
+                let operand = self.eval_operand(callee);
+                (operand.ty.clone(), Err(operand))
+            }
+        };
+        let Type::Function(sig) = ty else {
+            unreachable!()
         };
         let args: Vec<OperandValue> = args
             .iter()
@@ -1151,7 +1154,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 self.codegen_direct_call(ret_place, id, &flattened_args);
             }
             Err(value) => {
-                let callee = value.force_immediate_value(self).unwrap().first_value();
+                let callee = value.expect_immediate(self);
                 let sig = signature(&abi, self.module.target_config());
                 let sig = self.builder.func.import_signature(sig);
 
@@ -1211,15 +1214,9 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         right: &Operand,
     ) {
         let left_operand = self.eval_operand(left);
-        let left_value = left_operand
-            .force_immediate_value(self)
-            .unwrap()
-            .first_value();
+        let left_value = left_operand.expect_immediate(self);
         let right_operand = self.eval_operand(right);
-        let right_value = right_operand
-            .force_immediate_value(self)
-            .unwrap()
-            .first_value();
+        let right_value = right_operand.expect_immediate(self);
         let (left, right) = match binary_op {
             BinaryOp::Overflow(op) => {
                 let Type::Int(kind) = left_operand.ty else {
@@ -1312,7 +1309,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         let box_ptr = box_inner_ptr.ptr(self);
         self.store_immediate(place, box_ptr);
     }
-    fn assign(&mut self, place: &mir::Place, value: &mir::Rvalue, locals: &Locals) {
+    fn codgen_rvalue_assign(&mut self, place: &mir::Place, value: &mir::Rvalue) {
         match value {
             mir::Rvalue::Aggregate(kind, fields) => match kind {
                 AggregateKind::Tuple
@@ -1366,11 +1363,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 let byte_align =
                     self.build_int_const(&Type::UINT, ty_layout.alignment.in_bytes().into());
                 let value = self.eval_operand(value);
-                let count = self
-                    .eval_operand(count)
-                    .force_immediate_value(self)
-                    .unwrap()
-                    .first_value();
+                let count = self.eval_operand(count).expect_immediate(self);
                 let byte_size = self.builder.ins().imul(byte_size, count);
 
                 let ptr = self.codegen_alloc_call(byte_size, byte_align);
@@ -1380,7 +1373,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     return;
                 }
                 if ty_layout.size == Size::BYTE {
-                    let value = value.force_immediate_value(self).unwrap().first_value();
+                    let value = value.expect_immediate(self);
                     self.builder
                         .call_memset(self.target_config, ptr, value, byte_size);
                     let place = self.eval_place(place).unwrap();
@@ -1488,7 +1481,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 self.store_operand(place, operand);
             }
             mir::Rvalue::Call(callee, args) => {
-                self.codegen_call(place, callee, locals, args);
+                self.codegen_call(place, callee, args);
             }
             mir::Rvalue::Binary(binary_op, operands) => {
                 let (left, right) = &**operands;
@@ -1522,8 +1515,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                         (BackendRepr::Scalar(from), BackendRepr::Scalar(to)) => {
                             let from = scalar_to_cranelift_type(from);
                             let to = scalar_to_cranelift_type(to);
-                            let mut value =
-                                operand.force_immediate_value(self).unwrap().first_value();
+                            let mut value = operand.expect_immediate(self);
                             if from != to {
                                 value = self.builder.ins().bitcast(to, MemFlagsData::new(), value);
                             }
@@ -1556,11 +1548,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 mir::CastKind::IntegerCast(cast) => match cast {
                     mir::IntegerCast::ZeroExtendByteTo(kind) => {
                         let ty = ir::types::I64;
-                        let value = self
-                            .eval_operand(operand)
-                            .force_immediate_value(self)
-                            .unwrap()
-                            .first_value();
+                        let value = self.eval_operand(operand).expect_immediate(self);
                         let value = match kind {
                             IntegerKind::Unsigned => self.builder.ins().uextend(ty, value),
                             IntegerKind::Signed => self.builder.ins().uextend(ty, value),
@@ -1687,6 +1675,62 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             self.panic_block.set(Some(panic_block));
         };
     }
+
+    fn codgen_print_stmt(&mut self, operand: Option<&mir::Operand>) {
+        if let Some(operand) = operand {
+            let operand = self.eval_operand(operand);
+            match operand.ty {
+                Type::Int(_) => {
+                    let value = operand.expect_immediate(self);
+                    self.codegen_direct_void_call(self.runtime_functions.print_int, &[value]);
+                }
+                Type::Bool => {
+                    let value = operand.expect_immediate(self);
+                    let true_value = self.build_string_value("true".to_string());
+                    let false_value = self.build_string_value("false".to_string());
+
+                    let (first_value, second_value) = (
+                        self.builder
+                            .ins()
+                            .select(value, true_value.0, false_value.0),
+                        self.builder
+                            .ins()
+                            .select(value, true_value.1, false_value.1),
+                    );
+                    self.print_string(first_value, second_value);
+                }
+                Type::String => {
+                    let (first_val, second_val) = match operand.kind {
+                        OperandValueKind::Indirect(CodegenPlace::MemPlace(place)) => {
+                            let first_val = self.load_array_ptr(place.clone());
+                            let second_val = self.load_array_len(place);
+                            (first_val, second_val)
+                        }
+                        OperandValueKind::Value(ScalarValue::Pair([first, second], _)) => {
+                            (first, second)
+                        }
+                        _ => unreachable!("{:?}", operand.kind),
+                    };
+                    self.print_string(first_val, second_val);
+                }
+                ref ty => todo!("print for {} {:?}", ty, ty),
+            }
+        } else {
+            self.print_newline();
+        }
+    }
+    fn codgen_stmt(&mut self, stmt: &mir::Stmt) {
+        match &stmt.kind {
+            mir::StmtKind::Noop => (),
+            mir::StmtKind::Assign(place, rvalue) => {
+                self.codgen_rvalue_assign(place, rvalue);
+            }
+            mir::StmtKind::Print(operand) => {
+                let operand = operand.as_ref();
+                self.codgen_print_stmt(operand);
+            }
+        }
+    }
     fn codgen(mut self, body: &'_ mir::Body) {
         let block_map = self.block_map;
 
@@ -1700,79 +1744,12 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 self.store_params(body);
             }
             for stmt in block.stmts.iter() {
-                match &stmt.kind {
-                    mir::StmtKind::Noop => (),
-                    mir::StmtKind::Assign(place, rvalue) => {
-                        self.assign(place, rvalue, &body.locals);
-                    }
-                    mir::StmtKind::Print(operand) => {
-                        if let Some(operand) = operand {
-                            let operand = self.eval_operand(operand);
-                            match operand.ty {
-                                Type::Int(_) => {
-                                    let value = operand
-                                        .force_immediate_value(&mut self)
-                                        .unwrap()
-                                        .first_value();
-                                    self.codegen_direct_void_call(
-                                        self.runtime_functions.print_int,
-                                        &[value],
-                                    );
-                                }
-                                Type::Bool => {
-                                    let value = operand
-                                        .force_immediate_value(&mut self)
-                                        .unwrap()
-                                        .first_value();
-                                    let true_value = self.build_string_value("true".to_string());
-                                    let false_value = self.build_string_value("false".to_string());
-
-                                    let (first_value, second_value) = (
-                                        self.builder.ins().select(
-                                            value,
-                                            true_value.0,
-                                            false_value.0,
-                                        ),
-                                        self.builder.ins().select(
-                                            value,
-                                            true_value.1,
-                                            false_value.1,
-                                        ),
-                                    );
-                                    self.print_string(first_value, second_value);
-                                }
-                                Type::String => {
-                                    let (first_val, second_val) = match operand.kind {
-                                        OperandValueKind::Indirect(CodegenPlace::MemPlace(
-                                            place,
-                                        )) => {
-                                            let first_val = self.load_array_ptr(place.clone());
-                                            let second_val = self.load_array_len(place);
-                                            (first_val, second_val)
-                                        }
-                                        OperandValueKind::Value(ScalarValue::Pair(
-                                            [first, second],
-                                            _,
-                                        )) => (first, second),
-                                        _ => unreachable!("{:?}", operand.kind),
-                                    };
-                                    self.print_string(first_val, second_val);
-                                }
-                                ref ty => todo!("print for {} {:?}", ty, ty),
-                            }
-                        } else {
-                            self.print_newline();
-                        }
-                    }
-                }
+                self.codgen_stmt(stmt);
             }
             match &block.expect_terminator().kind {
                 mir::TerminatorKind::Assert(operand, assert_kind, basic_block_id) => {
                     let value = self.eval_operand(operand);
-                    let value = value
-                        .force_immediate_value(&mut self)
-                        .unwrap()
-                        .first_value();
+                    let value = value.expect_immediate(&mut self);
                     let code = TrapCode::user(1).unwrap();
                     //If it negates than we are asserting !operand instead of operand
                     let assert_success = if assert_kind.negate() {
@@ -1820,10 +1797,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 }
                 mir::TerminatorKind::Switch(operand, targets) => {
                     let operand = self.eval_operand(operand);
-                    let value = operand
-                        .force_immediate_value(&mut self)
-                        .unwrap()
-                        .first_value();
+                    let value = operand.expect_immediate(&mut self);
                     let otherwise_block = block_map.blocks[targets.otherwise].unwrap();
                     let mut switch = frontend::Switch::new();
                     for target in targets.targets.iter() {

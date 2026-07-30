@@ -51,6 +51,9 @@ impl Size {
     }
 
     pub const fn align_to(self, align: Align) -> Self {
+        if self.0.is_multiple_of(align.in_bytes()){
+            return self;
+        }
         Self(self.0.next_multiple_of(align.in_bytes()))
     }
 
@@ -325,7 +328,7 @@ fn aggregate_layout(mut field_layouts: Vec<(FieldId, Layout)>) -> Result<Layout,
     let mut offset = Size::ZERO;
     let mut max_align = field_layouts
         .first()
-        .map_or(POINTER_ALIGN, |(_, layout)| layout.alignment);
+        .map_or(Align::BYTE, |(_, layout)| layout.alignment);
     let mut field_positions = IndexVec::from_value(field_layouts.len(), FieldOffset::default());
     let layouts = field_layouts
         .into_iter()

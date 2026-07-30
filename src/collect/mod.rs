@@ -686,6 +686,7 @@ fn lower_type_def(ctxt: CtxtRef<'_>, type_def: &TypeDef) -> TypeDefInfo {
         },
     }
 }
+
 pub fn build_global_context(
     config: Config,
     nodes: IndexVec<DefId, Node>,
