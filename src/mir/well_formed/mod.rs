@@ -11,11 +11,11 @@ use crate::{
     types::{FunctionType, TypeKind},
     unsafety,
 };
-pub struct WellFormed<'ctxt,'body> {
+pub struct WellFormed<'ctxt, 'body> {
     ctxt: CtxtRef<'ctxt>,
     body: &'body Body,
 }
-impl<'ctxt,'body> WellFormed<'ctxt,'body> {
+impl<'ctxt, 'body> WellFormed<'ctxt, 'body> {
     pub fn new(body: &'body Body, ctxt: CtxtRef<'ctxt>) -> Self {
         Self { ctxt, body }
     }
@@ -44,7 +44,7 @@ impl<'ctxt,'body> WellFormed<'ctxt,'body> {
         value
     }
 }
-impl Visit for WellFormed<'_,'_> {
+impl Visit for WellFormed<'_, '_> {
     fn visit_place(&mut self, _: PlaceCtxt, loc: Location, place: &super::Place) {
         let mut ty = place
             .base

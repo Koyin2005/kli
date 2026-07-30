@@ -9,7 +9,7 @@ use crate::{
     types::{FunctionType, GenericArgs, TypeKind},
 };
 
-impl<'a> Builder<'_,'a> {
+impl<'a> Builder<'_, 'a> {
     fn add_finished_body(self) {
         let body = self.body;
         let context = self.mir_context;

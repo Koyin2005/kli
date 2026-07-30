@@ -1,5 +1,8 @@
 use crate::{
-    CtxtRef, layout::{Layout, calculate_layout}, mir::{Constant, Locals, Location, Operand, StmtKind, passes::MirPass, visitor::MutVisit}, types::TypeKind,
+    CtxtRef,
+    layout::{Layout, calculate_layout},
+    mir::{Constant, Locals, Location, Operand, StmtKind, passes::MirPass, visitor::MutVisit},
+    types::TypeKind,
 };
 
 pub struct RemoveZst;
@@ -15,8 +18,8 @@ impl<'ctxt> MirPass<'ctxt> for RemoveZst {
         "remove-zst"
     }
     fn run(&self, ctxt: crate::CtxtRef<'ctxt>, body: &mut crate::mir::Body) {
-        struct RemoveZstVisit<'ctxt,'a>(CtxtRef<'ctxt>, &'a Locals, &'a TypeKind);
-        impl MutVisit for RemoveZstVisit<'_,'_> {
+        struct RemoveZstVisit<'ctxt, 'a>(CtxtRef<'ctxt>, &'a Locals, &'a TypeKind);
+        impl MutVisit for RemoveZstVisit<'_, '_> {
             fn visit_operand(&mut self, _: Location, operand: &mut crate::mir::Operand) {
                 let Operand::Load(place) = operand else {
                     return;

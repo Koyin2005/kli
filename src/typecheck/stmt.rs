@@ -4,7 +4,7 @@ use crate::{
     typed_ast,
 };
 
-impl FunctionCtxt<'_,'_> {
+impl FunctionCtxt<'_, '_> {
     pub(super) fn check_stmt(&self, stmt: &Stmt) -> typed_ast::Stmt {
         let loc = stmt.loc;
         match &stmt.kind {

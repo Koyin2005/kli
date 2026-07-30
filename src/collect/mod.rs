@@ -1,12 +1,31 @@
 use std::{
-    cell::RefCell, collections::{HashMap, HashSet}, fmt::Debug, hash::Hash,
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    hash::Hash,
 };
 
 use typed_arena::Arena;
 
 use crate::{
-    Symbol, builtins::Builtins, captures::{self, captures}, config::Config, def_ids::DefId, diagnostics::DiagnosticReporter, ident::Ident, index_vec::IndexVec, lang_items::LangItems, layout::{Layout, calculate_layout}, resolved_ast::{self, AnnotationKind, Item, ItemKind, Node, TypeDef, TypeImpl}, scheme::Scheme, src_loc::SrcLoc, typecheck::infer::TypeInfer, typed_ast::FieldId, types::{
-        self, CaseId, FunctionSig, GenericArg, GenericArgs, GenericArgsRef, GenericKind, GenericParam, TagType, Type, TypeKind, lower::Lower,
+    Symbol,
+    builtins::Builtins,
+    captures::{self, captures},
+    config::Config,
+    def_ids::DefId,
+    diagnostics::DiagnosticReporter,
+    ident::Ident,
+    index_vec::IndexVec,
+    lang_items::LangItems,
+    layout::{Layout, calculate_layout},
+    resolved_ast::{self, AnnotationKind, Item, ItemKind, Node, TypeDef, TypeImpl},
+    scheme::Scheme,
+    src_loc::SrcLoc,
+    typecheck::infer::TypeInfer,
+    typed_ast::FieldId,
+    types::{
+        self, CaseId, FunctionSig, GenericArg, GenericArgs, GenericArgsRef, GenericKind,
+        GenericParam, TagType, Type, TypeKind, lower::Lower,
     },
 };
 
@@ -190,16 +209,19 @@ impl Generics {
             .collect()
     }
 }
-struct Interner<'a,T>{
-    seen : RefCell<HashMap<T,&'a T>>,
-    values : &'a Arena<T>
+struct Interner<'a, T> {
+    seen: RefCell<HashMap<T, &'a T>>,
+    values: &'a Arena<T>,
 }
-impl<'a,T : Eq + Hash + Clone> Interner<'a,T>{
-    fn new(arena : &'a Arena<T>) -> Self{
-        Self { seen: RefCell::default(), values: arena }
+impl<'a, T: Eq + Hash + Clone> Interner<'a, T> {
+    fn new(arena: &'a Arena<T>) -> Self {
+        Self {
+            seen: RefCell::default(),
+            values: arena,
+        }
     }
-    fn intern(&self, value : T) -> &'_ T {
-        if let Some(value) = self.seen.borrow().get(&value){
+    fn intern(&self, value: T) -> &'_ T {
+        if let Some(value) = self.seen.borrow().get(&value) {
             return *value;
         }
         let value_ref = self.values.alloc(value.clone());
@@ -221,8 +243,7 @@ pub struct GlobalContext<'ctxt> {
     ty_cache: Cache<DefId, Scheme<TypeKind>>,
     builtin: Cache<(), DefId>,
     config: Config,
-    interners : Interners<'ctxt>
-
+    interners: Interners<'ctxt>,
 }
 impl<'a> GlobalContext<'a> {
     pub fn as_ref(&'a self) -> CtxtRef<'a> {
@@ -231,10 +252,10 @@ impl<'a> GlobalContext<'a> {
 }
 #[derive(Default)]
 pub struct Arenas {
-    ty_arena : Arena<TypeKind>
+    ty_arena: Arena<TypeKind>,
 }
-struct Interners<'a>{
-    ty_interner : Interner<'a,TypeKind>
+struct Interners<'a> {
+    ty_interner: Interner<'a, TypeKind>,
 }
 #[derive(Copy, Clone)]
 pub struct CtxtRef<'a>(&'a GlobalContext<'a>);
@@ -639,7 +660,7 @@ impl CtxtRef<'_> {
     pub fn layout_of(self, ty: &TypeKind) -> Result<Layout, crate::layout::LayoutError> {
         calculate_layout(self, ty)
     }
-    pub fn intern_ty(&self, kind : TypeKind) -> Type<'_>{
+    pub fn intern_ty(&self, kind: TypeKind) -> Type<'_> {
         Type::new(self.0.interners.ty_interner.intern(kind))
     }
 }
@@ -705,11 +726,13 @@ pub fn build_global_context(
     nodes: IndexVec<DefId, Node>,
     builtins: Builtins,
     parents: HashMap<DefId, DefId>,
-    arenas : &'_ Arenas
+    arenas: &'_ Arenas,
 ) -> GlobalContext<'_> {
     let diag = DiagnosticReporter::new();
     GlobalContext {
-        interners :Interners { ty_interner: Interner::new(&arenas.ty_arena) },
+        interners: Interners {
+            ty_interner: Interner::new(&arenas.ty_arena),
+        },
         config,
         parents,
         lang_items: Default::default(),

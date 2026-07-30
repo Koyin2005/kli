@@ -21,7 +21,7 @@ impl From<BuiltinResult> for Rvalue {
         }
     }
 }
-impl Builder<'_,'_> {
+impl Builder<'_, '_> {
     fn as_constant(&mut self, expr: &Expr) -> Option<Constant> {
         match expr.kind {
             ExprKind::Bool(value) => Some(Constant::bool(value)),
@@ -282,7 +282,9 @@ impl Builder<'_,'_> {
             }
             Builtin::ZeroExtend => {
                 let [operand] = operands.try_into().unwrap();
-                let TypeKind::Int(kind) = ty else { unreachable!() };
+                let TypeKind::Int(kind) = ty else {
+                    unreachable!()
+                };
                 BuiltinResult::Rvalue(Rvalue::Cast(
                     mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendByteTo(*kind)),
                     operand,
@@ -290,7 +292,9 @@ impl Builder<'_,'_> {
             }
             Builtin::BoxAlloc => {
                 let [operand] = operands.try_into().unwrap();
-                let TypeKind::Box(ty) = ty else { unreachable!() };
+                let TypeKind::Box(ty) = ty else {
+                    unreachable!()
+                };
                 BuiltinResult::Rvalue(Rvalue::AllocateBox((**ty).clone(), operand))
             }
             Builtin::Len => {

@@ -6,7 +6,7 @@ use crate::{
     typed_ast::{Expr, ExprKind},
 };
 
-impl Builder<'_,'_> {
+impl Builder<'_, '_> {
     pub(super) fn expr_stmt(&mut self, expr: &Expr) {
         match &expr.kind {
             ExprKind::Err => (),

@@ -42,7 +42,7 @@ impl<'ctxt> RootCtxt<'ctxt> {
             .insert(var_id, VarInfo { name, ty });
     }
 
-    fn lower(&self) -> Lower<'_,'ctxt> {
+    fn lower(&self) -> Lower<'_, 'ctxt> {
         Lower::new(self.ctxt, self.id, Some(&self.infer))
     }
     pub(super) fn lower_type(&self, ty: &res::Type) -> TypeKind {
@@ -153,7 +153,10 @@ impl<'ctxt> RootCtxt<'ctxt> {
         }
         (ty, value)
     }
-    pub(super) fn iterator_element(&self, ty: TypeKind) -> Result<(IteratorType, TypeKind), TypeKind> {
+    pub(super) fn iterator_element(
+        &self,
+        ty: TypeKind,
+    ) -> Result<(IteratorType, TypeKind), TypeKind> {
         match ty {
             TypeKind::Infer(var) => match self.simplify_type(TypeKind::Infer(var)) {
                 TypeKind::Infer(_) => Err(ty),
@@ -216,12 +219,12 @@ pub enum CoercionKind {
     NeverToAny(TypeKind),
 }
 pub struct VisibilityError;
-pub struct FunctionCtxt<'root,'ctxt> {
+pub struct FunctionCtxt<'root, 'ctxt> {
     pub(super) id: DefId,
     root: &'root RootCtxt<'ctxt>,
     pub(super) return_type: TypeKind,
 }
-impl<'root,'ctxt> FunctionCtxt<'root,'ctxt> {
+impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
     pub fn new(root: &'root RootCtxt<'ctxt>, id: DefId, ty: TypeKind) -> Self {
         Self {
             id,

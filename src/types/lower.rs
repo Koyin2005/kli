@@ -7,14 +7,15 @@ use crate::resolved_ast::{self as res, TypeName};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
 use crate::types::{
-    FieldName, FunctionType, GenericArg, GenericArgs, GenericKind, IntegerKind, RecordField, TypeKind,
+    FieldName, FunctionType, GenericArg, GenericArgs, GenericKind, IntegerKind, RecordField,
+    TypeKind,
 };
-pub struct Lower<'a,'ctxt> {
+pub struct Lower<'a, 'ctxt> {
     ctxt: CtxtRef<'ctxt>,
     _id: DefId,
     infer: Option<&'a RefCell<TypeInfer>>,
 }
-impl<'a,'ctxt> Lower<'a,'ctxt> {
+impl<'a, 'ctxt> Lower<'a, 'ctxt> {
     pub fn new(ctxt: CtxtRef<'ctxt>, id: DefId, infer: Option<&'a RefCell<TypeInfer>>) -> Self {
         Self {
             ctxt,
@@ -91,7 +92,12 @@ impl<'a,'ctxt> Lower<'a,'ctxt> {
         let count = generics.own_count();
         self.lower_generic_args_with(generics, count, loc, args)
     }
-    pub fn lower_type_name(&self, loc: SrcLoc, name: TypeName, args: &res::GenericArgs) -> TypeKind {
+    pub fn lower_type_name(
+        &self,
+        loc: SrcLoc,
+        name: TypeName,
+        args: &res::GenericArgs,
+    ) -> TypeKind {
         match name {
             TypeName::Param(name, param) => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);

@@ -7,7 +7,7 @@ use crate::{
     typed_ast::{self, FieldId},
     types::{self, FieldName, TypeKind},
 };
-impl FunctionCtxt<'_,'_> {
+impl FunctionCtxt<'_, '_> {
     pub fn check_pattern(&self, pattern: &Pattern, expected_type: TypeKind) -> typed_ast::Pattern {
         let loc = pattern.loc;
         let root = self.root();

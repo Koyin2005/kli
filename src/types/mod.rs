@@ -194,19 +194,19 @@ impl IntegerKind {
         matches!(self, Self::Signed)
     }
 }
-#[derive(PartialEq, Eq,Clone, Copy,Hash)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Type<'ctxt>(&'ctxt TypeKind);
-impl<'ctxt> Type<'ctxt>{
-    pub fn new(kind : &'ctxt TypeKind) -> Self{
+impl<'ctxt> Type<'ctxt> {
+    pub fn new(kind: &'ctxt TypeKind) -> Self {
         Self(kind)
     }
-    pub fn kind(self) -> &'ctxt TypeKind{
+    pub fn kind(self) -> &'ctxt TypeKind {
         self.0
     }
 }
-impl std::fmt::Debug for Type<'_>{
+impl std::fmt::Debug for Type<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{}",self.0)
+        write!(f, "{}", self.0)
     }
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
@@ -284,7 +284,11 @@ impl TypeKind {
             return_type: Box::new(return_ty),
         })
     }
-    pub fn field_info(&self, field_id: FieldId, ctxt: CtxtRef<'_>) -> Option<(TypeKind, FieldName)> {
+    pub fn field_info(
+        &self,
+        field_id: FieldId,
+        ctxt: CtxtRef<'_>,
+    ) -> Option<(TypeKind, FieldName)> {
         match self {
             Self::Record(fields) => fields
                 .get(field_id)

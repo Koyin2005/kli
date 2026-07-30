@@ -16,8 +16,8 @@ pub fn backend_repr(layout: &layout::Layout) -> BackendRepr {
             let Some(first_field) = non_zst_fields.next() else {
                 unreachable!("this should be zero sized")
             };
-            
-            if non_zst_fields.next().is_none(){
+
+            if non_zst_fields.next().is_none() {
                 return backend_repr(&first_field.layout);
             }
             BackendRepr::Memory

@@ -1114,7 +1114,7 @@ impl<'info> Resolve<'info> {
         })
     }
     pub fn resolve<'a>(
-        arena : &'a Arenas,
+        arena: &'a Arenas,
         config: Config,
         modules: Vec<ast::Module>,
     ) -> Result<GlobalContext<'a>, ResolveErrored> {
@@ -1148,7 +1148,7 @@ impl<'info> Resolve<'info> {
         }
 
         let resolved_diag = this.diag;
-        let context = build_global_context(this.config, nodes, builtins, decl_info.parents,arena);
+        let context = build_global_context(this.config, nodes, builtins, decl_info.parents, arena);
         if !diag.report_all() & !resolved_diag.report_all() {
             Ok(context)
         } else {

@@ -353,7 +353,7 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                 let sig = sig.clone();
                 ctxt.func.signature = sig;
             }
-            
+
             let body = &mir_ctxt.bodies[&instance.body_src()];
             let mut builder = frontend::FunctionBuilder::new(&mut ctxt.func, &mut f_ctxt);
             let block_map = BlockMap::new(body, &mut builder);
@@ -399,7 +399,7 @@ impl OperandValue {
     #[track_caller]
     pub fn expect_immediate(
         &self,
-        cg: &mut FunctionCodegen<'_,'_, impl Module>,
+        cg: &mut FunctionCodegen<'_, '_, impl Module>,
     ) -> codegen::ir::Value {
         match self.kind {
             OperandValueKind::Indirect(ref place) => cg
@@ -548,7 +548,7 @@ impl MemPlace {
         };
         Self::new_with_offset(self.base_ptr, layout, ty, offset)
     }
-    fn ptr(&self, builder: &mut FunctionCodegen<'_,'_, impl Module>) -> ir::Value {
+    fn ptr(&self, builder: &mut FunctionCodegen<'_, '_, impl Module>) -> ir::Value {
         if self.offset == 0 {
             return self.base_ptr;
         }
@@ -573,7 +573,7 @@ impl MemPlace {
         }
     }
 }
-pub struct FunctionCodegen<'r,'ctxt, M: Module> {
+pub struct FunctionCodegen<'r, 'ctxt, M: Module> {
     ctxt: CtxtRef<'ctxt>,
     builder: cranelift::frontend::FunctionBuilder<'r>,
     local_info: locals::Locals,
@@ -589,7 +589,7 @@ pub struct FunctionCodegen<'r,'ctxt, M: Module> {
     panic_block: Cell<Option<ir::Block>>,
 }
 
-impl<'a,'ctxt, M: Module> FunctionCodegen<'a,'ctxt, M> {
+impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn new(
         ctxt: CtxtRef<'ctxt>,
         mut builder: cranelift::frontend::FunctionBuilder<'a>,
@@ -739,9 +739,7 @@ impl<'a,'ctxt, M: Module> FunctionCodegen<'a,'ctxt, M> {
                 self.store_operand_with_mem_place(place, value);
                 return;
             }
-            CodegenPlace::Ssa(_, variable) => {
-                variable
-            }
+            CodegenPlace::Ssa(_, variable) => variable,
         };
         let value = value.expect_immediate(self);
         self.store_var_imm(first_var, value);
@@ -821,7 +819,7 @@ impl<'a,'ctxt, M: Module> FunctionCodegen<'a,'ctxt, M> {
                                     }
                                 }
                             }
-                            if let BackendRepr::ZeroSized = backend_repr(&self.layout_for(&ty)){
+                            if let BackendRepr::ZeroSized = backend_repr(&self.layout_for(&ty)) {
                                 return Err(ty);
                             }
                         }
@@ -1322,8 +1320,8 @@ impl<'a,'ctxt, M: Module> FunctionCodegen<'a,'ctxt, M> {
                 }
                 AggregateKind::Variant(id, case, args) => {
                     let type_def = self.ctxt.type_def(*id);
-                    let ty =
-                        Scheme::new(TypeKind::Named(*id, type_def.name, args.clone())).bind(self.args);
+                    let ty = Scheme::new(TypeKind::Named(*id, type_def.name, args.clone()))
+                        .bind(self.args);
 
                     let name = type_def.case(*case).name;
                     let payload_place = place.clone().with_case_downcast(*case, name);
@@ -1360,7 +1358,8 @@ impl<'a,'ctxt, M: Module> FunctionCodegen<'a,'ctxt, M> {
                 let ty = Scheme::new(ty.clone()).bind(self.args);
                 let ty_layout = self.layout_for(&ty);
 
-                let byte_size = self.build_int_const(&TypeKind::UINT, ty_layout.size.in_bytes().into());
+                let byte_size =
+                    self.build_int_const(&TypeKind::UINT, ty_layout.size.in_bytes().into());
                 let byte_align =
                     self.build_int_const(&TypeKind::UINT, ty_layout.alignment.in_bytes().into());
                 let value = self.eval_operand(value);

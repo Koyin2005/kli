@@ -104,7 +104,11 @@ pub fn missing_patterns(
         .collect()
 }
 
-fn specialize(constructor: Constructor, fields: &[TypeKind], matrix: Vec<Vec<Pat>>) -> Vec<Vec<Pat>> {
+fn specialize(
+    constructor: Constructor,
+    fields: &[TypeKind],
+    matrix: Vec<Vec<Pat>>,
+) -> Vec<Vec<Pat>> {
     matrix
         .into_iter()
         .filter_map(|mut row| {

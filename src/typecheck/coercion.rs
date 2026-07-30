@@ -1,12 +1,12 @@
 use crate::{resolved_ast, typecheck::root::FunctionCtxt, typed_ast, types::TypeKind};
 
-pub struct Coercion<'a,'ctxt> {
+pub struct Coercion<'a, 'ctxt> {
     target_ty: Option<TypeKind>,
     exprs: Vec<typed_ast::Expr>,
-    ctxt: &'a FunctionCtxt<'a,'ctxt>,
+    ctxt: &'a FunctionCtxt<'a, 'ctxt>,
 }
-impl<'a,'b> Coercion<'a,'b> {
-    pub fn new(target_ty: Option<TypeKind>, ctxt: &'a FunctionCtxt<'a,'b>) -> Coercion<'a,'b> {
+impl<'a, 'b> Coercion<'a, 'b> {
+    pub fn new(target_ty: Option<TypeKind>, ctxt: &'a FunctionCtxt<'a, 'b>) -> Coercion<'a, 'b> {
         Coercion {
             target_ty,
             exprs: Vec::new(),

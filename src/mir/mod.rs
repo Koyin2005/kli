@@ -298,7 +298,8 @@ impl Rvalue {
             Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),
             Rvalue::Len(_) => TypeKind::UINT,
             Rvalue::Call(operand, _) => {
-                let TypeKind::Function(function) = operand.type_of(ctxt, locals, return_type) else {
+                let TypeKind::Function(function) = operand.type_of(ctxt, locals, return_type)
+                else {
                     unreachable!("Should be a function type")
                 };
                 *function.return_type

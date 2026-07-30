@@ -60,17 +60,21 @@ impl TypeInfer {
             | (ty @ TypeKind::Byte, TypeKind::Byte)
             | (ty @ TypeKind::Never, TypeKind::Never)
             | (ty @ TypeKind::String, TypeKind::String) => Some(ty),
-            (TypeKind::Param(name1, index1), TypeKind::Param(name2, index2)) if index1 == index2 => {
+            (TypeKind::Param(name1, index1), TypeKind::Param(name2, index2))
+                if index1 == index2 =>
+            {
                 assert_eq!(name1, name2);
                 Some(TypeKind::Param(name1, index1))
             }
             (TypeKind::Array(ty1), TypeKind::Array(ty2)) => self
                 .unify_ty(*ty1, *ty2)
                 .map(|ty| TypeKind::Array(Box::new(ty))),
-            (TypeKind::Box(ty1), TypeKind::Box(ty2)) => {
-                self.unify_ty(*ty1, *ty2).map(|ty| TypeKind::Box(Box::new(ty)))
-            }
-            (TypeKind::Record(fields1), TypeKind::Record(fields2)) if fields1.len() == fields2.len() => {
+            (TypeKind::Box(ty1), TypeKind::Box(ty2)) => self
+                .unify_ty(*ty1, *ty2)
+                .map(|ty| TypeKind::Box(Box::new(ty))),
+            (TypeKind::Record(fields1), TypeKind::Record(fields2))
+                if fields1.len() == fields2.len() =>
+            {
                 fields1
                     .into_iter()
                     .zip(fields2)
@@ -88,7 +92,9 @@ impl TypeInfer {
                     .collect::<Option<IndexVec<_, _>>>()
                     .map(TypeKind::Record)
             }
-            (TypeKind::Tuple(fields1), TypeKind::Tuple(fields2)) if fields1.len() == fields2.len() => {
+            (TypeKind::Tuple(fields1), TypeKind::Tuple(fields2))
+                if fields1.len() == fields2.len() =>
+            {
                 fields1
                     .into_iter()
                     .zip(fields2)
@@ -115,21 +121,25 @@ impl TypeInfer {
                 let args = self.unify_generic_args(args1, args2)?;
                 Some(TypeKind::Named(id1, name, args))
             }
-            (TypeKind::Infer(var1), TypeKind::Infer(var2)) if var1 == var2 => Some(TypeKind::Infer(var1)),
-            (TypeKind::Infer(var), ty) | (ty, TypeKind::Infer(var)) => match &mut self.type_vars[var] {
-                TypeVarInfo {
-                    ty: Some(entry), ..
-                } => {
-                    let entry = entry.clone();
-                    let ty = self.unify_ty(entry, ty);
-                    self.type_vars[var].ty.clone_from(&ty);
-                    ty
+            (TypeKind::Infer(var1), TypeKind::Infer(var2)) if var1 == var2 => {
+                Some(TypeKind::Infer(var1))
+            }
+            (TypeKind::Infer(var), ty) | (ty, TypeKind::Infer(var)) => {
+                match &mut self.type_vars[var] {
+                    TypeVarInfo {
+                        ty: Some(entry), ..
+                    } => {
+                        let entry = entry.clone();
+                        let ty = self.unify_ty(entry, ty);
+                        self.type_vars[var].ty.clone_from(&ty);
+                        ty
+                    }
+                    TypeVarInfo { ty: entry, .. } => {
+                        *entry = Some(ty.clone());
+                        Some(ty)
+                    }
                 }
-                TypeVarInfo { ty: entry, .. } => {
-                    *entry = Some(ty.clone());
-                    Some(ty)
-                }
-            },
+            }
             //This will fail to compile if new variants are not matched
             (
                 TypeKind::Int(IntegerKind::Signed | IntegerKind::Unsigned)

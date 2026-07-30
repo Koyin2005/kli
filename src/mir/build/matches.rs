@@ -42,7 +42,7 @@ struct MatchTest {
     place: Place,
     case: TestCase,
 }
-impl Builder<'_,'_> {
+impl Builder<'_, '_> {
     fn build_tree(&mut self, tests: TestMatrix) -> MatchBranch {
         let Some(head_row) = tests.first() else {
             return MatchBranch::Unreachable;

@@ -17,7 +17,7 @@ use crate::{
     types::{FieldName, FunctionSig, FunctionType, GenericArgs, RecordField, TypeKind},
 };
 
-impl FunctionCtxt<'_,'_> {
+impl FunctionCtxt<'_, '_> {
     fn check_place(&self, place: &Expr, expected_ty: Option<TypeKind>) -> typed_ast::Place {
         let (ty, kind) = match &place.kind {
             &ExprKind::Var(var) => (
