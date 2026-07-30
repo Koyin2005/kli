@@ -6,6 +6,7 @@ use crate::{
         backend_repr::{BackendRepr, backend_repr},
         locals::{LocalKind, ReturnSlot},
     },
+    config::Feature,
     index_vec::IndexVec,
     layout::{self, Align, LayoutKind, Scalar, Size, TagEncoding},
     mir::{
@@ -114,6 +115,7 @@ struct RuntimeFunctions {
     alloc: FuncId,
     print_int: FuncId,
     print_string: FuncId,
+    print_newline: FuncId,
 }
 struct FunctionMap {
     functions: HashMap<Instance, FunctionInfo>,
@@ -179,7 +181,9 @@ impl<'a> CodegenRoot<'a> {
             builder.switch_to_block(entry);
             build_function(self, &mut builder, entry);
             builder.finalize(self.module.target_config());
-            println!("{:?}", ctxt.func);
+            if self.ctxt.config().has_feature(Feature::OutputBackendIr) {
+                println!("{:?}", ctxt.func);
+            }
             self.module.define_function(function, ctxt).unwrap();
             self.module.clear_context(ctxt);
         }
@@ -219,6 +223,25 @@ impl<'a> CodegenRoot<'a> {
         let mut ctxt = codegen::Context::new();
         let mut f_ctxt = frontend::FunctionBuilderContext::new();
         let mut constants = Constants::default();
+
+        let print_int =
+            self.declare_function("kli_print_int", cranelift_module::Linkage::Import, &{
+                let mut sig = ir::Signature::new(self.module.target_config().default_call_conv);
+                sig.params.push(AbiParam::new(ir::types::I64));
+                sig
+            });
+        let print_string =
+            self.declare_function("kli_print_string", cranelift_module::Linkage::Import, &{
+                let mut sig = ir::Signature::new(self.module.target_config().default_call_conv);
+                sig.params.push(AbiParam::new(PTR_IR_TYPE));
+                sig.params.push(AbiParam::new(ir::types::I64));
+                sig
+            });
+        let print_newline =
+            self.declare_function("kli_print_newline", cranelift_module::Linkage::Import, &{
+                ir::Signature::new(self.module.target_config().default_call_conv)
+            });
+
         //Declare panic function
         let panic_function = self.make_function(
             &mut ctxt,
@@ -264,6 +287,8 @@ impl<'a> CodegenRoot<'a> {
                     let malloc = this.module.declare_func_in_func(malloc, builder.func);
                     let non_zero_size_block = builder.create_block();
                     let zero_size_block = builder.create_block();
+                    let alloc_failed_block = builder.create_block();
+                    let alloc_success_block = builder.create_block();
 
                     builder
                         .ins()
@@ -277,30 +302,44 @@ impl<'a> CodegenRoot<'a> {
                     builder.switch_to_block(non_zero_size_block);
                     let ptr = builder.ins().call(malloc, &[size_arg]);
                     let ptr = builder.inst_results(ptr)[0];
-                    builder.ins().trapz(ptr, TrapCode::unwrap_user(1));
-                    builder.ins().return_(&[ptr]);
+                    builder
+                        .ins()
+                        .brif(ptr, alloc_success_block, [], alloc_failed_block, []);
                     builder.seal_block(non_zero_size_block);
+
+                    builder.switch_to_block(alloc_failed_block);
+                    let print_string = this
+                        .module
+                        .declare_func_in_func(print_string, &mut builder.func);
+                    let print_newline = this
+                        .module
+                        .declare_func_in_func(print_newline, &mut builder.func);
+                    const MSG: &str = "failed to allocated";
+                    let len = const { MSG.len() as i64 };
+                    let msg = constants.constant_for(
+                        &mut this.module,
+                        String::from(MSG).into_bytes().into_boxed_slice(),
+                    );
+                    let msg = this.module.declare_data_in_func(msg, &mut builder.func);
+                    let msg = builder.ins().symbol_value(PTR_IR_TYPE, msg);
+                    let len = builder.ins().iconst(ir::types::I64, len);
+                    builder.ins().call(print_string, &[msg, len]);
+                    builder.ins().call(print_newline, &[]);
+                    builder.ins().trap(TrapCode::unwrap_user(1));
+                    builder.seal_block(alloc_failed_block);
+
+                    builder.switch_to_block(alloc_success_block);
+                    builder.ins().return_(&[ptr]);
+                    builder.seal_block(alloc_success_block);
                 },
             )
         };
-        let print_int =
-            self.declare_function("kli_print_int", cranelift_module::Linkage::Import, &{
-                let mut sig = ir::Signature::new(self.module.target_config().default_call_conv);
-                sig.params.push(AbiParam::new(ir::types::I64));
-                sig
-            });
-        let print_string =
-            self.declare_function("kli_print_string", cranelift_module::Linkage::Import, &{
-                let mut sig = ir::Signature::new(self.module.target_config().default_call_conv);
-                sig.params.push(AbiParam::new(PTR_IR_TYPE));
-                sig.params.push(AbiParam::new(ir::types::I64));
-                sig
-            });
         let runtime = RuntimeFunctions {
             panic: panic_function,
             alloc: allocate_function,
             print_int,
             print_string,
+            print_newline,
         };
 
         for instance in self.instances {
@@ -320,11 +359,14 @@ impl<'a> CodegenRoot<'a> {
             for param in sig.params.iter() {
                 builder.append_block_param(block_map.entry(), param.value_type);
             }
-            println!(
-                "building {} {}",
-                self.ctxt.display_path_for(instance.body_src().def_id()),
-                instance.args
-            );
+            let should_print = self.ctxt.config().has_feature(Feature::OutputBackendIr);
+            if should_print {
+                println!(
+                    "building {} {}",
+                    self.ctxt.display_path_for(instance.body_src().def_id()),
+                    instance.args
+                );
+            }
             FunctionCodegen::new(
                 self.ctxt,
                 builder,
@@ -338,7 +380,9 @@ impl<'a> CodegenRoot<'a> {
                 &mut constants,
             )
             .codgen(body);
-            println!("{:?}", ctxt.func);
+            if should_print {
+                println!("{:?}", ctxt.func);
+            }
             self.module.define_function(id, &mut ctxt).unwrap();
             self.module.clear_context(&mut ctxt);
         }
@@ -495,7 +539,7 @@ impl MemPlace {
                 kind, self.ty
             ),
         };
-        Self::new_with_offset(self.base_ptr, layout, ty,offset)
+        Self::new_with_offset(self.base_ptr, layout, ty, offset)
     }
     fn ptr(&self, builder: &mut FunctionCodegen<'_, impl Module>) -> ir::Value {
         if self.offset == 0 {
@@ -688,7 +732,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 self.store_operand_with_mem_place(place, value);
                 return;
             }
-            CodegenPlace::Ssa(.., variable) =>variable,
+            CodegenPlace::Ssa(.., variable) => variable,
         };
         let value = value.force_immediate_value(self).unwrap();
         self.store_var_imm(first_var, value.first_value());
@@ -721,16 +765,14 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
     }
     fn load_array_ptr(&mut self, place: MemPlace) -> codegen::ir::Value {
         let (ptr, offset) = place.ptr_and_offset();
-        self
-            .builder
+        self.builder
             .ins()
             .load(PTR_IR_TYPE, MemFlagsData::new(), ptr, offset)
     }
     fn load_array_len(&mut self, place: MemPlace) -> codegen::ir::Value {
         let place = place.offset_in_bytes(layout::POINTER_SIZE.in_bytes_i32());
         let (ptr, offset) = place.ptr_and_offset();
-        self
-            .builder
+        self.builder
             .ins()
             .load(ir::types::I64, MemFlagsData::new(), ptr, offset)
     }
@@ -1010,6 +1052,12 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         let size_val = self.build_int_const(&Type::UINT, total_size.into());
         let align = self.build_int_const(&Type::UINT, ty_layout.alignment.in_bytes().into());
         self.codegen_alloc_call(size_val, align)
+    }
+    fn print_string_newline(&mut self, ptr: ir::Value, len: ir::Value) {
+        let print_string = self.runtime_functions.print_string;
+        let print_newline = self.runtime_functions.print_newline;
+        self.codegen_direct_void_call(print_string, &[ptr, len]);
+        self.codegen_direct_void_call(print_newline, &[]);
     }
     fn codegen_direct_void_call(&mut self, id: FuncId, args: &[ir::Value]) {
         let func = self.module.declare_func_in_func(id, self.builder.func);
@@ -1599,7 +1647,9 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 match local_kind {
                     LocalKind::Memory(_) => {
                         let layout = self.layout_for(&ty);
-                        println!("{} {} {:?}", param_index, ty, backend_repr(&layout));
+                        if self.ctxt.config().has_feature(Feature::OutputBackendIr) {
+                            println!("{} {} {:?}", param_index, ty, backend_repr(&layout));
+                        }
                         if let BackendRepr::Memory = backend_repr(&layout) {
                             let ptr = value.first_value();
                             let src_place = MemPlace::new(ptr, layout, ty);
@@ -1681,10 +1731,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                                             false_value.1,
                                         ),
                                     );
-                                    self.codegen_direct_void_call(
-                                        self.runtime_functions.print_string,
-                                        &[first_value, second_value],
-                                    );
+                                    self.print_string_newline(first_value, second_value);
                                 }
                                 Type::String => {
                                     let (first_val, second_val) = match operand.kind {
@@ -1701,19 +1748,13 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                                         )) => (first, second),
                                         _ => unreachable!("{:?}", operand.kind),
                                     };
-                                    self.codegen_direct_void_call(
-                                        self.runtime_functions.print_string,
-                                        &[first_val, second_val],
-                                    );
+                                    self.print_string_newline(first_val, second_val);
                                 }
                                 ref ty => todo!("print for {} {:?}", ty, ty),
                             }
                         } else {
                             let values = self.build_string_value("".to_string());
-                            self.codegen_direct_void_call(
-                                self.runtime_functions.print_string,
-                                &[values.0, values.1],
-                            );
+                            self.print_string_newline(values.0, values.1);
                         }
                     }
                 }
@@ -1755,19 +1796,19 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                         AssertKind::InBounds => {
                             "attempted to access out of bounds index".to_string()
                         }
-                        AssertKind::Overflow(op) => format!("failed to compute '{}' due to overflow",match op{
-                            OverflowOp::Add => '+',
-                            OverflowOp::Multiply => '*',
-                            OverflowOp::Subtract => '-'
-                        }),
+                        AssertKind::Overflow(op) => format!(
+                            "failed to compute '{}' due to overflow",
+                            match op {
+                                OverflowOp::Add => '+',
+                                OverflowOp::Multiply => '*',
+                                OverflowOp::Subtract => '-',
+                            }
+                        ),
                         AssertKind::DivideOverflow => {
                             "attempted to compute overflowing division".to_string()
                         }
                     });
-                    self.codegen_direct_void_call(
-                        self.runtime_functions.print_string,
-                        &[first, second],
-                    );
+                    self.print_string_newline(first, second);
                     self.builder.ins().trap(code);
                 }
                 mir::TerminatorKind::Switch(operand, targets) => {

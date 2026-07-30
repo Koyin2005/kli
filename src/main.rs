@@ -1,6 +1,7 @@
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
+    io::{self, Write},
     path::Path,
     process::Command,
 };
@@ -317,12 +318,26 @@ fn main() {
         {
             std::fs::write("foo.o", obj.emit().unwrap()).unwrap();
         }
-        Command::new("gcc")
+        let output = Command::new("gcc")
             .arg("kli_rt.c")
             .arg("-o")
             .arg("output")
             .arg("foo.o")
             .output()
             .unwrap();
+
+        let success = output.status.success();
+        if !success {
+            println!("compilation exited with {}", output.status);
+            io::stdout().write_all(&output.stdout).unwrap();
+            io::stderr().write_all(&output.stderr).unwrap();
+        }
+        if success && ctxt.config().run() {
+            Command::new(r".\output.exe")
+                .spawn()
+                .unwrap()
+                .wait()
+                .unwrap();
+        }
     }
 }

@@ -13,6 +13,7 @@ pub enum Feature {
     OutputInstances,
     Optimise,
     WithMirPass,
+    OutputBackendIr,
 }
 impl Display for Feature {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -22,6 +23,7 @@ impl Display for Feature {
             Self::OutputInstances => "output-instances",
             Self::OutputMir => "output-mir",
             Self::WithMirPass => "with-mir-pass",
+            Self::OutputBackendIr => "output-backend-ir",
         })
     }
 }
@@ -39,6 +41,7 @@ impl FeatureArgSet {
 }
 pub struct Config {
     path: String,
+    run: bool,
     features: HashMap<Feature, FeatureArgSet>,
 }
 impl Config {
@@ -51,6 +54,9 @@ impl Config {
     pub fn has_feature(&self, feature: Feature) -> bool {
         self.features.contains_key(&feature)
     }
+    pub fn run(&self) -> bool {
+        self.run
+    }
 }
 pub struct ConfigError;
 pub fn config() -> Result<Config, ConfigError> {
@@ -61,6 +67,12 @@ pub fn config() -> Result<Config, ConfigError> {
         return Err(ConfigError);
     }
     let path = args.remove(0);
+    let run = if let Some("run") = args.get(0).map(String::as_str) {
+        args.remove(0);
+        true
+    } else {
+        false
+    };
     let arg_src = args
         .into_iter()
         .fold(String::from(""), |mut output, current| {
@@ -94,5 +106,9 @@ pub fn config() -> Result<Config, ConfigError> {
             ))
         })
         .collect();
-    Ok(Config { path, features })
+    Ok(Config {
+        path,
+        features,
+        run,
+    })
 }
