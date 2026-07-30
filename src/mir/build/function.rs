@@ -9,7 +9,7 @@ use crate::{
     types::{FunctionType, GenericArgs, TypeKind},
 };
 
-impl Builder<'_> {
+impl<'a> Builder<'_,'a> {
     fn add_finished_body(self) {
         let body = self.body;
         let context = self.mir_context;
@@ -28,9 +28,9 @@ impl Builder<'_> {
             self.new_local(ty, kind);
         }
     }
-    pub fn build_from_function(
-        ctxt: CtxtRef,
-        mir_context: &mut Context,
+    pub fn build_from_function<'b>(
+        ctxt: CtxtRef<'a>,
+        mir_context: &'b mut Context,
         function: &typed_ast::Function,
         src: BodySource,
     ) {

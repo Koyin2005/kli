@@ -22,10 +22,10 @@ mod simplify_cfg;
 pub(super) fn optimisation_enabled(ctxt: CtxtRef<'_>) -> bool {
     ctxt.config().has_feature(Feature::Optimise)
 }
-pub trait MirPass {
+pub trait MirPass<'ctxt> {
     fn name(&self) -> &'static str;
-    fn run(&self, ctxt: CtxtRef<'_>, body: &mut Body);
-    fn enabled(&self, ctxt: CtxtRef<'_>) -> bool {
+    fn run(&self, ctxt: CtxtRef<'ctxt>, body: &'_ mut Body);
+    fn enabled(&self, ctxt: CtxtRef<'ctxt>) -> bool {
         _ = ctxt;
         true
     }
@@ -44,7 +44,7 @@ pub(super) fn should_dump(ctxt: CtxtRef<'_>, src: BodySource) -> bool {
     })
 }
 pub struct DumpMir;
-impl MirPass for DumpMir {
+impl MirPass<'_> for DumpMir {
     fn name(&self) -> &'static str {
         "dump-mir"
     }
@@ -57,7 +57,7 @@ impl MirPass for DumpMir {
         ctxt.config().has_feature(Feature::OutputMir)
     }
 }
-pub fn passes() -> &'static [&'static dyn MirPass] {
+pub fn passes<'a>() -> &'a [&'a dyn MirPass<'a>] {
     &[
         &RemoveZst,
         &SimplifyCfg,

@@ -662,7 +662,7 @@ impl Context {
     pub fn body_iter(&self) -> impl Iterator<Item = &Body> {
         self.body_sources.iter().map(|src| &self.bodies[src])
     }
-    pub fn for_each_body_mut(&mut self, mut f: impl FnMut(&mut Body)) {
+    pub fn for_each_body_mut<'a>(&mut self, mut f: impl FnMut(&mut Body) + 'a) {
         for src in self.body_sources.iter() {
             f(self.bodies.get_mut(src).unwrap());
         }

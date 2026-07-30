@@ -21,7 +21,7 @@ impl From<BuiltinResult> for Rvalue {
         }
     }
 }
-impl Builder<'_> {
+impl Builder<'_,'_> {
     fn as_constant(&mut self, expr: &Expr) -> Option<Constant> {
         match expr.kind {
             ExprKind::Bool(value) => Some(Constant::bool(value)),

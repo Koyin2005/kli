@@ -16,6 +16,7 @@ pub mod typed_ast;
 mod typed_ast_visitor;
 pub mod types;
 pub use collect::CtxtRef;
+pub use collect::Arenas;
 pub use ident::Symbol;
 pub mod arenas;
 mod builtins;

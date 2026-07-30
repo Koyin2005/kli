@@ -7,7 +7,7 @@ use crate::{
 
 pub struct SimplifyCfg;
 
-impl MirPass for SimplifyCfg {
+impl MirPass<'_> for SimplifyCfg {
     fn name(&self) -> &'static str {
         "simplify-cfg"
     }

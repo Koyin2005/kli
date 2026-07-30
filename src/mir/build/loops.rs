@@ -3,7 +3,7 @@ use crate::{
     typed_ast::{Expr, IteratorType, Pattern},
 };
 
-impl Builder<'_> {
+impl Builder<'_,'_> {
     pub(super) fn for_loop(
         &mut self,
         _: &Pattern,

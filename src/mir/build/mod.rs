@@ -15,15 +15,15 @@ mod function;
 mod loops;
 mod matches;
 mod stmt;
-pub struct Builder<'ctxt> {
-    pub mir_context: &'ctxt mut Context,
+pub struct Builder<'mir,'ctxt> {
+    pub mir_context: &'mir mut Context,
     body: Body,
     current_block: BasicBlockId,
     pub ctxt: CtxtRef<'ctxt>,
 }
-impl<'ctxt> Builder<'ctxt> {
+impl<'mir,'ctxt> Builder<'mir,'ctxt> {
     pub fn new(
-        mir_context: &'ctxt mut Context,
+        mir_context: &'mir mut Context,
         source: BodySource,
         return_type: TypeKind,
         ctxt: CtxtRef<'ctxt>,

@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::ast::{GenericArgs, ModuleId, NodeId, Path, StmtKind};
 use crate::builtins::{Builtin, Builtins};
-use crate::collect::{GlobalContext, build_global_context};
+use crate::collect::{Arenas, GlobalContext, build_global_context};
 use crate::config::Config;
 use crate::def_ids::DefId;
 use crate::diagnostics::DiagnosticReporter;
@@ -1113,10 +1113,11 @@ impl<'info> Resolve<'info> {
             this.add_item(item.id, item);
         })
     }
-    pub fn resolve(
+    pub fn resolve<'a>(
+        arena : &'a Arenas,
         config: Config,
         modules: Vec<ast::Module>,
-    ) -> Result<GlobalContext, ResolveErrored> {
+    ) -> Result<GlobalContext<'a>, ResolveErrored> {
         //First pass : Declare everything
         let diag = DiagnosticReporter::new();
         let decl_info = decl::Declare::new(&diag).declare(&modules);
@@ -1147,7 +1148,7 @@ impl<'info> Resolve<'info> {
         }
 
         let resolved_diag = this.diag;
-        let context = build_global_context(this.config, nodes, builtins, decl_info.parents);
+        let context = build_global_context(this.config, nodes, builtins, decl_info.parents,arena);
         if !diag.report_all() & !resolved_diag.report_all() {
             Ok(context)
         } else {

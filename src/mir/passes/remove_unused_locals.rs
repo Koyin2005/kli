@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub struct RemoveUnusedLocals;
-impl MirPass for RemoveUnusedLocals {
+impl MirPass<'_> for RemoveUnusedLocals {
     fn name(&self) -> &'static str {
         "remove-unused-locals"
     }

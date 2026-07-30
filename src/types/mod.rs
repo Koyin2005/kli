@@ -194,8 +194,21 @@ impl IntegerKind {
         matches!(self, Self::Signed)
     }
 }
-
-
+#[derive(PartialEq, Eq,Clone, Copy,Hash)]
+pub struct Type<'ctxt>(&'ctxt TypeKind);
+impl<'ctxt> Type<'ctxt>{
+    pub fn new(kind : &'ctxt TypeKind) -> Self{
+        Self(kind)
+    }
+    pub fn kind(self) -> &'ctxt TypeKind{
+        self.0
+    }
+}
+impl std::fmt::Debug for Type<'_>{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{}",self.0)
+    }
+}
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub enum TypeKind {
     Infer(usize),

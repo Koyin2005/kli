@@ -7,17 +7,7 @@ use std::{
 };
 
 use kli::{
-    Symbol,
-    ast::{self, Module, ModuleId},
-    codegen::CodegenRoot,
-    config::{Config, Feature, config},
-    mir::{self, passes::passes},
-    monomorph::collect::{Instance, InstanceCollector, InstanceKind},
-    parsing::parse::Parser,
-    patterns::visit::PatternCheck,
-    resolve::Resolve,
-    typecheck::root::TypeCheck,
-    unsafety::SafetyCheck,
+    Arenas, Symbol, ast::{self, Module, ModuleId}, codegen::CodegenRoot, config::{Config, Feature, config}, mir::{self, passes::passes}, monomorph::collect::{Instance, InstanceCollector, InstanceKind}, parsing::parse::Parser, patterns::visit::PatternCheck, resolve::Resolve, typecheck::root::TypeCheck, unsafety::SafetyCheck,
 };
 enum ModuleError {
     Io(std::io::Error),
@@ -252,7 +242,8 @@ fn main() {
     let Some(modules) = parse_all_modules(file_tree) else {
         return;
     };
-    let Ok(context) = Resolve::resolve(config, modules) else {
+    let arenas = Arenas::default();
+    let Ok(context) = Resolve::resolve(&arenas,config, modules) else {
         return;
     };
     let ctxt = context.as_ref();
@@ -296,16 +287,17 @@ fn main() {
             )
         })
         .collect::<HashMap<_, _>>();
-    for pass in passes() {
+    
+        mir_context.for_each_body_mut(move |body| {
+            for pass in passes() {
         let overidde = run_pass.get(pass.name()).copied();
         let should_run = overidde.unwrap_or_else(|| pass.enabled(ctxt));
         if !should_run {
             continue;
         }
-        mir_context.for_each_body_mut(|body| {
             pass.run(ctxt, body);
-        });
-    }
+        }
+    });
     if let Some((main, _)) = ctxt.main_function() {
         let instances = InstanceCollector::new(&mir_context)
             .collect(Instance::non_generic(InstanceKind::Function(main)));

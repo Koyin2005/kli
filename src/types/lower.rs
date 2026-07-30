@@ -9,13 +9,13 @@ use crate::typecheck::infer::TypeInfer;
 use crate::types::{
     FieldName, FunctionType, GenericArg, GenericArgs, GenericKind, IntegerKind, RecordField, TypeKind,
 };
-pub struct Lower<'a> {
-    ctxt: CtxtRef<'a>,
+pub struct Lower<'a,'ctxt> {
+    ctxt: CtxtRef<'ctxt>,
     _id: DefId,
     infer: Option<&'a RefCell<TypeInfer>>,
 }
-impl<'a> Lower<'a> {
-    pub fn new(ctxt: CtxtRef<'a>, id: DefId, infer: Option<&'a RefCell<TypeInfer>>) -> Self {
+impl<'a,'ctxt> Lower<'a,'ctxt> {
+    pub fn new(ctxt: CtxtRef<'ctxt>, id: DefId, infer: Option<&'a RefCell<TypeInfer>>) -> Self {
         Self {
             ctxt,
             _id: id,

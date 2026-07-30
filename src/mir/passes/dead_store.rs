@@ -7,7 +7,7 @@ use crate::mir::{
 };
 
 pub struct DeadStoreElim;
-impl MirPass for DeadStoreElim {
+impl MirPass<'_> for DeadStoreElim {
     fn name(&self) -> &'static str {
         "dead-store-elim"
     }

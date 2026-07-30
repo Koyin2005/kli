@@ -32,7 +32,7 @@ impl<'ctxt> RootCtxt<'ctxt> {
             variables: Default::default(),
         }
     }
-    pub fn ctxt(&self) -> CtxtRef<'_> {
+    pub fn ctxt(&'_ self) -> CtxtRef<'ctxt> {
         self.ctxt
     }
 
@@ -42,7 +42,7 @@ impl<'ctxt> RootCtxt<'ctxt> {
             .insert(var_id, VarInfo { name, ty });
     }
 
-    fn lower(&self) -> Lower<'_> {
+    fn lower(&self) -> Lower<'_,'ctxt> {
         Lower::new(self.ctxt, self.id, Some(&self.infer))
     }
     pub(super) fn lower_type(&self, ty: &res::Type) -> TypeKind {
@@ -216,23 +216,23 @@ pub enum CoercionKind {
     NeverToAny(TypeKind),
 }
 pub struct VisibilityError;
-pub struct FunctionCtxt<'ctxt> {
+pub struct FunctionCtxt<'root,'ctxt> {
     pub(super) id: DefId,
-    root: &'ctxt RootCtxt<'ctxt>,
+    root: &'root RootCtxt<'ctxt>,
     pub(super) return_type: TypeKind,
 }
-impl<'ctxt> FunctionCtxt<'ctxt> {
-    pub fn new(root: &'ctxt RootCtxt<'ctxt>, id: DefId, ty: TypeKind) -> Self {
+impl<'root,'ctxt> FunctionCtxt<'root,'ctxt> {
+    pub fn new(root: &'root RootCtxt<'ctxt>, id: DefId, ty: TypeKind) -> Self {
         Self {
             id,
             root,
             return_type: ty,
         }
     }
-    pub fn root(&self) -> &RootCtxt<'_> {
+    pub fn root(&'_ self) -> &'_ RootCtxt<'ctxt> {
         self.root
     }
-    pub fn ctxt(&self) -> CtxtRef<'_> {
+    pub fn ctxt(&'_ self) -> CtxtRef<'ctxt> {
         self.root.ctxt
     }
     pub fn apply_coercion(&self, coercion: Coercion, expr: typed_ast::Expr) -> typed_ast::Expr {
@@ -323,7 +323,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
     pub fn new(ctxt: CtxtRef<'ctxt>) -> Self {
         Self { ctxt }
     }
-    pub(super) fn ctxt(&self) -> CtxtRef<'_> {
+    pub(super) fn ctxt(&self) -> CtxtRef<'ctxt> {
         self.ctxt
     }
     fn validate_main(&self) {

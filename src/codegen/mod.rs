@@ -127,11 +127,11 @@ pub struct CodegenRoot<'c> {
     instances: Vec<Instance>,
 }
 
-impl<'a> CodegenRoot<'a> {
+impl<'ctxt> CodegenRoot<'ctxt> {
     pub fn new(
-        ctxt: CtxtRef<'a>,
+        ctxt: CtxtRef<'ctxt>,
         instances: impl IntoIterator<Item = Instance>,
-    ) -> CodegenRoot<'a> {
+    ) -> CodegenRoot<'ctxt> {
         let triple = target_lexicon::Triple::host();
         let mut builder = codegen::settings::builder();
         builder.set("opt_level", "speed_and_size").unwrap();
@@ -353,6 +353,7 @@ impl<'a> CodegenRoot<'a> {
                 let sig = sig.clone();
                 ctxt.func.signature = sig;
             }
+            
             let body = &mir_ctxt.bodies[&instance.body_src()];
             let mut builder = frontend::FunctionBuilder::new(&mut ctxt.func, &mut f_ctxt);
             let block_map = BlockMap::new(body, &mut builder);
@@ -398,7 +399,7 @@ impl OperandValue {
     #[track_caller]
     pub fn expect_immediate(
         &self,
-        cg: &mut FunctionCodegen<'_, impl Module>,
+        cg: &mut FunctionCodegen<'_,'_, impl Module>,
     ) -> codegen::ir::Value {
         match self.kind {
             OperandValueKind::Indirect(ref place) => cg
@@ -547,7 +548,7 @@ impl MemPlace {
         };
         Self::new_with_offset(self.base_ptr, layout, ty, offset)
     }
-    fn ptr(&self, builder: &mut FunctionCodegen<'_, impl Module>) -> ir::Value {
+    fn ptr(&self, builder: &mut FunctionCodegen<'_,'_, impl Module>) -> ir::Value {
         if self.offset == 0 {
             return self.base_ptr;
         }
@@ -572,8 +573,8 @@ impl MemPlace {
         }
     }
 }
-pub struct FunctionCodegen<'r, M: Module> {
-    ctxt: CtxtRef<'r>,
+pub struct FunctionCodegen<'r,'ctxt, M: Module> {
+    ctxt: CtxtRef<'ctxt>,
     builder: cranelift::frontend::FunctionBuilder<'r>,
     local_info: locals::Locals,
     return_ty: TypeKind,
@@ -588,9 +589,9 @@ pub struct FunctionCodegen<'r, M: Module> {
     panic_block: Cell<Option<ir::Block>>,
 }
 
-impl<'a, M: Module> FunctionCodegen<'a, M> {
+impl<'a,'ctxt, M: Module> FunctionCodegen<'a,'ctxt, M> {
     fn new(
-        ctxt: CtxtRef<'a>,
+        ctxt: CtxtRef<'ctxt>,
         mut builder: cranelift::frontend::FunctionBuilder<'a>,
         body: &'a mir::Body,
         args: GenericArgsRef<'a>,
