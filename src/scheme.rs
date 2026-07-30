@@ -1,9 +1,12 @@
-use crate::types::{GenericArg, GenericArgsRef, TypeKind, TypeMap, TypeMappable};
+use crate::{
+    CtxtRef,
+    types::{GenericArg, GenericArgsRef, Type, TypeKind, TypeMap, TypeMappable},
+};
 #[derive(Clone, Eq, PartialEq)]
 pub struct Scheme<T> {
     value: T,
 }
-impl<T: TypeMappable> Scheme<T> {
+impl<'ctxt, T: TypeMappable<'ctxt>> Scheme<T> {
     pub fn new(value: T) -> Self {
         Self { value }
     }
@@ -12,21 +15,24 @@ impl<T: TypeMappable> Scheme<T> {
             value: f(self.value),
         }
     }
-    pub fn bind(self, args: GenericArgsRef<'_>) -> T {
-        struct Binder<'a>(GenericArgsRef<'a>);
-        impl TypeMap for Binder<'_> {
+    pub fn bind(self, ctxt: CtxtRef<'ctxt>, args: GenericArgsRef<'_, 'ctxt>) -> T {
+        struct Binder<'ctxt, 'b>(CtxtRef<'ctxt>, GenericArgsRef<'b, 'ctxt>);
+        impl<'ctxt> TypeMap<'ctxt> for Binder<'ctxt, '_> {
             type Error = std::convert::Infallible;
-            fn map_type(&mut self, ty: TypeKind) -> Result<TypeKind, Self::Error> {
-                let TypeKind::Param(_, index) = ty else {
+            fn ctxt(&self) -> crate::CtxtRef<'ctxt> {
+                self.0
+            }
+            fn map_type(&mut self, ty: Type<'ctxt>) -> Result<Type<'ctxt>, Self::Error> {
+                let &TypeKind::Param(_, index) = ty.kind() else {
                     return self.super_map_type(ty);
                 };
-                let Some(GenericArg(ty)) = self.0.get(index).cloned() else {
-                    return Ok(TypeKind::Unknown);
+                let Some(GenericArg(ty)) = self.1.get(index).cloned() else {
+                    return Ok(Type::UNKNOWN);
                 };
                 Ok(ty)
             }
         }
-        let Ok(value) = self.value.apply_map(&mut Binder(args));
+        let Ok(value) = self.value.apply_map(&mut Binder(ctxt, args));
         value
     }
     pub fn skip(self) -> T {

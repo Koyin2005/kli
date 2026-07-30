@@ -52,7 +52,7 @@ impl MirPass<'_> for RemoveUnusedLocals {
 struct LocalFinder {
     locals: HashSet<Local>,
 }
-impl Visit for LocalFinder {
+impl Visit<'_> for LocalFinder {
     fn visit_local(&mut self, _: PlaceCtxt, _: crate::mir::Location, local: Local) {
         self.locals.insert(local);
     }

@@ -1,32 +1,36 @@
 use crate::{
+    CtxtRef,
     typecheck::infer::TypeInfer,
     typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
-    types::{GenericArgs, TypeKind, visit::VisitMut},
+    types::{GenericArgs, Type, TypeKind, visit::VisitMut},
 };
 
-impl VisitMut for TypeSubst<'_> {
-    fn visit_type(&mut self, ty: &mut TypeKind) {
-        if let TypeKind::Infer(var) = ty {
-            *ty = self.infer.simplify_type(TypeKind::Infer(*var));
-            return;
+impl<'ctxt> VisitMut<'ctxt> for TypeSubst<'_, 'ctxt> {
+    fn ctxt(&self) -> CtxtRef<'ctxt> {
+        self.ctxt
+    }
+    fn visit_type(&mut self, ty: Type<'ctxt>) -> Type<'ctxt> {
+        if let &TypeKind::Infer(_) = ty.kind() {
+            return self.infer.simplify_type(ty);
         }
-        self.super_visit_type(ty);
+        self.super_visit_type(ty)
     }
 }
-pub struct TypeSubst<'a> {
-    infer: &'a mut TypeInfer,
+pub struct TypeSubst<'a, 'ctxt> {
+    ctxt: CtxtRef<'ctxt>,
+    infer: &'a mut TypeInfer<'ctxt>,
 }
-impl<'a> TypeSubst<'a> {
-    pub fn new(infer: &'a mut TypeInfer) -> Self {
-        Self { infer }
+impl<'a, 'ctxt> TypeSubst<'a, 'ctxt> {
+    pub fn new(ctxt: CtxtRef<'ctxt>, infer: &'a mut TypeInfer<'ctxt>) -> Self {
+        Self { infer, ctxt }
     }
-    pub fn subst_type(&mut self, ty: &mut TypeKind) {
-        self.visit_type(ty);
+    pub fn subst_type(&mut self, ty: &mut Type<'ctxt>) {
+        *ty = self.visit_type(*ty);
     }
-    pub fn subst_generic_args(&mut self, args: &mut GenericArgs) {
-        self.visit_generic_args(args);
+    pub fn subst_generic_args(&mut self, args: &mut GenericArgs<'ctxt>) {
+        *args = self.visit_generic_args(args.clone());
     }
-    pub fn subst_pattern(&mut self, pattern: &mut Pattern) {
+    pub fn subst_pattern(&mut self, pattern: &mut Pattern<'ctxt>) {
         match &mut pattern.kind {
             PatternKind::Bool(_) | PatternKind::Int(_) | PatternKind::Err | PatternKind::Unit => (),
             PatternKind::Binding(.., ty) => self.subst_type(ty),
@@ -44,7 +48,7 @@ impl<'a> TypeSubst<'a> {
         }
         self.subst_type(&mut pattern.ty);
     }
-    pub fn subst_place(&mut self, place: &mut Place) {
+    pub fn subst_place(&mut self, place: &mut Place<'ctxt>) {
         match &mut place.kind {
             PlaceKind::Field(place, _) => self.subst_place(place),
             PlaceKind::Var(..) | PlaceKind::Upvar(..) | PlaceKind::Invalid => (),
@@ -56,7 +60,7 @@ impl<'a> TypeSubst<'a> {
         }
         self.subst_type(&mut place.ty);
     }
-    pub fn subst_stmt(&mut self, stmt: &mut Stmt) {
+    pub fn subst_stmt(&mut self, stmt: &mut Stmt<'ctxt>) {
         match &mut stmt.kind {
             StmtKind::Expr(expr) => self.subst_expr(expr),
             StmtKind::Let(let_binding) => {
@@ -65,7 +69,7 @@ impl<'a> TypeSubst<'a> {
             }
         }
     }
-    pub fn subst_expr(&mut self, expr: &mut Expr) {
+    pub fn subst_expr(&mut self, expr: &mut Expr<'ctxt>) {
         match &mut expr.kind {
             ExprKind::Return(value) | ExprKind::Unsafe(value) => {
                 self.subst_expr(value);
@@ -160,7 +164,7 @@ impl<'a> TypeSubst<'a> {
         }
         self.subst_type(&mut expr.ty);
     }
-    pub fn subst_function(&mut self, function: &mut Function) {
+    pub fn subst_function(&mut self, function: &mut Function<'ctxt>) {
         for param in function.params.iter_mut() {
             self.subst_type(&mut param.ty);
         }

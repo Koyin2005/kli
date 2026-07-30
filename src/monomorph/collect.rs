@@ -1,6 +1,7 @@
 use std::collections::{HashSet, VecDeque};
 
 use crate::{
+    CtxtRef,
     def_ids::DefId,
     mir::{BodySource, ConstValue, Constant, Context, Location, visitor::Visit},
     scheme::Scheme,
@@ -13,11 +14,11 @@ pub enum InstanceKind {
     Function(FunctionId),
 }
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct Instance {
-    pub args: GenericArgs,
+pub struct Instance<'ctxt> {
+    pub args: GenericArgs<'ctxt>,
     pub kind: InstanceKind,
 }
-impl Instance {
+impl<'ctxt> Instance<'ctxt> {
     pub fn non_generic(kind: InstanceKind) -> Self {
         Self {
             args: GenericArgs::new(),
@@ -32,9 +33,9 @@ impl Instance {
 }
 
 pub struct InstanceCollector<'ctxt> {
-    seen_instances: HashSet<Instance>,
-    instances: Vec<Instance>,
-    ctxt: &'ctxt Context,
+    seen_instances: HashSet<Instance<'ctxt>>,
+    instances: Vec<Instance<'ctxt>>,
+    ctxt: &'ctxt Context<'ctxt>,
 }
 impl<'ctxt> InstanceCollector<'ctxt> {
     pub fn new(context: &'ctxt Context) -> Self {
@@ -44,22 +45,26 @@ impl<'ctxt> InstanceCollector<'ctxt> {
             ctxt: context,
         }
     }
-    pub fn collect(mut self, entry: Instance) -> Vec<Instance> {
+    pub fn collect(mut self, ctxt: CtxtRef<'ctxt>, entry: Instance<'ctxt>) -> Vec<Instance<'ctxt>> {
         let mut unvisited = VecDeque::new();
         unvisited.push_back(entry);
         while let Some(instance) = unvisited.pop_front() {
-            struct Collector<'unv> {
-                v: &'unv mut VecDeque<Instance>,
-                args: GenericArgsRef<'unv>,
+            struct Collector<'unv, 'ctxt> {
+                ctxt: CtxtRef<'ctxt>,
+                v: &'unv mut VecDeque<Instance<'ctxt>>,
+                args: GenericArgsRef<'unv, 'ctxt>,
             }
-            impl Visit for Collector<'_> {
-                fn visit_constant(&mut self, _: Location, constant: &Constant) {
+            impl<'ctxt> Visit<'ctxt> for Collector<'_, 'ctxt> {
+                fn ctxt(&self) -> crate::CtxtRef<'ctxt> {
+                    self.ctxt
+                }
+                fn visit_constant(&mut self, _: Location, constant: &Constant<'ctxt>) {
                     let new_instance = match constant.value {
                         ConstValue::Named(id, ref args) => Some(Instance {
                             args: args
                                 .iter()
                                 .cloned()
-                                .map(|arg| Scheme::new(arg).bind(self.args))
+                                .map(|arg| Scheme::new(arg).bind(self.ctxt(), self.args))
                                 .collect(),
                             kind: InstanceKind::Function(id),
                         }),
@@ -76,6 +81,7 @@ impl<'ctxt> InstanceCollector<'ctxt> {
             self.instances.push(instance.clone());
             let body = self.ctxt.expect_body(instance.body_src());
             let mut collector = Collector {
+                ctxt,
                 v: &mut unvisited,
                 args: &instance.args,
             };

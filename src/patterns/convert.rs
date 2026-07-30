@@ -4,8 +4,8 @@ use crate::{
     typed_ast::{Pattern, PatternKind},
 };
 
-pub fn pattern_to_pat(ctxt: CtxtRef<'_>, pattern: &Pattern) -> Pat {
-    let ty = pattern.ty.clone();
+pub fn pattern_to_pat<'ctxt>(ctxt: CtxtRef<'ctxt>, pattern: &Pattern<'ctxt>) -> Pat<'ctxt> {
+    let ty = pattern.ty;
 
     match &pattern.kind {
         PatternKind::Int(value) => Pat {

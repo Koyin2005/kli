@@ -6,8 +6,8 @@ use crate::{
     typed_ast::{Expr, ExprKind},
 };
 
-impl Builder<'_, '_> {
-    pub(super) fn expr_stmt(&mut self, expr: &Expr) {
+impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
+    pub(super) fn expr_stmt(&'_ mut self, expr: &'_ Expr<'ctxt>) {
         match &expr.kind {
             ExprKind::Err => (),
             ExprKind::Assign(place, value) => {
@@ -68,9 +68,9 @@ impl Builder<'_, '_> {
                 self.switch_to_block(loop_end);
             }
             ExprKind::BuiltinCall(builtin, _, args) => {
-                match self.builtin_call(&expr.ty, *builtin, args) {
+                match self.builtin_call(expr.ty, *builtin, args) {
                     BuiltinResult::Rvalue(value) => {
-                        self.assign_to_temp(expr.loc, expr.ty.clone(), value);
+                        self.assign_to_temp(expr.loc, expr.ty, value);
                     }
                 }
             }

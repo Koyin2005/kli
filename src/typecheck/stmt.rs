@@ -4,8 +4,8 @@ use crate::{
     typed_ast,
 };
 
-impl FunctionCtxt<'_, '_> {
-    pub(super) fn check_stmt(&self, stmt: &Stmt) -> typed_ast::Stmt {
+impl<'ctxt> FunctionCtxt<'_, 'ctxt> {
+    pub(super) fn check_stmt(&self, stmt: &Stmt) -> typed_ast::Stmt<'ctxt> {
         let loc = stmt.loc;
         match &stmt.kind {
             StmtKind::Expr(expr) => {

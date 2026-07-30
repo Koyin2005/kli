@@ -8,15 +8,15 @@ use crate::{
         visitor::{PlaceCtxt, Visit},
     },
     src_loc::SrcLoc,
-    types::{FunctionType, TypeKind},
+    types::{FunctionSig, IntegerKind, Type},
     unsafety,
 };
 pub struct WellFormed<'ctxt, 'body> {
     ctxt: CtxtRef<'ctxt>,
-    body: &'body Body,
+    body: &'body Body<'ctxt>,
 }
 impl<'ctxt, 'body> WellFormed<'ctxt, 'body> {
-    pub fn new(body: &'body Body, ctxt: CtxtRef<'ctxt>) -> Self {
+    pub fn new(body: &'body Body<'ctxt>, ctxt: CtxtRef<'ctxt>) -> Self {
         Self { ctxt, body }
     }
     #[track_caller]
@@ -44,16 +44,14 @@ impl<'ctxt, 'body> WellFormed<'ctxt, 'body> {
         value
     }
 }
-impl Visit for WellFormed<'_, '_> {
+impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_place(&mut self, _: PlaceCtxt, loc: Location, place: &super::Place) {
-        let mut ty = place
-            .base
-            .type_of(&self.body.locals, &self.body.return_type);
+        let mut ty = place.base.type_of(&self.body.locals, self.body.return_type);
         for proj in &place.projections {
             let loc = self.body.src_info(loc);
             match proj {
                 super::PlaceProjection::CaseDowncast(index, _) => {
-                    ty = if let TypeKind::Named(id, _, ref args) = ty {
+                    ty = if let Some((id, _, args)) = ty.as_named() {
                         self.ctxt
                             .type_def(id)
                             .case(*index)
@@ -74,44 +72,34 @@ impl Visit for WellFormed<'_, '_> {
                 super::PlaceProjection::ConstantIndex(_) | super::PlaceProjection::Index(_) => {
                     ty = self.assert_with_some(
                         ty,
-                        |ty| match ty {
-                            TypeKind::Array(ty) => Some(*ty),
-                            _ => None,
-                        },
+                        Type::as_array,
                         || "Cannot take an index for non-array",
                         loc,
                     )
                 }
                 super::PlaceProjection::Deref => {
-                    ty = self.assert_with_some(
-                        ty,
-                        |ty| match ty {
-                            TypeKind::Box(ty) => Some(*ty),
-                            _ => None,
-                        },
-                        || "Cannot deref non box",
-                        loc,
-                    )
+                    ty = self.assert_with_some(ty, Type::as_box, || "Cannot deref non box", loc)
                 }
             }
         }
     }
 
-    fn visit_rvalue(&mut self, loc: Location, rvalue: &super::Rvalue) {
+    fn visit_rvalue(&mut self, loc: Location, rvalue: &super::Rvalue<'ctxt>) {
         self.super_visit_rvalue(loc, rvalue);
         let loc = self.body.src_info(loc);
         match rvalue {
             super::Rvalue::AllocateBox(ty, operand) => {
                 self.assert(
-                    *ty == operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type),
+                    *ty == operand.type_of(self.ctxt, &self.body.locals, self.body.return_type),
                     || "Same type",
                     loc,
                 );
             }
             super::Rvalue::Discriminant(place) => {
                 self.assert(
-                    if let TypeKind::Named(id, _, _) =
-                        place.type_of(self.ctxt, &self.body.locals, &self.body.return_type)
+                    if let Some((id, _, _)) = place
+                        .type_of(self.ctxt, &self.body.locals, self.body.return_type)
+                        .as_named()
                         && let TypeDefKind::Variant(_) = self.ctxt.type_def(id).kind
                     {
                         true
@@ -123,8 +111,7 @@ impl Visit for WellFormed<'_, '_> {
                 );
             }
             super::Rvalue::Repeat { ty, value, count } => {
-                let operand_ty =
-                    value.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
+                let operand_ty = value.type_of(self.ctxt, &self.body.locals, self.body.return_type);
 
                 self.assert(
                     operand_ty == *ty,
@@ -132,9 +119,9 @@ impl Visit for WellFormed<'_, '_> {
                     loc,
                 );
 
-                let count_ty = count.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
+                let count_ty = count.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 self.assert(
-                    count_ty == TypeKind::UINT,
+                    count_ty.is_integer_kind(IntegerKind::Unsigned),
                     || format!("count should be a uint not '{}'", count_ty),
                     loc,
                 );
@@ -142,7 +129,7 @@ impl Visit for WellFormed<'_, '_> {
             super::Rvalue::AllocateArray(element, fields) => {
                 for field in fields {
                     let field_ty =
-                        field.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
+                        field.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                     self.assert(
                         *element == field_ty,
                         || format!("array elements should have same type '{}'", element),
@@ -171,7 +158,7 @@ impl Visit for WellFormed<'_, '_> {
                                 == operand.type_of(
                                     self.ctxt,
                                     &self.body.locals,
-                                    &self.body.return_type,
+                                    self.body.return_type,
                                 ),
                             || format!("Field of '{}' should have type '{}'", field.name, field_ty),
                             loc,
@@ -202,7 +189,7 @@ impl Visit for WellFormed<'_, '_> {
                         loc,
                     );
                     let operand_ty =
-                        field.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
+                        field.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                     self.assert(
                         field_ty == operand_ty,
                         || format!("{field_ty} and {operand_ty} should be same types"),
@@ -214,33 +201,30 @@ impl Visit for WellFormed<'_, '_> {
             super::Rvalue::Use(_) => (),
             super::Rvalue::AddrOf(place) => {
                 self.assert(
-                    matches!(
-                        place.type_of(self.ctxt, &self.body.locals, &self.body.return_type),
-                        TypeKind::Array(_)
-                    ),
+                    place
+                        .type_of(self.ctxt, &self.body.locals, self.body.return_type)
+                        .as_array()
+                        .is_some(),
                     || "Expected an array".to_string(),
                     loc,
                 );
             }
             super::Rvalue::Call(operand, operands) => {
-                let callee = operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                let FunctionType { params, .. } = self.assert_with_some(
-                    callee,
-                    |ty| match ty {
-                        TypeKind::Function(function_type) => Some(function_type),
-                        _ => None,
-                    },
+                let callee = operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let FunctionSig { params, .. } = self.assert_with_some(
+                    &callee,
+                    |ty| ty.as_function(),
                     || "Can only call function types",
                     loc,
                 );
                 let operand_tys = operands
                     .iter()
                     .map(|operand| {
-                        operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type)
+                        operand.type_of(self.ctxt, &self.body.locals, self.body.return_type)
                     })
                     .collect::<Vec<_>>();
                 self.assert(
-                    operand_tys == params,
+                    operand_tys == *params,
                     || format!("Expected '{:?}' but got '{:?}'", params, operand_tys),
                     loc,
                 );
@@ -249,8 +233,8 @@ impl Visit for WellFormed<'_, '_> {
                 let (left, right) = left_and_right.as_ref();
                 match (
                     binary_op,
-                    left.type_of(self.ctxt, &self.body.locals, &self.body.return_type),
-                    right.type_of(self.ctxt, &self.body.locals, &self.body.return_type),
+                    left.type_of(self.ctxt, &self.body.locals, self.body.return_type),
+                    right.type_of(self.ctxt, &self.body.locals, self.body.return_type),
                 ) {
                     (
                         BinaryOp::BitwiseAnd
@@ -262,7 +246,7 @@ impl Visit for WellFormed<'_, '_> {
                         left,
                         right,
                     ) if left == right && left.is_integer() && right.is_integer() => (),
-                    (BinaryOp::BitwiseAnd, TypeKind::Bool, TypeKind::Bool) => (),
+                    (BinaryOp::BitwiseAnd, left, right) if left.is_bool() && right.is_bool() => (),
                     (BinaryOp::Equals, left, right) => self.assert(
                         left == right,
                         || format!("Cannot equate '{}' and '{}'", left, right),
@@ -275,12 +259,11 @@ impl Visit for WellFormed<'_, '_> {
                     ),
                 }
             }
-            super::Rvalue::Cast(cast_kind, operand) => match cast_kind {
+            &super::Rvalue::Cast(cast_kind, ref operand) => match cast_kind {
                 CastKind::Transmute(to) => {
-                    let from =
-                        operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
+                    let from = operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                     self.assert(
-                        unsafety::transmutable(self.ctxt, &from, to),
+                        unsafety::transmutable(self.ctxt, from, to),
                         || format!("Cannot transmute {} into {}", from, to),
                         loc,
                     );
@@ -288,43 +271,39 @@ impl Visit for WellFormed<'_, '_> {
                 CastKind::IntegerCast(kind) => match kind {
                     IntegerCast::ZeroExtendByteTo(kind) => {
                         let from =
-                            operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
+                            operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                        let to = Type::new_int(self.ctxt(), kind);
                         self.assert(
-                            from == TypeKind::Byte,
-                            || format!("Cannot extend {} into {}", from, TypeKind::Int(*kind)),
+                            from.is_byte(),
+                            || format!("Cannot extend {} into {}", from, to),
                             loc,
                         );
                     }
                 },
             },
             super::Rvalue::Len(place) => {
-                let ty = place.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                self.assert(
-                    matches!(ty, TypeKind::Array(..)),
-                    || "Expected an array type",
-                    loc,
-                );
+                let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                self.assert(ty.as_array().is_some(), || "Expected an array type", loc);
             }
         }
     }
-    fn visit_terminator(&mut self, loc: Location, terminator: &super::Terminator) {
+    fn visit_terminator(&mut self, loc: Location, terminator: &super::Terminator<'ctxt>) {
         self.super_visit_terminator(loc, terminator);
         if let TerminatorKind::Assert(operand, ..) = &terminator.kind {
-            let condition_ty =
-                operand.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
+            let condition_ty = operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
             self.assert(
-                condition_ty == TypeKind::Bool,
+                condition_ty.is_bool(),
                 || format!("Can only assert on bools not {}", condition_ty),
                 terminator.src_info,
             );
         }
     }
-    fn visit_stmt(&mut self, loc: Location, stmt: &Stmt) {
+    fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
             StmtKind::Assign(lhs, rhs) => {
-                let lhs_ty = lhs.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
-                let rhs_ty = rhs.type_of(self.ctxt, &self.body.locals, &self.body.return_type);
+                let lhs_ty = lhs.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let rhs_ty = rhs.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 self.assert(
                     lhs_ty == rhs_ty,
                     || {

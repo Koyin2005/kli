@@ -7,18 +7,19 @@ use crate::{
 
 pub struct SimplifyCfg;
 
-impl MirPass<'_> for SimplifyCfg {
+impl<'ctxt> MirPass<'ctxt> for SimplifyCfg {
     fn name(&self) -> &'static str {
         "simplify-cfg"
     }
-    fn run(&self, _: crate::CtxtRef<'_>, body: &mut crate::mir::Body) {
+    fn run(&self, _: crate::CtxtRef<'ctxt>, body: &mut crate::mir::Body<'ctxt>) {
         for block in body.block_info.blocks_mut() {
             Self::remove_noops(block);
         }
         let mut modified = true;
         while modified {
             modified = false;
-            for block in body.block_info.blocks().indices() {
+            let block_indices = body.block_info.blocks().indices().collect::<Vec<_>>();
+            for block in block_indices {
                 let targets = match body.block_info.blocks()[block].expect_terminator().kind {
                     TerminatorKind::Goto(target) => {
                         if body.block_info.predecessors()[target].len() != 1 {

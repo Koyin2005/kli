@@ -8,7 +8,7 @@ use crate::{
     },
     resolved_ast::Var,
     src_loc::SrcLoc,
-    types::TypeKind,
+    types::Type,
 };
 mod expr;
 mod function;
@@ -16,16 +16,16 @@ mod loops;
 mod matches;
 mod stmt;
 pub struct Builder<'mir, 'ctxt> {
-    pub mir_context: &'mir mut Context,
-    body: Body,
+    pub mir_context: &'mir mut Context<'ctxt>,
+    body: Body<'ctxt>,
     current_block: BasicBlockId,
     pub ctxt: CtxtRef<'ctxt>,
 }
 impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     pub fn new(
-        mir_context: &'mir mut Context,
+        mir_context: &'mir mut Context<'ctxt>,
         source: BodySource,
-        return_type: TypeKind,
+        return_type: Type<'ctxt>,
         ctxt: CtxtRef<'ctxt>,
     ) -> Self {
         Self {
@@ -40,29 +40,29 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             ctxt,
         }
     }
-    pub(super) fn new_local(&mut self, ty: TypeKind, kind: LocalKind) -> Local {
+    pub(super) fn new_local(&mut self, ty: Type<'ctxt>, kind: LocalKind) -> Local {
         self.body.locals.push(LocalInfo { ty, kind })
     }
-    pub(super) fn new_local_from_info(&mut self, info: LocalInfo) -> Local {
+    pub(super) fn new_local_from_info(&mut self, info: LocalInfo<'ctxt>) -> Local {
         self.body.locals.push(info)
     }
     pub(super) fn finish_assert_to_new_block(
         &mut self,
         loc: SrcLoc,
-        operand: Operand,
+        operand: Operand<'ctxt>,
         assert_kind: AssertKind,
     ) {
         let new_block = self.new_block();
         self.finish_block(loc, TerminatorKind::Assert(operand, assert_kind, new_block));
         self.switch_to_block(new_block);
     }
-    pub(super) fn new_temp(&mut self, ty: TypeKind) -> Local {
+    pub(super) fn new_temp(&mut self, ty: Type<'ctxt>) -> Local {
         self.new_local_from_info(LocalInfo {
             ty,
             kind: super::LocalKind::Temp,
         })
     }
-    pub(super) fn new_var(&mut self, var: Var, ty: TypeKind) -> Local {
+    pub(super) fn new_var(&mut self, var: Var, ty: Type<'ctxt>) -> Local {
         self.new_local_from_info(LocalInfo {
             ty,
             kind: super::LocalKind::Var(var),
@@ -90,7 +90,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         self.current_block = block;
         block
     }
-    pub(super) fn finish_block(&mut self, loc: SrcLoc, terminator: TerminatorKind) {
+    pub(super) fn finish_block(&mut self, loc: SrcLoc, terminator: TerminatorKind<'ctxt>) {
         self.body.block_info.blocks_mut()[self.current_block].terminator = Some(Terminator {
             src_info: loc,
             kind: terminator,
@@ -99,7 +99,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     pub(super) fn finish_block_with_switch_targets(
         &mut self,
         loc: SrcLoc,
-        operand: Operand,
+        operand: Operand<'ctxt>,
         targets: Vec<SwitchTarget>,
         otherwise: BasicBlockId,
     ) {
@@ -111,7 +111,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     pub(super) fn finish_block_with_switch(
         &mut self,
         loc: SrcLoc,
-        operand: Operand,
+        operand: Operand<'ctxt>,
         targets: SwitchTargets,
     ) {
         self.finish_block(loc, TerminatorKind::Switch(operand, targets));
@@ -119,7 +119,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     pub(super) fn finish_block_with_if(
         &mut self,
         loc: SrcLoc,
-        operand: Operand,
+        operand: Operand<'ctxt>,
         true_block: BasicBlockId,
         false_block: BasicBlockId,
     ) {
@@ -138,26 +138,42 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     pub(super) fn finish_block_with_goto(&mut self, loc: SrcLoc, block: BasicBlockId) {
         self.finish_block(loc, TerminatorKind::Goto(block));
     }
-    pub(super) fn push_stmt(&mut self, loc: SrcLoc, kind: StmtKind) {
+    pub(super) fn push_stmt(&mut self, loc: SrcLoc, kind: StmtKind<'ctxt>) {
         self.body.block_info.blocks_mut()[self.current_block]
             .stmts
             .push(Stmt { loc, kind });
     }
-    pub(super) fn assign_to_temp(&mut self, loc: SrcLoc, ty: TypeKind, value: Rvalue) -> Local {
+    pub(super) fn assign_to_temp(
+        &mut self,
+        loc: SrcLoc,
+        ty: Type<'ctxt>,
+        value: Rvalue<'ctxt>,
+    ) -> Local {
         let temp = self.new_temp(ty);
         self.assign(loc, Place::local(temp), value);
         temp
     }
-    pub(super) fn assign_equals(&mut self, loc: SrcLoc, left: Operand, right: Operand) -> Local {
-        self.assign_binary_result(loc, TypeKind::Bool, BinaryOp::Equals, left, right)
+    pub(super) fn assign_equals(
+        &mut self,
+        loc: SrcLoc,
+        left: Operand<'ctxt>,
+        right: Operand<'ctxt>,
+    ) -> Local {
+        self.assign_binary_result(
+            loc,
+            Type::new_bool(self.ctxt),
+            BinaryOp::Equals,
+            left,
+            right,
+        )
     }
     pub(super) fn assign_binary_result(
         &mut self,
         loc: SrcLoc,
-        ty: TypeKind,
+        ty: Type<'ctxt>,
         op: BinaryOp,
-        left: Operand,
-        right: Operand,
+        left: Operand<'ctxt>,
+        right: Operand<'ctxt>,
     ) -> Local {
         self.assign_to_temp(loc, ty, Rvalue::Binary(op, Box::new((left, right))))
     }
@@ -166,7 +182,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         self.finish_block(loc, TerminatorKind::Panic);
         self.switch_to_block(block);
     }
-    pub(super) fn assign(&mut self, loc: SrcLoc, place: Place, value: Rvalue) {
+    pub(super) fn assign(&mut self, loc: SrcLoc, place: Place, value: Rvalue<'ctxt>) {
         self.push_stmt(loc, StmtKind::Assign(place, Box::new(value)));
     }
 }

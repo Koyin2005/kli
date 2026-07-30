@@ -67,7 +67,7 @@ pub fn config() -> Result<Config, ConfigError> {
         return Err(ConfigError);
     }
     let path = args.remove(0);
-    let run = if let Some("run") = args.get(0).map(String::as_str) {
+    let run = if let Some("run") = args.first().map(String::as_str) {
         args.remove(0);
         true
     } else {

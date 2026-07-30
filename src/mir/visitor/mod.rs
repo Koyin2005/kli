@@ -1,17 +1,23 @@
-use crate::mir::{
-    BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Place, PlaceBase,
-    PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
+use crate::{
+    CtxtRef,
+    mir::{
+        BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Place, PlaceBase,
+        PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
+    },
 };
 pub enum PlaceCtxt {
     Read,
     Write,
 }
-pub trait Visit {
-    fn visit_assign(&mut self, loc: Location, place: &Place, rvalue: &Rvalue) {
+pub trait Visit<'ctxt> {
+    fn ctxt(&self) -> CtxtRef<'ctxt> {
+        unimplemented!("not implemented")
+    }
+    fn visit_assign(&mut self, loc: Location, place: &Place, rvalue: &Rvalue<'ctxt>) {
         self.visit_place(PlaceCtxt::Write, loc, place);
         self.visit_rvalue(loc, rvalue);
     }
-    fn super_visit_stmt(&mut self, loc: Location, stmt: &Stmt) {
+    fn super_visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         match &stmt.kind {
             StmtKind::Noop => (),
             StmtKind::Assign(place, rvalue) => {
@@ -24,8 +30,8 @@ pub trait Visit {
             }
         }
     }
-    fn super_visit_constant(&mut self, _loc: Location, _constant: &Constant) {}
-    fn super_visit_terminator(&mut self, loc: Location, terminator: &Terminator) {
+    fn super_visit_constant(&mut self, _loc: Location, _constant: &Constant<'ctxt>) {}
+    fn super_visit_terminator(&mut self, loc: Location, terminator: &Terminator<'ctxt>) {
         match &terminator.kind {
             TerminatorKind::Goto(_)
             | TerminatorKind::Panic
@@ -36,7 +42,7 @@ pub trait Visit {
             }
         }
     }
-    fn super_visit_block(&mut self, id: BasicBlockId, info: &BasicBlock) {
+    fn super_visit_block(&mut self, id: BasicBlockId, info: &BasicBlock<'ctxt>) {
         for (stmt_id, stmt) in info.stmts.iter_enumerated() {
             self.visit_stmt(
                 Location {
@@ -54,7 +60,7 @@ pub trait Visit {
             info.expect_terminator(),
         );
     }
-    fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue) {
+    fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue<'ctxt>) {
         match rvalue {
             Rvalue::Discriminant(place) => self.visit_place(PlaceCtxt::Read, loc, place),
             Rvalue::Len(place) => self.visit_place(PlaceCtxt::Read, loc, place),
@@ -115,17 +121,17 @@ pub trait Visit {
             self.visit_projection(loc, *projection);
         }
     }
-    fn super_visit_operand(&mut self, loc: Location, operand: &Operand) {
+    fn super_visit_operand(&mut self, loc: Location, operand: &Operand<'ctxt>) {
         match operand {
             Operand::Load(place) => self.visit_place(PlaceCtxt::Read, loc, place),
             Operand::Constant(constant) => self.visit_constant(loc, constant),
         }
     }
 
-    fn visit_stmt(&mut self, loc: Location, stmt: &Stmt) {
+    fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         self.super_visit_stmt(loc, stmt);
     }
-    fn visit_operand(&mut self, loc: Location, operand: &Operand) {
+    fn visit_operand(&mut self, loc: Location, operand: &Operand<'ctxt>) {
         self.super_visit_operand(loc, operand);
     }
     fn visit_local(&mut self, ctxt: PlaceCtxt, loc: Location, local: Local) {
@@ -137,31 +143,31 @@ pub trait Visit {
     fn visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
         self.super_visit_projection(loc, projection);
     }
-    fn visit_constant(&mut self, loc: Location, constant: &Constant) {
+    fn visit_constant(&mut self, loc: Location, constant: &Constant<'ctxt>) {
         self.super_visit_constant(loc, constant);
     }
-    fn visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue) {
+    fn visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue<'ctxt>) {
         self.super_visit_rvalue(loc, rvalue);
     }
-    fn visit_terminator(&mut self, loc: Location, terminator: &Terminator) {
+    fn visit_terminator(&mut self, loc: Location, terminator: &Terminator<'ctxt>) {
         self.super_visit_terminator(loc, terminator);
     }
-    fn visit_block(&mut self, id: BasicBlockId, block: &BasicBlock) {
+    fn visit_block(&mut self, id: BasicBlockId, block: &BasicBlock<'ctxt>) {
         self.super_visit_block(id, block)
     }
-    fn visit_body(&mut self, body: &Body) {
+    fn visit_body(&mut self, body: &Body<'ctxt>) {
         for (id, block) in body.block_info.blocks().iter_enumerated() {
             self.visit_block(id, block);
         }
     }
 }
 
-pub trait MutVisit {
-    fn visit_assign(&mut self, loc: Location, place: &mut Place, rvalue: &mut Rvalue) {
+pub trait MutVisit<'ctxt> {
+    fn visit_assign(&mut self, loc: Location, place: &mut Place, rvalue: &mut Rvalue<'ctxt>) {
         self.visit_place(loc, place);
         self.visit_rvalue(loc, rvalue);
     }
-    fn super_visit_stmt(&mut self, loc: Location, stmt: &mut Stmt) {
+    fn super_visit_stmt(&mut self, loc: Location, stmt: &mut Stmt<'ctxt>) {
         match &mut stmt.kind {
             StmtKind::Noop => (),
             StmtKind::Assign(place, rvalue) => {
@@ -174,8 +180,8 @@ pub trait MutVisit {
             }
         }
     }
-    fn super_visit_constant(&mut self, _loc: Location, _constant: &mut Constant) {}
-    fn super_visit_terminator(&mut self, loc: Location, terminator: &mut Terminator) {
+    fn super_visit_constant(&mut self, _loc: Location, _constant: &mut Constant<'ctxt>) {}
+    fn super_visit_terminator(&mut self, loc: Location, terminator: &mut Terminator<'ctxt>) {
         match &mut terminator.kind {
             TerminatorKind::Goto(_)
             | TerminatorKind::Panic
@@ -186,7 +192,7 @@ pub trait MutVisit {
             }
         }
     }
-    fn super_visit_block(&mut self, id: BasicBlockId, info: &mut BasicBlock) {
+    fn super_visit_block(&mut self, id: BasicBlockId, info: &mut BasicBlock<'ctxt>) {
         for (stmt_id, stmt) in info.stmts.iter_mut_enumerated() {
             self.visit_stmt(
                 Location {
@@ -204,7 +210,7 @@ pub trait MutVisit {
             info.expect_terminator_mut(),
         );
     }
-    fn super_visit_rvalue(&mut self, loc: Location, rvalue: &mut Rvalue) {
+    fn super_visit_rvalue(&mut self, loc: Location, rvalue: &mut Rvalue<'ctxt>) {
         match rvalue {
             Rvalue::Discriminant(place) => self.visit_place(loc, place),
             Rvalue::Len(place) => self.visit_place(loc, place),
@@ -265,17 +271,17 @@ pub trait MutVisit {
             self.visit_projection(loc, projection);
         }
     }
-    fn super_visit_operand(&mut self, loc: Location, operand: &mut Operand) {
+    fn super_visit_operand(&mut self, loc: Location, operand: &mut Operand<'ctxt>) {
         match operand {
             Operand::Load(place) => self.visit_place(loc, place),
             Operand::Constant(constant) => self.visit_constant(loc, constant),
         }
     }
 
-    fn visit_stmt(&mut self, loc: Location, stmt: &mut Stmt) {
+    fn visit_stmt(&mut self, loc: Location, stmt: &mut Stmt<'ctxt>) {
         self.super_visit_stmt(loc, stmt);
     }
-    fn visit_operand(&mut self, loc: Location, operand: &mut Operand) {
+    fn visit_operand(&mut self, loc: Location, operand: &mut Operand<'ctxt>) {
         self.super_visit_operand(loc, operand);
     }
     fn visit_local(&mut self, loc: Location, local: &mut Local) {
@@ -287,24 +293,24 @@ pub trait MutVisit {
     fn visit_projection(&mut self, loc: Location, projection: &mut PlaceProjection) {
         self.super_visit_projection(loc, projection);
     }
-    fn visit_constant(&mut self, loc: Location, constant: &mut Constant) {
+    fn visit_constant(&mut self, loc: Location, constant: &mut Constant<'ctxt>) {
         self.super_visit_constant(loc, constant);
     }
-    fn visit_rvalue(&mut self, loc: Location, rvalue: &mut Rvalue) {
+    fn visit_rvalue(&mut self, loc: Location, rvalue: &mut Rvalue<'ctxt>) {
         self.super_visit_rvalue(loc, rvalue);
     }
-    fn visit_terminator(&mut self, loc: Location, terminator: &mut Terminator) {
+    fn visit_terminator(&mut self, loc: Location, terminator: &mut Terminator<'ctxt>) {
         self.super_visit_terminator(loc, terminator);
     }
-    fn visit_block(&mut self, id: BasicBlockId, block: &mut BasicBlock) {
+    fn visit_block(&mut self, id: BasicBlockId, block: &mut BasicBlock<'ctxt>) {
         self.super_visit_block(id, block)
     }
-    fn visit_body(&mut self, body: &mut Body) {
+    fn visit_body(&mut self, body: &mut Body<'ctxt>) {
         for (id, block) in body.block_info.blocks_mut().iter_mut_enumerated() {
             self.visit_block(id, block);
         }
     }
-    fn visit_body_no_invalidate(&mut self, body: &mut Body) {
+    fn visit_body_no_invalidate(&mut self, body: &mut Body<'ctxt>) {
         for (id, block) in body
             .block_info
             .blocks_mut_dont_dirty()

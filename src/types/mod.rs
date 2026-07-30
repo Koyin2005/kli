@@ -19,11 +19,11 @@ pub enum TagType {
     Never,
 }
 impl TagType {
-    pub fn into_type(self) -> TypeKind {
+    pub fn into_type<'ctxt>(self, ctxt: CtxtRef<'ctxt>) -> Type<'ctxt> {
         match self {
-            Self::Never => TypeKind::Never,
-            Self::Byte => TypeKind::Byte,
-            Self::Uint => TypeKind::UINT,
+            Self::Never => Type::new_never(ctxt),
+            Self::Byte => Type::new_byte(ctxt),
+            Self::Uint => Type::new_uint(ctxt),
         }
     }
 }
@@ -36,32 +36,32 @@ pub struct GenericParam {
     pub name: Symbol,
     pub kind: GenericKind,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct GenericArg(pub TypeKind);
-impl GenericArg {
-    pub const fn from_type(ty: TypeKind) -> Self {
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+pub struct GenericArg<'ctxt>(pub Type<'ctxt>);
+impl<'ctxt> GenericArg<'ctxt> {
+    pub const fn from_type(ty: Type<'ctxt>) -> Self {
         Self(ty)
     }
-    pub fn expect_ty(&self) -> &TypeKind {
-        &self.0
+    pub fn expect_ty(self) -> Type<'ctxt> {
+        self.0
     }
 }
-impl TypeMappable for GenericArg {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
+impl<'ctxt> TypeMappable<'ctxt> for GenericArg<'ctxt> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         match self {
             Self(ty) => Ok(GenericArg::from_type(ty.apply_map(m)?)),
         }
     }
 }
-impl std::fmt::Display for GenericArgs {
+impl std::fmt::Display for GenericArgs<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", display_generic_args(self))
     }
 }
-pub fn display_generic_args<'a>(args: &'a [GenericArg]) -> DisplayGenericArgs<'a> {
+fn display_generic_args<'a>(args: &'a [GenericArg]) -> DisplayGenericArgs<'a> {
     DisplayGenericArgs(args)
 }
-pub struct DisplayGenericArgs<'a>(&'a [GenericArg]);
+pub struct DisplayGenericArgs<'a>(&'a [GenericArg<'a>]);
 impl Display for DisplayGenericArgs<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.0.is_empty() {
@@ -81,35 +81,19 @@ impl Display for DisplayGenericArgs<'_> {
     }
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
-pub struct FunctionSig {
-    pub params: Vec<TypeKind>,
-    pub return_type: TypeKind,
+pub struct FunctionSig<'ctxt> {
+    pub params: Vec<Type<'ctxt>>,
+    pub return_type: Type<'ctxt>,
 }
-impl FunctionSig {
-    pub fn new(params: Vec<TypeKind>, return_type: TypeKind) -> Self {
+impl<'ctxt> FunctionSig<'ctxt> {
+    pub const fn new(params: Vec<Type<'ctxt>>, return_type: Type<'ctxt>) -> Self {
         Self {
             params,
             return_type,
         }
     }
-    pub fn into_function_type(self) -> FunctionType {
-        FunctionType {
-            params: self.params,
-            return_type: Box::new(self.return_type),
-        }
-    }
-}
-#[derive(PartialEq, Eq, Clone, Debug, Hash)]
-pub struct FunctionType {
-    pub params: Vec<TypeKind>,
-    pub return_type: Box<TypeKind>,
-}
-impl FunctionType {
-    pub fn new_data(params: Vec<TypeKind>, return_type: TypeKind) -> Self {
-        Self {
-            params,
-            return_type: Box::new(return_type),
-        }
+    pub fn into_type(self, ctxt: CtxtRef<'ctxt>) -> Type<'ctxt> {
+        TypeKind::Function(self).intern(ctxt)
     }
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
@@ -129,18 +113,18 @@ impl Display for FieldName {
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
-pub struct GenericArgs(Vec<GenericArg>);
-impl GenericArgs {
+pub struct GenericArgs<'ctxt>(Vec<GenericArg<'ctxt>>);
+impl<'ctxt> GenericArgs<'ctxt> {
     pub const fn new() -> Self {
         Self(Vec::new())
     }
-    pub const fn from_vec(v: Vec<GenericArg>) -> Self {
+    pub const fn from_vec(v: Vec<GenericArg<'ctxt>>) -> Self {
         Self(v)
     }
-    pub fn from_single(arg: GenericArg) -> Self {
+    pub fn from_single(arg: GenericArg<'ctxt>) -> Self {
         Self(vec![arg])
     }
-    pub fn from_type(arg: TypeKind) -> Self {
+    pub fn from_type(arg: Type<'ctxt>) -> Self {
         Self(vec![GenericArg::from_type(arg)])
     }
     pub fn combine(mut self, rest: Self) -> Self {
@@ -148,41 +132,41 @@ impl GenericArgs {
         self
     }
 }
-impl<const N: usize> TryFrom<GenericArgs> for [GenericArg; N] {
-    type Error = GenericArgs;
-    fn try_from(value: GenericArgs) -> Result<Self, Self::Error> {
+impl<'ctxt, const N: usize> TryFrom<GenericArgs<'ctxt>> for [GenericArg<'ctxt>; N] {
+    type Error = GenericArgs<'ctxt>;
+    fn try_from(value: GenericArgs<'ctxt>) -> Result<Self, Self::Error> {
         value.0.try_into().map_err(GenericArgs::from_vec)
     }
 }
-impl std::ops::Deref for GenericArgs {
-    type Target = [GenericArg];
-    fn deref(&self) -> GenericArgsRef<'_> {
+impl<'ctxt> std::ops::Deref for GenericArgs<'ctxt> {
+    type Target = [GenericArg<'ctxt>];
+    fn deref(&self) -> GenericArgsRef<'_, 'ctxt> {
         &self.0
     }
 }
-impl std::ops::DerefMut for GenericArgs {
+impl<'ctxt> std::ops::DerefMut for GenericArgs<'ctxt> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
-impl IntoIterator for GenericArgs {
-    type IntoIter = std::vec::IntoIter<GenericArg>;
-    type Item = GenericArg;
+impl<'ctxt> IntoIterator for GenericArgs<'ctxt> {
+    type IntoIter = std::vec::IntoIter<GenericArg<'ctxt>>;
+    type Item = GenericArg<'ctxt>;
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
-impl FromIterator<GenericArg> for GenericArgs {
-    fn from_iter<T: IntoIterator<Item = GenericArg>>(iter: T) -> Self {
+impl<'ctxt> FromIterator<GenericArg<'ctxt>> for GenericArgs<'ctxt> {
+    fn from_iter<T: IntoIterator<Item = GenericArg<'ctxt>>>(iter: T) -> Self {
         Self(iter.into_iter().collect())
     }
 }
-pub type GenericArgsRef<'a> = &'a [GenericArg];
+pub type GenericArgsRef<'a, 'b> = &'a [GenericArg<'b>];
 
-#[derive(PartialEq, Eq, Clone, Debug, Hash)]
-pub struct RecordField {
+#[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
+pub struct RecordField<'ctxt> {
     pub name: FieldName,
-    pub ty: TypeKind,
+    pub ty: Type<'ctxt>,
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
 pub enum IntegerKind {
@@ -195,22 +179,166 @@ impl IntegerKind {
     }
 }
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Type<'ctxt>(&'ctxt TypeKind);
+pub struct Type<'ctxt>(&'ctxt TypeKind<'ctxt>);
 impl<'ctxt> Type<'ctxt> {
+    pub const UNKNOWN: Self = Self(&TypeKind::Unknown);
+    pub const BYTE: Self = Self(&TypeKind::Unknown);
+
+    pub fn new_int(ctxt: CtxtRef<'ctxt>, kind: IntegerKind) -> Self {
+        TypeKind::Int(kind).intern(ctxt)
+    }
+    pub fn new_bool(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::Bool.intern(ctxt)
+    }
+    pub fn new_uint(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::UINT.intern(ctxt)
+    }
+    pub fn new_char(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::Char.intern(ctxt)
+    }
+    pub fn new_never(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::Char.intern(ctxt)
+    }
+    pub fn new_unknown(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::Unknown.intern(ctxt)
+    }
+    pub fn new_unit(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::UNIT.intern(ctxt)
+    }
+    pub fn new_byte(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::Byte.intern(ctxt)
+    }
+    pub fn is_bool(self) -> bool {
+        matches!(self.0, TypeKind::Bool)
+    }
+    pub fn is_byte(self) -> bool {
+        matches!(self.0, TypeKind::Byte)
+    }
+
     pub fn new(kind: &'ctxt TypeKind) -> Self {
         Self(kind)
     }
-    pub fn kind(self) -> &'ctxt TypeKind {
+    pub fn kind(&self) -> &'_ TypeKind<'ctxt> {
         self.0
+    }
+    pub fn named(
+        ctxt: CtxtRef<'ctxt>,
+        id: DefId,
+        name: Symbol,
+        args: impl IntoIterator<Item = GenericArg<'ctxt>>,
+    ) -> Self {
+        TypeKind::Named(id, name, args.into_iter().collect()).intern(ctxt)
+    }
+    pub fn param(ctxt: CtxtRef<'ctxt>, name: Symbol, index: usize) -> Self {
+        TypeKind::Param(name, index).intern(ctxt)
+    }
+    pub fn infer_var(ctxt: CtxtRef<'ctxt>, var: usize) -> Self {
+        TypeKind::Infer(var).intern(ctxt)
+    }
+    pub fn function_type(ctxt: CtxtRef<'ctxt>, params: Vec<Self>, return_type: Self) -> Self {
+        FunctionSig::new(params, return_type).into_type(ctxt)
+    }
+    pub fn new_box(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
+        TypeKind::Box(ty).intern(ctxt)
+    }
+    pub fn as_box(self) -> Option<Self> {
+        let &TypeKind::Box(ty) = self.kind() else {
+            return None;
+        };
+        Some(ty)
+    }
+    pub fn new_array(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
+        TypeKind::Array(ty).intern(ctxt)
+    }
+    pub fn new_string(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::String.intern(ctxt)
+    }
+    pub fn record_from_iter(
+        ctxt: CtxtRef<'ctxt>,
+        fields: impl IntoIterator<Item = (FieldName, Self)>,
+    ) -> Self {
+        TypeKind::Record(
+            fields
+                .into_iter()
+                .map(|(name, ty)| RecordField { name, ty })
+                .collect(),
+        )
+        .intern(ctxt)
+    }
+
+    pub fn as_array(self) -> Option<Type<'ctxt>> {
+        let TypeKind::Array(element) = self.0 else {
+            return None;
+        };
+        Some(*element)
+    }
+    pub fn new_record(
+        ctxt: CtxtRef<'ctxt>,
+        fields: impl IntoIterator<Item = RecordField<'ctxt>>,
+    ) -> Self {
+        TypeKind::Record(fields.into_iter().collect()).intern(ctxt)
+    }
+    pub fn tuple_from_iter(
+        ctxt: CtxtRef<'ctxt>,
+        field_tys: impl IntoIterator<Item = Self>,
+    ) -> Self {
+        TypeKind::Tuple(field_tys.into_iter().collect()).intern(ctxt)
+    }
+    pub fn pair(ctxt: CtxtRef<'ctxt>, first: Self, second: Self) -> Self {
+        Self::tuple_from_iter(ctxt, [first, second])
+    }
+    pub fn as_tuple(self) -> Option<&'ctxt Vec<Self>> {
+        let TypeKind::Tuple(fields) = self.0 else {
+            return None;
+        };
+        Some(fields)
+    }
+    pub fn into_box(self) -> Result<Self, Self> {
+        let &TypeKind::Box(ty) = self.kind() else {
+            return Err(self);
+        };
+        Ok(ty)
+    }
+    pub const fn as_integer(self) -> Option<IntegerKind> {
+        let &TypeKind::Int(kind) = self.0 else {
+            return None;
+        };
+        Some(kind)
+    }
+    pub const fn is_integer(self) -> bool {
+        matches!(self.0, TypeKind::Int(_))
+    }
+    pub fn is_integer_kind(self, kind: IntegerKind) -> bool {
+        let &TypeKind::Int(int_kind) = self.0 else {
+            return false;
+        };
+        int_kind == kind
+    }
+    pub fn as_function(self) -> Option<&'ctxt FunctionSig<'ctxt>> {
+        let TypeKind::Function(function) = self.0 else {
+            return None;
+        };
+        Some(function)
+    }
+}
+impl<'ctxt> std::ops::Deref for Type<'ctxt> {
+    type Target = TypeKind<'ctxt>;
+    fn deref(&self) -> &Self::Target {
+        self.kind()
     }
 }
 impl std::fmt::Debug for Type<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+impl std::fmt::Display for Type<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
-pub enum TypeKind {
+pub enum TypeKind<'ctxt> {
     Infer(usize),
     Unknown,
     Int(IntegerKind),
@@ -219,18 +347,21 @@ pub enum TypeKind {
     Byte,
     Never,
     Param(Symbol, usize),
-    Function(FunctionType),
-    Tuple(Vec<TypeKind>),
-    Record(IndexVec<FieldId, RecordField>),
-    Array(Box<TypeKind>),
-    Named(DefId, Symbol, GenericArgs),
+    Function(FunctionSig<'ctxt>),
+    Tuple(Vec<Type<'ctxt>>),
+    Record(IndexVec<FieldId, RecordField<'ctxt>>),
+    Array(Type<'ctxt>),
+    Named(DefId, Symbol, GenericArgs<'ctxt>),
     String,
-    Box(Box<TypeKind>),
+    Box(Type<'ctxt>),
 }
-impl TypeKind {
+impl<'ctxt> TypeKind<'ctxt> {
     pub const UNIT: Self = Self::Tuple(Vec::new());
     pub const UINT: Self = Self::Int(IntegerKind::Unsigned);
     pub const INT: Self = Self::Int(IntegerKind::Signed);
+    pub fn intern(self, ctxt: CtxtRef<'ctxt>) -> Type<'ctxt> {
+        ctxt.intern_ty(self)
+    }
     pub const fn is_unit(&self) -> bool {
         match self {
             Self::Tuple(fields) => fields.is_empty(),
@@ -243,32 +374,29 @@ impl TypeKind {
     pub fn is_integer(&self) -> bool {
         matches!(self, Self::Int(_))
     }
+    pub fn is_integer_kind(&self, kind: IntegerKind) -> bool {
+        matches!(self, Self::Int(int_kind) if kind == *int_kind)
+    }
 
     pub const fn is_builtin_scalar(&self) -> bool {
         matches!(self, Self::Int(_) | Self::Bool | Self::Byte | Self::Char)
     }
-    pub fn as_array(&self) -> Option<&TypeKind> {
-        let TypeKind::Array(element) = self else {
-            return None;
-        };
-        Some(element)
-    }
-    pub fn array(element: Self) -> Self {
-        Self::Array(Box::new(element))
+    pub fn array(element: Type<'ctxt>) -> Self {
+        Self::Array(element)
     }
     pub fn string(_: CtxtRef<'_>) -> Self {
         TypeKind::String
     }
-    pub fn as_named(&self) -> Option<(DefId, Symbol, GenericArgsRef<'_>)> {
+    pub fn as_named(&self) -> Option<(DefId, Symbol, GenericArgsRef<'_, 'ctxt>)> {
         let Self::Named(id, name, args) = self else {
             return None;
         };
         Some((*id, *name, args))
     }
-    pub fn closure_env(fields: impl Iterator<Item = Capture>) -> Self {
+    pub fn closure_env(fields: impl Iterator<Item = Capture<'ctxt>>) -> Self {
         Self::record_named_fields(fields.map(|capture| (capture.var.0, capture.ty)))
     }
-    pub fn record_named_fields(fields: impl Iterator<Item = (Symbol, Self)>) -> Self {
+    pub fn record_named_fields(fields: impl Iterator<Item = (Symbol, Type<'ctxt>)>) -> Self {
         Self::Record(
             fields
                 .map(|(name, ty)| RecordField {
@@ -278,24 +406,18 @@ impl TypeKind {
                 .collect(),
         )
     }
-    pub fn new_function(params: Vec<Self>, return_ty: Self) -> Self {
-        Self::Function(FunctionType {
-            params,
-            return_type: Box::new(return_ty),
-        })
-    }
     pub fn field_info(
         &self,
         field_id: FieldId,
-        ctxt: CtxtRef<'_>,
-    ) -> Option<(TypeKind, FieldName)> {
+        ctxt: CtxtRef<'ctxt>,
+    ) -> Option<(Type<'ctxt>, FieldName)> {
         match self {
             Self::Record(fields) => fields
                 .get(field_id)
-                .map(|field| (field.ty.clone(), field.name)),
+                .map(|field| (field.ty, field.name)),
             Self::Tuple(fields) => fields
                 .get(field_id.into_usize())
-                .map(|ty| (ty.clone(), FieldName::Index(field_id))),
+                .map(|ty| (*ty, FieldName::Index(field_id))),
             &Self::Named(id, _, ref args) => ctxt
                 .type_def(id)
                 .fields()
@@ -305,44 +427,11 @@ impl TypeKind {
             _ => None,
         }
     }
-    pub fn function_type(params: Vec<Self>, return_type: Self) -> Self {
-        Self::Function(FunctionType {
-            params,
-            return_type: Box::new(return_type),
-        })
-    }
-    pub fn pair(first: TypeKind, second: TypeKind) -> Self {
-        Self::tuple([first, second])
-    }
-    pub fn tuple(field_tys: impl IntoIterator<Item = Self>) -> Self {
-        Self::Tuple(field_tys.into_iter().collect())
-    }
-    pub fn into_box(self, ctxt: CtxtRef<'_>) -> Result<Self, Self> {
-        if self.as_box(ctxt).is_none() {
-            return Err(self);
-        }
-        let Self::Named(_, _, args) = self else {
-            return Err(self);
-        };
-        let [GenericArg(ty)] = args.try_into().unwrap();
-        Ok(ty)
-    }
-    pub fn as_box(&self, ctxt: CtxtRef<'_>) -> Option<&TypeKind> {
-        use crate::lang_items::LangItem;
-        let &Self::Named(id, _, ref args) = self else {
-            return None;
-        };
-        let box_id = ctxt.lang_items().get(LangItem::Box)?;
-        if id != box_id {
-            return None;
-        }
-        Some(args.first()?.expect_ty())
-    }
     pub fn is_resource(&self, ctxt: CtxtRef<'_>) -> bool {
         _ = ctxt;
         false
     }
-    pub fn is_uninhabited(&self, ctxt: CtxtRef<'_>) -> bool {
+    pub fn is_uninhabited(&self, ctxt: CtxtRef<'ctxt>) -> bool {
         match self {
             Self::Infer(_)
             | Self::Unknown
@@ -377,7 +466,7 @@ impl TypeKind {
     }
 }
 
-impl Display for TypeKind {
+impl Display for TypeKind<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Box(ty) => {
@@ -422,7 +511,7 @@ impl Display for TypeKind {
             TypeKind::Unknown => f.pad("{unknown}"),
             TypeKind::Infer(_) => f.pad("_"),
             &TypeKind::Param(name, _) => write!(f, "{}", name),
-            TypeKind::Function(FunctionType {
+            TypeKind::Function(FunctionSig {
                 params,
                 return_type,
             }) => {
@@ -444,10 +533,11 @@ impl Display for TypeKind {
         }
     }
 }
-pub trait TypeMap {
+pub trait TypeMap<'ctxt> {
     type Error;
-    fn super_map_type(&mut self, ty: TypeKind) -> Result<TypeKind, Self::Error> {
-        match ty {
+    fn ctxt(&self) -> CtxtRef<'ctxt>;
+    fn super_map_type(&mut self, ty: Type<'ctxt>) -> Result<Type<'ctxt>, Self::Error> {
+        match ty.kind() {
             TypeKind::String
             | TypeKind::Bool
             | TypeKind::Char
@@ -457,109 +547,99 @@ pub trait TypeMap {
             | TypeKind::Infer(_)
             | TypeKind::Param(..)
             | TypeKind::Never => Ok(ty),
-            TypeKind::Function(function_type) => {
-                Ok(TypeKind::Function(self.map_function_type(function_type)?))
-            }
-            TypeKind::Tuple(fields) => Ok(TypeKind::Tuple(
+            TypeKind::Function(function_type) => Ok(self
+                .map_function_type(function_type.clone())?
+                .into_type(self.ctxt())),
+            TypeKind::Tuple(fields) => Ok(Type::tuple_from_iter(self.ctxt(), {
+                let fields: Vec<_> = fields.iter()
+                    .map(|&field| self.map_type(field))
+                    .collect::<Result<_, _>>()?;
                 fields
+            })),
+            TypeKind::Record(fields) => Ok(Type::new_record(self.ctxt(), {
+                let fields: Vec<RecordField<'ctxt>> = fields
                     .into_iter()
-                    .map(|field| self.map_type(field))
-                    .collect::<Result<_, _>>()?,
-            )),
-            TypeKind::Record(fields) => Ok(TypeKind::Record(
+                    .map(|&field| self.map_field(field))
+                    .collect::<Result<_, _>>()?;
                 fields
-                    .into_iter()
-                    .map(|field| self.map_field(field))
-                    .collect::<Result<_, _>>()?,
-            )),
-            TypeKind::Named(id, name, args) => Ok(TypeKind::Named(
+            })),
+            &TypeKind::Named(id, name, ref args) => Ok(Type::named(
+                self.ctxt(),
                 id,
                 name,
-                args.into_iter()
-                    .map(|arg| arg.apply_map(self))
+                args.iter()
+                    .map(|&arg| arg.apply_map(self))
                     .collect::<Result<GenericArgs, _>>()?,
             )),
-            TypeKind::Array(ty) => Ok(TypeKind::Array(Box::new(self.map_type(*ty)?))),
-            TypeKind::Box(ty) => Ok(TypeKind::Box(Box::new(self.map_type(*ty)?))),
+            TypeKind::Array(ty) => Ok(Type::new_array(self.ctxt(), self.map_type(*ty)?)),
+            TypeKind::Box(ty) => Ok(Type::new_box(self.ctxt(), self.map_type(*ty)?)),
         }
     }
     fn super_map_function_type(
         &mut self,
-        mut function_type: FunctionType,
-    ) -> Result<FunctionType, Self::Error> {
+        mut function_type: FunctionSig<'ctxt>,
+    ) -> Result<FunctionSig<'ctxt>, Self::Error> {
         function_type.params = function_type
             .params
             .into_iter()
             .map(|param| self.map_type(param))
             .collect::<Result<_, _>>()?;
-        *function_type.return_type = self.map_type(*function_type.return_type)?;
+        function_type.return_type = self.map_type(function_type.return_type)?;
         Ok(function_type)
     }
-    fn super_map_field(&mut self, field: RecordField) -> Result<RecordField, Self::Error> {
+    fn super_map_field(
+        &mut self,
+        field: RecordField<'ctxt>,
+    ) -> Result<RecordField<'ctxt>, Self::Error> {
         let mut field = field;
         let ty = self.map_type(field.ty)?;
         field.ty = ty;
         Ok(field)
     }
-    fn map_type(&mut self, ty: TypeKind) -> Result<TypeKind, Self::Error> {
+    fn map_type(&mut self, ty: Type<'ctxt>) -> Result<Type<'ctxt>, Self::Error> {
         self.super_map_type(ty)
     }
-    fn map_field(&mut self, field: RecordField) -> Result<RecordField, Self::Error> {
+    fn map_field(&mut self, field: RecordField<'ctxt>) -> Result<RecordField<'ctxt>, Self::Error> {
         self.super_map_field(field)
     }
     fn map_function_type(
         &mut self,
-        function_type: FunctionType,
-    ) -> Result<FunctionType, Self::Error> {
+        function_type: FunctionSig<'ctxt>,
+    ) -> Result<FunctionSig<'ctxt>, Self::Error> {
         self.super_map_function_type(function_type)
     }
 }
 
-pub trait TypeMappable {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error>
+pub trait TypeMappable<'ctxt> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error>
     where
         Self: Sized;
 }
 
-impl TypeMappable for TypeKind {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
+impl<'ctxt> TypeMappable<'ctxt> for Type<'ctxt> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         m.map_type(self)
     }
 }
 
-impl TypeMappable for FunctionType {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
+impl<'ctxt> TypeMappable<'ctxt> for FunctionSig<'ctxt> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         m.map_function_type(self)
     }
 }
-impl TypeMappable for RecordField {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
+impl<'ctxt> TypeMappable<'ctxt> for RecordField<'ctxt> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         m.map_field(self)
     }
 }
-impl TypeMappable for FunctionSig {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error>
-    where
-        Self: Sized,
-    {
-        Ok(Self {
-            params: self
-                .params
-                .into_iter()
-                .map(|param| m.map_type(param))
-                .collect::<Result<_, _>>()?,
-            return_type: m.map_type(self.return_type)?,
-        })
-    }
-}
-impl<T: TypeMappable> TypeMappable for Box<T> {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
+impl<'ctxt, T: TypeMappable<'ctxt>> TypeMappable<'ctxt> for Box<T> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         Ok(Box::new((*self).apply_map(m)?))
     }
 }
 
-impl TypeMappable for GenericArgs {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error>
+impl<'ctxt> TypeMappable<'ctxt> for GenericArgs<'ctxt> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error>
     where
         Self: Sized,
     {

@@ -8,49 +8,54 @@ use crate::{
     ident::Ident,
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
-    types::{CaseId, GenericArgs, GenericKind, TypeKind},
+    types::{CaseId, GenericArgs, GenericKind, Type},
 };
 
 #[derive(Debug)]
-pub struct PatternField {
+pub struct PatternField<'ctxt> {
     pub index: FieldId,
-    pub pattern: Pattern,
+    pub pattern: Pattern<'ctxt>,
 }
 #[derive(Debug)]
-pub struct Pattern {
-    pub ty: TypeKind,
+pub struct Pattern<'ctxt> {
+    pub ty: Type<'ctxt>,
     pub loc: SrcLoc,
-    pub kind: PatternKind,
+    pub kind: PatternKind<'ctxt>,
 }
 #[derive(Debug)]
-pub enum PatternKind {
+pub enum PatternKind<'ctxt> {
     Err,
     Unit,
     Int(u64),
     Bool(bool),
-    Case(DefId, GenericArgs, CaseId, Option<Box<Pattern>>),
-    Binding(Mutable, Var, Box<TypeKind>),
-    Record(Vec<PatternField>),
+    Case(
+        DefId,
+        GenericArgs<'ctxt>,
+        CaseId,
+        Option<Box<Pattern<'ctxt>>>,
+    ),
+    Binding(Mutable, Var, Type<'ctxt>),
+    Record(Vec<PatternField<'ctxt>>),
 }
 #[derive(Debug)]
-pub struct Place {
-    pub ty: TypeKind,
+pub struct Place<'ctxt> {
+    pub ty: Type<'ctxt>,
     pub loc: SrcLoc,
-    pub kind: PlaceKind,
+    pub kind: PlaceKind<'ctxt>,
 }
 #[derive(Debug)]
-pub enum PlaceKind {
+pub enum PlaceKind<'ctxt> {
     Upvar(DefId, Var),
     Var(Var),
-    Field(Box<Place>, FieldId),
-    Index(Box<Expr>, Box<Expr>),
-    Deref(Box<Expr>),
+    Field(Box<Place<'ctxt>>, FieldId),
+    Index(Box<Expr<'ctxt>>, Box<Expr<'ctxt>>),
+    Deref(Box<Expr<'ctxt>>),
     Invalid,
 }
 #[derive(Debug, Clone)]
-pub struct Capture {
+pub struct Capture<'ctxt> {
     pub var: Var,
-    pub ty: TypeKind,
+    pub ty: Type<'ctxt>,
 }
 #[derive(Debug)]
 pub struct LambdaParam {
@@ -58,38 +63,38 @@ pub struct LambdaParam {
     pub loc: SrcLoc,
 }
 #[derive(Debug)]
-pub struct Lambda {
+pub struct Lambda<'ctxt> {
     pub id: DefId,
     pub loc: SrcLoc,
     pub params: Vec<LambdaParam>,
-    pub param_tys: Vec<TypeKind>,
-    pub return_type: Box<TypeKind>,
+    pub param_tys: Vec<Type<'ctxt>>,
+    pub return_type: Type<'ctxt>,
 }
 #[derive(Debug)]
-pub struct LetBinding {
-    pub pattern: Pattern,
-    pub value: Expr,
+pub struct LetBinding<'ctxt> {
+    pub pattern: Pattern<'ctxt>,
+    pub value: Expr<'ctxt>,
 }
 #[derive(Debug)]
-pub enum StmtKind {
-    Let(LetBinding),
-    Expr(Expr),
+pub enum StmtKind<'ctxt> {
+    Let(LetBinding<'ctxt>),
+    Expr(Expr<'ctxt>),
 }
 #[derive(Debug)]
-pub struct Stmt {
+pub struct Stmt<'ctxt> {
     pub loc: SrcLoc,
-    pub kind: StmtKind,
+    pub kind: StmtKind<'ctxt>,
 }
 #[derive(Debug)]
-pub struct BlockBody {
-    pub stmts: Vec<Stmt>,
-    pub expr: Box<Expr>,
+pub struct BlockBody<'ctxt> {
+    pub stmts: Vec<Stmt<'ctxt>>,
+    pub expr: Box<Expr<'ctxt>>,
 }
 #[derive(Debug)]
-pub struct Expr {
-    pub ty: TypeKind,
+pub struct Expr<'ctxt> {
+    pub ty: Type<'ctxt>,
     pub loc: SrcLoc,
-    pub kind: ExprKind,
+    pub kind: ExprKind<'ctxt>,
 }
 define_id!(FieldId);
 impl FieldId {
@@ -97,9 +102,9 @@ impl FieldId {
 }
 
 #[derive(Debug)]
-pub struct RecordFieldInit {
+pub struct RecordFieldInit<'ctxt> {
     pub index: FieldId,
-    pub value: Expr,
+    pub value: Expr<'ctxt>,
 }
 #[derive(Debug)]
 pub enum IteratorType {}
@@ -120,67 +125,67 @@ pub enum LogicalOp {
     Or,
 }
 #[derive(Debug)]
-pub enum ExprKind {
-    Unsafe(Box<Expr>),
-    Return(Box<Expr>),
-    Record(Box<[RecordFieldInit]>),
-    Block(BlockBody),
+pub enum ExprKind<'ctxt> {
+    Unsafe(Box<Expr<'ctxt>>),
+    Return(Box<Expr<'ctxt>>),
+    Record(Box<[RecordFieldInit<'ctxt>]>),
+    Block(BlockBody<'ctxt>),
     String(Rc<str>),
     Bool(bool),
     Int(u64),
     Unit,
     Err,
     Panic,
-    NeverToAny(Box<Expr>),
-    BuiltinCall(Builtin, GenericArgs, Box<[Expr]>),
-    VariantInit(DefId, CaseId, GenericArgs, Option<Box<Expr>>),
-    Function(DefId, GenericArgs),
-    Const(DefId, GenericArgs),
-    Print(Option<Box<Expr>>),
-    Call(Box<Expr>, Vec<Expr>),
-    Load(Place),
-    Binary(BinaryOp, Box<Expr>, Box<Expr>),
-    Logic(LogicalOp, Box<Expr>, Box<Expr>),
+    NeverToAny(Box<Expr<'ctxt>>),
+    BuiltinCall(Builtin, GenericArgs<'ctxt>, Box<[Expr<'ctxt>]>),
+    VariantInit(DefId, CaseId, GenericArgs<'ctxt>, Option<Box<Expr<'ctxt>>>),
+    Function(DefId, GenericArgs<'ctxt>),
+    Const(DefId, GenericArgs<'ctxt>),
+    Print(Option<Box<Expr<'ctxt>>>),
+    Call(Box<Expr<'ctxt>>, Vec<Expr<'ctxt>>),
+    Load(Place<'ctxt>),
+    Binary(BinaryOp, Box<Expr<'ctxt>>, Box<Expr<'ctxt>>),
+    Logic(LogicalOp, Box<Expr<'ctxt>>, Box<Expr<'ctxt>>),
     For {
-        pattern: Box<Pattern>,
-        iterator: Box<Expr>,
+        pattern: Box<Pattern<'ctxt>>,
+        iterator: Box<Expr<'ctxt>>,
         iterator_type: IteratorType,
-        body: Box<Expr>,
+        body: Box<Expr<'ctxt>>,
     },
-    Case(Box<Expr>, Vec<CaseArm>),
-    Assign(Box<Place>, Box<Expr>),
-    Lambda(Box<Lambda>),
-    Tuple(Box<[Expr]>),
-    Array(Box<[Expr]>),
-    NamedRecord(DefId, GenericArgs, Box<[RecordFieldInit]>),
-    While(Box<Expr>, Box<Expr>),
+    Case(Box<Expr<'ctxt>>, Vec<CaseArm<'ctxt>>),
+    Assign(Box<Place<'ctxt>>, Box<Expr<'ctxt>>),
+    Lambda(Box<Lambda<'ctxt>>),
+    Tuple(Box<[Expr<'ctxt>]>),
+    Array(Box<[Expr<'ctxt>]>),
+    NamedRecord(DefId, GenericArgs<'ctxt>, Box<[RecordFieldInit<'ctxt>]>),
+    While(Box<Expr<'ctxt>>, Box<Expr<'ctxt>>),
 }
 #[derive(Debug)]
-pub struct CaseArm {
-    pub pattern: Pattern,
-    pub body: Expr,
+pub struct CaseArm<'ctxt> {
+    pub pattern: Pattern<'ctxt>,
+    pub body: Expr<'ctxt>,
 }
 pub struct GenericParam {
     pub name: Ident,
     pub kind: GenericKind,
 }
 #[derive(Debug, Clone)]
-pub struct Param {
+pub struct Param<'ctxt> {
     pub name: Ident,
     pub var: Option<VarId>,
-    pub ty: TypeKind,
+    pub ty: Type<'ctxt>,
 }
-impl Param {
+impl<'ctxt> Param<'ctxt> {
     pub fn var(&self) -> Option<Var> {
         Some(Var(self.name.symbol, self.var?))
     }
 }
-pub struct Function {
-    pub params: Vec<Param>,
-    pub return_type: TypeKind,
-    pub body: Option<Expr>,
+pub struct Function<'ctxt> {
+    pub params: Vec<Param<'ctxt>>,
+    pub return_type: Type<'ctxt>,
+    pub body: Option<Expr<'ctxt>>,
 }
 
-pub struct Program {
-    pub functions: BTreeMap<DefId, Function>,
+pub struct Program<'ctxt> {
+    pub functions: BTreeMap<DefId, Function<'ctxt>>,
 }

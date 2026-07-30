@@ -11,7 +11,7 @@ use crate::{
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
     typed_ast::FieldId,
-    types::{CaseId, FieldName, GenericArgs, IntegerKind, TypeKind},
+    types::{CaseId, FieldName, GenericArgs, IntegerKind, Type, TypeKind},
 };
 pub mod basic_blocks;
 pub mod build;
@@ -33,7 +33,11 @@ pub enum PlaceProjection {
     Deref,
 }
 impl PlaceProjection {
-    pub fn apply_projection_to_type(self, ty: TypeKind, ctxt: CtxtRef<'_>) -> TypeKind {
+    pub fn apply_projection_to_type<'ctxt>(
+        self,
+        ty: Type<'ctxt>,
+        ctxt: CtxtRef<'ctxt>,
+    ) -> Type<'ctxt> {
         match self {
             PlaceProjection::Field(field) => {
                 ty.field_info(field, ctxt)
@@ -41,23 +45,23 @@ impl PlaceProjection {
                     .0
             }
             PlaceProjection::Index(_) | PlaceProjection::ConstantIndex(_) => {
-                let TypeKind::Array(ty) = ty else {
+                let Some(ty) = ty.as_array() else {
                     unreachable!("Should be an array")
                 };
-                *ty
+                ty
             }
             PlaceProjection::Deref => {
-                let TypeKind::Box(ty) = ty else {
+                let TypeKind::Box(ty) = ty.kind() else {
                     unreachable!("Should be a box but got {}", ty)
                 };
                 *ty
             }
             PlaceProjection::CaseDowncast(index, _) => {
-                let TypeKind::Named(id, _, args) = ty else {
+                let Some((id, _, args)) = ty.as_named() else {
                     unreachable!("Should be named")
                 };
 
-                ctxt.type_def(id).case(index).payload_type(&args, ctxt)
+                ctxt.type_def(id).case(index).payload_type(args, ctxt)
             }
         }
     }
@@ -68,10 +72,10 @@ pub enum PlaceBase {
     ReturnPlace,
 }
 impl PlaceBase {
-    pub fn type_of(self, locals: &Locals, return_type: &TypeKind) -> TypeKind {
+    pub fn type_of<'ctxt>(self, locals: &Locals<'ctxt>, return_type: Type<'ctxt>) -> Type<'ctxt> {
         match self {
-            PlaceBase::Local(local) => locals[local].ty.clone(),
-            PlaceBase::ReturnPlace => return_type.clone(),
+            PlaceBase::Local(local) => locals[local].ty,
+            PlaceBase::ReturnPlace => return_type,
         }
     }
 }
@@ -126,7 +130,12 @@ impl Place {
         self
     }
 
-    pub fn type_of(&self, ctxt: CtxtRef<'_>, locals: &Locals, return_type: &TypeKind) -> TypeKind {
+    pub fn type_of<'ctxt>(
+        &self,
+        ctxt: CtxtRef<'ctxt>,
+        locals: &Locals<'ctxt>,
+        return_type: Type<'ctxt>,
+    ) -> Type<'ctxt> {
         let mut ty = self.base.type_of(locals, return_type);
         for projection in self.projections.iter() {
             ty = projection.apply_projection_to_type(ty, ctxt);
@@ -136,15 +145,15 @@ impl Place {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum ConstValue {
+pub enum ConstValue<'ctxt> {
     ZeroSized,
-    Named(DefId, GenericArgs),
+    Named(DefId, GenericArgs<'ctxt>),
     Scalar(i128),
-    Variant(CaseId, Option<Box<Constant>>),
-    Record(Box<[Constant]>),
+    Variant(CaseId, Option<Box<Constant<'ctxt>>>),
+    Record(Box<[Constant<'ctxt>]>),
     String(Symbol),
 }
-impl ConstValue {
+impl<'ctxt> ConstValue<'ctxt> {
     pub const MIN_INT: i64 = i64::MIN;
     fn as_scalar(&self) -> Option<i128> {
         match self {
@@ -154,73 +163,78 @@ impl ConstValue {
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Constant {
-    pub ty: Box<TypeKind>,
+pub struct Constant<'ctxt> {
+    pub ty: Type<'ctxt>,
 
-    pub value: ConstValue,
+    pub value: ConstValue<'ctxt>,
 }
-impl Constant {
-    pub fn zero(kind: IntegerKind) -> Self {
+impl<'ctxt> Constant<'ctxt> {
+    pub fn zero(ctxt: CtxtRef<'ctxt>, kind: IntegerKind) -> Self {
         match kind {
-            IntegerKind::Signed => Self::int(0),
-            IntegerKind::Unsigned => Self::uint(0),
+            IntegerKind::Signed => Self::int(ctxt, 0),
+            IntegerKind::Unsigned => Self::uint(ctxt, 0),
         }
     }
-    pub fn bool(value: bool) -> Self {
+    pub fn bool(ctxt: CtxtRef<'ctxt>, value: bool) -> Self {
         Self {
-            ty: Box::new(TypeKind::Bool),
+            ty: Type::new_bool(ctxt),
             value: ConstValue::Scalar(value as i128),
         }
     }
-    pub fn byte(value: u8) -> Self {
+    pub fn byte(ctxt: CtxtRef<'ctxt>, value: u8) -> Self {
         Self {
-            ty: Box::new(TypeKind::Byte),
+            ty: Type::new_byte(ctxt),
             value: ConstValue::Scalar(value as i128),
         }
     }
-    pub fn int(value: i64) -> Self {
+    pub fn int(ctxt: CtxtRef<'ctxt>, value: i64) -> Self {
         Self {
-            ty: Box::new(TypeKind::Int(IntegerKind::Signed)),
+            ty: Type::new_int(ctxt, IntegerKind::Signed),
             value: ConstValue::Scalar(value as i128),
         }
     }
-    pub fn uint(value: u64) -> Self {
+    pub fn uint(ctxt: CtxtRef<'ctxt>, value: u64) -> Self {
         Self {
-            ty: Box::new(TypeKind::Int(IntegerKind::Unsigned)),
+            ty: Type::new_uint(ctxt),
             value: ConstValue::Scalar(value as i128),
         }
     }
-    pub fn zero_sized(ty: TypeKind) -> Self {
+    pub const fn zero_sized(ty: Type<'ctxt>) -> Self {
         Self {
-            ty: Box::new(ty),
+            ty,
             value: ConstValue::ZeroSized,
         }
     }
-    pub fn unit() -> Self {
-        Self::zero_sized(TypeKind::UNIT)
+    pub fn unit(ctxt: CtxtRef<'ctxt>) -> Self {
+        Self::zero_sized(Type::new_unit(ctxt))
     }
 }
 #[derive(Clone, Debug)]
-pub enum Operand {
+pub enum Operand<'ctxt> {
     Load(Place),
-    Constant(Constant),
+    Constant(Constant<'ctxt>),
 }
-impl Operand {
-    pub fn type_of(&self, ctxt: CtxtRef<'_>, locals: &Locals, return_type: &TypeKind) -> TypeKind {
+impl<'ctxt> Operand<'ctxt> {
+    pub fn type_of(
+        &self,
+        ctxt: CtxtRef<'ctxt>,
+        locals: &Locals<'ctxt>,
+        return_type: Type<'ctxt>,
+    ) -> Type<'ctxt> {
         match self {
-            Operand::Constant(constant) => (*constant.ty).clone(),
+            Operand::Constant(constant) => constant.ty,
             Operand::Load(place) => place.type_of(ctxt, locals, return_type),
         }
     }
 }
 #[derive(Clone, Debug)]
-pub enum AggregateKind {
+pub enum AggregateKind<'ctxt> {
     Record {
         field_names: IndexVec<FieldId, FieldName>,
     },
     Tuple,
-    NamedRecord(DefId, GenericArgs),
-    Variant(DefId, CaseId, GenericArgs),
+    NamedRecord(DefId, GenericArgs<'ctxt>),
+    Variant(DefId, CaseId, GenericArgs<'ctxt>),
 }
 #[derive(Debug, Clone, Copy)]
 pub enum OverflowOp {
@@ -238,34 +252,34 @@ pub enum BinaryOp {
     BitwiseAnd,
     Lesser,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub enum IntegerCast {
     ZeroExtendByteTo(IntegerKind),
 }
-#[derive(Clone, Debug)]
-pub enum CastKind {
-    Transmute(TypeKind),
+#[derive(Clone, Debug, Copy)]
+pub enum CastKind<'ctxt> {
+    Transmute(Type<'ctxt>),
     IntegerCast(IntegerCast),
 }
 #[derive(Clone, Debug)]
-pub enum Rvalue {
-    Aggregate(AggregateKind, IndexVec<FieldId, Operand>),
+pub enum Rvalue<'ctxt> {
+    Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Operand<'ctxt>>),
     Repeat {
-        ty: TypeKind,
-        value: Operand,
-        count: Operand,
+        ty: Type<'ctxt>,
+        value: Operand<'ctxt>,
+        count: Operand<'ctxt>,
     },
-    AllocateArray(TypeKind, Vec<Operand>),
-    AllocateBox(TypeKind, Operand),
-    Use(Operand),
-    Call(Operand, Vec<Operand>),
-    Binary(BinaryOp, Box<(Operand, Operand)>),
+    AllocateArray(Type<'ctxt>, Vec<Operand<'ctxt>>),
+    AllocateBox(Type<'ctxt>, Operand<'ctxt>),
+    Use(Operand<'ctxt>),
+    Call(Operand<'ctxt>, Vec<Operand<'ctxt>>),
+    Binary(BinaryOp, Box<(Operand<'ctxt>, Operand<'ctxt>)>),
     AddrOf(Place),
-    Cast(CastKind, Operand),
+    Cast(CastKind<'ctxt>, Operand<'ctxt>),
     Len(Place),
     Discriminant(Place),
 }
-impl Rvalue {
+impl<'ctxt> Rvalue<'ctxt> {
     pub fn can_remove_if_unused(&self) -> bool {
         match self {
             Self::Aggregate(..)
@@ -292,61 +306,68 @@ impl Rvalue {
         }
     }
 
-    pub fn type_of(&self, ctxt: CtxtRef<'_>, locals: &Locals, return_type: &TypeKind) -> TypeKind {
+    pub fn type_of(
+        &self,
+        ctxt: CtxtRef<'ctxt>,
+        locals: &Locals<'ctxt>,
+        return_type: Type<'ctxt>,
+    ) -> Type<'ctxt> {
         match self {
-            Rvalue::AllocateBox(ty, _) => TypeKind::Box(Box::new(ty.clone())),
+            &Rvalue::AllocateBox(ty, _) => Type::new_box(ctxt, ty),
             Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),
-            Rvalue::Len(_) => TypeKind::UINT,
+            Rvalue::Len(_) => Type::new_uint(ctxt),
             Rvalue::Call(operand, _) => {
-                let TypeKind::Function(function) = operand.type_of(ctxt, locals, return_type)
+                let Some(function) = operand.type_of(ctxt, locals, return_type).as_function()
                 else {
                     unreachable!("Should be a function type")
                 };
-                *function.return_type
+                function.return_type
             }
             Rvalue::Binary(op, left_and_right) => match op {
-                BinaryOp::Overflow(_) => TypeKind::pair(
+                BinaryOp::Overflow(_) => Type::pair(
+                    ctxt,
                     left_and_right.0.type_of(ctxt, locals, return_type),
-                    TypeKind::Bool,
+                    Type::new_bool(ctxt),
                 ),
                 BinaryOp::Wrapping(_) => left_and_right.0.type_of(ctxt, locals, return_type),
-                BinaryOp::BitwiseAnd => TypeKind::Bool,
+                BinaryOp::BitwiseAnd => Type::new_bool(ctxt),
                 BinaryOp::Divide => left_and_right.0.type_of(ctxt, locals, return_type),
-                BinaryOp::Equals => TypeKind::Bool,
-                BinaryOp::Lesser | BinaryOp::Greater => TypeKind::Bool,
+                BinaryOp::Equals => Type::new_bool(ctxt),
+                BinaryOp::Lesser | BinaryOp::Greater => Type::new_bool(ctxt),
             },
             Rvalue::AllocateArray(element, _) | Rvalue::Repeat { ty: element, .. } => {
-                TypeKind::array(element.clone())
+                Type::new_array(ctxt, *element)
             }
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
-                AggregateKind::Record { field_names } => TypeKind::Record(
-                    field_names
-                        .iter()
-                        .zip(operands)
-                        .map(|(&name, operand)| crate::types::RecordField {
+                AggregateKind::Record { field_names } => Type::new_record(
+                    ctxt,
+                    field_names.iter().zip(operands).map(|(&name, operand)| {
+                        crate::types::RecordField {
                             name,
                             ty: operand.type_of(ctxt, locals, return_type),
-                        })
-                        .collect(),
+                        }
+                    }),
                 ),
                 &AggregateKind::Variant(id, _, ref args)
                 | &AggregateKind::NamedRecord(id, ref args) => {
                     let name = ctxt.type_def(id).name;
-                    TypeKind::Named(id, name, args.clone())
+                    Type::named(ctxt, id, name, args.clone())
                 }
-                AggregateKind::Tuple => TypeKind::Tuple(
+                AggregateKind::Tuple => Type::tuple_from_iter(
+                    ctxt,
                     operands
                         .iter()
-                        .map(|operand| operand.type_of(ctxt, locals, return_type))
-                        .collect(),
+                        .map(|operand| operand.type_of(ctxt, locals, return_type)),
                 ),
             },
-            Rvalue::Cast(cast, _) => match cast {
-                CastKind::Transmute(ty) => ty.clone(),
-                CastKind::IntegerCast(IntegerCast::ZeroExtendByteTo(kind)) => TypeKind::Int(*kind),
+            &Rvalue::Cast(cast, _) => match cast {
+                CastKind::Transmute(ty) => ty,
+                CastKind::IntegerCast(IntegerCast::ZeroExtendByteTo(kind)) => {
+                    Type::new_int(ctxt, kind)
+                }
             },
-            Rvalue::Discriminant(_) => TypeKind::UINT,
-            Rvalue::AddrOf(_) => TypeKind::UINT,
+            Rvalue::Discriminant(_) => Type::new_uint(ctxt),
+            Rvalue::AddrOf(_) => Type::new_uint(ctxt),
         }
     }
 }
@@ -459,11 +480,11 @@ impl ExactSizeIterator for Successors<'_> {
 }
 
 #[derive(Clone)]
-pub struct Terminator {
+pub struct Terminator<'ctxt> {
     pub src_info: SrcLoc,
-    pub kind: TerminatorKind,
+    pub kind: TerminatorKind<'ctxt>,
 }
-impl Terminator {
+impl<'ctxt> Terminator<'ctxt> {
     pub fn successors(&self) -> Successors<'_> {
         Successors(match self.kind {
             TerminatorKind::Assert(.., block) | TerminatorKind::Goto(block) => {
@@ -498,9 +519,9 @@ impl Terminator {
     }
 }
 #[derive(Clone)]
-pub enum TerminatorKind {
-    Assert(Operand, AssertKind, BasicBlockId),
-    Switch(Operand, SwitchTargets),
+pub enum TerminatorKind<'ctxt> {
+    Assert(Operand<'ctxt>, AssertKind, BasicBlockId),
+    Switch(Operand<'ctxt>, SwitchTargets),
     Unreachable,
     Return,
     Goto(BasicBlockId),
@@ -534,21 +555,15 @@ impl std::fmt::Debug for Location {
 }
 
 #[derive(Clone)]
-pub struct Stmt {
+pub struct Stmt<'ctxt> {
     pub loc: SrcLoc,
-    pub kind: StmtKind,
+    pub kind: StmtKind<'ctxt>,
 }
 #[derive(Clone)]
-pub struct CopyNonOverlapping {
-    pub dst: Operand,
-    pub src: Operand,
-    pub count: Operand,
-}
-#[derive(Clone)]
-pub enum StmtKind {
+pub enum StmtKind<'ctxt> {
     Noop,
-    Assign(Place, Box<Rvalue>),
-    Print(Option<Operand>),
+    Assign(Place, Box<Rvalue<'ctxt>>),
+    Print(Option<Operand<'ctxt>>),
 }
 define_id!(BasicBlockId);
 impl BasicBlockId {
@@ -556,19 +571,19 @@ impl BasicBlockId {
 }
 define_id!(StmtId);
 #[derive(Default, Clone)]
-pub struct BasicBlock {
-    pub stmts: IndexVec<StmtId, Stmt>,
-    pub terminator: Option<Terminator>,
+pub struct BasicBlock<'ctxt> {
+    pub stmts: IndexVec<StmtId, Stmt<'ctxt>>,
+    pub terminator: Option<Terminator<'ctxt>>,
 }
-impl BasicBlock {
+impl<'ctxt> BasicBlock<'ctxt> {
     #[track_caller]
-    pub fn expect_terminator(&self) -> &Terminator {
+    pub fn expect_terminator(&self) -> &Terminator<'ctxt> {
         self.terminator
             .as_ref()
             .expect("Block should have a terminator")
     }
     #[track_caller]
-    pub fn expect_terminator_mut(&mut self) -> &mut Terminator {
+    pub fn expect_terminator_mut(&mut self) -> &mut Terminator<'ctxt> {
         self.terminator
             .as_mut()
             .expect("Block should have a terminator")
@@ -602,21 +617,21 @@ pub enum LocalKind {
     Param(Option<Var>),
 }
 #[derive(Clone)]
-pub struct LocalInfo {
-    pub ty: TypeKind,
+pub struct LocalInfo<'ctxt> {
+    pub ty: Type<'ctxt>,
     pub kind: LocalKind,
 }
 #[derive(Clone)]
-pub struct Body {
+pub struct Body<'ctxt> {
     pub src: BodySource,
-    pub return_type: TypeKind,
-    pub locals: Locals,
-    pub block_info: BasicBlocks,
+    pub return_type: Type<'ctxt>,
+    pub locals: Locals<'ctxt>,
+    pub block_info: BasicBlocks<'ctxt>,
 }
-impl Body {
-    pub fn param_types(&self) -> impl Iterator<Item = TypeKind> {
+impl<'ctxt> Body<'ctxt> {
+    pub fn param_types(&self) -> impl Iterator<Item = Type<'ctxt>> {
         self.params_iter()
-            .map(|param| self.locals[param].ty.clone())
+            .map(|param| self.locals[param].ty)
     }
     pub fn params_iter(&self) -> impl Iterator<Item = Local> {
         self.locals
@@ -645,31 +660,31 @@ impl Body {
         }
     }
 }
-pub type Locals = IndexVec<Local, LocalInfo>;
+pub type Locals<'ctxt> = IndexVec<Local, LocalInfo<'ctxt>>;
 
 #[derive(Default)]
-pub struct Context {
+pub struct Context<'ctxt> {
     pub check_well_formed: bool,
-    pub(super) bodies: HashMap<BodySource, Body>,
+    pub(super) bodies: HashMap<BodySource, Body<'ctxt>>,
     pub(super) body_sources: Vec<BodySource>,
 }
-impl Context {
+impl<'ctxt> Context<'ctxt> {
     pub fn new(well_formed: bool) -> Self {
         Self {
             check_well_formed: well_formed,
             ..Default::default()
         }
     }
-    pub fn body_iter(&self) -> impl Iterator<Item = &Body> {
+    pub fn body_iter(&self) -> impl Iterator<Item = &Body<'ctxt>> {
         self.body_sources.iter().map(|src| &self.bodies[src])
     }
-    pub fn for_each_body_mut<'a>(&mut self, mut f: impl FnMut(&mut Body) + 'a) {
+    pub fn for_each_body_mut<'a>(&mut self, mut f: impl FnMut(&mut Body<'ctxt>) + 'a) {
         for src in self.body_sources.iter() {
             f(self.bodies.get_mut(src).unwrap());
         }
     }
     #[track_caller]
-    pub fn expect_body(&self, src: BodySource) -> &Body {
+    pub fn expect_body(&self, src: BodySource) -> &Body<'ctxt> {
         self.bodies.get(&src).expect("expected a body")
     }
 }

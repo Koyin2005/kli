@@ -3,7 +3,7 @@ use crate::{
     collect::{CtxtRef, TypeDefKind},
     def_ids::DefId,
     index_vec::IndexVec,
-    types::{CaseId, TypeKind},
+    types::{CaseId, Type, TypeKind},
 };
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Constructor {
@@ -23,8 +23,12 @@ pub enum ConstructorSet {
     Record,
     Cases(IndexVec<CaseId, Symbol>),
 }
-pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &TypeKind) -> ConstructorSet {
-    match ty {
+pub fn constructors_of_ty<'ctxt>(
+    from: DefId,
+    ctxt: CtxtRef<'ctxt>,
+    ty: Type<'ctxt>,
+) -> ConstructorSet {
+    match ty.kind() {
         TypeKind::Bool => ConstructorSet::Bool,
         TypeKind::Never => ConstructorSet::Never,
         TypeKind::Char
@@ -71,17 +75,21 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &TypeKind) -> Cons
     }
 }
 
-pub fn fields_of(ty: &TypeKind, constructor: Constructor, ctxt: CtxtRef<'_>) -> Vec<TypeKind> {
+pub fn fields_of<'ctxt>(
+    ty: Type<'ctxt>,
+    constructor: Constructor,
+    ctxt: CtxtRef<'ctxt>,
+) -> Vec<Type<'ctxt>> {
     match constructor {
         Constructor::Int(_)
         | Constructor::Bool(_)
         | Constructor::NonExhaustive
         | Constructor::Wildcard
         | Constructor::Missing => Vec::new(),
-        Constructor::Record => match ty {
-            TypeKind::Record(fields) => fields.iter().map(|field| field.ty.clone()).collect(),
-            TypeKind::Named(id, _, args) => ctxt
-                .type_def(*id)
+        Constructor::Record => match ty.kind() {
+            TypeKind::Record(fields) => fields.iter().map(|field| field.ty).collect(),
+            &TypeKind::Named(id, _, ref args) => ctxt
+                .type_def(id)
                 .fields()
                 .iter()
                 .map(|&field_def| field_def.type_of(args, ctxt))
@@ -90,10 +98,10 @@ pub fn fields_of(ty: &TypeKind, constructor: Constructor, ctxt: CtxtRef<'_>) -> 
             _ => unreachable!("should be a record type"),
         },
         Constructor::Case(name) => {
-            let TypeKind::Named(ty_id, .., args) = ty else {
+            let Some((ty_id, .., args)) = ty.as_named() else {
                 unreachable!("should be named")
             };
-            match ctxt.type_def(*ty_id).kind {
+            match ctxt.type_def(ty_id).kind {
                 TypeDefKind::Record(fields) => fields
                     .iter()
                     .map(|&field| field.type_of(args, ctxt))

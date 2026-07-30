@@ -1,11 +1,11 @@
-use std::{borrow::Cow, cmp::max};
+use std::cmp::max;
 
 use crate::{
     CtxtRef,
     collect::TypeDefKind,
     index_vec::IndexVec,
     typed_ast::FieldId,
-    types::{CaseId, IntegerKind, TagType, TypeKind},
+    types::{CaseId, IntegerKind, TagType, Type, TypeKind},
 };
 
 pub const BITS_IN_BYTE: u8 = 8;
@@ -262,6 +262,7 @@ pub enum LayoutKind {
     Scalar(Scalar),
 }
 
+#[derive(Clone)]
 pub enum LayoutError {
     TooGeneric,
     Unknown,
@@ -277,17 +278,17 @@ impl std::fmt::Debug for LayoutError {
     }
 }
 
-fn variant_layout(
-    ctxt: CtxtRef<'_>,
+fn variant_layout<'ctxt>(
+    ctxt: CtxtRef<'ctxt>,
     tag_type: TagType,
-    cases: IndexVec<CaseId, Option<TypeKind>>,
+    cases: IndexVec<CaseId, Option<Type<'ctxt>>>,
 ) -> Result<Layout, LayoutError> {
     if cases.is_empty() {
         return Ok(Layout::zst().uninhabited());
     }
     let case_layouts = cases
         .iter()
-        .map(|case| {
+        .map(|&case| {
             if let Some(case) = case {
                 calculate_layout(ctxt, case)
             } else {
@@ -353,18 +354,21 @@ fn aggregate_layout(mut field_layouts: Vec<(FieldId, Layout)>) -> Result<Layout,
         kind: LayoutKind::Aggregate(layouts, field_positions),
     })
 }
-fn record_layout(
-    ctxt: CtxtRef<'_>,
-    fields: IndexVec<FieldId, Cow<'_, TypeKind>>,
+fn record_layout<'ctxt>(
+    ctxt: CtxtRef<'ctxt>,
+    fields: IndexVec<FieldId, Type<'ctxt>>,
 ) -> Result<Layout, LayoutError> {
     let field_layouts = fields
         .iter_enumerated()
-        .map(|(i, field)| Ok((i, calculate_layout(ctxt, field)?)))
+        .map(|(i, field)| Ok((i, calculate_layout(ctxt, *field)?)))
         .collect::<Result<Vec<_>, _>>()?;
     aggregate_layout(field_layouts)
 }
-pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &TypeKind) -> Result<Layout, LayoutError> {
-    Ok(match ty {
+pub fn calculate_layout<'ctxt>(
+    ctxt: CtxtRef<'ctxt>,
+    ty: Type<'ctxt>,
+) -> Result<Layout, LayoutError> {
+    Ok(match ty.kind() {
         TypeKind::Infer(_) | TypeKind::Unknown => return Err(LayoutError::Unknown),
         TypeKind::Int(integer_kind) => Layout {
             size: INT_SIZE,
@@ -395,16 +399,10 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &TypeKind) -> Result<Layout, Layo
             ]);
         }
         TypeKind::Tuple(fields) => {
-            return record_layout(ctxt, fields.iter().map(Cow::Borrowed).collect());
+            return record_layout(ctxt, fields.iter().copied().collect());
         }
         TypeKind::Record(fields) => {
-            return record_layout(
-                ctxt,
-                fields
-                    .into_iter()
-                    .map(|field| Cow::Borrowed(&field.ty))
-                    .collect(),
-            );
+            return record_layout(ctxt, fields.into_iter().map(|field| field.ty).collect());
         }
         TypeKind::Named(id, .., args) => match ctxt.type_def(*id).kind {
             TypeDefKind::Record(fields) => {
@@ -412,7 +410,7 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &TypeKind) -> Result<Layout, Layo
                     ctxt,
                     fields
                         .into_iter()
-                        .map(|field| Cow::Owned(field.type_of(args, ctxt)))
+                        .map(|field| field.type_of(args, ctxt))
                         .collect(),
                 );
             }

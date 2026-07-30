@@ -1,8 +1,11 @@
-use crate::types::{GenericArgs, TypeKind};
+use crate::{
+    CtxtRef,
+    types::{GenericArg, GenericArgs, Type, TypeKind},
+};
 
-pub trait Visit {
-    fn super_visit_type(&mut self, ty: &TypeKind) {
-        match ty {
+pub trait Visit<'ctxt> {
+    fn super_visit_type(&mut self, ty: Type<'ctxt>) {
+        match ty.kind() {
             TypeKind::Infer(_)
             | TypeKind::Unknown
             | TypeKind::Int(_)
@@ -13,40 +16,41 @@ pub trait Visit {
             | TypeKind::String
             | TypeKind::Param(..) => (),
             TypeKind::Function(function_type) => {
-                for param in function_type.params.iter() {
+                for &param in function_type.params.iter() {
                     self.visit_type(param);
                 }
-                self.visit_type(&function_type.return_type);
+                self.visit_type(function_type.return_type);
             }
             TypeKind::Tuple(fields) => {
-                for ty in fields {
+                for &ty in fields {
                     self.visit_type(ty);
                 }
             }
             TypeKind::Record(fields) => {
                 for field in fields {
-                    self.visit_type(&field.ty);
+                    self.visit_type(field.ty);
                 }
             }
-            TypeKind::Array(ty) | TypeKind::Box(ty) => self.visit_type(ty),
+            &(TypeKind::Array(ty) | TypeKind::Box(ty)) => self.visit_type(ty),
             TypeKind::Named(.., generic_args) => {
                 self.visit_generic_args(generic_args);
             }
         }
     }
-    fn visit_type(&mut self, ty: &TypeKind) {
+    fn visit_type(&mut self, ty: Type<'ctxt>) {
         self.super_visit_type(ty);
     }
-    fn visit_generic_args(&mut self, args: &GenericArgs) {
+    fn visit_generic_args(&mut self, args: &GenericArgs<'ctxt>) {
         for arg in args.iter() {
-            self.visit_type(&arg.0);
+            self.visit_type(arg.0);
         }
     }
 }
 
-pub trait VisitMut {
-    fn super_visit_type(&mut self, ty: &mut TypeKind) {
-        match ty {
+pub trait VisitMut<'ctxt> {
+    fn ctxt(&self) -> CtxtRef<'ctxt>;
+    fn super_visit_type(&mut self, ty: Type<'ctxt>) -> Type<'ctxt> {
+        match ty.kind() {
             TypeKind::Infer(_)
             | TypeKind::Unknown
             | TypeKind::Int(_)
@@ -55,35 +59,42 @@ pub trait VisitMut {
             | TypeKind::Byte
             | TypeKind::Never
             | TypeKind::String
-            | TypeKind::Param(..) => (),
+            | TypeKind::Param(..) => ty,
             TypeKind::Function(function_type) => {
-                for param in function_type.params.iter_mut() {
-                    self.visit_type(param);
-                }
-                self.visit_type(&mut function_type.return_type);
+                let params = function_type
+                    .params
+                    .iter()
+                    .map(|&param| self.visit_type(param))
+                    .collect();
+                let return_type = self.visit_type(function_type.return_type);
+                Type::function_type(self.ctxt(), params, return_type)
             }
-            TypeKind::Tuple(fields) => {
-                for ty in fields {
-                    self.visit_type(ty);
-                }
-            }
-            TypeKind::Record(fields) => {
-                for field in fields {
-                    self.visit_type(&mut field.ty);
-                }
-            }
-            TypeKind::Array(ty) | TypeKind::Box(ty) => self.visit_type(ty),
-            TypeKind::Named(.., generic_args) => {
-                self.visit_generic_args(generic_args);
-            }
+            TypeKind::Tuple(fields) => Type::tuple_from_iter(
+                self.ctxt(),
+                fields.iter().map(|&field| self.visit_type(field)),
+            ),
+            TypeKind::Record(fields) => Type::record_from_iter(
+                self.ctxt(),
+                fields
+                    .iter()
+                    .map(|field| (field.name, self.visit_type(field.ty))),
+            ),
+            &TypeKind::Array(ty) => Type::new_array(self.ctxt(), self.visit_type(ty)),
+            &TypeKind::Box(ty) => Type::new_box(self.ctxt(), self.visit_type(ty)),
+            &TypeKind::Named(id, name, ref generic_args) => Type::named(
+                self.ctxt(),
+                id,
+                name,
+                self.visit_generic_args(generic_args.clone()),
+            ),
         }
     }
-    fn visit_type(&mut self, ty: &mut TypeKind) {
-        self.super_visit_type(ty);
+    fn visit_type(&mut self, ty: Type<'ctxt>) -> Type<'ctxt> {
+        self.super_visit_type(ty)
     }
-    fn visit_generic_args(&mut self, args: &mut GenericArgs) {
-        for arg in args.iter_mut() {
-            self.visit_type(&mut arg.0);
-        }
+    fn visit_generic_args(&mut self, args: GenericArgs<'ctxt>) -> GenericArgs<'ctxt> {
+        args.into_iter()
+            .map(|arg| GenericArg(self.visit_type(arg.0)))
+            .collect()
     }
 }

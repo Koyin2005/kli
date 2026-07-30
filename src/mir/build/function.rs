@@ -6,10 +6,10 @@ use crate::{
     },
     src_loc::SrcLoc,
     typed_ast::{self, Lambda},
-    types::{FunctionType, GenericArgs, TypeKind},
+    types::{GenericArgs, Type},
 };
 
-impl<'a> Builder<'_, 'a> {
+impl<'ctxt> Builder<'_, 'ctxt> {
     fn add_finished_body(self) {
         let body = self.body;
         let context = self.mir_context;
@@ -23,23 +23,23 @@ impl<'a> Builder<'_, 'a> {
             "Can only have one source for each body"
         );
     }
-    fn add_param_locals(&mut self, params: impl Iterator<Item = (LocalKind, TypeKind)>) {
+    fn add_param_locals(&mut self, params: impl Iterator<Item = (LocalKind, Type<'ctxt>)>) {
         for (kind, ty) in params {
             self.new_local(ty, kind);
         }
     }
     pub fn build_from_function<'b>(
-        ctxt: CtxtRef<'a>,
-        mir_context: &'b mut Context,
-        function: &typed_ast::Function,
+        ctxt: CtxtRef<'ctxt>,
+        mir_context: &'b mut Context<'ctxt>,
+        function: &typed_ast::Function<'ctxt>,
         src: BodySource,
     ) {
-        let mut builder = Builder::new(mir_context, src, function.return_type.clone(), ctxt);
+        let mut builder = Builder::new(mir_context, src, function.return_type, ctxt);
         builder.add_param_locals(
             function
                 .params
                 .iter()
-                .map(|param| (LocalKind::Param(param.var()), param.ty.clone())),
+                .map(|param| (LocalKind::Param(param.var()), param.ty)),
         );
         if let Some(body) = function.body.as_ref() {
             builder.expr_into_dest(Place::return_place(), body);
@@ -49,19 +49,19 @@ impl<'a> Builder<'_, 'a> {
         }
         builder.add_finished_body();
     }
-    pub(super) fn lambda_code_constant(ctxt: CtxtRef<'_>, lambda: &Lambda) -> Constant {
-        let ty = TypeKind::Function(FunctionType {
-            params: lambda.param_tys.clone(),
-            return_type: lambda.return_type.clone(),
-        });
+    pub(super) fn lambda_code_constant(
+        ctxt: CtxtRef<'ctxt>,
+        lambda: &Lambda<'ctxt>,
+    ) -> Constant<'ctxt> {
+        let ty = Type::function_type(ctxt, lambda.param_tys.clone(), lambda.return_type);
         let generics = ctxt.generics(lambda.id);
         let args = if generics.is_empty() {
-            generics.instantiate_identity()
+            generics.instantiate_identity(ctxt)
         } else {
             GenericArgs::new()
         };
         Constant {
-            ty: Box::new(ty),
+            ty,
             value: crate::mir::ConstValue::Named(lambda.id, args),
         }
     }

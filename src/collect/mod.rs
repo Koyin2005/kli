@@ -17,7 +17,7 @@ use crate::{
     ident::Ident,
     index_vec::IndexVec,
     lang_items::LangItems,
-    layout::{Layout, calculate_layout},
+    layout::{Layout, LayoutError, calculate_layout},
     resolved_ast::{self, AnnotationKind, Item, ItemKind, Node, TypeDef, TypeImpl},
     scheme::Scheme,
     src_loc::SrcLoc,
@@ -55,8 +55,12 @@ pub struct Field {
     pub name: Symbol,
 }
 impl Field {
-    pub fn type_of(self, args: GenericArgsRef, ctxt: CtxtRef<'_>) -> TypeKind {
-        ctxt.type_of(self.id).bind(args)
+    pub fn type_of<'ctxt>(
+        self,
+        args: GenericArgsRef<'_, 'ctxt>,
+        ctxt: CtxtRef<'ctxt>,
+    ) -> Type<'ctxt> {
+        ctxt.type_of(self.id).bind(ctxt, args)
     }
 }
 #[derive(Clone, Copy)]
@@ -70,8 +74,13 @@ impl Case {
     pub fn expect_field(self) -> Field {
         self.field.expect("should have a field")
     }
-    pub fn payload_type(self, args: GenericArgsRef<'_>, ctxt: CtxtRef<'_>) -> TypeKind {
-        TypeKind::tuple(
+    pub fn payload_type<'ctxt>(
+        self,
+        args: GenericArgsRef<'_, 'ctxt>,
+        ctxt: CtxtRef<'ctxt>,
+    ) -> Type<'ctxt> {
+        Type::tuple_from_iter(
+            ctxt,
             self.field
                 .into_iter()
                 .map(|field| field.type_of(args, ctxt)),
@@ -185,26 +194,31 @@ impl Generics {
     pub fn kinds(&self) -> impl Iterator<Item = GenericKind> {
         self.params.iter().map(|param| param.kind)
     }
-    pub fn instantiate(&self, infer: &mut TypeInfer, loc: SrcLoc) -> GenericArgs {
+    pub fn instantiate<'ctxt>(
+        &self,
+        ctxt: CtxtRef<'ctxt>,
+        infer: &mut TypeInfer,
+        loc: SrcLoc,
+    ) -> GenericArgs<'ctxt> {
         self.kinds()
             .map(|kind| match kind {
-                GenericKind::Type => GenericArg(TypeKind::Infer(infer.fresh_ty(loc))),
+                GenericKind::Type => GenericArg(Type::infer_var(ctxt, infer.fresh_ty(loc))),
             })
             .collect()
     }
-    pub fn instantiate_unknown(&self) -> GenericArgs {
+    pub fn instantiate_unknown<'ctxt>(&self) -> GenericArgs<'ctxt> {
         self.kinds()
             .map(|kind| match kind {
-                GenericKind::Type => GenericArg(TypeKind::Unknown),
+                GenericKind::Type => GenericArg(Type::UNKNOWN),
             })
             .collect()
     }
-    pub fn instantiate_identity(&self) -> GenericArgs {
+    pub fn instantiate_identity<'ctxt>(&self, ctxt: CtxtRef<'ctxt>) -> GenericArgs<'ctxt> {
         self.params
             .iter()
             .enumerate()
             .map(|(i, param)| match param.kind {
-                GenericKind::Type => GenericArg(TypeKind::Param(param.name, i)),
+                GenericKind::Type => GenericArg(Type::param(ctxt, param.name, i)),
             })
             .collect()
     }
@@ -222,7 +236,7 @@ impl<'a, T: Eq + Hash + Clone> Interner<'a, T> {
     }
     fn intern(&self, value: T) -> &'_ T {
         if let Some(value) = self.seen.borrow().get(&value) {
-            return *value;
+            return value;
         }
         let value_ref = self.values.alloc(value.clone());
         self.seen.borrow_mut().insert(value, value_ref);
@@ -240,7 +254,8 @@ pub struct GlobalContext<'ctxt> {
     nodes: IndexVec<DefId, Node>,
     builtins: Builtins,
     std_lib: Cache<(), Option<DefId>>,
-    ty_cache: Cache<DefId, Scheme<TypeKind>>,
+    ty_cache: Cache<DefId, Scheme<Type<'ctxt>>>,
+    layout_cache: Cache<Type<'ctxt>, Result<Layout, LayoutError>>,
     builtin: Cache<(), DefId>,
     config: Config,
     interners: Interners<'ctxt>,
@@ -251,16 +266,16 @@ impl<'a> GlobalContext<'a> {
     }
 }
 #[derive(Default)]
-pub struct Arenas {
-    ty_arena: Arena<TypeKind>,
+pub struct Arenas<'ctxt> {
+    ty_arena: Arena<TypeKind<'ctxt>>,
 }
 struct Interners<'a> {
-    ty_interner: Interner<'a, TypeKind>,
+    ty_interner: Interner<'a, TypeKind<'a>>,
 }
 #[derive(Copy, Clone)]
 pub struct CtxtRef<'a>(&'a GlobalContext<'a>);
 
-impl CtxtRef<'_> {
+impl<'ctxt> CtxtRef<'ctxt> {
     pub fn config(&self) -> &Config {
         &self.0.config
     }
@@ -294,12 +309,12 @@ impl CtxtRef<'_> {
     pub fn is_type_recursive(self, id: DefId) -> bool {
         use types::visit::Visit;
         struct RecursiveIndirection<'a>(CtxtRef<'a>, HashSet<DefId>, bool);
-        impl<'a> Visit for RecursiveIndirection<'a> {
-            fn visit_type(&mut self, ty: &TypeKind) {
+        impl<'a> Visit<'a> for RecursiveIndirection<'a> {
+            fn visit_type(&mut self, ty: Type<'a>) {
                 if self.2 {
                     return;
                 }
-                match ty {
+                match ty.kind() {
                     TypeKind::Named(id, _, args) => {
                         if !self.1.insert(*id) {
                             self.2 = true;
@@ -309,7 +324,7 @@ impl CtxtRef<'_> {
                             if self.2 {
                                 return;
                             }
-                            self.visit_type(&field.type_of(args, self.0));
+                            self.visit_type(field.type_of(args, self.0));
                         }
                     }
                     TypeKind::Array(_) | TypeKind::Box(_) => (),
@@ -317,14 +332,15 @@ impl CtxtRef<'_> {
                 }
             }
         }
-        let ty = TypeKind::Named(
+        let ty = Type::named(
+            self,
             id,
             self.expect_type(id).name.symbol,
-            self.generics(id).instantiate_identity(),
+            self.generics(id).instantiate_identity(self),
         );
         let seen = HashSet::new();
         let mut r = RecursiveIndirection(self, seen, false);
-        r.visit_type(&ty);
+        r.visit_type(ty);
         r.2
     }
 
@@ -365,37 +381,39 @@ impl CtxtRef<'_> {
             })
         })
     }
-    pub fn type_of(self, id: DefId) -> Scheme<TypeKind> {
+    pub fn type_of(self, id: DefId) -> Scheme<Type<'ctxt>> {
         self.0.ty_cache.compute(id, |id| {
             Scheme::new(match self.node(id) {
                 Node::Case(case_def) => {
                     let parent_id = self.expect_parent(id);
                     let type_def = self.expect_type(parent_id);
                     let name = type_def.name;
-                    let variant_ty = TypeKind::Named(
+                    let variant_ty = Type::named(
+                        self,
                         parent_id,
                         name.symbol,
-                        self.generics(parent_id).instantiate_identity(),
+                        self.generics(parent_id).instantiate_identity(self),
                     );
                     if let Some(ty) = case_def.field.map(|inner| {
                         self.type_of(inner)
-                            .bind(&self.generics(parent_id).instantiate_identity())
+                            .bind(self, &self.generics(parent_id).instantiate_identity(self))
                     }) {
-                        TypeKind::new_function(vec![ty], variant_ty)
+                        Type::function_type(self, vec![ty], variant_ty)
                     } else {
                         variant_ty
                     }
                 }
                 Node::Item(item) => match &item.kind {
-                    ItemKind::TypeDef(type_def) => TypeKind::Named(
+                    ItemKind::TypeDef(type_def) => Type::named(
+                        self,
                         id,
                         type_def.name.symbol,
-                        self.generics(id).instantiate_identity(),
+                        self.generics(id).instantiate_identity(self),
                     ),
                     ItemKind::Function(_) => {
-                        return self.signature_of(id).map(|signature| {
-                            TypeKind::new_function(signature.params, signature.return_type)
-                        });
+                        return self
+                            .signature_of(id)
+                            .map(|signature| signature.into_type(self));
                     }
                     ItemKind::Module(_) | ItemKind::Import(_) => {
                         unreachable!(
@@ -410,9 +428,9 @@ impl CtxtRef<'_> {
                 Node::Lambda(_) => panic!("Can't get the type of lambda"),
                 Node::Impl(_) => panic!("Cannot get the type of impl"),
                 Node::Method(_) => {
-                    return self.signature_of(id).map(|signature| {
-                        TypeKind::new_function(signature.params, signature.return_type)
-                    });
+                    return self
+                        .signature_of(id)
+                        .map(|signature| signature.into_type(self));
                 }
             })
         })
@@ -542,7 +560,7 @@ impl CtxtRef<'_> {
             })
     }
     #[track_caller]
-    pub fn signature_of(self, id: DefId) -> Scheme<FunctionSig> {
+    pub fn signature_of(self, id: DefId) -> Scheme<FunctionSig<'ctxt>> {
         let function = match self.node(id) {
             Node::Item(item) => item.expect_function_def(),
             Node::Method(method) => &method.function,
@@ -600,7 +618,7 @@ impl CtxtRef<'_> {
     pub fn diag(&self) -> &DiagnosticReporter {
         &self.0.diag
     }
-    pub fn builtins(&self) -> &Builtins {
+    pub fn builtins(&'_ self) -> &'_ Builtins {
         &self.0.builtins
     }
     pub fn builtins_module(self) -> DefId {
@@ -657,10 +675,12 @@ impl CtxtRef<'_> {
     pub fn lang_items(self) -> LangItems {
         self.0.lang_items.compute((), |()| LangItems::collect(self))
     }
-    pub fn layout_of(self, ty: &TypeKind) -> Result<Layout, crate::layout::LayoutError> {
-        calculate_layout(self, ty)
+    pub fn layout_of(self, ty: Type<'ctxt>) -> Result<Layout, crate::layout::LayoutError> {
+        self.0
+            .layout_cache
+            .compute(ty, |ty| calculate_layout(self, ty))
     }
-    pub fn intern_ty(&self, kind: TypeKind) -> Type<'_> {
+    pub fn intern_ty(self, kind: TypeKind<'ctxt>) -> Type<'ctxt> {
         Type::new(self.0.interners.ty_interner.intern(kind))
     }
 }
@@ -721,13 +741,13 @@ fn lower_type_def(ctxt: CtxtRef<'_>, type_def: &TypeDef) -> TypeDefInfo {
     }
 }
 
-pub fn build_global_context(
+pub fn build_global_context<'a>(
     config: Config,
     nodes: IndexVec<DefId, Node>,
     builtins: Builtins,
     parents: HashMap<DefId, DefId>,
-    arenas: &'_ Arenas,
-) -> GlobalContext<'_> {
+    arenas: &'a Arenas<'a>,
+) -> GlobalContext<'a> {
     let diag = DiagnosticReporter::new();
     GlobalContext {
         interners: Interners {
@@ -745,5 +765,6 @@ pub fn build_global_context(
         builtin: Default::default(),
         std_lib: Default::default(),
         ty_cache: Default::default(),
+        layout_cache: Default::default(),
     }
 }

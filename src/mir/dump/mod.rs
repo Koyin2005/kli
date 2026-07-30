@@ -7,7 +7,7 @@ use crate::{
         ConstValue, LocalKind, Operand, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
     },
     typed_ast::FieldId,
-    types::{self, display_generic_args},
+    types,
 };
 
 pub struct MirDump<'ctxt> {
@@ -59,7 +59,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 LocalKind::Param(var) => write!(
                     self.output,
                     " param {}",
-                    if let Some(var) = *var {
+                    if let Some(var) = var {
                         var.0
                     } else {
                         Symbol::EMPTY_STRING
@@ -139,11 +139,11 @@ impl<'ctxt> MirDump<'ctxt> {
                     AggregateKind::Record { .. } | AggregateKind::Tuple => (),
                     AggregateKind::Variant(id, index, args) => {
                         let name = self.ctxt.type_def(*id).case(*index).name;
-                        write!(self.output, "{}{}", name, display_generic_args(args))?;
+                        write!(self.output, "{}{}", name, args)?;
                     }
                     AggregateKind::NamedRecord(id, args) => {
                         let name = self.ctxt.type_def(*id).name;
-                        write!(self.output, "{}{}", name, display_generic_args(args))?;
+                        write!(self.output, "{}{}", name, args)?;
                     }
                 };
                 let (open_bracket, close_bracket) = match kind {
@@ -205,12 +205,7 @@ impl<'ctxt> MirDump<'ctxt> {
     }
     fn write_constant(&mut self, ty: &types::TypeKind, value: &ConstValue) -> std::io::Result<()> {
         if let ConstValue::Named(id, args) = value {
-            return write!(
-                self.output,
-                "{}{}",
-                self.ctxt.display_path_for(*id),
-                display_generic_args(args)
-            );
+            return write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args);
         } else if let ConstValue::String(string) = value {
             return write!(self.output, "\"{string}\"");
         } else if let ConstValue::ZeroSized = value {
@@ -241,12 +236,7 @@ impl<'ctxt> MirDump<'ctxt> {
             types::TypeKind::Never => unreachable!("already did zero sized types"),
             types::TypeKind::Function(_) => match value {
                 ConstValue::Named(id, args) => {
-                    write!(
-                        self.output,
-                        "{}{}",
-                        self.ctxt.display_path_for(*id),
-                        display_generic_args(args)
-                    )
+                    write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args)
                 }
                 _ => unreachable!("only values of function type"),
             },
@@ -276,7 +266,7 @@ impl<'ctxt> MirDump<'ctxt> {
             types::TypeKind::Named(def_id, name, args) => match self.ctxt.type_def(*def_id).kind {
                 TypeDefKind::Record(fields) => match value {
                     ConstValue::Record(values) => {
-                        write!(self.output, "{name}{}{{", display_generic_args(args))?;
+                        write!(self.output, "{name}{}{{", args)?;
                         self.write_with_coma_sep(
                             values.iter().zip(fields),
                             |this, (value, field)| {
@@ -291,7 +281,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 TypeDefKind::Variant(cases) => match value {
                     ConstValue::Variant(case, inner) => {
                         let name = cases[*case].name;
-                        write!(self.output, "{name}{}", display_generic_args(args))?;
+                        write!(self.output, "{name}{}", args)?;
                         if let Some(inner) = inner {
                             write!(self.output, "(")?;
                             self.write_constant(&inner.ty, &inner.value)?;

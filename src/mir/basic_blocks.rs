@@ -17,18 +17,18 @@ struct Cache {
     reverse_postorder: OnceLock<Vec<BasicBlockId>>,
 }
 #[derive(Clone)]
-pub struct BasicBlocks {
-    blocks: IndexVec<BasicBlockId, BasicBlock>,
+pub struct BasicBlocks<'ctxt> {
+    blocks: IndexVec<BasicBlockId, BasicBlock<'ctxt>>,
     cache: Rc<Cache>,
 }
-impl BasicBlocks {
-    pub fn new(blocks: IndexVec<BasicBlockId, BasicBlock>) -> Self {
+impl<'ctxt> BasicBlocks<'ctxt> {
+    pub fn new(blocks: IndexVec<BasicBlockId, BasicBlock<'ctxt>>) -> Self {
         Self {
             blocks,
             cache: Rc::new(Cache::default()),
         }
     }
-    pub fn blocks(&self) -> &IndexVec<BasicBlockId, BasicBlock> {
+    pub fn blocks(&self) -> &IndexVec<BasicBlockId, BasicBlock<'ctxt>> {
         &self.blocks
     }
     pub fn dominators(&self) -> &traversal::DominatorTree {
@@ -56,11 +56,11 @@ impl BasicBlocks {
             post_order
         })
     }
-    pub fn blocks_mut(&mut self) -> &mut IndexVec<BasicBlockId, BasicBlock> {
+    pub fn blocks_mut(&mut self) -> &mut IndexVec<BasicBlockId, BasicBlock<'ctxt>> {
         self.dirty_cache();
         self.blocks_mut_dont_dirty()
     }
-    pub fn blocks_mut_dont_dirty(&mut self) -> &mut IndexVec<BasicBlockId, BasicBlock> {
+    pub fn blocks_mut_dont_dirty(&mut self) -> &mut IndexVec<BasicBlockId, BasicBlock<'ctxt>> {
         &mut self.blocks
     }
     fn dirty_cache(&mut self) {

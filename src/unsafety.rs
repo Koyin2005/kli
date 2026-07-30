@@ -5,10 +5,10 @@ use crate::{
     resolved_ast::AnnotationKind,
     typed_ast::{ExprKind, Function},
     typed_ast_visitor::{Visitor, walk_expr},
-    types::TypeKind,
+    types::Type,
 };
 
-pub fn transmutable(ctxt: CtxtRef<'_>, from: &TypeKind, to: &TypeKind) -> bool {
+pub fn transmutable<'ctxt>(ctxt: CtxtRef<'ctxt>, from: Type<'ctxt>, to: Type<'ctxt>) -> bool {
     match (from, to) {
         (from, to) if from == to => true,
         _ => match (ctxt.layout_of(from), ctxt.layout_of(to)) {
@@ -33,7 +33,7 @@ impl<'ctxt> SafetyCheck<'ctxt> {
     pub fn check(
         ctxt: CtxtRef<'ctxt>,
         id: DefId,
-        function: &Function,
+        function: &Function<'ctxt>,
     ) -> Result<(), SafetyCheckError> {
         if is_unsafe(ctxt, id) {
             return Ok(());
@@ -52,8 +52,8 @@ impl<'ctxt> SafetyCheck<'ctxt> {
         }
     }
 }
-impl Visitor for SafetyCheck<'_> {
-    fn visit_expr(&mut self, expr: &crate::typed_ast::Expr) {
+impl<'ctxt> Visitor<'ctxt> for SafetyCheck<'ctxt> {
+    fn visit_expr(&mut self, expr: &crate::typed_ast::Expr<'ctxt>) {
         let function = match expr.kind {
             ExprKind::Unsafe(ref expr) => {
                 let was_in_unsafe_block = self.in_unsafe_block;
@@ -64,8 +64,8 @@ impl Visitor for SafetyCheck<'_> {
             }
             ExprKind::BuiltinCall(builtin, ref args, _) => {
                 if let Builtin::Transmute = builtin
-                    && let Some([crate::types::GenericArg(ty1), crate::types::GenericArg(ty2)]) =
-                        &args.as_array()
+                    && let Some(&[crate::types::GenericArg(ty1), crate::types::GenericArg(ty2)]) =
+                        args.as_array()
                     && !transmutable(self.ctxt, ty1, ty2)
                 {
                     self.ctxt.diag().add_diagnostic(

@@ -1114,7 +1114,7 @@ impl<'info> Resolve<'info> {
         })
     }
     pub fn resolve<'a>(
-        arena: &'a Arenas,
+        arena: &'a Arenas<'a>,
         config: Config,
         modules: Vec<ast::Module>,
     ) -> Result<GlobalContext<'a>, ResolveErrored> {

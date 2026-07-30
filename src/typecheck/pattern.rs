@@ -5,17 +5,21 @@ use crate::{
     resolved_ast::{Pattern, PatternField, PatternKind, Var},
     typecheck::root::FunctionCtxt,
     typed_ast::{self, FieldId},
-    types::{self, FieldName, TypeKind},
+    types::{self, FieldName, Type, TypeKind},
 };
-impl FunctionCtxt<'_, '_> {
-    pub fn check_pattern(&self, pattern: &Pattern, expected_type: TypeKind) -> typed_ast::Pattern {
+impl<'ctxt> FunctionCtxt<'_, 'ctxt> {
+    pub fn check_pattern(
+        &self,
+        pattern: &Pattern,
+        expected_type: Type<'ctxt>,
+    ) -> typed_ast::Pattern<'ctxt> {
         let loc = pattern.loc;
         let root = self.root();
         let expected_type = root.simplify_type(expected_type);
         match pattern.kind {
             PatternKind::Int(value) => {
-                let (ty, value) = self.root().check_int_lit(loc, Some(&expected_type), value);
-                let _ = root.unify(expected_type, ty.clone(), pattern.loc);
+                let (ty, value) = self.root().check_int_lit(loc, Some(expected_type), value);
+                let _ = root.unify(expected_type, ty, pattern.loc);
                 typed_ast::Pattern {
                     ty,
                     loc,
@@ -23,17 +27,20 @@ impl FunctionCtxt<'_, '_> {
                 }
             }
             PatternKind::Unit => {
-                let _ = root.unify(expected_type, TypeKind::UNIT, pattern.loc);
+                let _ = root.unify(expected_type, Type::new_unit(self.ctxt()), pattern.loc);
                 typed_ast::Pattern {
-                    ty: TypeKind::UNIT,
+                    ty: Type::new_unit(self.ctxt()),
                     loc,
                     kind: typed_ast::PatternKind::Unit,
                 }
             }
             PatternKind::Tuple(ref fields) => {
-                let expected_fields = match expected_type {
-                    TypeKind::Tuple(field_tys) => field_tys,
-                    _ => Vec::new(),
+                let expected_fields = match expected_type.kind() {
+                    TypeKind::Tuple(field_tys) => &**field_tys,
+                    _ => {
+                        self.root().expect_ty_error("tuple", expected_type, loc);
+                        &[]
+                    }
                 };
                 if expected_fields.len() != fields.len() {
                     self.ctxt().diag().add_diagnostic(
@@ -49,7 +56,10 @@ impl FunctionCtxt<'_, '_> {
                     .iter()
                     .enumerate()
                     .map(|(i, field)| {
-                        let ty = expected_fields.get(i).cloned().unwrap_or(TypeKind::Unknown);
+                        let ty = expected_fields
+                            .get(i)
+                            .cloned()
+                            .unwrap_or(Type::new_unknown(self.ctxt()));
                         typed_ast::PatternField {
                             index: FieldId::new(i),
                             pattern: self.check_pattern(field, ty),
@@ -57,21 +67,21 @@ impl FunctionCtxt<'_, '_> {
                     })
                     .collect();
                 typed_ast::Pattern {
-                    ty: TypeKind::Tuple(expected_fields),
+                    ty: Type::tuple_from_iter(self.ctxt(), expected_fields.iter().copied()),
                     loc,
                     kind: typed_ast::PatternKind::Record(fields),
                 }
             }
             PatternKind::Case(name, ref inner) => {
-                let (id, ty_name, args) = match expected_type {
-                    TypeKind::Named(id, ty_name, args) => (id, ty_name, args),
-                    ty => {
-                        root.expect_ty_error("variant type", &ty, loc);
+                let (id, ty_name, args) = match expected_type.kind() {
+                    &TypeKind::Named(id, ty_name, ref args) => (id, ty_name, args),
+                    _ => {
+                        root.expect_ty_error("variant type", expected_type, loc);
                         if let Some(inner) = inner {
-                            let _ = self.check_pattern(inner, TypeKind::Unknown);
+                            let _ = self.check_pattern(inner, Type::new_unknown(self.ctxt()));
                         }
                         return typed_ast::Pattern {
-                            ty,
+                            ty: expected_type,
                             loc,
                             kind: typed_ast::PatternKind::Err,
                         };
@@ -86,10 +96,10 @@ impl FunctionCtxt<'_, '_> {
                             .diag()
                             .add_diagnostic("expected 'variant' type but got 'record'", loc);
                         if let Some(inner) = inner {
-                            let _ = self.check_pattern(inner, TypeKind::Unknown);
+                            let _ = self.check_pattern(inner, Type::new_unknown(self.ctxt()));
                         }
                         return typed_ast::Pattern {
-                            ty: TypeKind::Named(id, ty_name, args),
+                            ty: Type::named(self.ctxt(), id, ty_name, args.iter().copied()),
                             loc,
                             kind: typed_ast::PatternKind::Err,
                         };
@@ -104,17 +114,17 @@ impl FunctionCtxt<'_, '_> {
                         name.loc,
                     );
                     if let Some(inner) = inner {
-                        let _ = self.check_pattern(inner, TypeKind::Unknown);
+                        let _ = self.check_pattern(inner, Type::new_unknown(self.ctxt()));
                     }
                     return typed_ast::Pattern {
-                        ty: TypeKind::Named(id, ty_name, args),
+                        ty: Type::named(self.ctxt(), id, ty_name, args.iter().copied()),
                         loc,
                         kind: typed_ast::PatternKind::Err,
                     };
                 };
                 let case_id = case_def.id;
                 let inner = match (
-                    case_def.field.map(|field| field.type_of(&args, ctxt)),
+                    case_def.field.map(|field| field.type_of(args, ctxt)),
                     inner,
                 ) {
                     (None, None) => None,
@@ -126,7 +136,9 @@ impl FunctionCtxt<'_, '_> {
                             format!("'{}' has no inner fields", name.symbol),
                             name.loc,
                         );
-                        Some(Box::new(self.check_pattern(inner, TypeKind::Unknown)))
+                        Some(Box::new(
+                            self.check_pattern(inner, Type::new_unknown(self.ctxt())),
+                        ))
                     }
                     (Some(ty), None) => {
                         root.ctxt().diag().add_diagnostic(
@@ -141,29 +153,30 @@ impl FunctionCtxt<'_, '_> {
                     }
                 };
                 typed_ast::Pattern {
-                    ty: TypeKind::Named(id, ty_name, args.clone()),
+                    ty: Type::named(self.ctxt(), id, ty_name, args.iter().copied()),
                     loc,
-                    kind: typed_ast::PatternKind::Case(case_id, args, i, inner),
+                    kind: typed_ast::PatternKind::Case(case_id, args.clone(), i, inner),
                 }
             }
             PatternKind::Record(ref pat_fields) => {
-                let (ty, expected_fields) = match root.simplify_type(expected_type) {
-                    TypeKind::Record(fields) => (TypeKind::Record(fields.clone()), Some(fields)),
-                    TypeKind::Named(id, name, args)
+                let expected_type = root.simplify_type(expected_type);
+                let (ty, expected_fields) = match expected_type.kind() {
+                    TypeKind::Record(fields) => (expected_type, Some(fields.clone())),
+                    &TypeKind::Named(id, _, ref args)
                         if let TypeDefKind::Record(fields) = self.ctxt().type_def(id).kind =>
                     {
                         let fields = fields
                             .into_iter()
                             .map(|field| types::RecordField {
                                 name: FieldName::Named(field.name),
-                                ty: field.type_of(&args, self.ctxt()),
+                                ty: field.type_of(args, self.ctxt()),
                             })
                             .collect();
-                        (TypeKind::Named(id, name, args), Some(fields))
+                        (expected_type, Some(fields))
                     }
-                    ref ty => {
-                        root.expect_ty_error("record", ty, pattern.loc);
-                        (TypeKind::Unknown, None)
+                    _ => {
+                        root.expect_ty_error("record", expected_type, pattern.loc);
+                        (Type::new_unknown(self.ctxt()), None)
                     }
                 };
                 let field_names = expected_fields
@@ -187,9 +200,9 @@ impl FunctionCtxt<'_, '_> {
                                 .and_then(|field| {
                                     expected_fields
                                         .as_ref()
-                                        .map(|fields| fields[field].ty.clone())
+                                        .map(|fields| fields[field].ty)
                                 })
-                                .unwrap_or(TypeKind::Unknown),
+                                .unwrap_or(Type::new_unknown(self.ctxt())),
                         );
                         if expected_fields.is_some() && !seen_fields.insert(name.symbol) {
                             root.ctxt().diag().add_diagnostic(
@@ -222,7 +235,7 @@ impl FunctionCtxt<'_, '_> {
                     seen_fields,
                     expected_fields.iter().flatten().map(|field| field.name),
                 );
-                if let TypeKind::Named(id, _, _) = ty
+                if let Some((id, _, _)) = ty.as_named()
                     && let type_def = self.ctxt().type_def(id)
                 {
                     let ty_fields = type_def.fields();
@@ -238,26 +251,23 @@ impl FunctionCtxt<'_, '_> {
                 }
             }
             PatternKind::Bool(value) => {
-                root.unify(expected_type, TypeKind::Bool, pattern.loc);
+                let bool = Type::new_bool(self.ctxt());
+                root.unify(expected_type, bool, pattern.loc);
                 typed_ast::Pattern {
                     loc,
-                    ty: TypeKind::Bool,
+                    ty: bool,
                     kind: typed_ast::PatternKind::Bool(value),
                 }
             }
             PatternKind::Binding(mutable, ref ident, var) => {
                 let name = ident.symbol;
 
-                let var_ty = expected_type.clone();
-                root.declare_var(var, var_ty.clone(), name);
+                let var_ty = expected_type;
+                root.declare_var(var, var_ty, name);
                 typed_ast::Pattern {
                     ty: expected_type,
                     loc,
-                    kind: typed_ast::PatternKind::Binding(
-                        mutable,
-                        Var(name, var),
-                        Box::new(var_ty),
-                    ),
+                    kind: typed_ast::PatternKind::Binding(mutable, Var(name, var), var_ty),
                 }
             }
         }

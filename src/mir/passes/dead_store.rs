@@ -37,7 +37,7 @@ impl MirPass<'_> for DeadStoreElim {
 struct LocalFinder {
     locals: HashSet<Local>,
 }
-impl Visit for LocalFinder {
+impl Visit<'_> for LocalFinder {
     fn visit_local(&mut self, ctxt: PlaceCtxt, _: crate::mir::Location, local: Local) {
         if let PlaceCtxt::Read = ctxt {
             self.locals.insert(local);
@@ -48,7 +48,7 @@ impl Visit for LocalFinder {
 struct LocalReplacer<'a> {
     locals: &'a HashSet<Local>,
 }
-impl MutVisit for LocalReplacer<'_> {
+impl<'ctxt> MutVisit<'ctxt> for LocalReplacer<'_> {
     fn visit_stmt(&mut self, loc: crate::mir::Location, stmt: &mut crate::mir::Stmt) {
         if let StmtKind::Assign(place, rvalue) = &mut stmt.kind
             && let PlaceBase::Local(local) = place.base

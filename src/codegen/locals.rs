@@ -28,18 +28,18 @@ pub enum LocalKind {
     Memory(cranelift::codegen::ir::StackSlot),
 }
 
-pub struct Locals {
+pub struct Locals<'ctxt> {
     return_slot: ReturnSlot,
-    info: IndexVec<Local, CodegenLocalInfo>,
+    info: IndexVec<Local, CodegenLocalInfo<'ctxt>>,
 }
-impl Locals {
+impl<'ctxt> Locals<'ctxt> {
     pub fn return_slot(&self) -> ReturnSlot {
         self.return_slot
     }
     pub fn new(
-        body: &mir::Body,
-        args: GenericArgsRef,
-        ctxt: CtxtRef<'_>,
+        body: &mir::Body<'ctxt>,
+        args: GenericArgsRef<'_, 'ctxt>,
+        ctxt: CtxtRef<'ctxt>,
         builder: &mut frontend::FunctionBuilder,
         ret_mode: PassMode,
     ) -> Self {
@@ -51,7 +51,7 @@ impl Locals {
                 }
                 PassMode::ByValue(_) => {
                     let layout = ctxt
-                        .layout_of(&Scheme::new(body.return_type.clone()).bind(args))
+                        .layout_of(Scheme::new(body.return_type).bind(ctxt, args))
                         .unwrap();
                     let slot = builder.create_sized_stack_slot(codegen::ir::StackSlotData::new(
                         codegen::ir::StackSlotKind::ExplicitSlot,
@@ -67,8 +67,8 @@ impl Locals {
                 .locals
                 .iter_enumerated()
                 .map(|(id, local)| {
-                    let ty = Scheme::new(local.ty.clone()).bind(args);
-                    let layout = ctxt.layout_of(&ty).unwrap();
+                    let ty = Scheme::new(local.ty).bind(ctxt, args);
+                    let layout = ctxt.layout_of(ty).unwrap();
                     let repr = backend_repr(&layout);
                     let kind = match repr {
                         BackendRepr::ZeroSized => LocalKind::ZeroSized,
@@ -88,7 +88,7 @@ impl Locals {
                 .collect(),
         }
     }
-    pub fn info_for(&self, local: Local) -> &CodegenLocalInfo {
+    pub fn info_for(&self, local: Local) -> &CodegenLocalInfo<'ctxt> {
         &self.info[local]
     }
 }
@@ -107,7 +107,7 @@ impl Ssa {
         struct SsaVisitor {
             assignments: HashMap<PlaceBase, AssignCount>,
         }
-        impl Visit for SsaVisitor {
+        impl<'ctxt> Visit<'ctxt> for SsaVisitor {
             fn visit_assign(&mut self, _: mir::Location, place: &mir::Place, _: &mir::Rvalue) {
                 let base = place.base;
                 if !place.projections.is_empty() {
@@ -153,7 +153,7 @@ impl Ssa {
     }
 }
 
-pub struct CodegenLocalInfo {
-    pub ty: types::TypeKind,
+pub struct CodegenLocalInfo<'ctxt> {
+    pub ty: types::Type<'ctxt>,
     pub kind: LocalKind,
 }

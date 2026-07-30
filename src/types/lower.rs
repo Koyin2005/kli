@@ -6,17 +6,18 @@ use crate::def_ids::DefId;
 use crate::resolved_ast::{self as res, TypeName};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
-use crate::types::{
-    FieldName, FunctionType, GenericArg, GenericArgs, GenericKind, IntegerKind, RecordField,
-    TypeKind,
-};
+use crate::types::{FieldName, GenericArg, GenericArgs, GenericKind, IntegerKind, Type};
 pub struct Lower<'a, 'ctxt> {
     ctxt: CtxtRef<'ctxt>,
     _id: DefId,
-    infer: Option<&'a RefCell<TypeInfer>>,
+    infer: Option<&'a RefCell<TypeInfer<'ctxt>>>,
 }
 impl<'a, 'ctxt> Lower<'a, 'ctxt> {
-    pub fn new(ctxt: CtxtRef<'ctxt>, id: DefId, infer: Option<&'a RefCell<TypeInfer>>) -> Self {
+    pub fn new(
+        ctxt: CtxtRef<'ctxt>,
+        id: DefId,
+        infer: Option<&'a RefCell<TypeInfer<'ctxt>>>,
+    ) -> Self {
         Self {
             ctxt,
             _id: id,
@@ -26,7 +27,7 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
     pub fn lower_types(
         &self,
         tys: &mut dyn Iterator<Item = &res::Type>,
-    ) -> impl Iterator<Item = TypeKind> {
+    ) -> impl Iterator<Item = Type<'ctxt>> {
         tys.map(|ty| self.lower_type(ty))
     }
     fn lower_generic_args_with(
@@ -35,7 +36,7 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
         count: usize,
         loc: SrcLoc,
         args: &res::GenericArgs,
-    ) -> GenericArgs {
+    ) -> GenericArgs<'ctxt> {
         let arg_count = count;
         let loc = args.loc.unwrap_or(loc);
         if let Some(args) = args.args() {
@@ -64,14 +65,14 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
                         res::GenericArg::Type(ty) => GenericArg::from_type(self.lower_type(ty)),
                     },
                     (None, Some(kind)) => match kind {
-                        GenericKind::Type => GenericArg::from_type(TypeKind::Unknown),
+                        GenericKind::Type => GenericArg::from_type(Type::UNKNOWN),
                     },
                 };
                 args.push(arg);
             }
             GenericArgs::from_vec(args)
         } else if let Some(infer) = self.infer {
-            generics.instantiate(&mut infer.borrow_mut(), loc)
+            generics.instantiate(self.ctxt, &mut infer.borrow_mut(), loc)
         } else if arg_count > 0 {
             self.ctxt.diag().add_diagnostic(
                 format!("Expected '{}' generic args but got none", arg_count,),
@@ -87,7 +88,7 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
         id: DefId,
         loc: SrcLoc,
         args: &res::GenericArgs,
-    ) -> GenericArgs {
+    ) -> GenericArgs<'ctxt> {
         let generics = self.ctxt.generics(id);
         let count = generics.own_count();
         self.lower_generic_args_with(generics, count, loc, args)
@@ -97,74 +98,73 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
         loc: SrcLoc,
         name: TypeName,
         args: &res::GenericArgs,
-    ) -> TypeKind {
+    ) -> Type<'ctxt> {
         match name {
             TypeName::Param(name, param) => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                TypeKind::Param(name, param)
+                Type::param(self.ctxt, name, param)
             }
             TypeName::UserDefined(id) => {
                 let args = self.lower_generic_args(id, loc, args);
-                TypeKind::Named(id, self.ctxt.expect_ident(id).symbol, args)
+                Type::named(self.ctxt, id, self.ctxt.expect_ident(id).symbol, args)
             }
             TypeName::Byte => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                TypeKind::Byte
+                Type::new_byte(self.ctxt)
             }
             TypeName::Bool => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                TypeKind::Bool
+                Type::new_bool(self.ctxt)
             }
             TypeName::Int => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                TypeKind::Int(IntegerKind::Signed)
+                Type::new_int(self.ctxt, IntegerKind::Signed)
             }
             TypeName::Uint => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                TypeKind::Int(IntegerKind::Unsigned)
+                Type::new_uint(self.ctxt)
             }
             TypeName::Char => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                TypeKind::Char
+                Type::new_char(self.ctxt)
             }
             TypeName::Never => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                TypeKind::Never
+                Type::new_never(self.ctxt)
             }
             TypeName::Array => {
                 let args = self.lower_generic_args_with(Generics::default(), 1, loc, args);
                 let ty = if let Ok([GenericArg(ty)]) = <[_; _]>::try_from(args) {
                     ty
                 } else {
-                    TypeKind::Unknown
+                    Type::new_unknown(self.ctxt)
                 };
-                TypeKind::Array(Box::new(ty))
+                Type::new_array(self.ctxt, ty)
             }
             TypeName::String => {
                 _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                TypeKind::String
+                Type::new_string(self.ctxt)
             }
             TypeName::Box => {
                 let args = self.lower_generic_args_with(Generics::default(), 1, loc, args);
                 let ty = if let Ok([GenericArg(ty)]) = <[_; _]>::try_from(args) {
                     ty
                 } else {
-                    TypeKind::Unknown
+                    Type::new_unknown(self.ctxt)
                 };
-                TypeKind::Box(Box::new(ty))
+                Type::new_box(self.ctxt, ty)
             }
         }
     }
-    pub fn lower_type(&self, ty: &res::Type) -> TypeKind {
+    pub fn lower_type(&self, ty: &res::Type) -> Type<'ctxt> {
         match &ty.kind {
             res::TypeKind::Tuple(fields) => {
-                TypeKind::tuple(fields.iter().map(|field| self.lower_type(field)))
+                Type::tuple_from_iter(self.ctxt, fields.iter().map(|field| self.lower_type(field)))
             }
-            res::TypeKind::Record(fields) => TypeKind::Record({
+            res::TypeKind::Record(fields) => {
                 let mut seen_fields = HashSet::new();
-                fields
-                    .iter()
-                    .filter_map(|field| {
+                Type::record_from_iter(self.ctxt, {
+                    fields.iter().filter_map(|field| {
                         if !seen_fields.insert(field.name.symbol) {
                             self.ctxt.diag().add_diagnostic(
                                 format!("Repeated field '{}'", field.name.symbol),
@@ -172,14 +172,14 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
                             );
                             return None;
                         }
-                        Some(RecordField {
-                            name: FieldName::Named(field.name.symbol),
-                            ty: self.lower_type(&field.ty),
-                        })
+                        Some((
+                            FieldName::Named(field.name.symbol),
+                            self.lower_type(&field.ty),
+                        ))
                     })
-                    .collect()
-            }),
-            res::TypeKind::Unknown => TypeKind::Unknown,
+                })
+            }
+            res::TypeKind::Unknown => Type::UNKNOWN,
             &res::TypeKind::Named(name, ref args) => self.lower_type_name(ty.loc, name, args),
             res::TypeKind::Function(function_type) => {
                 let res::FunctionType {
@@ -188,10 +188,7 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
                 } = function_type.as_ref();
                 let params = self.lower_types(&mut params.iter()).collect();
                 let return_type = self.lower_type(return_type);
-                TypeKind::Function(FunctionType {
-                    params,
-                    return_type: Box::new(return_type),
-                })
+                Type::function_type(self.ctxt, params, return_type)
             }
         }
     }

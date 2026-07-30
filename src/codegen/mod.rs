@@ -16,7 +16,7 @@ use crate::{
     monomorph::collect::{Instance, InstanceKind},
     scheme::Scheme,
     typed_ast::FieldId,
-    types::{CaseId, FunctionSig, GenericArgsRef, IntegerKind, TypeKind},
+    types::{CaseId, FunctionSig, GenericArgsRef, IntegerKind, Type, TypeKind},
 };
 use cranelift::{
     codegen::{
@@ -67,14 +67,15 @@ impl PassMode {
     }
 }
 #[track_caller]
-fn call_abi(ctxt: CtxtRef<'_>, function_sig: &FunctionSig) -> CallAbi {
+fn call_abi<'ctxt>(ctxt: CtxtRef<'ctxt>, function_sig: &FunctionSig<'ctxt>) -> CallAbi {
     let params = function_sig
         .params
         .iter()
+        .copied()
         .map(|param| PassMode::new(backend_repr(&ctxt.layout_of(param).unwrap())))
         .collect();
     let ret = PassMode::new(backend_repr(
-        &ctxt.layout_of(&function_sig.return_type).unwrap(),
+        &ctxt.layout_of(function_sig.return_type).unwrap(),
     ));
     CallAbi { params, ret }
 }
@@ -117,20 +118,20 @@ struct RuntimeFunctions {
     print_string: FuncId,
     print_newline: FuncId,
 }
-struct FunctionMap {
-    functions: HashMap<Instance, FunctionInfo>,
+struct FunctionMap<'ctxt> {
+    functions: HashMap<Instance<'ctxt>, FunctionInfo>,
 }
 pub struct CodegenRoot<'c> {
     ctxt: CtxtRef<'c>,
     module: cranelift_object::ObjectModule,
-    map: FunctionMap,
-    instances: Vec<Instance>,
+    map: FunctionMap<'c>,
+    instances: Vec<Instance<'c>>,
 }
 
 impl<'ctxt> CodegenRoot<'ctxt> {
     pub fn new(
         ctxt: CtxtRef<'ctxt>,
-        instances: impl IntoIterator<Item = Instance>,
+        instances: impl IntoIterator<Item = Instance<'ctxt>>,
     ) -> CodegenRoot<'ctxt> {
         let triple = target_lexicon::Triple::host();
         let mut builder = codegen::settings::builder();
@@ -189,7 +190,10 @@ impl<'ctxt> CodegenRoot<'ctxt> {
         }
         function
     }
-    pub fn codegen_functions(mut self, mir_ctxt: &mir::Context) -> cranelift_object::ObjectProduct {
+    pub fn codegen_functions<'mir_ctxt>(
+        mut self,
+        mir_ctxt: &'mir_ctxt mir::Context<'ctxt>,
+    ) -> cranelift_object::ObjectProduct {
         for (i, instance) in self.instances.iter().enumerate() {
             let (name, linkage) = if self
                 .ctxt
@@ -206,9 +210,9 @@ impl<'ctxt> CodegenRoot<'ctxt> {
             let function = &mir_ctxt.bodies[&instance.body_src()];
             let sig = Scheme::new(FunctionSig::new(
                 function.param_types().collect(),
-                function.return_type.clone(),
+                function.return_type,
             ))
-            .bind(&instance.args);
+            .bind(self.ctxt, &instance.args);
             let abi = call_abi(self.ctxt, &sig);
             let sig = signature(&abi, self.module.target_config());
             self.map.functions.insert(
@@ -310,17 +314,17 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                     builder.switch_to_block(alloc_failed_block);
                     let print_string = this
                         .module
-                        .declare_func_in_func(print_string, &mut builder.func);
+                        .declare_func_in_func(print_string,builder.func);
                     let print_newline = this
                         .module
-                        .declare_func_in_func(print_newline, &mut builder.func);
+                        .declare_func_in_func(print_newline,builder.func);
                     const MSG: &str = "failed to allocated";
                     let len = const { MSG.len() as i64 };
                     let msg = constants.constant_for(
                         &mut this.module,
                         String::from(MSG).into_bytes().into_boxed_slice(),
                     );
-                    let msg = this.module.declare_data_in_func(msg, &mut builder.func);
+                    let msg = this.module.declare_data_in_func(msg, builder.func);
                     let msg = builder.ins().symbol_value(PTR_IR_TYPE, msg);
                     let len = builder.ins().iconst(ir::types::I64, len);
                     builder.ins().call(print_string, &[msg, len]);
@@ -391,15 +395,15 @@ impl<'ctxt> CodegenRoot<'ctxt> {
     }
 }
 #[derive(Debug, Clone)]
-struct OperandValue {
-    ty: TypeKind,
-    kind: OperandValueKind,
+struct OperandValue<'ctxt> {
+    ty: Type<'ctxt>,
+    kind: OperandValueKind<'ctxt>,
 }
-impl OperandValue {
+impl<'ctxt> OperandValue<'ctxt> {
     #[track_caller]
     pub fn expect_immediate(
         &self,
-        cg: &mut FunctionCodegen<'_, '_, impl Module>,
+        cg: &mut FunctionCodegen<'_, 'ctxt, impl Module>,
     ) -> codegen::ir::Value {
         match self.kind {
             OperandValueKind::Indirect(ref place) => cg
@@ -443,8 +447,8 @@ impl ScalarValue {
     }
 }
 #[derive(Debug, Clone)]
-enum OperandValueKind {
-    Indirect(CodegenPlace),
+enum OperandValueKind<'ctxt> {
+    Indirect(CodegenPlace<'ctxt>),
     ZeroSized,
     Value(ScalarValue),
 }
@@ -454,34 +458,34 @@ enum ScalarType {
 }
 
 #[derive(Debug, Clone)]
-enum CodegenPlace {
-    Ssa(TypeKind, frontend::Variable),
-    MemPlace(MemPlace),
+enum CodegenPlace<'ctxt> {
+    Ssa(Type<'ctxt>, frontend::Variable),
+    MemPlace(MemPlace<'ctxt>),
 }
-impl CodegenPlace {
-    fn type_of(&self) -> TypeKind {
-        match &self {
-            CodegenPlace::MemPlace(place) => place.ty.clone(),
-            CodegenPlace::Ssa(ty, ..) => ty.clone(),
+impl<'ctxt> CodegenPlace<'ctxt> {
+    fn type_of(&self) -> Type<'ctxt> {
+        match self {
+            CodegenPlace::MemPlace(place) => place.ty,
+            &CodegenPlace::Ssa(ty, ..) => ty,
         }
     }
 }
 #[derive(Clone, Debug)]
-struct MemPlace {
-    ty: TypeKind,
+struct MemPlace<'ctxt> {
+    ty: Type<'ctxt>,
     layout: layout::Layout,
     base_ptr: codegen::ir::Value,
     offset: i32,
     scalar: Option<ScalarType>,
 }
-impl MemPlace {
-    fn new(ptr: codegen::ir::Value, layout: layout::Layout, ty: TypeKind) -> Self {
+impl<'ctxt> MemPlace<'ctxt> {
+    fn new(ptr: codegen::ir::Value, layout: layout::Layout, ty: Type<'ctxt>) -> Self {
         Self::new_with_offset(ptr, layout, ty, 0)
     }
     fn new_with_offset(
         ptr: codegen::ir::Value,
         layout: layout::Layout,
-        ty: TypeKind,
+        ty: Type<'ctxt>,
         offset: i32,
     ) -> Self {
         Self {
@@ -501,12 +505,12 @@ impl MemPlace {
     fn ptr_and_offset(&self) -> (codegen::ir::Value, i32) {
         (self.base_ptr, self.offset)
     }
-    fn project_downcast(self, ctxt: CtxtRef<'_>, case: CaseId) -> Self {
-        let TypeKind::Named(id, _, args) = self.ty else {
+    fn project_downcast(self, ctxt: CtxtRef<'ctxt>, case: CaseId) -> Self {
+        let Some((id, _, args)) = self.ty.as_named() else {
             unreachable!("Should be named")
         };
 
-        let ty = ctxt.type_def(id).case(case).payload_type(&args, ctxt);
+        let ty = ctxt.type_def(id).case(case).payload_type(args, ctxt);
         let layout = match self.layout.kind {
             LayoutKind::Variant { tag, ref cases } => {
                 let (size, align) = match tag {
@@ -520,7 +524,7 @@ impl MemPlace {
         Self::new_with_offset(self.base_ptr, layout, ty, self.offset)
     }
     #[track_caller]
-    fn project_field(self, ctxt: CtxtRef<'_>, field: FieldId) -> Self {
+    fn project_field(self, ctxt: CtxtRef<'ctxt>, field: FieldId) -> Self {
         let (ty, offset, layout) = match self.layout.kind {
             LayoutKind::Aggregate(field_layouts, ref field_positions) => (
                 self.ty.field_info(field, ctxt).unwrap().0,
@@ -529,12 +533,10 @@ impl MemPlace {
                     .swap_remove(field_positions[field].index_in_memory)
                     .layout,
             ),
-            LayoutKind::Variant { tag, cases } if field == FieldId::FIRST_FIELD => (
-                if cases.len() < 256 {
-                    TypeKind::Byte
-                } else {
-                    TypeKind::UINT
-                },
+            LayoutKind::Variant { tag, .. } if field == FieldId::FIRST_FIELD => (
+                ctxt.type_def(self.ty.as_named().unwrap().0)
+                    .tag_type()
+                    .into_type(ctxt),
                 0,
                 match tag {
                     TagEncoding::Field { scalar } => layout::Layout::from_scalar(scalar),
@@ -565,7 +567,7 @@ impl MemPlace {
     }
     fn offset_in_bytes(&self, value: i32) -> Self {
         Self {
-            ty: self.ty.clone(),
+            ty: self.ty,
             layout: self.layout.clone(),
             base_ptr: self.base_ptr,
             offset: self.offset + value,
@@ -576,12 +578,12 @@ impl MemPlace {
 pub struct FunctionCodegen<'r, 'ctxt, M: Module> {
     ctxt: CtxtRef<'ctxt>,
     builder: cranelift::frontend::FunctionBuilder<'r>,
-    local_info: locals::Locals,
-    return_ty: TypeKind,
+    local_info: locals::Locals<'ctxt>,
+    return_ty: Type<'ctxt>,
     abi: &'r CallAbi,
     constants: &'r mut Constants,
-    functions: &'r FunctionMap,
-    args: GenericArgsRef<'r>,
+    functions: &'r FunctionMap<'ctxt>,
+    args: GenericArgsRef<'r, 'ctxt>,
     target_config: codegen::isa::TargetFrontendConfig,
     module: &'r mut M,
     block_map: &'r BlockMap,
@@ -593,10 +595,10 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn new(
         ctxt: CtxtRef<'ctxt>,
         mut builder: cranelift::frontend::FunctionBuilder<'a>,
-        body: &'a mir::Body,
-        args: GenericArgsRef<'a>,
+        body: &'a mir::Body<'ctxt>,
+        args: GenericArgsRef<'a, 'ctxt>,
         module: &'a mut M,
-        functions: &'a FunctionMap,
+        functions: &'a FunctionMap<'ctxt>,
         abi: &'a CallAbi,
         block_map: &'a BlockMap,
         runtime_functions: &'a RuntimeFunctions,
@@ -611,7 +613,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             ctxt,
             panic_block: Cell::default(),
             local_info: locals::Locals::new(body, args, ctxt, &mut builder, abi.ret),
-            return_ty: Scheme::new(body.return_type.clone()).bind(args),
+            return_ty: Scheme::new(body.return_type).bind(ctxt, args),
             abi,
             args,
             constants,
@@ -671,7 +673,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             Offset32::new(second_offset),
         );
     }
-    fn copy(&mut self, place: CodegenPlace, dst_place: CodegenPlace) {
+    fn copy(&mut self, place: CodegenPlace<'ctxt>, dst_place: CodegenPlace<'ctxt>) {
         match (place, dst_place) {
             (CodegenPlace::MemPlace(place), CodegenPlace::MemPlace(dst_place)) => {
                 self.memcopy(place, dst_place)
@@ -685,8 +687,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             }
         }
     }
-    fn memcopy(&mut self, place: MemPlace, dst_place: MemPlace) {
-        let size = self.layout_for(&dst_place.ty).size;
+    fn memcopy(&mut self, place: MemPlace<'ctxt>, dst_place: MemPlace<'ctxt>) {
+        let size = self.layout_for(dst_place.ty).size;
         let src = place.ptr(self);
         let dst = dst_place.ptr(self);
         self.builder.emit_small_memory_copy(
@@ -700,7 +702,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             MemFlagsData::new(),
         );
     }
-    fn store_scalar(&mut self, place: CodegenPlace, value: ScalarValue) {
+    fn store_scalar(&mut self, place: CodegenPlace<'ctxt>, value: ScalarValue) {
         match place {
             CodegenPlace::MemPlace(place) => self.store_scalar_mem(place, value),
             CodegenPlace::Ssa(.., var) => {
@@ -708,7 +710,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             }
         }
     }
-    fn store_scalar_mem(&mut self, place: MemPlace, value: ScalarValue) {
+    fn store_scalar_mem(&mut self, place: MemPlace<'ctxt>, value: ScalarValue) {
         match value {
             ScalarValue::Pair([first, second], offset) => {
                 self.store_immediate_pair_mem(place, first, second, offset);
@@ -718,7 +720,11 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             }
         }
     }
-    fn store_operand_with_mem_place(&mut self, dst_place: MemPlace, value: OperandValue) {
+    fn store_operand_with_mem_place(
+        &mut self,
+        dst_place: MemPlace<'ctxt>,
+        value: OperandValue<'ctxt>,
+    ) {
         match value.kind {
             OperandValueKind::ZeroSized => (),
             OperandValueKind::Indirect(place) => {
@@ -730,7 +736,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn store_var_imm(&mut self, var: frontend::Variable, value: codegen::ir::Value) {
         self.builder.def_var(var, value);
     }
-    fn store_value(&mut self, place: &mir::Place, value: OperandValue) {
+    fn store_value(&mut self, place: &mir::Place, value: OperandValue<'ctxt>) {
         let Ok(dst_place) = self.eval_place(place) else {
             return;
         };
@@ -744,17 +750,17 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let value = value.expect_immediate(self);
         self.store_var_imm(first_var, value);
     }
-    fn store_operand(&mut self, place: &mir::Place, operand: &mir::Operand) {
+    fn store_operand(&mut self, place: &mir::Place, operand: &mir::Operand<'ctxt>) {
         let operand = self.eval_operand(operand);
         self.store_value(place, operand);
     }
-    fn load_place(&mut self, place: &CodegenPlace) -> Option<ScalarValue> {
+    fn load_place(&mut self, place: &CodegenPlace<'ctxt>) -> Option<ScalarValue> {
         match &place {
             CodegenPlace::MemPlace(place) => self.load_place_mem(place),
             CodegenPlace::Ssa(.., var) => Some(ScalarValue::Single(self.builder.use_var(*var))),
         }
     }
-    fn load_place_mem(&mut self, place: &MemPlace) -> Option<ScalarValue> {
+    fn load_place_mem(&mut self, place: &MemPlace<'ctxt>) -> Option<ScalarValue> {
         let (base_ptr, offset) = place.ptr_and_offset();
         let scalar = place.scalar?;
         match scalar {
@@ -767,7 +773,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         }
     }
     #[track_caller]
-    fn layout_for(&self, ty: &TypeKind) -> layout::Layout {
+    fn layout_for(&self, ty: Type<'ctxt>) -> layout::Layout {
         self.ctxt.layout_of(ty).expect("should be monoed enough")
     }
     fn load_array_ptr(&mut self, place: MemPlace) -> codegen::ir::Value {
@@ -783,11 +789,11 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             .ins()
             .load(ir::types::I64, MemFlagsData::new(), ptr, offset)
     }
-    fn eval_place(&mut self, place: &mir::Place) -> Result<CodegenPlace, TypeKind> {
+    fn eval_place(&mut self, place: &mir::Place) -> Result<CodegenPlace<'ctxt>, Type<'ctxt>> {
         let (ty, ptr, projections) = match place.base {
             PlaceBase::Local(local) => {
-                let local_info = &self.local_info.info_for(local);
-                let mut ty = local_info.ty.clone();
+                let local_info = self.local_info.info_for(local);
+                let mut ty = local_info.ty;
                 let base_kind = local_info.kind;
                 let mut projections = &place.projections[..];
                 let ptr = match base_kind {
@@ -812,14 +818,14 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                                     | mir::PlaceProjection::Field(_) => (),
                                     mir::PlaceProjection::Deref => {
                                         let value = self
-                                            .load_place(&CodegenPlace::Ssa(ty.clone(), var))
+                                            .load_place(&CodegenPlace::Ssa(ty, var))
                                             .unwrap()
                                             .first_value();
                                         break 'a value;
                                     }
                                 }
                             }
-                            if let BackendRepr::ZeroSized = backend_repr(&self.layout_for(&ty)) {
+                            if let BackendRepr::ZeroSized = backend_repr(&self.layout_for(ty)) {
                                 return Err(ty);
                             }
                         }
@@ -829,7 +835,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 (ty, ptr, projections)
             }
             PlaceBase::ReturnPlace => {
-                let ty = self.return_ty.clone();
+                let ty = self.return_ty;
                 let ptr = match self.local_info.return_slot() {
                     ReturnSlot::Scalar(variable) => {
                         return Ok(CodegenPlace::Ssa(ty, variable));
@@ -845,7 +851,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 (ty, ptr, &place.projections[..])
             }
         };
-        let layout = self.layout_for(&ty);
+        let layout = self.layout_for(ty);
         let mut place_value = MemPlace::new(ptr, layout, ty);
         for projection in projections {
             place_value = match *projection {
@@ -853,16 +859,16 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     place_value.project_field(self.ctxt, field_id)
                 }
                 mir::PlaceProjection::ConstantIndex(index) => {
-                    let ty = projection.apply_projection_to_type(place_value.ty.clone(), self.ctxt);
-                    let layout = self.layout_for(&ty);
+                    let ty = projection.apply_projection_to_type(place_value.ty, self.ctxt);
+                    let layout = self.layout_for(ty);
                     let ptr_value = self.load_array_ptr(place_value.clone());
                     let index: u64 = index.into();
                     let offset: i32 = (index * layout.size.in_bytes()).try_into().unwrap();
                     MemPlace::new_with_offset(ptr_value, layout, ty, offset)
                 }
                 mir::PlaceProjection::Index(local) => {
-                    let ty = projection.apply_projection_to_type(place_value.ty.clone(), self.ctxt);
-                    let layout = self.layout_for(&ty);
+                    let ty = projection.apply_projection_to_type(place_value.ty, self.ctxt);
+                    let layout = self.layout_for(ty);
                     let ptr_value = self.load_array_ptr(place_value);
                     let index_place = self.eval_place(&mir::Place::local(local)).unwrap();
                     let index_value = self.load_place(&index_place).unwrap().first_value();
@@ -884,11 +890,11 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     place_value.project_downcast(self.ctxt, case)
                 }
                 mir::PlaceProjection::Deref => {
-                    let ty = projection.apply_projection_to_type(place_value.ty.clone(), self.ctxt);
-                    let layout = self.layout_for(&ty);
+                    let ty = projection.apply_projection_to_type(place_value.ty, self.ctxt);
+                    let layout = self.layout_for(ty);
                     let box_ptr = self
                         .load_place_mem(&MemPlace {
-                            ty: ty.clone(),
+                            ty,
                             layout: layout.clone(),
                             base_ptr: ptr,
                             offset: 0,
@@ -918,8 +924,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         };
         self.builder.ins().build_imm_const(ty, value, signed)
     }
-    fn build_const(&mut self, constant: &Constant) -> OperandValue {
-        let ty = Scheme::new((*constant.ty).clone()).bind(self.args);
+    fn build_const(&mut self, constant: &Constant<'ctxt>) -> OperandValue<'ctxt> {
+        let ty = Scheme::new(constant.ty).bind(self.ctxt, self.args);
         let kind = match constant.value {
             mir::ConstValue::ZeroSized => OperandValueKind::ZeroSized,
             mir::ConstValue::Named(id, ref args) => {
@@ -948,10 +954,10 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 }
                 let (id, _, _) = constant.ty.as_named().unwrap();
                 let (tag_ty, value) = self.ctxt.type_def(id).case_value(case);
-                let layout = self.layout_for(&ty);
+                let layout = self.layout_for(ty);
                 match backend_repr(&layout) {
                     BackendRepr::Scalar(_) => OperandValueKind::Value(ScalarValue::Single(
-                        self.build_int_const(&tag_ty.into_type(), value.into()),
+                        self.build_int_const(&tag_ty.into_type(self.ctxt), value.into()),
                     )),
                     BackendRepr::ZeroSized => unreachable!(),
                     BackendRepr::Memory => {
@@ -966,7 +972,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         OperandValueKind::Indirect(CodegenPlace::MemPlace(MemPlace::new(
                             ptr,
                             layout,
-                            ty.clone(),
+                            ty,
                         )))
                     }
                 }
@@ -991,12 +997,12 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let second = self.build_int_const(&TypeKind::UINT, len.into());
         (first, second)
     }
-    fn eval_operand(&mut self, operand: &mir::Operand) -> OperandValue {
+    fn eval_operand(&mut self, operand: &mir::Operand<'ctxt>) -> OperandValue<'ctxt> {
         match operand {
             Operand::Constant(constant) => self.build_const(constant),
             Operand::Load(place) => match self.eval_place(place) {
                 Ok(place) => OperandValue {
-                    ty: place.type_of().clone(),
+                    ty: place.type_of(),
                     kind: OperandValueKind::Indirect(place),
                 },
                 Err(ty) => OperandValue {
@@ -1008,9 +1014,9 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     }
     fn explode_args(
         &mut self,
-        return_place: Option<CodegenPlace>,
+        return_place: Option<CodegenPlace<'ctxt>>,
         abi: &CallAbi,
-        args: Vec<OperandValue>,
+        args: Vec<OperandValue<'ctxt>>,
     ) -> Vec<ir::Value> {
         let mut all_args = Vec::new();
         if let Some(CodegenPlace::MemPlace(place)) = return_place {
@@ -1055,7 +1061,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             &[size_in_bytes, align_in_bytes],
         )
     }
-    fn codgen_static_size_alloc_call(&mut self, ty: &TypeKind, count: u64) -> ir::Value {
+    fn codgen_static_size_alloc_call(&mut self, ty: Type<'ctxt>, count: u64) -> ir::Value {
         let ty_layout = self.layout_for(ty);
         let total_size = ty_layout.size.mul(count).in_bytes();
         let size_val = self.build_int_const(&TypeKind::UINT, total_size.into());
@@ -1099,36 +1105,33 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let values = self.builder.inst_results(call).to_vec();
         self.store_return_value(values, ret_place);
     }
-    fn codegen_call(&mut self, place: &mir::Place, callee: &mir::Operand, args: &[Operand]) {
+    fn codegen_call(
+        &mut self,
+        place: &mir::Place,
+        callee: &mir::Operand<'ctxt>,
+        args: &[Operand<'ctxt>],
+    ) {
         let (ty, callee) = match callee {
-            Operand::Constant(Constant {
+            &Operand::Constant(Constant {
                 ty,
-                value: ConstValue::Named(id, args),
-            }) => (Scheme::new((**ty).clone()).bind(self.args), Ok((*id, args))),
+                value: ConstValue::Named(id, ref args),
+            }) => (Scheme::new(ty).bind(self.ctxt, self.args), Ok((id, args))),
             _ => {
                 let operand = self.eval_operand(callee);
-                (operand.ty.clone(), Err(operand))
+                (operand.ty, Err(operand))
             }
         };
-        let TypeKind::Function(sig) = ty else {
-            unreachable!()
-        };
+        let sig = ty.as_function().unwrap();
         let args: Vec<OperandValue> = args
             .iter()
             .map(|operand| self.eval_operand(operand))
             .collect();
-        let abi = call_abi(
-            self.ctxt,
-            &FunctionSig {
-                params: sig.params.clone(),
-                return_type: (*sig.return_type).clone(),
-            },
-        );
+        let abi = call_abi(self.ctxt, sig);
         let ret_place = self.eval_place(place).ok();
         match callee {
             Ok((def_id, generic_args)) => {
                 let function = Instance {
-                    args: Scheme::new(generic_args.clone()).bind(self.args),
+                    args: Scheme::new(generic_args.clone()).bind(self.ctxt, self.args),
                     kind: InstanceKind::Function(def_id),
                 };
                 let id = self
@@ -1209,8 +1212,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         &mut self,
         place: &mir::Place,
         binary_op: mir::BinaryOp,
-        left: &Operand,
-        right: &Operand,
+        left: &Operand<'ctxt>,
+        right: &Operand<'ctxt>,
     ) {
         let left_operand = self.eval_operand(left);
         let left_value = left_operand.expect_immediate(self);
@@ -1218,23 +1221,17 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let right_value = right_operand.expect_immediate(self);
         let (left, right) = match binary_op {
             BinaryOp::Overflow(op) => {
-                let TypeKind::Int(kind) = left_operand.ty else {
-                    unreachable!()
-                };
+                let kind = left_operand.ty.as_integer().unwrap();
                 let (left, right) = self.build_overflow_op(op, kind, left_value, right_value);
                 (left, Some(right))
             }
             BinaryOp::Wrapping(op) => {
-                let TypeKind::Int(kind) = left_operand.ty else {
-                    unreachable!()
-                };
+                let kind = left_operand.ty.as_integer().unwrap();
                 let (left, _) = self.build_overflow_op(op, kind, left_value, right_value);
                 (left, None)
             }
             BinaryOp::Divide => {
-                let TypeKind::Int(kind) = left_operand.ty else {
-                    unreachable!()
-                };
+                let kind = left_operand.ty.as_integer().unwrap();
                 (
                     match kind {
                         IntegerKind::Signed => self.builder.ins().sdiv(left_value, right_value),
@@ -1244,9 +1241,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 )
             }
             BinaryOp::Greater => {
-                let TypeKind::Int(kind) = left_operand.ty else {
-                    unreachable!()
-                };
+                let kind = left_operand.ty.as_integer().unwrap();
                 (
                     self.builder.ins().icmp(
                         match kind {
@@ -1260,9 +1255,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 )
             }
             BinaryOp::Lesser => {
-                let TypeKind::Int(kind) = left_operand.ty else {
-                    unreachable!()
-                };
+                let kind = left_operand.ty.as_integer().unwrap();
                 (
                     self.builder.ins().icmp(
                         match kind {
@@ -1285,30 +1278,30 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         };
         let place = self.eval_place(place).unwrap();
         if let Some(right) = right {
-            let TypeKind::Tuple(fields) = place.type_of().clone() else {
+            let Some(fields) = place.type_of().as_tuple() else {
                 unreachable!()
             };
-            let Some(&TypeKind::Int(_)) = fields.first() else {
+            let Some(&ty) = fields.first() else {
                 unreachable!()
             };
-            let offset = layout::INT_SIZE;
+            let offset = self.layout_for(ty).size;
             self.store_immediate_pair(place, left, right, offset);
         } else {
             self.store_immediate(place, left);
         }
     }
-    fn codgen_box(&mut self, place: &mir::Place, ty: &TypeKind, operand: &mir::Operand) {
-        let ty = Scheme::new(ty.clone()).bind(self.args);
-        let ptr = self.codgen_static_size_alloc_call(&ty, 1);
+    fn codgen_box(&mut self, place: &mir::Place, ty: Type<'ctxt>, operand: &mir::Operand<'ctxt>) {
+        let ty = Scheme::new(ty).bind(self.ctxt, self.args);
+        let ptr = self.codgen_static_size_alloc_call(ty, 1);
         let value = self.eval_operand(operand);
-        let box_inner_ptr = MemPlace::new(ptr, self.layout_for(&ty), ty);
+        let box_inner_ptr = MemPlace::new(ptr, self.layout_for(ty), ty);
         self.store_operand_with_mem_place(box_inner_ptr.clone(), value.clone());
 
         let place = self.eval_place(place).unwrap();
         let box_ptr = box_inner_ptr.ptr(self);
         self.store_immediate(place, box_ptr);
     }
-    fn codgen_rvalue_assign(&mut self, place: &mir::Place, value: &mir::Rvalue) {
+    fn codgen_rvalue_assign(&mut self, place: &mir::Place, value: &mir::Rvalue<'ctxt>) {
         match value {
             mir::Rvalue::Aggregate(kind, fields) => match kind {
                 AggregateKind::Tuple
@@ -1320,15 +1313,15 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 }
                 AggregateKind::Variant(id, case, args) => {
                     let type_def = self.ctxt.type_def(*id);
-                    let ty = Scheme::new(TypeKind::Named(*id, type_def.name, args.clone()))
-                        .bind(self.args);
+                    let ty = Scheme::new(Type::named(self.ctxt, *id, type_def.name, args.clone()))
+                        .bind(self.ctxt, self.args);
 
                     let name = type_def.case(*case).name;
                     let payload_place = place.clone().with_case_downcast(*case, name);
                     for (id, field) in fields.iter_enumerated() {
                         self.store_operand(&payload_place.clone().with_field(id), field);
                     }
-                    let LayoutKind::Variant { tag, .. } = self.layout_for(&ty).kind else {
+                    let LayoutKind::Variant { tag, .. } = self.layout_for(ty).kind else {
                         unreachable!()
                     };
                     let Some(dst_place) = self.eval_place(place).ok() else {
@@ -1355,8 +1348,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 }
             },
             mir::Rvalue::Repeat { ty, value, count } => {
-                let ty = Scheme::new(ty.clone()).bind(self.args);
-                let ty_layout = self.layout_for(&ty);
+                let ty = Scheme::new(*ty).bind(self.ctxt, self.args);
+                let ty_layout = self.layout_for(ty);
 
                 let byte_size =
                     self.build_int_const(&TypeKind::UINT, ty_layout.size.in_bytes().into());
@@ -1420,7 +1413,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     let element_size: i64 = ty_layout.size.in_bytes_i64();
                     let new_offset = self.builder.ins().imul_imm_u(var_use, element_size);
                     let ptr = self.builder.ins().iadd(ptr, new_offset);
-                    let place_value = MemPlace::new(ptr, ty_layout.clone(), ty.clone());
+                    let place_value = MemPlace::new(ptr, ty_layout.clone(), ty);
                     self.store_operand_with_mem_place(place_value, value);
 
                     let one_value = self.build_int_const(&TypeKind::UINT, 1);
@@ -1434,16 +1427,16 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 self.store_immediate_pair(place, ptr, count, layout::POINTER_SIZE);
             }
             mir::Rvalue::AllocateArray(ty, fields) => {
-                let ty = Scheme::new(ty.clone()).bind(self.args);
-                let ty_layout = self.layout_for(&ty);
+                let ty = Scheme::new(*ty).bind(self.ctxt, self.args);
+                let ty_layout = self.layout_for(ty);
                 let len: u64 = fields.len().try_into().unwrap();
-                let ptr = self.codgen_static_size_alloc_call(&ty, len);
+                let ptr = self.codgen_static_size_alloc_call(ty, len);
                 if ty_layout.is_zst() || fields.is_empty() {
                     let len_value = self.build_int_const(&TypeKind::UINT, len.into());
                     self.store_value(
                         place,
                         OperandValue {
-                            ty: TypeKind::array(ty),
+                            ty: Type::new_array(self.ctxt, ty),
                             kind: OperandValueKind::Value(ScalarValue::pair(
                                 ptr,
                                 len_value,
@@ -1453,7 +1446,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     );
                     return;
                 }
-                let place_value = MemPlace::new(ptr, ty_layout.clone(), ty.clone());
+                let place_value = MemPlace::new(ptr, ty_layout.clone(), ty);
                 for (i, operand) in fields.iter().enumerate() {
                     let i: u64 = i.try_into().unwrap();
                     let offset: u64 = ty_layout.size.in_bytes() * i;
@@ -1465,7 +1458,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 self.store_value(
                     place,
                     OperandValue {
-                        ty: TypeKind::array(ty),
+                        ty: Type::new_array(self.ctxt, ty),
                         kind: OperandValueKind::Value(ScalarValue::pair(
                             ptr,
                             len_value,
@@ -1475,7 +1468,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 );
             }
             mir::Rvalue::AllocateBox(ty, operand) => {
-                self.codgen_box(place, ty, operand);
+                self.codgen_box(place, *ty, operand);
             }
             mir::Rvalue::Use(operand) => {
                 self.store_operand(place, operand);
@@ -1497,7 +1490,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 self.store_immediate(place, addr);
             }
             mir::Rvalue::Cast(kind, operand) => match kind {
-                mir::CastKind::Transmute(to) => {
+                &mir::CastKind::Transmute(to) => {
                     //Zero sized transmutes are no ops
                     let Ok(dst_place) = self.eval_place(place) else {
                         return;
@@ -1507,10 +1500,10 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         so we store it in memory and then copy that value as a 'to'
                     */
                     let operand = self.eval_operand(operand);
-                    let to_ty = Scheme::new(to.clone()).bind(self.args);
-                    let to_layout = self.layout_for(&to_ty);
+                    let to_ty = Scheme::new(to).bind(self.ctxt, self.args);
+                    let to_layout = self.layout_for(to_ty);
 
-                    let from_layout = self.layout_for(&operand.ty);
+                    let from_layout = self.layout_for(operand.ty);
                     match (backend_repr(&from_layout), backend_repr(&to_layout)) {
                         (BackendRepr::Scalar(from), BackendRepr::Scalar(to)) => {
                             let from = scalar_to_cranelift_type(from);
@@ -1580,7 +1573,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         }
                         CodegenPlace::Ssa(ty, .., var) => {
                             let (id, ..) = ty.as_named().unwrap();
-                            let tag_ty = self.ctxt.type_def(id).tag_type().into_type();
+                            let tag_ty = self.ctxt.type_def(id).tag_type().into_type(self.ctxt);
                             (self.builder.use_var(var), !tag_ty.is_integer())
                         }
                     },
@@ -1597,7 +1590,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             }
         }
     }
-    fn store_params(&mut self, body: &'_ mir::Body) {
+    fn store_params(&mut self, body: &'_ mir::Body<'ctxt>) {
         let abi = self.abi;
         let param_values = {
             let mut param_values = Vec::new();
@@ -1627,7 +1620,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         };
         for (i, local) in body.params_iter().enumerate() {
             let local_kind = self.local_info.info_for(local).kind;
-            let ty = self.local_info.info_for(local).ty.clone();
+            let ty = self.local_info.info_for(local).ty;
             if matches!(local_kind, LocalKind::Memory(_) | LocalKind::Scalar(..))
                 && let Ok(place) = self.eval_place(&Place::local(local))
             {
@@ -1642,7 +1635,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 };
                 match local_kind {
                     LocalKind::Memory(_) => {
-                        let layout = self.layout_for(&ty);
+                        let layout = self.layout_for(ty);
                         if self.ctxt.config().has_feature(Feature::OutputBackendIr) {
                             println!("{} {} {:?}", param_index, ty, backend_repr(&layout));
                         }
@@ -1676,10 +1669,10 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         };
     }
 
-    fn codgen_print_stmt(&mut self, operand: Option<&mir::Operand>) {
+    fn codgen_print_stmt(&mut self, operand: Option<&mir::Operand<'ctxt>>) {
         if let Some(operand) = operand {
             let operand = self.eval_operand(operand);
-            match operand.ty {
+            match operand.ty.kind() {
                 TypeKind::Int(_) => {
                     let value = operand.expect_immediate(self);
                     self.codegen_direct_void_call(self.runtime_functions.print_int, &[value]);
@@ -1719,7 +1712,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             self.print_newline();
         }
     }
-    fn codgen_stmt(&mut self, stmt: &mir::Stmt) {
+    fn codgen_stmt(&mut self, stmt: &mir::Stmt<'ctxt>) {
         match &stmt.kind {
             mir::StmtKind::Noop => (),
             mir::StmtKind::Assign(place, rvalue) => {
@@ -1731,7 +1724,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             }
         }
     }
-    fn codgen(mut self, body: &'_ mir::Body) {
+    fn codgen(mut self, body: &'_ mir::Body<'ctxt>) {
         let block_map = self.block_map;
 
         for (id, &block) in block_map.blocks.iter_enumerated() {

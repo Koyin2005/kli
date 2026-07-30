@@ -1,12 +1,15 @@
-use crate::{resolved_ast, typecheck::root::FunctionCtxt, typed_ast, types::TypeKind};
+use crate::{resolved_ast, typecheck::root::FunctionCtxt, typed_ast, types::Type};
 
 pub struct Coercion<'a, 'ctxt> {
-    target_ty: Option<TypeKind>,
-    exprs: Vec<typed_ast::Expr>,
+    target_ty: Option<Type<'ctxt>>,
+    exprs: Vec<typed_ast::Expr<'ctxt>>,
     ctxt: &'a FunctionCtxt<'a, 'ctxt>,
 }
-impl<'a, 'b> Coercion<'a, 'b> {
-    pub fn new(target_ty: Option<TypeKind>, ctxt: &'a FunctionCtxt<'a, 'b>) -> Coercion<'a, 'b> {
+impl<'a, 'ctxt> Coercion<'a, 'ctxt> {
+    pub fn new(
+        target_ty: Option<Type<'ctxt>>,
+        ctxt: &'a FunctionCtxt<'a, 'ctxt>,
+    ) -> Coercion<'a, 'ctxt> {
         Coercion {
             target_ty,
             exprs: Vec::new(),
@@ -17,14 +20,14 @@ impl<'a, 'b> Coercion<'a, 'b> {
     pub fn check_expr(&mut self, expr: &resolved_ast::Expr) {
         self.exprs.push(
             self.ctxt
-                .check_expr_coerces_to(expr, self.target_ty.clone()),
+                .check_expr_coerces_to(expr, self.target_ty),
         );
     }
 
-    pub fn finish(self) -> (Option<TypeKind>, Vec<typed_ast::Expr>) {
+    pub fn finish(self) -> (Option<Type<'ctxt>>, Vec<typed_ast::Expr<'ctxt>>) {
         let Some(combined_ty) = self
             .ctxt
-            .merge_ty(self.exprs.iter().map(|expr| expr.ty.clone()))
+            .merge_ty(self.exprs.iter().map(|expr| expr.ty))
         else {
             return (self.target_ty, self.exprs);
         };
@@ -34,7 +37,7 @@ impl<'a, 'b> Coercion<'a, 'b> {
             .map(|expr| {
                 let Ok(coercion) =
                     self.ctxt
-                        .unify_or_coerce(expr.loc, combined_ty.clone(), expr.ty.clone())
+                        .unify_or_coerce(expr.loc, combined_ty, expr.ty)
                 else {
                     return expr;
                 };

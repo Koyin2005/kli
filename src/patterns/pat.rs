@@ -4,28 +4,28 @@ use crate::{
     collect::CtxtRef,
     def_ids::DefId,
     patterns::ctors::{Constructor, ConstructorSet, constructors_of_ty, fields_of},
-    types::TypeKind,
+    types::{Type, TypeKind},
 };
 #[derive(Clone)]
-pub struct PatWithIndex {
-    pub pat: Pat,
+pub struct PatWithIndex<'ctxt> {
+    pub pat: Pat<'ctxt>,
     pub index: usize,
 }
 #[derive(Clone)]
-pub struct Pat {
-    pub ty: TypeKind,
+pub struct Pat<'ctxt> {
+    pub ty: Type<'ctxt>,
     pub constructor: Constructor,
-    pub fields: Vec<PatWithIndex>,
+    pub fields: Vec<PatWithIndex<'ctxt>>,
 }
-impl Pat {
-    pub fn wildcard(ty: TypeKind) -> Self {
+impl<'ctxt> Pat<'ctxt> {
+    pub fn wildcard(ty: Type<'ctxt>) -> Self {
         Self {
             ty,
             constructor: Constructor::Wildcard,
             fields: Vec::new(),
         }
     }
-    pub fn with_index(self, index: usize) -> PatWithIndex {
+    pub fn with_index(self, index: usize) -> PatWithIndex<'ctxt> {
         PatWithIndex { pat: self, index }
     }
     pub fn format(&self, ctxt: CtxtRef<'_>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -54,7 +54,7 @@ impl Pat {
             Constructor::NonExhaustive => f.write_str("_"),
             Constructor::Record => {
                 use crate::typed_ast::FieldId;
-                let (fields, brackets): (&mut dyn Fn(FieldId) -> _, _) = match &self.ty {
+                let (fields, brackets): (&mut dyn Fn(FieldId) -> _, _) = match self.ty.kind() {
                     TypeKind::Record(fields) => (&mut |i| Some(fields[i].name), ("{", "}")),
                     &TypeKind::Named(id, ..) => (
                         &mut move |i| {
@@ -90,12 +90,12 @@ impl Pat {
     }
 }
 
-pub fn missing_patterns(
+pub fn missing_patterns<'ctxt>(
     from_id: DefId,
-    ctxt: CtxtRef<'_>,
-    ty: &[TypeKind; 1],
-    patterns: &mut dyn Iterator<Item = Pat>,
-) -> Vec<Pat> {
+    ctxt: CtxtRef<'ctxt>,
+    ty: &[Type<'ctxt>; 1],
+    patterns: &mut dyn Iterator<Item = Pat<'ctxt>>,
+) -> Vec<Pat<'ctxt>> {
     let missing =
         missing_patterns_inner(from_id, ctxt, ty, patterns.map(|pat| vec![pat]).collect());
     missing
@@ -104,11 +104,11 @@ pub fn missing_patterns(
         .collect()
 }
 
-fn specialize(
+fn specialize<'ctxt>(
     constructor: Constructor,
-    fields: &[TypeKind],
-    matrix: Vec<Vec<Pat>>,
-) -> Vec<Vec<Pat>> {
+    fields: &[Type<'ctxt>],
+    matrix: Vec<Vec<Pat<'ctxt>>>,
+) -> Vec<Vec<Pat<'ctxt>>> {
     matrix
         .into_iter()
         .filter_map(|mut row| {
@@ -185,13 +185,13 @@ fn split_constructors(
     }
     (seen, missing)
 }
-fn missing_patterns_inner(
+fn missing_patterns_inner<'ctxt>(
     from_id: DefId,
-    ctxt: CtxtRef<'_>,
-    tys: &'_ [TypeKind],
-    matrix: Vec<Vec<Pat>>,
-) -> Vec<Vec<Pat>> {
-    let Some(head) = tys.first() else {
+    ctxt: CtxtRef<'ctxt>,
+    tys: &'_ [Type<'ctxt>],
+    matrix: Vec<Vec<Pat<'ctxt>>>,
+) -> Vec<Vec<Pat<'ctxt>>> {
+    let Some(&head) = tys.first() else {
         return if matrix.is_empty() {
             vec![Vec::new()]
         } else {
@@ -226,7 +226,7 @@ fn missing_patterns_inner(
             if c == Constructor::Missing {
                 all_missing.extend(missing_ctors.iter().copied().map(|ctor| {
                     std::iter::once(Pat {
-                        ty: head.clone(),
+                        ty: head,
                         constructor: ctor,
                         fields: fields_of(head, ctor, ctxt)
                             .into_iter()
@@ -240,7 +240,7 @@ fn missing_patterns_inner(
                 }));
             } else {
                 let head_pat = Pat {
-                    ty: head.clone(),
+                    ty: head,
                     constructor: c,
                     fields: row
                         .by_ref()

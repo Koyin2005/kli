@@ -310,7 +310,7 @@ fn main() {
     });
     if let Some((main, _)) = ctxt.main_function() {
         let instances = InstanceCollector::new(&mir_context)
-            .collect(Instance::non_generic(InstanceKind::Function(main)));
+            .collect(ctxt, Instance::non_generic(InstanceKind::Function(main)));
         if ctxt.config().has_feature(Feature::OutputInstances) {
             for instance in &instances {
                 println!("{:?}", instance);
