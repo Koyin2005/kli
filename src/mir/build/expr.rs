@@ -94,7 +94,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let index = self.expr_into_temp(index);
                 let len = self.assign_to_temp(
                     place.loc,
-                    Type::new_unit(self.ctxt),
+                    Type::new_uint(self.ctxt),
                     Rvalue::Len(base.clone()),
                 );
                 let in_bounds = self.assign_to_temp(

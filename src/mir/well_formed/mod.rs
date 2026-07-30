@@ -45,6 +45,9 @@ impl<'ctxt, 'body> WellFormed<'ctxt, 'body> {
     }
 }
 impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
+    fn ctxt(&self) -> CtxtRef<'ctxt> {
+        self.ctxt
+    }
     fn visit_place(&mut self, _: PlaceCtxt, loc: Location, place: &super::Place) {
         let mut ty = place.base.type_of(&self.body.locals, self.body.return_type);
         for proj in &place.projections {

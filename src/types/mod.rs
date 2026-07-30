@@ -197,7 +197,7 @@ impl<'ctxt> Type<'ctxt> {
         TypeKind::Char.intern(ctxt)
     }
     pub fn new_never(ctxt: CtxtRef<'ctxt>) -> Self {
-        TypeKind::Char.intern(ctxt)
+        TypeKind::Never.intern(ctxt)
     }
     pub fn new_unknown(ctxt: CtxtRef<'ctxt>) -> Self {
         TypeKind::Unknown.intern(ctxt)

@@ -479,9 +479,11 @@ struct MemPlace<'ctxt> {
     scalar: Option<ScalarType>,
 }
 impl<'ctxt> MemPlace<'ctxt> {
+    #[track_caller]
     fn new(ptr: codegen::ir::Value, layout: layout::Layout, ty: Type<'ctxt>) -> Self {
         Self::new_with_offset(ptr, layout, ty, 0)
     }
+    #[track_caller]
     fn new_with_offset(
         ptr: codegen::ir::Value,
         layout: layout::Layout,
@@ -873,7 +875,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     let index_place = self.eval_place(&mir::Place::local(local)).unwrap();
                     let index_value = self.load_place(&index_place).unwrap().first_value();
                     let size_value =
-                        self.build_int_const(&index_place.type_of(), layout.size.in_bytes().into());
+                        self.build_int_const(index_place.type_of(), layout.size.in_bytes().into());
                     let (offset, overflow) =
                         self.builder.ins().umul_overflow(index_value, size_value);
                     self.builder
@@ -908,8 +910,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         }
         Ok(CodegenPlace::MemPlace(place_value))
     }
-    fn build_int_const(&mut self, ty: &TypeKind, value: i128) -> codegen::ir::Value {
-        let (ty, value, signed) = match ty {
+    fn build_int_const(&mut self, ty: Type<'ctxt>, value: i128) -> codegen::ir::Value {
+        let (ty, value, signed) = match ty.kind() {
             TypeKind::Bool | TypeKind::Byte => (
                 codegen::ir::types::I8,
                 codegen::ir::immediates::Imm64::new(value as i64),
@@ -946,28 +948,55 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 ))
             }
             mir::ConstValue::Scalar(value) => OperandValueKind::Value(ScalarValue::Single(
-                self.build_int_const(&constant.ty, value),
+                self.build_int_const(constant.ty, value),
             )),
             mir::ConstValue::Variant(case, ref data) => {
-                if data.is_some() {
-                    todo!("Handle constant data variants")
-                }
                 let (id, _, _) = constant.ty.as_named().unwrap();
                 let (tag_ty, value) = self.ctxt.type_def(id).case_value(case);
                 let layout = self.layout_for(ty);
                 match backend_repr(&layout) {
                     BackendRepr::Scalar(_) => OperandValueKind::Value(ScalarValue::Single(
-                        self.build_int_const(&tag_ty.into_type(self.ctxt), value.into()),
+                        self.build_int_const(tag_ty.into_type(self.ctxt), value.into()),
                     )),
                     BackendRepr::ZeroSized => unreachable!(),
                     BackendRepr::Memory => {
                         let mut bytes: Box<[u8]> =
                             std::iter::repeat_n(0, layout.size.in_bytes_usize()).collect();
-                        if value < 256 {
-                            bytes[0] = value as u8;
-                        } else {
-                            todo!("really big")
-                        };
+
+                        let mut value = value;
+                        let mut byte_values = Vec::<u8>::new();
+                        let mut data_offset = 0usize;
+                        while value > 0 {
+                            let byte = (value & 0xFF) as u8;
+                            byte_values.push(byte);
+                            value >>= 8;
+                            data_offset += 1;
+                        }
+                        if let Some(_) = data && data_offset > 0{
+                            todo!("handle constant data variants")
+                        }
+
+                        if matches!(self.module.isa().endianness(),ir::Endianness::Big) {
+                            /*
+                                size = 4 bytes
+                                value = 268
+                                value = 256 + 8 + 4
+
+                                Binary 00000001 00001100
+                                Hex    01       0C
+
+                                Big endian
+                                00 00 01 0A
+
+                                Little endian
+                                0C 01 00 00
+                             */
+                            byte_values.reverse();
+                        }
+                        for (i,value) in byte_values.into_iter().enumerate(){
+                            bytes[i] = value;
+                        }
+
                         let ptr = self.alloc_constant(bytes);
                         OperandValueKind::Indirect(CodegenPlace::MemPlace(MemPlace::new(
                             ptr,
@@ -977,7 +1006,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     }
                 }
             }
-            mir::ConstValue::Record(..) => todo!(),
+            mir::ConstValue::Record(_) => todo!("handle record constants"),
             mir::ConstValue::String(name) => {
                 let string = name.to_string();
                 let (first, second) = self.build_string_value(string);
@@ -994,7 +1023,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn build_string_value(&mut self, string: String) -> (ir::Value, ir::Value) {
         let len: u64 = string.len().try_into().unwrap();
         let first = self.alloc_constant(string.into_bytes().into_boxed_slice());
-        let second = self.build_int_const(&TypeKind::UINT, len.into());
+        let second = self.build_int_const(Type::new_uint(self.ctxt), len.into());
         (first, second)
     }
     fn eval_operand(&mut self, operand: &mir::Operand<'ctxt>) -> OperandValue<'ctxt> {
@@ -1064,8 +1093,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn codgen_static_size_alloc_call(&mut self, ty: Type<'ctxt>, count: u64) -> ir::Value {
         let ty_layout = self.layout_for(ty);
         let total_size = ty_layout.size.mul(count).in_bytes();
-        let size_val = self.build_int_const(&TypeKind::UINT, total_size.into());
-        let align = self.build_int_const(&TypeKind::UINT, ty_layout.alignment.in_bytes().into());
+        let size_val = self.build_int_const(Type::new_uint(self.ctxt), total_size.into());
+        let align = self.build_int_const(Type::new_uint(self.ctxt), ty_layout.alignment.in_bytes().into());
         self.codegen_alloc_call(size_val, align)
     }
     fn print_string(&mut self, ptr: ir::Value, len: ir::Value) {
@@ -1330,16 +1359,16 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     match tag {
                         layout::TagEncoding::Field { .. } => {
                             let (id, ..) = dst_place.type_of().as_named().unwrap();
-                            let (_, value) = self.ctxt.type_def(id).case_value(*case);
+                            let (tag, value) = self.ctxt.type_def(id).case_value(*case);
+                                    let discr = self.build_int_const(tag.into_type(self.ctxt), value.into());
                             match dst_place {
                                 CodegenPlace::MemPlace(dst_place) => {
                                     let tag =
                                         dst_place.project_field(self.ctxt, FieldId::FIRST_FIELD);
-                                    let discr = self.build_int_const(&tag.ty, value.into());
                                     self.store_immediate_mem(tag, discr);
                                 }
-                                CodegenPlace::Ssa(..) => {
-                                    todo!("Ssa variants")
+                                CodegenPlace::Ssa(..,var) => {
+                                        self.store_var_imm(var, discr);
                                 }
                             }
                         }
@@ -1352,9 +1381,9 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let ty_layout = self.layout_for(ty);
 
                 let byte_size =
-                    self.build_int_const(&TypeKind::UINT, ty_layout.size.in_bytes().into());
+                    self.build_int_const(Type::new_uint(self.ctxt), ty_layout.size.in_bytes().into());
                 let byte_align =
-                    self.build_int_const(&TypeKind::UINT, ty_layout.alignment.in_bytes().into());
+                    self.build_int_const(Type::new_uint(self.ctxt), ty_layout.alignment.in_bytes().into());
                 let value = self.eval_operand(value);
                 let count = self.eval_operand(count).expect_immediate(self);
                 let byte_size = self.builder.ins().imul(byte_size, count);
@@ -1386,7 +1415,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let loop_end = self.builder.create_block();
                 let loop_count = self.builder.declare_var(ir::types::I64);
                 {
-                    let zero_value = self.build_int_const(&TypeKind::UINT, 0);
+                    let zero_value = self.build_int_const(Type::new_uint(self.ctxt), 0);
                     self.builder.def_var(loop_count, zero_value);
                     self.builder.ins().jump(loop_condition, &[]);
                 }
@@ -1416,7 +1445,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     let place_value = MemPlace::new(ptr, ty_layout.clone(), ty);
                     self.store_operand_with_mem_place(place_value, value);
 
-                    let one_value = self.build_int_const(&TypeKind::UINT, 1);
+                    let one_value = self.build_int_const(Type::new_uint(self.ctxt), 1);
                     let new_val = self.builder.ins().iadd(var_use, one_value);
                     self.builder.def_var(loop_count, new_val);
 
@@ -1432,7 +1461,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let len: u64 = fields.len().try_into().unwrap();
                 let ptr = self.codgen_static_size_alloc_call(ty, len);
                 if ty_layout.is_zst() || fields.is_empty() {
-                    let len_value = self.build_int_const(&TypeKind::UINT, len.into());
+                    let len_value = self.build_int_const(Type::new_uint(self.ctxt), len.into());
                     self.store_value(
                         place,
                         OperandValue {
@@ -1454,7 +1483,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     let value = self.eval_operand(operand);
                     self.store_operand_with_mem_place(place_value.offset_in_bytes(offset), value);
                 }
-                let len_value = self.build_int_const(&TypeKind::UINT, len.into());
+                let len_value = self.build_int_const(Type::new_uint(self.ctxt), len.into());
                 self.store_value(
                     place,
                     OperandValue {
@@ -1706,6 +1735,19 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     };
                     self.print_string(first_val, second_val);
                 }
+                TypeKind::Tuple(fields) => {
+                    if !fields.is_empty(){
+                        todo!("non empty tuples")
+                    }
+                    let (first_val, second_val) = self.build_string_value("()".to_string());
+                    self.print_string(first_val, second_val);
+                }
+                TypeKind::Unknown | TypeKind::Infer(_) => unreachable!(),
+                TypeKind::Never => {
+                    self.builder.ins().trap(TrapCode::unwrap_user(1));
+                    let block = self.builder.create_block();
+                    self.builder.switch_to_block(block);
+                },
                 ref ty => todo!("print for {} {:?}", ty, ty),
             }
         } else {
@@ -1746,12 +1788,12 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     let code = TrapCode::user(1).unwrap();
                     //If it negates than we are asserting !operand instead of operand
                     let assert_success = if assert_kind.negate() {
-                        let cond_value = self.build_int_const(&TypeKind::Bool, 0);
+                        let cond_value = self.build_int_const(Type::new_bool(self.ctxt), 0);
                         self.builder
                             .ins()
                             .icmp(ir::condcodes::IntCC::Equal, value, cond_value)
                     } else {
-                        let cond_value = self.build_int_const(&TypeKind::Bool, 0);
+                        let cond_value = self.build_int_const(Type::new_bool(self.ctxt), 0);
                         self.builder
                             .ins()
                             .icmp(ir::condcodes::IntCC::NotEqual, value, cond_value)

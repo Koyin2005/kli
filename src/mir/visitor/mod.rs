@@ -10,6 +10,7 @@ pub enum PlaceCtxt {
     Write,
 }
 pub trait Visit<'ctxt> {
+    #[track_caller]
     fn ctxt(&self) -> CtxtRef<'ctxt> {
         unimplemented!("not implemented")
     }

@@ -164,7 +164,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             }
         };
         let pattern = self.check_pattern(pattern, element);
-        let body = self.check_expr_coerces_to(body, Some(Type::new_uint(self.ctxt())));
+        let body = self.check_expr_coerces_to(body, Some(Type::new_unit(self.ctxt())));
         let Some(iterator_type) = iterator_type else {
             return typed_ast::Expr {
                 ty: Type::new_unit(self.ctxt()),
