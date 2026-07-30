@@ -9,7 +9,7 @@ use crate::{
         build::Builder,
     },
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
-    types::{FunctionType, Type},
+    types::{FunctionType, TypeKind},
 };
 pub(super) enum BuiltinResult {
     Rvalue(Rvalue),
@@ -92,10 +92,10 @@ impl Builder<'_> {
             typed_ast::PlaceKind::Index(base, index) => {
                 let base = self.place(base);
                 let index = self.expr_into_temp(index);
-                let len = self.assign_to_temp(place.loc, Type::UINT, Rvalue::Len(base.clone()));
+                let len = self.assign_to_temp(place.loc, TypeKind::UINT, Rvalue::Len(base.clone()));
                 let in_bounds = self.assign_to_temp(
                     place.loc,
-                    Type::Bool,
+                    TypeKind::Bool,
                     Self::binary_op_rvalue(
                         mir::BinaryOp::Lesser,
                         Operand::Load(Place::local(index)),
@@ -263,7 +263,7 @@ impl Builder<'_> {
     }
     pub(super) fn builtin_call(
         &mut self,
-        ty: &Type,
+        ty: &TypeKind,
         builtin: Builtin,
         args: &[Expr],
     ) -> BuiltinResult {
@@ -274,7 +274,7 @@ impl Builder<'_> {
         match builtin {
             Builtin::ArrayRepeat => {
                 let [value, count] = operands.try_into().unwrap();
-                let Type::UINT = args[1].ty else {
+                let TypeKind::UINT = args[1].ty else {
                     unreachable!()
                 };
                 let ty = ty.as_array().unwrap().clone();
@@ -282,7 +282,7 @@ impl Builder<'_> {
             }
             Builtin::ZeroExtend => {
                 let [operand] = operands.try_into().unwrap();
-                let Type::Int(kind) = ty else { unreachable!() };
+                let TypeKind::Int(kind) = ty else { unreachable!() };
                 BuiltinResult::Rvalue(Rvalue::Cast(
                     mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendByteTo(*kind)),
                     operand,
@@ -290,7 +290,7 @@ impl Builder<'_> {
             }
             Builtin::BoxAlloc => {
                 let [operand] = operands.try_into().unwrap();
-                let Type::Box(ty) = ty else { unreachable!() };
+                let TypeKind::Box(ty) = ty else { unreachable!() };
                 BuiltinResult::Rvalue(Rvalue::AllocateBox((**ty).clone(), operand))
             }
             Builtin::Len => {
@@ -370,7 +370,7 @@ impl Builder<'_> {
                     .map(|field| field_map.remove(&field).unwrap())
                     .collect::<IndexVec<FieldId, _>>();
 
-                let Type::Record(ref rec_fields) = expr.ty else {
+                let TypeKind::Record(ref rec_fields) = expr.ty else {
                     unreachable!("Should be a record")
                 };
                 let field_names = rec_fields.iter().map(|field| field.name).collect();
@@ -385,7 +385,7 @@ impl Builder<'_> {
                 [self.operand(value)].into(),
             ),
             ExprKind::Call(callee, args) => match &callee.ty {
-                Type::Function(function_ty) => {
+                TypeKind::Function(function_ty) => {
                     let FunctionType { .. } = function_ty;
                     let callee_value = self.operand(callee);
                     let arg_values = args.iter().map(|arg| self.operand(arg)).collect::<Vec<_>>();
@@ -424,7 +424,7 @@ impl Builder<'_> {
                         );
                         let overflow = self.assign_binary_result(
                             expr.loc,
-                            Type::Bool,
+                            TypeKind::Bool,
                             mir::BinaryOp::BitwiseAnd,
                             Operand::Load(Place::local(is_left_min)),
                             Operand::Load(Place::local(is_right_neg_1)),
@@ -480,7 +480,7 @@ impl Builder<'_> {
                 };
                 let checked_result = self.assign_to_temp(
                     expr.loc,
-                    Type::pair(expr.ty.clone(), Type::Bool),
+                    TypeKind::pair(expr.ty.clone(), TypeKind::Bool),
                     Rvalue::Binary(
                         mir::BinaryOp::Overflow(overflow_op),
                         Box::new((left_operand, right_operand)),

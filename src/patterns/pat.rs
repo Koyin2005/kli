@@ -4,7 +4,7 @@ use crate::{
     collect::CtxtRef,
     def_ids::DefId,
     patterns::ctors::{Constructor, ConstructorSet, constructors_of_ty, fields_of},
-    types::Type,
+    types::TypeKind,
 };
 #[derive(Clone)]
 pub struct PatWithIndex {
@@ -13,12 +13,12 @@ pub struct PatWithIndex {
 }
 #[derive(Clone)]
 pub struct Pat {
-    pub ty: Type,
+    pub ty: TypeKind,
     pub constructor: Constructor,
     pub fields: Vec<PatWithIndex>,
 }
 impl Pat {
-    pub fn wildcard(ty: Type) -> Self {
+    pub fn wildcard(ty: TypeKind) -> Self {
         Self {
             ty,
             constructor: Constructor::Wildcard,
@@ -55,8 +55,8 @@ impl Pat {
             Constructor::Record => {
                 use crate::typed_ast::FieldId;
                 let (fields, brackets): (&mut dyn Fn(FieldId) -> _, _) = match &self.ty {
-                    Type::Record(fields) => (&mut |i| Some(fields[i].name), ("{", "}")),
-                    &Type::Named(id, ..) => (
+                    TypeKind::Record(fields) => (&mut |i| Some(fields[i].name), ("{", "}")),
+                    &TypeKind::Named(id, ..) => (
                         &mut move |i| {
                             Some(crate::types::FieldName::Named(
                                 ctxt.type_def(id).fields()[i].name,
@@ -64,7 +64,7 @@ impl Pat {
                         },
                         ("{", "}"),
                     ),
-                    Type::Tuple(fields) => (
+                    TypeKind::Tuple(fields) => (
                         &mut |_| None,
                         ("(", if fields.len() == 1 { ",)" } else { ")" }),
                     ),
@@ -93,7 +93,7 @@ impl Pat {
 pub fn missing_patterns(
     from_id: DefId,
     ctxt: CtxtRef<'_>,
-    ty: &[Type; 1],
+    ty: &[TypeKind; 1],
     patterns: &mut dyn Iterator<Item = Pat>,
 ) -> Vec<Pat> {
     let missing =
@@ -104,7 +104,7 @@ pub fn missing_patterns(
         .collect()
 }
 
-fn specialize(constructor: Constructor, fields: &[Type], matrix: Vec<Vec<Pat>>) -> Vec<Vec<Pat>> {
+fn specialize(constructor: Constructor, fields: &[TypeKind], matrix: Vec<Vec<Pat>>) -> Vec<Vec<Pat>> {
     matrix
         .into_iter()
         .filter_map(|mut row| {
@@ -184,7 +184,7 @@ fn split_constructors(
 fn missing_patterns_inner(
     from_id: DefId,
     ctxt: CtxtRef<'_>,
-    tys: &'_ [Type],
+    tys: &'_ [TypeKind],
     matrix: Vec<Vec<Pat>>,
 ) -> Vec<Vec<Pat>> {
     let Some(head) = tys.first() else {

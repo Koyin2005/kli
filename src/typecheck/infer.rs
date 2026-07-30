@@ -1,11 +1,11 @@
 use crate::{
     index_vec::IndexVec,
     src_loc::SrcLoc,
-    types::{FunctionType, GenericArg, GenericArgs, IntegerKind, RecordField, Type, TypeMap},
+    types::{FunctionType, GenericArg, GenericArgs, IntegerKind, RecordField, TypeKind, TypeMap},
 };
 #[derive(Debug)]
 pub struct TypeVarInfo {
-    ty: Option<Type>,
+    ty: Option<TypeKind>,
     loc: SrcLoc,
 }
 #[derive(Default)]
@@ -32,7 +32,7 @@ impl TypeInfer {
             .filter_map(|var| var.ty.is_none().then_some(var.loc))
             .collect()
     }
-    pub fn simplify_type(&self, ty: Type) -> Type {
+    pub fn simplify_type(&self, ty: TypeKind) -> TypeKind {
         let Ok(ty) = Simplify(self).map_type(ty);
         ty
     }
@@ -50,27 +50,27 @@ impl TypeInfer {
             .map(|(arg1, arg2)| Some(GenericArg(self.unify_ty(arg1.0, arg2.0)?)))
             .collect::<Option<GenericArgs>>()
     }
-    pub fn unify_ty(&mut self, ty1: Type, ty2: Type) -> Option<Type> {
+    pub fn unify_ty(&mut self, ty1: TypeKind, ty2: TypeKind) -> Option<TypeKind> {
         match (ty1, ty2) {
-            (ty @ Type::Int(IntegerKind::Signed), Type::Int(IntegerKind::Signed))
-            | (ty @ Type::Int(IntegerKind::Unsigned), Type::Int(IntegerKind::Unsigned))
-            | (ty @ Type::Bool, Type::Bool)
-            | (ty @ Type::Unknown, Type::Unknown)
-            | (ty @ Type::Char, Type::Char)
-            | (ty @ Type::Byte, Type::Byte)
-            | (ty @ Type::Never, Type::Never)
-            | (ty @ Type::String, Type::String) => Some(ty),
-            (Type::Param(name1, index1), Type::Param(name2, index2)) if index1 == index2 => {
+            (ty @ TypeKind::Int(IntegerKind::Signed), TypeKind::Int(IntegerKind::Signed))
+            | (ty @ TypeKind::Int(IntegerKind::Unsigned), TypeKind::Int(IntegerKind::Unsigned))
+            | (ty @ TypeKind::Bool, TypeKind::Bool)
+            | (ty @ TypeKind::Unknown, TypeKind::Unknown)
+            | (ty @ TypeKind::Char, TypeKind::Char)
+            | (ty @ TypeKind::Byte, TypeKind::Byte)
+            | (ty @ TypeKind::Never, TypeKind::Never)
+            | (ty @ TypeKind::String, TypeKind::String) => Some(ty),
+            (TypeKind::Param(name1, index1), TypeKind::Param(name2, index2)) if index1 == index2 => {
                 assert_eq!(name1, name2);
-                Some(Type::Param(name1, index1))
+                Some(TypeKind::Param(name1, index1))
             }
-            (Type::Array(ty1), Type::Array(ty2)) => self
+            (TypeKind::Array(ty1), TypeKind::Array(ty2)) => self
                 .unify_ty(*ty1, *ty2)
-                .map(|ty| Type::Array(Box::new(ty))),
-            (Type::Box(ty1), Type::Box(ty2)) => {
-                self.unify_ty(*ty1, *ty2).map(|ty| Type::Box(Box::new(ty)))
+                .map(|ty| TypeKind::Array(Box::new(ty))),
+            (TypeKind::Box(ty1), TypeKind::Box(ty2)) => {
+                self.unify_ty(*ty1, *ty2).map(|ty| TypeKind::Box(Box::new(ty)))
             }
-            (Type::Record(fields1), Type::Record(fields2)) if fields1.len() == fields2.len() => {
+            (TypeKind::Record(fields1), TypeKind::Record(fields2)) if fields1.len() == fields2.len() => {
                 fields1
                     .into_iter()
                     .zip(fields2)
@@ -86,17 +86,17 @@ impl TypeInfer {
                         }
                     })
                     .collect::<Option<IndexVec<_, _>>>()
-                    .map(Type::Record)
+                    .map(TypeKind::Record)
             }
-            (Type::Tuple(fields1), Type::Tuple(fields2)) if fields1.len() == fields2.len() => {
+            (TypeKind::Tuple(fields1), TypeKind::Tuple(fields2)) if fields1.len() == fields2.len() => {
                 fields1
                     .into_iter()
                     .zip(fields2)
                     .map(|(field1, field2)| self.unify_ty(field1, field2))
                     .collect::<Option<_>>()
-                    .map(Type::Tuple)
+                    .map(TypeKind::Tuple)
             }
-            (Type::Function(function1), Type::Function(function2))
+            (TypeKind::Function(function1), TypeKind::Function(function2))
                 if function1.params.len() == function2.params.len() =>
             {
                 let params = function1
@@ -106,17 +106,17 @@ impl TypeInfer {
                     .map(|(ty1, ty2)| self.unify_ty(ty1, ty2))
                     .collect::<Option<Vec<_>>>()?;
                 let return_ty = self.unify_ty(*function1.return_type, *function2.return_type)?;
-                Some(Type::Function(FunctionType {
+                Some(TypeKind::Function(FunctionType {
                     params,
                     return_type: Box::new(return_ty),
                 }))
             }
-            (Type::Named(id1, name, args1), Type::Named(id2, _, args2)) if id1 == id2 => {
+            (TypeKind::Named(id1, name, args1), TypeKind::Named(id2, _, args2)) if id1 == id2 => {
                 let args = self.unify_generic_args(args1, args2)?;
-                Some(Type::Named(id1, name, args))
+                Some(TypeKind::Named(id1, name, args))
             }
-            (Type::Infer(var1), Type::Infer(var2)) if var1 == var2 => Some(Type::Infer(var1)),
-            (Type::Infer(var), ty) | (ty, Type::Infer(var)) => match &mut self.type_vars[var] {
+            (TypeKind::Infer(var1), TypeKind::Infer(var2)) if var1 == var2 => Some(TypeKind::Infer(var1)),
+            (TypeKind::Infer(var), ty) | (ty, TypeKind::Infer(var)) => match &mut self.type_vars[var] {
                 TypeVarInfo {
                     ty: Some(entry), ..
                 } => {
@@ -132,20 +132,20 @@ impl TypeInfer {
             },
             //This will fail to compile if new variants are not matched
             (
-                Type::Int(IntegerKind::Signed | IntegerKind::Unsigned)
-                | Type::Bool
-                | Type::Unknown
-                | Type::Char
-                | Type::Param(..)
-                | Type::Function(..)
-                | Type::Byte
-                | Type::Record(..)
-                | Type::Named(..)
-                | Type::Never
-                | Type::Tuple(_)
-                | Type::Array(_)
-                | Type::String
-                | Type::Box(_),
+                TypeKind::Int(IntegerKind::Signed | IntegerKind::Unsigned)
+                | TypeKind::Bool
+                | TypeKind::Unknown
+                | TypeKind::Char
+                | TypeKind::Param(..)
+                | TypeKind::Function(..)
+                | TypeKind::Byte
+                | TypeKind::Record(..)
+                | TypeKind::Named(..)
+                | TypeKind::Never
+                | TypeKind::Tuple(_)
+                | TypeKind::Array(_)
+                | TypeKind::String
+                | TypeKind::Box(_),
                 _,
             ) => None,
         }
@@ -155,8 +155,8 @@ impl TypeInfer {
 struct Simplify<'a>(&'a TypeInfer);
 impl TypeMap for Simplify<'_> {
     type Error = std::convert::Infallible;
-    fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
-        let Type::Infer(var) = ty else {
+    fn map_type(&mut self, ty: TypeKind) -> Result<TypeKind, Self::Error> {
+        let TypeKind::Infer(var) = ty else {
             return self.super_map_type(ty);
         };
         if let TypeVarInfo {

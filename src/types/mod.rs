@@ -19,11 +19,11 @@ pub enum TagType {
     Never,
 }
 impl TagType {
-    pub fn into_type(self) -> Type {
+    pub fn into_type(self) -> TypeKind {
         match self {
-            Self::Never => Type::Never,
-            Self::Byte => Type::Byte,
-            Self::Uint => Type::UINT,
+            Self::Never => TypeKind::Never,
+            Self::Byte => TypeKind::Byte,
+            Self::Uint => TypeKind::UINT,
         }
     }
 }
@@ -37,12 +37,12 @@ pub struct GenericParam {
     pub kind: GenericKind,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct GenericArg(pub Type);
+pub struct GenericArg(pub TypeKind);
 impl GenericArg {
-    pub const fn from_type(ty: Type) -> Self {
+    pub const fn from_type(ty: TypeKind) -> Self {
         Self(ty)
     }
-    pub fn expect_ty(&self) -> &Type {
+    pub fn expect_ty(&self) -> &TypeKind {
         &self.0
     }
 }
@@ -82,11 +82,11 @@ impl Display for DisplayGenericArgs<'_> {
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct FunctionSig {
-    pub params: Vec<Type>,
-    pub return_type: Type,
+    pub params: Vec<TypeKind>,
+    pub return_type: TypeKind,
 }
 impl FunctionSig {
-    pub fn new(params: Vec<Type>, return_type: Type) -> Self {
+    pub fn new(params: Vec<TypeKind>, return_type: TypeKind) -> Self {
         Self {
             params,
             return_type,
@@ -101,11 +101,11 @@ impl FunctionSig {
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct FunctionType {
-    pub params: Vec<Type>,
-    pub return_type: Box<Type>,
+    pub params: Vec<TypeKind>,
+    pub return_type: Box<TypeKind>,
 }
 impl FunctionType {
-    pub fn new_data(params: Vec<Type>, return_type: Type) -> Self {
+    pub fn new_data(params: Vec<TypeKind>, return_type: TypeKind) -> Self {
         Self {
             params,
             return_type: Box::new(return_type),
@@ -140,7 +140,7 @@ impl GenericArgs {
     pub fn from_single(arg: GenericArg) -> Self {
         Self(vec![arg])
     }
-    pub fn from_type(arg: Type) -> Self {
+    pub fn from_type(arg: TypeKind) -> Self {
         Self(vec![GenericArg::from_type(arg)])
     }
     pub fn combine(mut self, rest: Self) -> Self {
@@ -182,7 +182,7 @@ pub type GenericArgsRef<'a> = &'a [GenericArg];
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct RecordField {
     pub name: FieldName,
-    pub ty: Type,
+    pub ty: TypeKind,
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
 pub enum IntegerKind {
@@ -195,8 +195,9 @@ impl IntegerKind {
     }
 }
 
+
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
-pub enum Type {
+pub enum TypeKind {
     Infer(usize),
     Unknown,
     Int(IntegerKind),
@@ -206,14 +207,14 @@ pub enum Type {
     Never,
     Param(Symbol, usize),
     Function(FunctionType),
-    Tuple(Vec<Type>),
+    Tuple(Vec<TypeKind>),
     Record(IndexVec<FieldId, RecordField>),
-    Array(Box<Type>),
+    Array(Box<TypeKind>),
     Named(DefId, Symbol, GenericArgs),
     String,
-    Box(Box<Type>),
+    Box(Box<TypeKind>),
 }
-impl Type {
+impl TypeKind {
     pub const UNIT: Self = Self::Tuple(Vec::new());
     pub const UINT: Self = Self::Int(IntegerKind::Unsigned);
     pub const INT: Self = Self::Int(IntegerKind::Signed);
@@ -233,8 +234,8 @@ impl Type {
     pub const fn is_builtin_scalar(&self) -> bool {
         matches!(self, Self::Int(_) | Self::Bool | Self::Byte | Self::Char)
     }
-    pub fn as_array(&self) -> Option<&Type> {
-        let Type::Array(element) = self else {
+    pub fn as_array(&self) -> Option<&TypeKind> {
+        let TypeKind::Array(element) = self else {
             return None;
         };
         Some(element)
@@ -243,7 +244,7 @@ impl Type {
         Self::Array(Box::new(element))
     }
     pub fn string(_: CtxtRef<'_>) -> Self {
-        Type::String
+        TypeKind::String
     }
     pub fn as_named(&self) -> Option<(DefId, Symbol, GenericArgsRef<'_>)> {
         let Self::Named(id, name, args) = self else {
@@ -270,7 +271,7 @@ impl Type {
             return_type: Box::new(return_ty),
         })
     }
-    pub fn field_info(&self, field_id: FieldId, ctxt: CtxtRef<'_>) -> Option<(Type, FieldName)> {
+    pub fn field_info(&self, field_id: FieldId, ctxt: CtxtRef<'_>) -> Option<(TypeKind, FieldName)> {
         match self {
             Self::Record(fields) => fields
                 .get(field_id)
@@ -293,7 +294,7 @@ impl Type {
             return_type: Box::new(return_type),
         })
     }
-    pub fn pair(first: Type, second: Type) -> Self {
+    pub fn pair(first: TypeKind, second: TypeKind) -> Self {
         Self::tuple([first, second])
     }
     pub fn tuple(field_tys: impl IntoIterator<Item = Self>) -> Self {
@@ -309,7 +310,7 @@ impl Type {
         let [GenericArg(ty)] = args.try_into().unwrap();
         Ok(ty)
     }
-    pub fn as_box(&self, ctxt: CtxtRef<'_>) -> Option<&Type> {
+    pub fn as_box(&self, ctxt: CtxtRef<'_>) -> Option<&TypeKind> {
         use crate::lang_items::LangItem;
         let &Self::Named(id, _, ref args) = self else {
             return None;
@@ -359,16 +360,16 @@ impl Type {
     }
 }
 
-impl Display for Type {
+impl Display for TypeKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Box(ty) => {
                 write!(f, "Box[{ty}]")
             }
             Self::String => f.pad("string"),
-            Type::Byte => f.pad("byte"),
-            Type::Never => f.pad("never"),
-            Type::Record(fields) => {
+            TypeKind::Byte => f.pad("byte"),
+            TypeKind::Never => f.pad("never"),
+            TypeKind::Record(fields) => {
                 f.pad("{")?;
                 let mut first = true;
                 for field in fields {
@@ -380,7 +381,7 @@ impl Display for Type {
                 }
                 f.pad("}")
             }
-            Type::Tuple(fields) => {
+            TypeKind::Tuple(fields) => {
                 f.pad("(")?;
                 let mut first = true;
                 for field in fields {
@@ -395,16 +396,16 @@ impl Display for Type {
                 }
                 f.pad(")")
             }
-            Type::Char => f.pad("char"),
-            Type::Bool => f.pad("bool"),
-            Type::Int(kind) => match kind {
+            TypeKind::Char => f.pad("char"),
+            TypeKind::Bool => f.pad("bool"),
+            TypeKind::Int(kind) => match kind {
                 IntegerKind::Signed => f.pad("int"),
                 IntegerKind::Unsigned => f.pad("uint"),
             },
-            Type::Unknown => f.pad("{unknown}"),
-            Type::Infer(_) => f.pad("_"),
-            &Type::Param(name, _) => write!(f, "{}", name),
-            Type::Function(FunctionType {
+            TypeKind::Unknown => f.pad("{unknown}"),
+            TypeKind::Infer(_) => f.pad("_"),
+            &TypeKind::Param(name, _) => write!(f, "{}", name),
+            TypeKind::Function(FunctionType {
                 params,
                 return_type,
             }) => {
@@ -419,50 +420,50 @@ impl Display for Type {
                 }
                 write!(f, ") -> {}", return_type)
             }
-            Type::Named(_, name, args) => {
+            TypeKind::Named(_, name, args) => {
                 write!(f, "{}{}", name, display_generic_args(args))
             }
-            Type::Array(ty) => write!(f, "array[{}]", ty),
+            TypeKind::Array(ty) => write!(f, "array[{}]", ty),
         }
     }
 }
 pub trait TypeMap {
     type Error;
-    fn super_map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
+    fn super_map_type(&mut self, ty: TypeKind) -> Result<TypeKind, Self::Error> {
         match ty {
-            Type::String
-            | Type::Bool
-            | Type::Char
-            | Type::Int(_)
-            | Type::Unknown
-            | Type::Byte
-            | Type::Infer(_)
-            | Type::Param(..)
-            | Type::Never => Ok(ty),
-            Type::Function(function_type) => {
-                Ok(Type::Function(self.map_function_type(function_type)?))
+            TypeKind::String
+            | TypeKind::Bool
+            | TypeKind::Char
+            | TypeKind::Int(_)
+            | TypeKind::Unknown
+            | TypeKind::Byte
+            | TypeKind::Infer(_)
+            | TypeKind::Param(..)
+            | TypeKind::Never => Ok(ty),
+            TypeKind::Function(function_type) => {
+                Ok(TypeKind::Function(self.map_function_type(function_type)?))
             }
-            Type::Tuple(fields) => Ok(Type::Tuple(
+            TypeKind::Tuple(fields) => Ok(TypeKind::Tuple(
                 fields
                     .into_iter()
                     .map(|field| self.map_type(field))
                     .collect::<Result<_, _>>()?,
             )),
-            Type::Record(fields) => Ok(Type::Record(
+            TypeKind::Record(fields) => Ok(TypeKind::Record(
                 fields
                     .into_iter()
                     .map(|field| self.map_field(field))
                     .collect::<Result<_, _>>()?,
             )),
-            Type::Named(id, name, args) => Ok(Type::Named(
+            TypeKind::Named(id, name, args) => Ok(TypeKind::Named(
                 id,
                 name,
                 args.into_iter()
                     .map(|arg| arg.apply_map(self))
                     .collect::<Result<GenericArgs, _>>()?,
             )),
-            Type::Array(ty) => Ok(Type::Array(Box::new(self.map_type(*ty)?))),
-            Type::Box(ty) => Ok(Type::Box(Box::new(self.map_type(*ty)?))),
+            TypeKind::Array(ty) => Ok(TypeKind::Array(Box::new(self.map_type(*ty)?))),
+            TypeKind::Box(ty) => Ok(TypeKind::Box(Box::new(self.map_type(*ty)?))),
         }
     }
     fn super_map_function_type(
@@ -483,7 +484,7 @@ pub trait TypeMap {
         field.ty = ty;
         Ok(field)
     }
-    fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
+    fn map_type(&mut self, ty: TypeKind) -> Result<TypeKind, Self::Error> {
         self.super_map_type(ty)
     }
     fn map_field(&mut self, field: RecordField) -> Result<RecordField, Self::Error> {
@@ -503,7 +504,7 @@ pub trait TypeMappable {
         Self: Sized;
 }
 
-impl TypeMappable for Type {
+impl TypeMappable for TypeKind {
     fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         m.map_type(self)
     }

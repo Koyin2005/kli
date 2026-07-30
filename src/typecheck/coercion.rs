@@ -1,12 +1,12 @@
-use crate::{resolved_ast, typecheck::root::FunctionCtxt, typed_ast, types::Type};
+use crate::{resolved_ast, typecheck::root::FunctionCtxt, typed_ast, types::TypeKind};
 
 pub struct Coercion<'ctxt> {
-    target_ty: Option<Type>,
+    target_ty: Option<TypeKind>,
     exprs: Vec<typed_ast::Expr>,
     ctxt: &'ctxt FunctionCtxt<'ctxt>,
 }
 impl Coercion<'_> {
-    pub fn new<'a>(target_ty: Option<Type>, ctxt: &'a FunctionCtxt<'_>) -> Coercion<'a> {
+    pub fn new<'a>(target_ty: Option<TypeKind>, ctxt: &'a FunctionCtxt<'_>) -> Coercion<'a> {
         Coercion {
             target_ty,
             exprs: Vec::new(),
@@ -21,7 +21,7 @@ impl Coercion<'_> {
         );
     }
 
-    pub fn finish(self) -> (Option<Type>, Vec<typed_ast::Expr>) {
+    pub fn finish(self) -> (Option<TypeKind>, Vec<typed_ast::Expr>) {
         let Some(combined_ty) = self
             .ctxt
             .merge_ty(self.exprs.iter().map(|expr| expr.ty.clone()))

@@ -8,7 +8,7 @@ use crate::{
     ident::Ident,
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
-    types::{CaseId, GenericArgs, GenericKind, Type},
+    types::{CaseId, GenericArgs, GenericKind, TypeKind},
 };
 
 #[derive(Debug)]
@@ -18,7 +18,7 @@ pub struct PatternField {
 }
 #[derive(Debug)]
 pub struct Pattern {
-    pub ty: Type,
+    pub ty: TypeKind,
     pub loc: SrcLoc,
     pub kind: PatternKind,
 }
@@ -29,12 +29,12 @@ pub enum PatternKind {
     Int(u64),
     Bool(bool),
     Case(DefId, GenericArgs, CaseId, Option<Box<Pattern>>),
-    Binding(Mutable, Var, Box<Type>),
+    Binding(Mutable, Var, Box<TypeKind>),
     Record(Vec<PatternField>),
 }
 #[derive(Debug)]
 pub struct Place {
-    pub ty: Type,
+    pub ty: TypeKind,
     pub loc: SrcLoc,
     pub kind: PlaceKind,
 }
@@ -50,7 +50,7 @@ pub enum PlaceKind {
 #[derive(Debug, Clone)]
 pub struct Capture {
     pub var: Var,
-    pub ty: Type,
+    pub ty: TypeKind,
 }
 #[derive(Debug)]
 pub struct LambdaParam {
@@ -62,8 +62,8 @@ pub struct Lambda {
     pub id: DefId,
     pub loc: SrcLoc,
     pub params: Vec<LambdaParam>,
-    pub param_tys: Vec<Type>,
-    pub return_type: Box<Type>,
+    pub param_tys: Vec<TypeKind>,
+    pub return_type: Box<TypeKind>,
 }
 #[derive(Debug)]
 pub struct LetBinding {
@@ -87,7 +87,7 @@ pub struct BlockBody {
 }
 #[derive(Debug)]
 pub struct Expr {
-    pub ty: Type,
+    pub ty: TypeKind,
     pub loc: SrcLoc,
     pub kind: ExprKind,
 }
@@ -168,7 +168,7 @@ pub struct GenericParam {
 pub struct Param {
     pub name: Ident,
     pub var: Option<VarId>,
-    pub ty: Type,
+    pub ty: TypeKind,
 }
 impl Param {
     pub fn var(&self) -> Option<Var> {
@@ -177,7 +177,7 @@ impl Param {
 }
 pub struct Function {
     pub params: Vec<Param>,
-    pub return_type: Type,
+    pub return_type: TypeKind,
     pub body: Option<Expr>,
 }
 

@@ -16,7 +16,7 @@ use crate::{
     monomorph::collect::{Instance, InstanceKind},
     scheme::Scheme,
     typed_ast::FieldId,
-    types::{CaseId, FunctionSig, GenericArgsRef, IntegerKind, Type},
+    types::{CaseId, FunctionSig, GenericArgsRef, IntegerKind, TypeKind},
 };
 use cranelift::{
     codegen::{
@@ -391,7 +391,7 @@ impl<'a> CodegenRoot<'a> {
 }
 #[derive(Debug, Clone)]
 struct OperandValue {
-    ty: Type,
+    ty: TypeKind,
     kind: OperandValueKind,
 }
 impl OperandValue {
@@ -454,11 +454,11 @@ enum ScalarType {
 
 #[derive(Debug, Clone)]
 enum CodegenPlace {
-    Ssa(Type, frontend::Variable),
+    Ssa(TypeKind, frontend::Variable),
     MemPlace(MemPlace),
 }
 impl CodegenPlace {
-    fn type_of(&self) -> Type {
+    fn type_of(&self) -> TypeKind {
         match &self {
             CodegenPlace::MemPlace(place) => place.ty.clone(),
             CodegenPlace::Ssa(ty, ..) => ty.clone(),
@@ -467,20 +467,20 @@ impl CodegenPlace {
 }
 #[derive(Clone, Debug)]
 struct MemPlace {
-    ty: Type,
+    ty: TypeKind,
     layout: layout::Layout,
     base_ptr: codegen::ir::Value,
     offset: i32,
     scalar: Option<ScalarType>,
 }
 impl MemPlace {
-    fn new(ptr: codegen::ir::Value, layout: layout::Layout, ty: Type) -> Self {
+    fn new(ptr: codegen::ir::Value, layout: layout::Layout, ty: TypeKind) -> Self {
         Self::new_with_offset(ptr, layout, ty, 0)
     }
     fn new_with_offset(
         ptr: codegen::ir::Value,
         layout: layout::Layout,
-        ty: Type,
+        ty: TypeKind,
         offset: i32,
     ) -> Self {
         Self {
@@ -501,7 +501,7 @@ impl MemPlace {
         (self.base_ptr, self.offset)
     }
     fn project_downcast(self, ctxt: CtxtRef<'_>, case: CaseId) -> Self {
-        let Type::Named(id, _, args) = self.ty else {
+        let TypeKind::Named(id, _, args) = self.ty else {
             unreachable!("Should be named")
         };
 
@@ -530,9 +530,9 @@ impl MemPlace {
             ),
             LayoutKind::Variant { tag, cases } if field == FieldId::FIRST_FIELD => (
                 if cases.len() < 256 {
-                    Type::Byte
+                    TypeKind::Byte
                 } else {
-                    Type::UINT
+                    TypeKind::UINT
                 },
                 0,
                 match tag {
@@ -576,7 +576,7 @@ pub struct FunctionCodegen<'r, M: Module> {
     ctxt: CtxtRef<'r>,
     builder: cranelift::frontend::FunctionBuilder<'r>,
     local_info: locals::Locals,
-    return_ty: Type,
+    return_ty: TypeKind,
     abi: &'r CallAbi,
     constants: &'r mut Constants,
     functions: &'r FunctionMap,
@@ -768,7 +768,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         }
     }
     #[track_caller]
-    fn layout_for(&self, ty: &Type) -> layout::Layout {
+    fn layout_for(&self, ty: &TypeKind) -> layout::Layout {
         self.ctxt.layout_of(ty).expect("should be monoed enough")
     }
     fn load_array_ptr(&mut self, place: MemPlace) -> codegen::ir::Value {
@@ -784,7 +784,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             .ins()
             .load(ir::types::I64, MemFlagsData::new(), ptr, offset)
     }
-    fn eval_place(&mut self, place: &mir::Place) -> Result<CodegenPlace, Type> {
+    fn eval_place(&mut self, place: &mir::Place) -> Result<CodegenPlace, TypeKind> {
         let (ty, ptr, projections) = match place.base {
             PlaceBase::Local(local) => {
                 let local_info = &self.local_info.info_for(local);
@@ -903,14 +903,14 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         }
         Ok(CodegenPlace::MemPlace(place_value))
     }
-    fn build_int_const(&mut self, ty: &Type, value: i128) -> codegen::ir::Value {
+    fn build_int_const(&mut self, ty: &TypeKind, value: i128) -> codegen::ir::Value {
         let (ty, value, signed) = match ty {
-            Type::Bool | Type::Byte => (
+            TypeKind::Bool | TypeKind::Byte => (
                 codegen::ir::types::I8,
                 codegen::ir::immediates::Imm64::new(value as i64),
                 false,
             ),
-            Type::Int(kind) => (
+            TypeKind::Int(kind) => (
                 codegen::ir::types::I64,
                 codegen::ir::immediates::Imm64::new(value as i64),
                 kind.is_signed(),
@@ -989,7 +989,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
     fn build_string_value(&mut self, string: String) -> (ir::Value, ir::Value) {
         let len: u64 = string.len().try_into().unwrap();
         let first = self.alloc_constant(string.into_bytes().into_boxed_slice());
-        let second = self.build_int_const(&Type::UINT, len.into());
+        let second = self.build_int_const(&TypeKind::UINT, len.into());
         (first, second)
     }
     fn eval_operand(&mut self, operand: &mir::Operand) -> OperandValue {
@@ -1056,11 +1056,11 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             &[size_in_bytes, align_in_bytes],
         )
     }
-    fn codgen_static_size_alloc_call(&mut self, ty: &Type, count: u64) -> ir::Value {
+    fn codgen_static_size_alloc_call(&mut self, ty: &TypeKind, count: u64) -> ir::Value {
         let ty_layout = self.layout_for(ty);
         let total_size = ty_layout.size.mul(count).in_bytes();
-        let size_val = self.build_int_const(&Type::UINT, total_size.into());
-        let align = self.build_int_const(&Type::UINT, ty_layout.alignment.in_bytes().into());
+        let size_val = self.build_int_const(&TypeKind::UINT, total_size.into());
+        let align = self.build_int_const(&TypeKind::UINT, ty_layout.alignment.in_bytes().into());
         self.codegen_alloc_call(size_val, align)
     }
     fn print_string(&mut self, ptr: ir::Value, len: ir::Value) {
@@ -1111,7 +1111,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 (operand.ty.clone(), Err(operand))
             }
         };
-        let Type::Function(sig) = ty else {
+        let TypeKind::Function(sig) = ty else {
             unreachable!()
         };
         let args: Vec<OperandValue> = args
@@ -1219,21 +1219,21 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         let right_value = right_operand.expect_immediate(self);
         let (left, right) = match binary_op {
             BinaryOp::Overflow(op) => {
-                let Type::Int(kind) = left_operand.ty else {
+                let TypeKind::Int(kind) = left_operand.ty else {
                     unreachable!()
                 };
                 let (left, right) = self.build_overflow_op(op, kind, left_value, right_value);
                 (left, Some(right))
             }
             BinaryOp::Wrapping(op) => {
-                let Type::Int(kind) = left_operand.ty else {
+                let TypeKind::Int(kind) = left_operand.ty else {
                     unreachable!()
                 };
                 let (left, _) = self.build_overflow_op(op, kind, left_value, right_value);
                 (left, None)
             }
             BinaryOp::Divide => {
-                let Type::Int(kind) = left_operand.ty else {
+                let TypeKind::Int(kind) = left_operand.ty else {
                     unreachable!()
                 };
                 (
@@ -1245,7 +1245,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 )
             }
             BinaryOp::Greater => {
-                let Type::Int(kind) = left_operand.ty else {
+                let TypeKind::Int(kind) = left_operand.ty else {
                     unreachable!()
                 };
                 (
@@ -1261,7 +1261,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 )
             }
             BinaryOp::Lesser => {
-                let Type::Int(kind) = left_operand.ty else {
+                let TypeKind::Int(kind) = left_operand.ty else {
                     unreachable!()
                 };
                 (
@@ -1286,10 +1286,10 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         };
         let place = self.eval_place(place).unwrap();
         if let Some(right) = right {
-            let Type::Tuple(fields) = place.type_of().clone() else {
+            let TypeKind::Tuple(fields) = place.type_of().clone() else {
                 unreachable!()
             };
-            let Some(&Type::Int(_)) = fields.first() else {
+            let Some(&TypeKind::Int(_)) = fields.first() else {
                 unreachable!()
             };
             let offset = layout::INT_SIZE;
@@ -1298,7 +1298,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
             self.store_immediate(place, left);
         }
     }
-    fn codgen_box(&mut self, place: &mir::Place, ty: &Type, operand: &mir::Operand) {
+    fn codgen_box(&mut self, place: &mir::Place, ty: &TypeKind, operand: &mir::Operand) {
         let ty = Scheme::new(ty.clone()).bind(self.args);
         let ptr = self.codgen_static_size_alloc_call(&ty, 1);
         let value = self.eval_operand(operand);
@@ -1322,7 +1322,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 AggregateKind::Variant(id, case, args) => {
                     let type_def = self.ctxt.type_def(*id);
                     let ty =
-                        Scheme::new(Type::Named(*id, type_def.name, args.clone())).bind(self.args);
+                        Scheme::new(TypeKind::Named(*id, type_def.name, args.clone())).bind(self.args);
 
                     let name = type_def.case(*case).name;
                     let payload_place = place.clone().with_case_downcast(*case, name);
@@ -1359,9 +1359,9 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 let ty = Scheme::new(ty.clone()).bind(self.args);
                 let ty_layout = self.layout_for(&ty);
 
-                let byte_size = self.build_int_const(&Type::UINT, ty_layout.size.in_bytes().into());
+                let byte_size = self.build_int_const(&TypeKind::UINT, ty_layout.size.in_bytes().into());
                 let byte_align =
-                    self.build_int_const(&Type::UINT, ty_layout.alignment.in_bytes().into());
+                    self.build_int_const(&TypeKind::UINT, ty_layout.alignment.in_bytes().into());
                 let value = self.eval_operand(value);
                 let count = self.eval_operand(count).expect_immediate(self);
                 let byte_size = self.builder.ins().imul(byte_size, count);
@@ -1393,7 +1393,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 let loop_end = self.builder.create_block();
                 let loop_count = self.builder.declare_var(ir::types::I64);
                 {
-                    let zero_value = self.build_int_const(&Type::UINT, 0);
+                    let zero_value = self.build_int_const(&TypeKind::UINT, 0);
                     self.builder.def_var(loop_count, zero_value);
                     self.builder.ins().jump(loop_condition, &[]);
                 }
@@ -1423,7 +1423,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     let place_value = MemPlace::new(ptr, ty_layout.clone(), ty.clone());
                     self.store_operand_with_mem_place(place_value, value);
 
-                    let one_value = self.build_int_const(&Type::UINT, 1);
+                    let one_value = self.build_int_const(&TypeKind::UINT, 1);
                     let new_val = self.builder.ins().iadd(var_use, one_value);
                     self.builder.def_var(loop_count, new_val);
 
@@ -1439,11 +1439,11 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                 let len: u64 = fields.len().try_into().unwrap();
                 let ptr = self.codgen_static_size_alloc_call(&ty, len);
                 if ty_layout.is_zst() || fields.is_empty() {
-                    let len_value = self.build_int_const(&Type::UINT, len.into());
+                    let len_value = self.build_int_const(&TypeKind::UINT, len.into());
                     self.store_value(
                         place,
                         OperandValue {
-                            ty: Type::array(ty),
+                            ty: TypeKind::array(ty),
                             kind: OperandValueKind::Value(ScalarValue::pair(
                                 ptr,
                                 len_value,
@@ -1461,11 +1461,11 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     let value = self.eval_operand(operand);
                     self.store_operand_with_mem_place(place_value.offset_in_bytes(offset), value);
                 }
-                let len_value = self.build_int_const(&Type::UINT, len.into());
+                let len_value = self.build_int_const(&TypeKind::UINT, len.into());
                 self.store_value(
                     place,
                     OperandValue {
-                        ty: Type::array(ty),
+                        ty: TypeKind::array(ty),
                         kind: OperandValueKind::Value(ScalarValue::pair(
                             ptr,
                             len_value,
@@ -1680,11 +1680,11 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         if let Some(operand) = operand {
             let operand = self.eval_operand(operand);
             match operand.ty {
-                Type::Int(_) => {
+                TypeKind::Int(_) => {
                     let value = operand.expect_immediate(self);
                     self.codegen_direct_void_call(self.runtime_functions.print_int, &[value]);
                 }
-                Type::Bool => {
+                TypeKind::Bool => {
                     let value = operand.expect_immediate(self);
                     let true_value = self.build_string_value("true".to_string());
                     let false_value = self.build_string_value("false".to_string());
@@ -1699,7 +1699,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     );
                     self.print_string(first_value, second_value);
                 }
-                Type::String => {
+                TypeKind::String => {
                     let (first_val, second_val) = match operand.kind {
                         OperandValueKind::Indirect(CodegenPlace::MemPlace(place)) => {
                             let first_val = self.load_array_ptr(place.clone());
@@ -1753,12 +1753,12 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                     let code = TrapCode::user(1).unwrap();
                     //If it negates than we are asserting !operand instead of operand
                     let assert_success = if assert_kind.negate() {
-                        let cond_value = self.build_int_const(&Type::Bool, 0);
+                        let cond_value = self.build_int_const(&TypeKind::Bool, 0);
                         self.builder
                             .ins()
                             .icmp(ir::condcodes::IntCC::Equal, value, cond_value)
                     } else {
-                        let cond_value = self.build_int_const(&Type::Bool, 0);
+                        let cond_value = self.build_int_const(&TypeKind::Bool, 0);
                         self.builder
                             .ins()
                             .icmp(ir::condcodes::IntCC::NotEqual, value, cond_value)

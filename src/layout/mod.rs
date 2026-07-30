@@ -5,7 +5,7 @@ use crate::{
     collect::TypeDefKind,
     index_vec::IndexVec,
     typed_ast::FieldId,
-    types::{CaseId, IntegerKind, TagType, Type},
+    types::{CaseId, IntegerKind, TagType, TypeKind},
 };
 
 pub const BITS_IN_BYTE: u8 = 8;
@@ -280,7 +280,7 @@ impl std::fmt::Debug for LayoutError {
 fn variant_layout(
     ctxt: CtxtRef<'_>,
     tag_type: TagType,
-    cases: IndexVec<CaseId, Option<Type>>,
+    cases: IndexVec<CaseId, Option<TypeKind>>,
 ) -> Result<Layout, LayoutError> {
     if cases.is_empty() {
         return Ok(Layout::zst().uninhabited());
@@ -355,7 +355,7 @@ fn aggregate_layout(mut field_layouts: Vec<(FieldId, Layout)>) -> Result<Layout,
 }
 fn record_layout(
     ctxt: CtxtRef<'_>,
-    fields: IndexVec<FieldId, Cow<'_, Type>>,
+    fields: IndexVec<FieldId, Cow<'_, TypeKind>>,
 ) -> Result<Layout, LayoutError> {
     let field_layouts = fields
         .iter_enumerated()
@@ -363,29 +363,29 @@ fn record_layout(
         .collect::<Result<Vec<_>, _>>()?;
     aggregate_layout(field_layouts)
 }
-pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutError> {
+pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &TypeKind) -> Result<Layout, LayoutError> {
     Ok(match ty {
-        Type::Infer(_) | Type::Unknown => return Err(LayoutError::Unknown),
-        Type::Int(integer_kind) => Layout {
+        TypeKind::Infer(_) | TypeKind::Unknown => return Err(LayoutError::Unknown),
+        TypeKind::Int(integer_kind) => Layout {
             size: INT_SIZE,
             alignment: INT_ALIGN,
             kind: LayoutKind::Scalar(Scalar::Int64(*integer_kind)),
         },
-        Type::Bool => Layout {
+        TypeKind::Bool => Layout {
             size: Size::BYTE,
             alignment: Align::BYTE,
             kind: LayoutKind::Scalar(Scalar::Bool),
         },
-        Type::Char => Layout {
+        TypeKind::Char => Layout {
             size: Size::BYTE.mul(4),
             alignment: Align::FOUR_BYTE,
             kind: LayoutKind::Scalar(Scalar::Uint32),
         },
-        Type::Byte => Layout::BYTE,
-        Type::Never => Layout::zst().uninhabited(),
-        Type::Param(_, _) => return Err(LayoutError::TooGeneric),
-        Type::Function(_) | Type::Box(_) => Layout::pointer(true),
-        Type::Array(_) | Type::String => {
+        TypeKind::Byte => Layout::BYTE,
+        TypeKind::Never => Layout::zst().uninhabited(),
+        TypeKind::Param(_, _) => return Err(LayoutError::TooGeneric),
+        TypeKind::Function(_) | TypeKind::Box(_) => Layout::pointer(true),
+        TypeKind::Array(_) | TypeKind::String => {
             return aggregate_layout(vec![
                 (FieldId::new(0), Layout::pointer(true)),
                 (
@@ -394,10 +394,10 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
                 ),
             ]);
         }
-        Type::Tuple(fields) => {
+        TypeKind::Tuple(fields) => {
             return record_layout(ctxt, fields.iter().map(Cow::Borrowed).collect());
         }
-        Type::Record(fields) => {
+        TypeKind::Record(fields) => {
             return record_layout(
                 ctxt,
                 fields
@@ -406,7 +406,7 @@ pub fn calculate_layout(ctxt: CtxtRef<'_>, ty: &Type) -> Result<Layout, LayoutEr
                     .collect(),
             );
         }
-        Type::Named(id, .., args) => match ctxt.type_def(*id).kind {
+        TypeKind::Named(id, .., args) => match ctxt.type_def(*id).kind {
             TypeDefKind::Record(fields) => {
                 return record_layout(
                     ctxt,

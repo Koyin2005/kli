@@ -23,7 +23,7 @@ use crate::{
     typed_ast::FieldId,
     types::{
         self, CaseId, FunctionSig, GenericArg, GenericArgs, GenericArgsRef, GenericKind,
-        GenericParam, TagType, Type, lower::Lower,
+        GenericParam, TagType, TypeKind, lower::Lower,
     },
 };
 
@@ -53,7 +53,7 @@ pub struct Field {
     pub name: Symbol,
 }
 impl Field {
-    pub fn type_of(self, args: GenericArgsRef, ctxt: CtxtRef<'_>) -> Type {
+    pub fn type_of(self, args: GenericArgsRef, ctxt: CtxtRef<'_>) -> TypeKind {
         ctxt.type_of(self.id).bind(args)
     }
 }
@@ -68,8 +68,8 @@ impl Case {
     pub fn expect_field(self) -> Field {
         self.field.expect("should have a field")
     }
-    pub fn payload_type(self, args: GenericArgsRef<'_>, ctxt: CtxtRef<'_>) -> Type {
-        Type::tuple(
+    pub fn payload_type(self, args: GenericArgsRef<'_>, ctxt: CtxtRef<'_>) -> TypeKind {
+        TypeKind::tuple(
             self.field
                 .into_iter()
                 .map(|field| field.type_of(args, ctxt)),
@@ -186,14 +186,14 @@ impl Generics {
     pub fn instantiate(&self, infer: &mut TypeInfer, loc: SrcLoc) -> GenericArgs {
         self.kinds()
             .map(|kind| match kind {
-                GenericKind::Type => GenericArg(Type::Infer(infer.fresh_ty(loc))),
+                GenericKind::Type => GenericArg(TypeKind::Infer(infer.fresh_ty(loc))),
             })
             .collect()
     }
     pub fn instantiate_unknown(&self) -> GenericArgs {
         self.kinds()
             .map(|kind| match kind {
-                GenericKind::Type => GenericArg(Type::Unknown),
+                GenericKind::Type => GenericArg(TypeKind::Unknown),
             })
             .collect()
     }
@@ -202,7 +202,7 @@ impl Generics {
             .iter()
             .enumerate()
             .map(|(i, param)| match param.kind {
-                GenericKind::Type => GenericArg(Type::Param(param.name, i)),
+                GenericKind::Type => GenericArg(TypeKind::Param(param.name, i)),
             })
             .collect()
     }
@@ -217,7 +217,7 @@ pub struct GlobalContext {
     nodes: IndexVec<DefId, Node>,
     builtins: Builtins,
     std_lib: Cache<(), Option<DefId>>,
-    ty_cache: Cache<DefId, Scheme<Type>>,
+    ty_cache: Cache<DefId, Scheme<TypeKind>>,
     builtin: Cache<(), DefId>,
     config: Config,
 }
@@ -264,12 +264,12 @@ impl CtxtRef<'_> {
         use types::visit::Visit;
         struct RecursiveIndirection<'a>(CtxtRef<'a>, HashSet<DefId>, bool);
         impl<'a> Visit for RecursiveIndirection<'a> {
-            fn visit_type(&mut self, ty: &Type) {
+            fn visit_type(&mut self, ty: &TypeKind) {
                 if self.2 {
                     return;
                 }
                 match ty {
-                    Type::Named(id, _, args) => {
+                    TypeKind::Named(id, _, args) => {
                         if !self.1.insert(*id) {
                             self.2 = true;
                             return;
@@ -281,12 +281,12 @@ impl CtxtRef<'_> {
                             self.visit_type(&field.type_of(args, self.0));
                         }
                     }
-                    Type::Array(_) | Type::Box(_) => (),
+                    TypeKind::Array(_) | TypeKind::Box(_) => (),
                     _ => self.super_visit_type(ty),
                 }
             }
         }
-        let ty = Type::Named(
+        let ty = TypeKind::Named(
             id,
             self.expect_type(id).name.symbol,
             self.generics(id).instantiate_identity(),
@@ -334,14 +334,14 @@ impl CtxtRef<'_> {
             })
         })
     }
-    pub fn type_of(self, id: DefId) -> Scheme<Type> {
+    pub fn type_of(self, id: DefId) -> Scheme<TypeKind> {
         self.0.ty_cache.compute(id, |id| {
             Scheme::new(match self.node(id) {
                 Node::Case(case_def) => {
                     let parent_id = self.expect_parent(id);
                     let type_def = self.expect_type(parent_id);
                     let name = type_def.name;
-                    let variant_ty = Type::Named(
+                    let variant_ty = TypeKind::Named(
                         parent_id,
                         name.symbol,
                         self.generics(parent_id).instantiate_identity(),
@@ -350,20 +350,20 @@ impl CtxtRef<'_> {
                         self.type_of(inner)
                             .bind(&self.generics(parent_id).instantiate_identity())
                     }) {
-                        Type::new_function(vec![ty], variant_ty)
+                        TypeKind::new_function(vec![ty], variant_ty)
                     } else {
                         variant_ty
                     }
                 }
                 Node::Item(item) => match &item.kind {
-                    ItemKind::TypeDef(type_def) => Type::Named(
+                    ItemKind::TypeDef(type_def) => TypeKind::Named(
                         id,
                         type_def.name.symbol,
                         self.generics(id).instantiate_identity(),
                     ),
                     ItemKind::Function(_) => {
                         return self.signature_of(id).map(|signature| {
-                            Type::new_function(signature.params, signature.return_type)
+                            TypeKind::new_function(signature.params, signature.return_type)
                         });
                     }
                     ItemKind::Module(_) | ItemKind::Import(_) => {
@@ -380,7 +380,7 @@ impl CtxtRef<'_> {
                 Node::Impl(_) => panic!("Cannot get the type of impl"),
                 Node::Method(_) => {
                     return self.signature_of(id).map(|signature| {
-                        Type::new_function(signature.params, signature.return_type)
+                        TypeKind::new_function(signature.params, signature.return_type)
                     });
                 }
             })
@@ -626,7 +626,7 @@ impl CtxtRef<'_> {
     pub fn lang_items(self) -> LangItems {
         self.0.lang_items.compute((), |()| LangItems::collect(self))
     }
-    pub fn layout_of(self, ty: &Type) -> Result<Layout, crate::layout::LayoutError> {
+    pub fn layout_of(self, ty: &TypeKind) -> Result<Layout, crate::layout::LayoutError> {
         calculate_layout(self, ty)
     }
 }

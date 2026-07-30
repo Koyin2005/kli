@@ -6,7 +6,7 @@ use crate::{
     },
     src_loc::SrcLoc,
     typed_ast::{self, Lambda},
-    types::{FunctionType, GenericArgs, Type},
+    types::{FunctionType, GenericArgs, TypeKind},
 };
 
 impl Builder<'_> {
@@ -23,7 +23,7 @@ impl Builder<'_> {
             "Can only have one source for each body"
         );
     }
-    fn add_param_locals(&mut self, params: impl Iterator<Item = (LocalKind, Type)>) {
+    fn add_param_locals(&mut self, params: impl Iterator<Item = (LocalKind, TypeKind)>) {
         for (kind, ty) in params {
             self.new_local(ty, kind);
         }
@@ -50,7 +50,7 @@ impl Builder<'_> {
         builder.add_finished_body();
     }
     pub(super) fn lambda_code_constant(ctxt: CtxtRef<'_>, lambda: &Lambda) -> Constant {
-        let ty = Type::Function(FunctionType {
+        let ty = TypeKind::Function(FunctionType {
             params: lambda.param_tys.clone(),
             return_type: lambda.return_type.clone(),
         });

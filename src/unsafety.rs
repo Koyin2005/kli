@@ -5,10 +5,10 @@ use crate::{
     resolved_ast::AnnotationKind,
     typed_ast::{ExprKind, Function},
     typed_ast_visitor::{Visitor, walk_expr},
-    types::Type,
+    types::TypeKind,
 };
 
-pub fn transmutable(ctxt: CtxtRef<'_>, from: &Type, to: &Type) -> bool {
+pub fn transmutable(ctxt: CtxtRef<'_>, from: &TypeKind, to: &TypeKind) -> bool {
     match (from, to) {
         (from, to) if from == to => true,
         _ => match (ctxt.layout_of(from), ctxt.layout_of(to)) {

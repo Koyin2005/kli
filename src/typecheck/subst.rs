@@ -1,13 +1,13 @@
 use crate::{
     typecheck::infer::TypeInfer,
     typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
-    types::{GenericArgs, Type, visit::VisitMut},
+    types::{GenericArgs, TypeKind, visit::VisitMut},
 };
 
 impl VisitMut for TypeSubst<'_> {
-    fn visit_type(&mut self, ty: &mut Type) {
-        if let Type::Infer(var) = ty {
-            *ty = self.infer.simplify_type(Type::Infer(*var));
+    fn visit_type(&mut self, ty: &mut TypeKind) {
+        if let TypeKind::Infer(var) = ty {
+            *ty = self.infer.simplify_type(TypeKind::Infer(*var));
             return;
         }
         self.super_visit_type(ty);
@@ -20,7 +20,7 @@ impl<'a> TypeSubst<'a> {
     pub fn new(infer: &'a mut TypeInfer) -> Self {
         Self { infer }
     }
-    pub fn subst_type(&mut self, ty: &mut Type) {
+    pub fn subst_type(&mut self, ty: &mut TypeKind) {
         self.visit_type(ty);
     }
     pub fn subst_generic_args(&mut self, args: &mut GenericArgs) {

@@ -6,7 +6,7 @@ use crate::{
     src_loc::SrcLoc,
     typed_ast::{Expr, ExprKind, Pattern},
     typed_ast_visitor::{Visitor, walk_expr},
-    types::Type,
+    types::TypeKind,
 };
 pub struct PatternCheck<'ctxt> {
     diag: DiagnosticReporter,
@@ -63,7 +63,7 @@ fn check_patterns(
     ctxt: CtxtRef<'_>,
     diag: &mut DiagnosticReporter,
     loc: SrcLoc,
-    ty: &Type,
+    ty: &TypeKind,
     patterns: &[&Pattern],
 ) {
     let tys = [ty.clone()];

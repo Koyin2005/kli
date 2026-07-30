@@ -154,6 +154,6 @@ impl Ssa {
 }
 
 pub struct CodegenLocalInfo {
-    pub ty: types::Type,
+    pub ty: types::TypeKind,
     pub kind: LocalKind,
 }

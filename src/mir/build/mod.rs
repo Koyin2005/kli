@@ -8,7 +8,7 @@ use crate::{
     },
     resolved_ast::Var,
     src_loc::SrcLoc,
-    types::Type,
+    types::TypeKind,
 };
 mod expr;
 mod function;
@@ -25,7 +25,7 @@ impl<'ctxt> Builder<'ctxt> {
     pub fn new(
         mir_context: &'ctxt mut Context,
         source: BodySource,
-        return_type: Type,
+        return_type: TypeKind,
         ctxt: CtxtRef<'ctxt>,
     ) -> Self {
         Self {
@@ -40,7 +40,7 @@ impl<'ctxt> Builder<'ctxt> {
             ctxt,
         }
     }
-    pub(super) fn new_local(&mut self, ty: Type, kind: LocalKind) -> Local {
+    pub(super) fn new_local(&mut self, ty: TypeKind, kind: LocalKind) -> Local {
         self.body.locals.push(LocalInfo { ty, kind })
     }
     pub(super) fn new_local_from_info(&mut self, info: LocalInfo) -> Local {
@@ -56,13 +56,13 @@ impl<'ctxt> Builder<'ctxt> {
         self.finish_block(loc, TerminatorKind::Assert(operand, assert_kind, new_block));
         self.switch_to_block(new_block);
     }
-    pub(super) fn new_temp(&mut self, ty: Type) -> Local {
+    pub(super) fn new_temp(&mut self, ty: TypeKind) -> Local {
         self.new_local_from_info(LocalInfo {
             ty,
             kind: super::LocalKind::Temp,
         })
     }
-    pub(super) fn new_var(&mut self, var: Var, ty: Type) -> Local {
+    pub(super) fn new_var(&mut self, var: Var, ty: TypeKind) -> Local {
         self.new_local_from_info(LocalInfo {
             ty,
             kind: super::LocalKind::Var(var),
@@ -143,18 +143,18 @@ impl<'ctxt> Builder<'ctxt> {
             .stmts
             .push(Stmt { loc, kind });
     }
-    pub(super) fn assign_to_temp(&mut self, loc: SrcLoc, ty: Type, value: Rvalue) -> Local {
+    pub(super) fn assign_to_temp(&mut self, loc: SrcLoc, ty: TypeKind, value: Rvalue) -> Local {
         let temp = self.new_temp(ty);
         self.assign(loc, Place::local(temp), value);
         temp
     }
     pub(super) fn assign_equals(&mut self, loc: SrcLoc, left: Operand, right: Operand) -> Local {
-        self.assign_binary_result(loc, Type::Bool, BinaryOp::Equals, left, right)
+        self.assign_binary_result(loc, TypeKind::Bool, BinaryOp::Equals, left, right)
     }
     pub(super) fn assign_binary_result(
         &mut self,
         loc: SrcLoc,
-        ty: Type,
+        ty: TypeKind,
         op: BinaryOp,
         left: Operand,
         right: Operand,

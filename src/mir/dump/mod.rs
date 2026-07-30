@@ -203,7 +203,7 @@ impl<'ctxt> MirDump<'ctxt> {
         }
         Ok(())
     }
-    fn write_constant(&mut self, ty: &types::Type, value: &ConstValue) -> std::io::Result<()> {
+    fn write_constant(&mut self, ty: &types::TypeKind, value: &ConstValue) -> std::io::Result<()> {
         if let ConstValue::Named(id, args) = value {
             return write!(
                 self.output,
@@ -217,11 +217,11 @@ impl<'ctxt> MirDump<'ctxt> {
             return write!(self.output, "{ty}");
         }
         match ty {
-            types::Type::String => unreachable!(),
-            types::Type::Infer(_) | types::Type::Param(..) | types::Type::Unknown => {
+            types::TypeKind::String => unreachable!(),
+            types::TypeKind::Infer(_) | types::TypeKind::Param(..) | types::TypeKind::Unknown => {
                 write!(self.output, "unknown of '{}'", ty)
             }
-            types::Type::Char => {
+            types::TypeKind::Char => {
                 let &ConstValue::Scalar(value) = value else {
                     unreachable!("can only be a scalar for char")
                 };
@@ -230,16 +230,16 @@ impl<'ctxt> MirDump<'ctxt> {
                 };
                 write!(self.output, "'{char}'")
             }
-            types::Type::Int(_) | types::Type::Byte => value
+            types::TypeKind::Int(_) | types::TypeKind::Byte => value
                 .as_scalar()
                 .map(|value| write!(self.output, "{}", value))
                 .unwrap_or_else(|| write!(self.output, "unknown of '{}'", ty)),
-            types::Type::Bool => value
+            types::TypeKind::Bool => value
                 .as_scalar()
                 .and_then(|value| bool::try_from(value).ok())
                 .map_or(Ok(()), |value| write!(self.output, "{}", value)),
-            types::Type::Never => unreachable!("already did zero sized types"),
-            types::Type::Function(_) => match value {
+            types::TypeKind::Never => unreachable!("already did zero sized types"),
+            types::TypeKind::Function(_) => match value {
                 ConstValue::Named(id, args) => {
                     write!(
                         self.output,
@@ -250,13 +250,13 @@ impl<'ctxt> MirDump<'ctxt> {
                 }
                 _ => unreachable!("only values of function type"),
             },
-            types::Type::Record(_) | types::Type::Tuple(_) => {
+            types::TypeKind::Record(_) | types::TypeKind::Tuple(_) => {
                 let ConstValue::Record(field_consts) = value else {
                     unreachable!("should be a record")
                 };
                 let (fields, (open_bracket, closing_bracket)) = match ty {
-                    types::Type::Tuple(_) => (&IndexVec::new(), ('(', ')')),
-                    types::Type::Record(fields) => (fields, ('{', '}')),
+                    types::TypeKind::Tuple(_) => (&IndexVec::new(), ('(', ')')),
+                    types::TypeKind::Record(fields) => (fields, ('{', '}')),
                     _ => unreachable!(),
                 };
                 write!(self.output, "{}", open_bracket)?;
@@ -272,8 +272,8 @@ impl<'ctxt> MirDump<'ctxt> {
                 )?;
                 write!(self.output, "{}", closing_bracket)
             }
-            types::Type::Array(_) | types::Type::Box(_) => unimplemented!(),
-            types::Type::Named(def_id, name, args) => match self.ctxt.type_def(*def_id).kind {
+            types::TypeKind::Array(_) | types::TypeKind::Box(_) => unimplemented!(),
+            types::TypeKind::Named(def_id, name, args) => match self.ctxt.type_def(*def_id).kind {
                 TypeDefKind::Record(fields) => match value {
                     ConstValue::Record(values) => {
                         write!(self.output, "{name}{}{{", display_generic_args(args))?;
