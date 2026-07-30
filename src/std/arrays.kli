@@ -1,9 +1,10 @@
 import std.optional.Option
 import builtins
+import std.io.print_newline
 
 fun index_out_bounds() -> never = 
     do
-        print("index out of bounds");
+        print_newline("index out of bounds");
         panic
     end
 

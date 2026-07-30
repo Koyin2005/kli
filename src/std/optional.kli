@@ -1,3 +1,4 @@
+import std.io.print_newline
 @copy
 type Option[T] = 
 | None
@@ -16,7 +17,7 @@ fun expect_value[T](o : Option[T]) -> T =
     | .Some(x) -> x
     | .None -> 
         do
-            print("unwrapped None value");
+            print_newline("unwrapped None value");
             panic
         end
     end

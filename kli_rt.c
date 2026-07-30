@@ -9,11 +9,11 @@ void kli_print_newline(void){
 }
 
 void kli_print_int(uint64_t value) {
-    printf("%lld\n",value);
+    printf("%lld",value);
     fflush(stdout);
 }
 
 void kli_print_string(uint8_t *ptr, size_t len){
-    printf("%.*s\n",len,ptr);
+    printf("%.*s",len,ptr);
     fflush(stdout);
 }

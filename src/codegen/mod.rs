@@ -1053,11 +1053,19 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
         let align = self.build_int_const(&Type::UINT, ty_layout.alignment.in_bytes().into());
         self.codegen_alloc_call(size_val, align)
     }
-    fn print_string_newline(&mut self, ptr: ir::Value, len: ir::Value) {
+    fn print_string(&mut self, ptr: ir::Value, len: ir::Value){
         let print_string = self.runtime_functions.print_string;
-        let print_newline = self.runtime_functions.print_newline;
         self.codegen_direct_void_call(print_string, &[ptr, len]);
+
+    }
+    fn print_newline(&mut self){
+        let print_newline = self.runtime_functions.print_newline;
         self.codegen_direct_void_call(print_newline, &[]);
+
+    }
+    fn print_string_newline(&mut self, ptr: ir::Value, len: ir::Value) {
+        self.print_string(ptr, len);
+        self.print_newline();
     }
     fn codegen_direct_void_call(&mut self, id: FuncId, args: &[ir::Value]) {
         let func = self.module.declare_func_in_func(id, self.builder.func);
@@ -1731,7 +1739,7 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                                             false_value.1,
                                         ),
                                     );
-                                    self.print_string_newline(first_value, second_value);
+                                    self.print_string(first_value, second_value);
                                 }
                                 Type::String => {
                                     let (first_val, second_val) = match operand.kind {
@@ -1748,13 +1756,12 @@ impl<'a, M: Module> FunctionCodegen<'a, M> {
                                         )) => (first, second),
                                         _ => unreachable!("{:?}", operand.kind),
                                     };
-                                    self.print_string_newline(first_val, second_val);
+                                    self.print_string(first_val, second_val);
                                 }
                                 ref ty => todo!("print for {} {:?}", ty, ty),
                             }
                         } else {
-                            let values = self.build_string_value("".to_string());
-                            self.print_string_newline(values.0, values.1);
+                            self.print_newline();
                         }
                     }
                 }

@@ -73,7 +73,6 @@ impl Locals {
                     let kind = match repr {
                         BackendRepr::ZeroSized => LocalKind::ZeroSized,
                         BackendRepr::Scalar(scalar) if ssa.is_local_ssa(PlaceBase::Local(id)) => {
-                            println!("local scalar {}", ty);
                             LocalKind::Scalar(builder.declare_var(scalar_to_cranelift_type(scalar)))
                         }
                         _ => LocalKind::Memory(builder.create_sized_stack_slot(

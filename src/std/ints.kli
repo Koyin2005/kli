@@ -22,7 +22,7 @@ fun bitcast_uint_to_int(x : uint) -> int =
     unsafe builtins.transmute(x) end
 
 fun invalid_value() -> never = do
-    print("invalid numeric value");
+    io.print_newline("invalid numeric value");
     panic
 end
 
