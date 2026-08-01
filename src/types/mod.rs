@@ -5,7 +5,7 @@ use crate::{
     collect::{CtxtRef, TypeDefKind},
     def_ids::DefId,
     define_id,
-    typed_ast::{Capture, FieldId},
+    typed_ast::FieldId,
 };
 define_id!(CaseId);
 pub mod lower;
@@ -379,9 +379,6 @@ impl<'ctxt> TypeKind<'ctxt> {
             return None;
         };
         Some((*id, *name, args))
-    }
-    pub fn closure_env(_: impl Iterator<Item = Capture<'ctxt>>) -> Self {
-       unimplemented!()
     }
     pub fn field_info(
         &self,
