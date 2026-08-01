@@ -128,7 +128,6 @@ pub enum LogicalOp {
 pub enum ExprKind<'ctxt> {
     Unsafe(Box<Expr<'ctxt>>),
     Return(Box<Expr<'ctxt>>),
-    Record(Box<[RecordFieldInit<'ctxt>]>),
     Block(BlockBody<'ctxt>),
     String(Rc<str>),
     Bool(bool),

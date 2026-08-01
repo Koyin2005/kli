@@ -339,15 +339,7 @@ impl<'ctxt> Rvalue<'ctxt> {
                 Type::new_array(ctxt, *element)
             }
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
-                AggregateKind::Record { field_names } => Type::new_record(
-                    ctxt,
-                    field_names.iter().zip(operands).map(|(&name, operand)| {
-                        crate::types::RecordField {
-                            name,
-                            ty: operand.type_of(ctxt, locals, return_type),
-                        }
-                    }),
-                ),
+                AggregateKind::Record { field_names: _ } => todo!("remove me"),
                 &AggregateKind::Variant(id, _, ref args)
                 | &AggregateKind::NamedRecord(id, ref args) => {
                     let name = ctxt.type_def(id).name;
@@ -630,8 +622,7 @@ pub struct Body<'ctxt> {
 }
 impl<'ctxt> Body<'ctxt> {
     pub fn param_types(&self) -> impl Iterator<Item = Type<'ctxt>> {
-        self.params_iter()
-            .map(|param| self.locals[param].ty)
+        self.params_iter().map(|param| self.locals[param].ty)
     }
     pub fn params_iter(&self) -> impl Iterator<Item = Local> {
         self.locals

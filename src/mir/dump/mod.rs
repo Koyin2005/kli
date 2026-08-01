@@ -245,7 +245,9 @@ impl<'ctxt> MirDump<'ctxt> {
                     unreachable!("should be a record")
                 };
                 let (fields, (open_bracket, closing_bracket)) = match ty {
-                    types::TypeKind::Tuple(_) => (&IndexVec::<FieldId,types::RecordField>::new(), ('(', ')')),
+                    types::TypeKind::Tuple(_) => {
+                        (&IndexVec::<FieldId, types::RecordField>::new(), ('(', ')'))
+                    }
                     _ => unreachable!(),
                 };
                 write!(self.output, "{}", open_bracket)?;

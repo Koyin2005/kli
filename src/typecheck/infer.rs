@@ -89,7 +89,7 @@ impl<'ctxt> TypeInfer<'ctxt> {
             (&TypeKind::Box(ty1), &TypeKind::Box(ty2)) => self
                 .unify_ty(ty1, ty2)
                 .map(|ty| Type::new_box(self.ctxt, ty)),
-            
+
             (TypeKind::Tuple(fields1), TypeKind::Tuple(fields2))
                 if fields1.len() == fields2.len() =>
             {

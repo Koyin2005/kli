@@ -122,8 +122,11 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 match ctxt.type_def(id).kind {
                     TypeDefKind::Record(ref fields) => {
                         fields.iter_enumerated().find_map(|(index, field)| {
-                            (field.name == name.symbol)
-                                .then_some( (index, Some(field.id), field.type_of(args, ctxt)))
+                            (field.name == name.symbol).then_some((
+                                index,
+                                Some(field.id),
+                                field.type_of(args, ctxt),
+                            ))
                         })
                     }
                     _ => None,
@@ -186,10 +189,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
         lambda: &Lambda,
         hint: Option<Type<'ctxt>>,
     ) -> typed_ast::Expr<'ctxt> {
-        let expected_sig = match hint
-            .map(|ty| self.root().simplify_type(ty))
-            .as_deref()
-        {
+        let expected_sig = match hint.map(|ty| self.root().simplify_type(ty)).as_deref() {
             Some(TypeKind::Function(function)) => Some(function.clone()),
             _ => None,
         };
@@ -319,9 +319,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             && let Some(builtin) = self.root().ctxt().builtins().builtin_for(id.0)
         {
             let ctxt = self.ctxt();
-            let generic_args = self
-                .root()
-                .lower_generic_args_for(id.0, loc, generic_args);
+            let generic_args = self.root().lower_generic_args_for(id.0, loc, generic_args);
             let sig = ctxt.signature_of(id.0).bind(self.ctxt(), &generic_args);
             let FunctionSig {
                 params,
@@ -418,7 +416,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
         field_inits: &[FieldInit],
         expected_ty: Option<Type<'ctxt>>,
     ) -> typed_ast::Expr<'ctxt> {
-        let expected_fields: Option<IndexVec<FieldId,RecordField>> = match expected_ty
+        let expected_fields: Option<IndexVec<FieldId, RecordField>> = match expected_ty
             .map(|ty| self.root().simplify_type(ty))
             .as_ref()
             .map(|ty| ty.kind())
@@ -488,11 +486,9 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 })
                 .collect()
         };
-        typed_ast::Expr {
-            ty: Type::new_record(self.ctxt(), record_fields),
-            loc,
-            kind: typed_ast::ExprKind::Record(expr_fields),
-        }
+        _ = record_fields;
+        _ = expr_fields;
+        todo!("remove me")
     }
     fn check_binary_op(
         &self,
@@ -626,10 +622,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                     .collect::<Box<[_]>>();
 
                 typed_ast::Expr {
-                    ty: Type::tuple_from_iter(
-                        self.ctxt(),
-                        fields.iter().map(|field| field.ty),
-                    ),
+                    ty: Type::tuple_from_iter(self.ctxt(), fields.iter().map(|field| field.ty)),
                     loc,
                     kind: typed_ast::ExprKind::Tuple(fields),
                 }
@@ -722,9 +715,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             ExprKind::Binary(binary_op, left, right) => {
                 self.check_binary_op(loc, *binary_op, left, right, expected_ty)
             }
-            ExprKind::Lambda(lambda) => {
-                self.check_lambda(loc, lambda.id, lambda, expected_ty)
-            }
+            ExprKind::Lambda(lambda) => self.check_lambda(loc, lambda.id, lambda, expected_ty),
             ExprKind::For(for_expr) => {
                 self.check_for_loop(loc, &for_expr.pattern, &for_expr.iterator, &for_expr.body)
             }

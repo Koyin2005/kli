@@ -277,12 +277,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
         expected: Type<'ctxt>,
         ty: Type<'ctxt>,
     ) -> Result<Coercion<'ctxt>, TypeError> {
-        match self
-            .root
-            .infer
-            .borrow_mut()
-            .unify_ty(expected, ty)
-        {
+        match self.root.infer.borrow_mut().unify_ty(expected, ty) {
             Some(ty) => Ok(Coercion::Equal(ty)),
             None => match (expected.kind(), ty.kind()) {
                 (_, TypeKind::Never) => Ok(Coercion::NeverToAny(expected)),

@@ -252,19 +252,12 @@ impl<'ctxt> Type<'ctxt> {
     pub fn new_string(ctxt: CtxtRef<'ctxt>) -> Self {
         TypeKind::String.intern(ctxt)
     }
-    
 
     pub fn as_array(self) -> Option<Type<'ctxt>> {
         let TypeKind::Array(element) = self.0 else {
             return None;
         };
         Some(*element)
-    }
-    pub fn new_record(
-        _: CtxtRef<'ctxt>,
-        _: impl IntoIterator<Item = RecordField<'ctxt>>,
-    ) -> Self {
-        todo!("remove me")
     }
     pub fn tuple_from_iter(
         ctxt: CtxtRef<'ctxt>,
@@ -509,7 +502,8 @@ pub trait TypeMap<'ctxt> {
                 .map_function_type(function_type.clone())?
                 .into_type(self.ctxt())),
             TypeKind::Tuple(fields) => Ok(Type::tuple_from_iter(self.ctxt(), {
-                let fields: Vec<_> = fields.iter()
+                let fields: Vec<_> = fields
+                    .iter()
                     .map(|&field| self.map_type(field))
                     .collect::<Result<_, _>>()?;
                 fields

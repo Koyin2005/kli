@@ -1,10 +1,15 @@
 use std::collections::HashMap;
 
 use crate::{
-    Symbol, builtins::Builtin, index_vec::IndexVec, mir::{
+    Symbol,
+    builtins::Builtin,
+    index_vec::IndexVec,
+    mir::{
         self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Rvalue,
         build::Builder,
-    }, typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern}, types::{RecordField, Type, TypeKind},
+    },
+    typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
+    types::Type,
 };
 pub(super) enum BuiltinResult<'ctxt> {
     Rvalue(Rvalue<'ctxt>),
@@ -232,8 +237,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
 
                 self.switch_to_block(merge_block);
             }
-            ExprKind::Record(_)
-            | ExprKind::Function(..)
+            ExprKind::Function(..)
             | ExprKind::Bool(_)
             | ExprKind::Int(_)
             | ExprKind::Unit
@@ -282,11 +286,9 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
             Builtin::ZeroExtend => {
                 let [operand] = operands.try_into().unwrap();
-                let TypeKind::Int(kind) = ty.kind() else {
-                    unreachable!()
-                };
+                let kind = ty.as_integer().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Cast(
-                    mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendByteTo(*kind)),
+                    mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendByteTo(kind)),
                     operand,
                 ))
             }
@@ -364,24 +366,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     fields,
                 )
             }
-            ExprKind::Record(fields) => {
-                let mut field_map = fields
-                    .iter()
-                    .map(|field| (field.index, self.operand(&field.value)))
-                    .collect::<HashMap<_, _>>();
-                let fields = (0..fields.len())
-                    .map(FieldId::new)
-                    .map(|field| field_map.remove(&field).unwrap())
-                    .collect::<IndexVec<FieldId, _>>();
-
-                let rec_fields = if true {
-                    unreachable!("Should be a record")
-                } else {
-                    Vec::<RecordField>::new()
-                };
-                let field_names = rec_fields.iter().map(|field| field.name).collect();
-                Rvalue::Aggregate(AggregateKind::Record { field_names }, fields)
-            }
             ExprKind::Tuple(fields) => Rvalue::Aggregate(
                 AggregateKind::Tuple,
                 fields.iter().map(|field| self.operand(field)).collect(),
@@ -390,14 +374,16 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 AggregateKind::Variant(id, index, args.clone()),
                 [self.operand(value)].into(),
             ),
-            ExprKind::Call(callee, args) => match callee.ty.kind() {
-                TypeKind::Function(_) => {
-                    let callee_value = self.operand(callee);
-                    let arg_values = args.iter().map(|arg| self.operand(arg)).collect::<Vec<_>>();
-                    Rvalue::Call(callee_value, arg_values)
-                }
-                _ => unreachable!("Can't call non function at {:?}", expr.loc),
-            },
+            ExprKind::Call(callee, args) => {
+                let _ = callee
+                    .ty
+                    .as_function()
+                    .unwrap_or_else(|| unreachable!("Can't call non function at {:?}", expr.loc));
+
+                let callee_value = self.operand(callee);
+                let arg_values = args.iter().map(|arg| self.operand(arg)).collect::<Vec<_>>();
+                Rvalue::Call(callee_value, arg_values)
+            }
             ExprKind::Binary(binary_op, left, right) => {
                 let (left_operand, right_operand, overflow_op) = match binary_op {
                     BinaryOp::Add => (self.operand(left), self.operand(right), OverflowOp::Add),

@@ -1,10 +1,10 @@
-use std::cell::RefCell;
 use crate::collect::{CtxtRef, Generics};
 use crate::def_ids::DefId;
 use crate::resolved_ast::{self as res, TypeName};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
 use crate::types::{GenericArg, GenericArgs, GenericKind, IntegerKind, Type};
+use std::cell::RefCell;
 pub struct Lower<'a, 'ctxt> {
     ctxt: CtxtRef<'ctxt>,
     _id: DefId,

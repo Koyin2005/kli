@@ -145,11 +145,6 @@ impl<'a, 'ctxt> TypeSubst<'a, 'ctxt> {
                 }
                 self.subst_type(&mut lambda.return_type);
             }
-            ExprKind::Record(fields) => {
-                for field in fields {
-                    self.subst_expr(&mut field.value);
-                }
-            }
             ExprKind::Tuple(fields) | ExprKind::Array(fields) => {
                 for field in fields {
                     self.subst_expr(field);

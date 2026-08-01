@@ -18,27 +18,19 @@ impl<'a, 'ctxt> Coercion<'a, 'ctxt> {
     }
 
     pub fn check_expr(&mut self, expr: &resolved_ast::Expr) {
-        self.exprs.push(
-            self.ctxt
-                .check_expr_coerces_to(expr, self.target_ty),
-        );
+        self.exprs
+            .push(self.ctxt.check_expr_coerces_to(expr, self.target_ty));
     }
 
     pub fn finish(self) -> (Option<Type<'ctxt>>, Vec<typed_ast::Expr<'ctxt>>) {
-        let Some(combined_ty) = self
-            .ctxt
-            .merge_ty(self.exprs.iter().map(|expr| expr.ty))
-        else {
+        let Some(combined_ty) = self.ctxt.merge_ty(self.exprs.iter().map(|expr| expr.ty)) else {
             return (self.target_ty, self.exprs);
         };
         let exprs = self
             .exprs
             .into_iter()
             .map(|expr| {
-                let Ok(coercion) =
-                    self.ctxt
-                        .unify_or_coerce(expr.loc, combined_ty, expr.ty)
-                else {
+                let Ok(coercion) = self.ctxt.unify_or_coerce(expr.loc, combined_ty, expr.ty) else {
                     return expr;
                 };
                 self.ctxt.apply_coercion(coercion, expr)

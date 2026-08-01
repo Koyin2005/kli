@@ -312,12 +312,10 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                     builder.seal_block(non_zero_size_block);
 
                     builder.switch_to_block(alloc_failed_block);
-                    let print_string = this
-                        .module
-                        .declare_func_in_func(print_string,builder.func);
+                    let print_string = this.module.declare_func_in_func(print_string, builder.func);
                     let print_newline = this
                         .module
-                        .declare_func_in_func(print_newline,builder.func);
+                        .declare_func_in_func(print_newline, builder.func);
                     const MSG: &str = "failed to allocated";
                     let len = const { MSG.len() as i64 };
                     let msg = constants.constant_for(
@@ -972,36 +970,36 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                             value >>= 8;
                             data_offset += 1;
                         }
-                        if let Some(_) = data && data_offset > 0{
+                        if let Some(_) = data
+                            && data_offset > 0
+                        {
                             todo!("handle constant data variants")
                         }
 
-                        if matches!(self.module.isa().endianness(),ir::Endianness::Big) {
+                        if matches!(self.module.isa().endianness(), ir::Endianness::Big) {
                             /*
-                                size = 4 bytes
-                                value = 268
-                                value = 256 + 8 + 4
+                               size = 4 bytes
+                               value = 268
+                               value = 256 + 8 + 4
 
-                                Binary 00000001 00001100
-                                Hex    01       0C
+                               Binary 00000001 00001100
+                               Hex    01       0C
 
-                                Big endian
-                                00 00 01 0A
+                               Big endian
+                               00 00 01 0A
 
-                                Little endian
-                                0C 01 00 00
-                             */
+                               Little endian
+                               0C 01 00 00
+                            */
                             byte_values.reverse();
                         }
-                        for (i,value) in byte_values.into_iter().enumerate(){
+                        for (i, value) in byte_values.into_iter().enumerate() {
                             bytes[i] = value;
                         }
 
                         let ptr = self.alloc_constant(bytes);
                         OperandValueKind::Indirect(CodegenPlace::MemPlace(MemPlace::new(
-                            ptr,
-                            layout,
-                            ty,
+                            ptr, layout, ty,
                         )))
                     }
                 }
@@ -1094,7 +1092,10 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let ty_layout = self.layout_for(ty);
         let total_size = ty_layout.size.mul(count).in_bytes();
         let size_val = self.build_int_const(Type::new_uint(self.ctxt), total_size.into());
-        let align = self.build_int_const(Type::new_uint(self.ctxt), ty_layout.alignment.in_bytes().into());
+        let align = self.build_int_const(
+            Type::new_uint(self.ctxt),
+            ty_layout.alignment.in_bytes().into(),
+        );
         self.codegen_alloc_call(size_val, align)
     }
     fn print_string(&mut self, ptr: ir::Value, len: ir::Value) {
@@ -1360,15 +1361,16 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         layout::TagEncoding::Field { .. } => {
                             let (id, ..) = dst_place.type_of().as_named().unwrap();
                             let (tag, value) = self.ctxt.type_def(id).case_value(*case);
-                                    let discr = self.build_int_const(tag.into_type(self.ctxt), value.into());
+                            let discr =
+                                self.build_int_const(tag.into_type(self.ctxt), value.into());
                             match dst_place {
                                 CodegenPlace::MemPlace(dst_place) => {
                                     let tag =
                                         dst_place.project_field(self.ctxt, FieldId::FIRST_FIELD);
                                     self.store_immediate_mem(tag, discr);
                                 }
-                                CodegenPlace::Ssa(..,var) => {
-                                        self.store_var_imm(var, discr);
+                                CodegenPlace::Ssa(.., var) => {
+                                    self.store_var_imm(var, discr);
                                 }
                             }
                         }
@@ -1380,10 +1382,12 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let ty = Scheme::new(*ty).bind(self.ctxt, self.args);
                 let ty_layout = self.layout_for(ty);
 
-                let byte_size =
-                    self.build_int_const(Type::new_uint(self.ctxt), ty_layout.size.in_bytes().into());
-                let byte_align =
-                    self.build_int_const(Type::new_uint(self.ctxt), ty_layout.alignment.in_bytes().into());
+                let byte_size = self
+                    .build_int_const(Type::new_uint(self.ctxt), ty_layout.size.in_bytes().into());
+                let byte_align = self.build_int_const(
+                    Type::new_uint(self.ctxt),
+                    ty_layout.alignment.in_bytes().into(),
+                );
                 let value = self.eval_operand(value);
                 let count = self.eval_operand(count).expect_immediate(self);
                 let byte_size = self.builder.ins().imul(byte_size, count);
@@ -1736,7 +1740,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     self.print_string(first_val, second_val);
                 }
                 TypeKind::Tuple(fields) => {
-                    if !fields.is_empty(){
+                    if !fields.is_empty() {
                         todo!("non empty tuples")
                     }
                     let (first_val, second_val) = self.build_string_value("()".to_string());
@@ -1747,7 +1751,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     self.builder.ins().trap(TrapCode::unwrap_user(1));
                     let block = self.builder.create_block();
                     self.builder.switch_to_block(block);
-                },
+                }
                 ref ty => todo!("print for {} {:?}", ty, ty),
             }
         } else {

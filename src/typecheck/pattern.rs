@@ -1,7 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    collect::TypeDefKind, index_vec::IndexVec, resolved_ast::{Pattern, PatternField, PatternKind, Var}, typecheck::root::FunctionCtxt, typed_ast::{self, FieldId}, types::{self, FieldName, RecordField, Type, TypeKind},
+    collect::TypeDefKind,
+    index_vec::IndexVec,
+    resolved_ast::{Pattern, PatternField, PatternKind, Var},
+    typecheck::root::FunctionCtxt,
+    typed_ast::{self, FieldId},
+    types::{self, FieldName, RecordField, Type, TypeKind},
 };
 impl<'ctxt> FunctionCtxt<'_, 'ctxt> {
     pub fn check_pattern(
@@ -119,10 +124,7 @@ impl<'ctxt> FunctionCtxt<'_, 'ctxt> {
                     };
                 };
                 let case_id = case_def.id;
-                let inner = match (
-                    case_def.field.map(|field| field.type_of(args, ctxt)),
-                    inner,
-                ) {
+                let inner = match (case_def.field.map(|field| field.type_of(args, ctxt)), inner) {
                     (None, None) => None,
                     (Some(inner_ty), Some(inner)) => {
                         Some(Box::new(self.check_pattern(inner, inner_ty)))
@@ -156,24 +158,25 @@ impl<'ctxt> FunctionCtxt<'_, 'ctxt> {
             }
             PatternKind::Record(ref pat_fields) => {
                 let expected_type = root.simplify_type(expected_type);
-                let (ty, expected_fields):(_,Option<IndexVec<FieldId,RecordField>>) = match expected_type.kind() {
-                    &TypeKind::Named(id, _, ref args)
-                        if let TypeDefKind::Record(fields) = self.ctxt().type_def(id).kind =>
-                    {
-                        let fields = fields
-                            .into_iter()
-                            .map(|field| types::RecordField {
-                                name: FieldName::Named(field.name),
-                                ty: field.type_of(args, self.ctxt()),
-                            })
-                            .collect();
-                        (expected_type, Some(fields))
-                    }
-                    _ => {
-                        root.expect_ty_error("record", expected_type, pattern.loc);
-                        (Type::new_unknown(self.ctxt()), None)
-                    }
-                };
+                let (ty, expected_fields): (_, Option<IndexVec<FieldId, RecordField>>) =
+                    match expected_type.kind() {
+                        &TypeKind::Named(id, _, ref args)
+                            if let TypeDefKind::Record(fields) = self.ctxt().type_def(id).kind =>
+                        {
+                            let fields = fields
+                                .into_iter()
+                                .map(|field| types::RecordField {
+                                    name: FieldName::Named(field.name),
+                                    ty: field.type_of(args, self.ctxt()),
+                                })
+                                .collect();
+                            (expected_type, Some(fields))
+                        }
+                        _ => {
+                            root.expect_ty_error("record", expected_type, pattern.loc);
+                            (Type::new_unknown(self.ctxt()), None)
+                        }
+                    };
                 let field_names = expected_fields
                     .iter()
                     .flatten()
@@ -193,9 +196,7 @@ impl<'ctxt> FunctionCtxt<'_, 'ctxt> {
                             pattern,
                             field_id
                                 .and_then(|field| {
-                                    expected_fields
-                                        .as_ref()
-                                        .map(|fields| fields[field].ty)
+                                    expected_fields.as_ref().map(|fields| fields[field].ty)
                                 })
                                 .unwrap_or(Type::new_unknown(self.ctxt())),
                         );

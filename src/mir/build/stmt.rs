@@ -80,8 +80,7 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
                 self.switch_to_new_block();
             }
             //Evaluate
-            ExprKind::Record(..)
-            | ExprKind::String(_)
+            ExprKind::String(_)
             | ExprKind::Unit
             | ExprKind::Bool(_)
             | ExprKind::Int(_)
