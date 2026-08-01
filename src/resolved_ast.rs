@@ -222,6 +222,7 @@ pub enum TypeName {
     UserDefined(DefId),
     Box,
     Array,
+    RawDynArray,
     Param(Symbol, usize),
     Never,
 }

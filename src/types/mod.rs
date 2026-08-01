@@ -182,7 +182,15 @@ pub struct Type<'ctxt>(&'ctxt TypeKind<'ctxt>);
 impl<'ctxt> Type<'ctxt> {
     pub const UNKNOWN: Self = Self(&TypeKind::Unknown);
     pub const BYTE: Self = Self(&TypeKind::Unknown);
-
+    pub fn new_raw_dyn_array(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self{
+        TypeKind::RawDynArray(ty).intern(ctxt)
+    }
+    pub fn as_raw_dyn_array(self) -> Option<Self>{
+        let &TypeKind::RawDynArray(ty) = self.0 else {
+            return None;
+        };
+        Some(ty)
+    }
     pub fn new_int(ctxt: CtxtRef<'ctxt>, kind: IntegerKind) -> Self {
         TypeKind::Int(kind).intern(ctxt)
     }
@@ -333,6 +341,7 @@ pub enum TypeKind<'ctxt> {
     Array(Type<'ctxt>),
     Named(DefId, Symbol, GenericArgs<'ctxt>),
     String,
+    RawDynArray(Type<'ctxt>),
     Box(Type<'ctxt>),
 }
 impl<'ctxt> TypeKind<'ctxt> {
@@ -405,10 +414,12 @@ impl<'ctxt> TypeKind<'ctxt> {
             | Self::Byte
             | Self::Param(..)
             | Self::Function(..)
-            | Self::String => false,
+            | Self::String
+            | Self::Array(_)
+            | Self::RawDynArray(_)  => false,
             Self::Never => true,
             Self::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
-            Self::Array(ty) | Self::Box(ty) => ty.is_uninhabited(ctxt),
+            Self::Box(ty) => ty.is_uninhabited(ctxt),
             Self::Named(def_id, _, generic_args) => {
                 if ctxt.is_type_recursive(*def_id) {
                     false
@@ -435,6 +446,7 @@ impl Display for TypeKind<'_> {
             Self::Box(ty) => {
                 write!(f, "Box[{ty}]")
             }
+            Self::RawDynArray(ty) => write!(f,"RawDynArray[{}]",ty),
             Self::String => f.pad("string"),
             TypeKind::Byte => f.pad("byte"),
             TypeKind::Never => f.pad("never"),
@@ -518,6 +530,7 @@ pub trait TypeMap<'ctxt> {
             )),
             TypeKind::Array(ty) => Ok(Type::new_array(self.ctxt(), self.map_type(*ty)?)),
             TypeKind::Box(ty) => Ok(Type::new_box(self.ctxt(), self.map_type(*ty)?)),
+            TypeKind::RawDynArray(ty) => Ok(Type::new_box(self.ctxt(), self.map_type(*ty)?)),
         }
     }
     fn super_map_function_type(
