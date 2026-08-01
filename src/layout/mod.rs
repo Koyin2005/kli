@@ -401,9 +401,6 @@ pub fn calculate_layout<'ctxt>(
         TypeKind::Tuple(fields) => {
             return record_layout(ctxt, fields.iter().copied().collect());
         }
-        TypeKind::Record(fields) => {
-            return record_layout(ctxt, fields.into_iter().map(|field| field.ty).collect());
-        }
         TypeKind::Named(id, .., args) => match ctxt.type_def(*id).kind {
             TypeDefKind::Record(fields) => {
                 return record_layout(

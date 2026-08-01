@@ -1,15 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    Symbol,
-    builtins::Builtin,
-    index_vec::IndexVec,
-    mir::{
+    Symbol, builtins::Builtin, index_vec::IndexVec, mir::{
         self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Rvalue,
         build::Builder,
-    },
-    typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
-    types::{Type, TypeKind},
+    }, typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern}, types::{RecordField, Type, TypeKind},
 };
 pub(super) enum BuiltinResult<'ctxt> {
     Rvalue(Rvalue<'ctxt>),
@@ -379,8 +374,10 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .map(|field| field_map.remove(&field).unwrap())
                     .collect::<IndexVec<FieldId, _>>();
 
-                let TypeKind::Record(rec_fields) = expr.ty.kind() else {
+                let rec_fields = if true {
                     unreachable!("Should be a record")
+                } else {
+                    Vec::<RecordField>::new()
                 };
                 let field_names = rec_fields.iter().map(|field| field.name).collect();
                 Rvalue::Aggregate(AggregateKind::Record { field_names }, fields)

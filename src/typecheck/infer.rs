@@ -1,7 +1,7 @@
 use crate::{
     CtxtRef,
     src_loc::SrcLoc,
-    types::{GenericArg, GenericArgs, IntegerKind, RecordField, Type, TypeKind, TypeMap},
+    types::{GenericArg, GenericArgs, IntegerKind, Type, TypeKind, TypeMap},
 };
 #[derive(Debug)]
 pub struct TypeVarInfo<'ctxt> {
@@ -89,26 +89,7 @@ impl<'ctxt> TypeInfer<'ctxt> {
             (&TypeKind::Box(ty1), &TypeKind::Box(ty2)) => self
                 .unify_ty(ty1, ty2)
                 .map(|ty| Type::new_box(self.ctxt, ty)),
-            (TypeKind::Record(fields1), TypeKind::Record(fields2))
-                if fields1.len() == fields2.len() =>
-            {
-                let fields = fields1
-                    .into_iter()
-                    .zip(fields2)
-                    .map(|(field1, field2)| {
-                        if field1.name == field2.name {
-                            let ty = self.unify_ty(field1.ty, field2.ty)?;
-                            Some(RecordField {
-                                name: field1.name,
-                                ty,
-                            })
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Option<Vec<_>>>()?;
-                Some(Type::new_record(self.ctxt, fields))
-            }
+            
             (TypeKind::Tuple(fields1), TypeKind::Tuple(fields2))
                 if fields1.len() == fields2.len() =>
             {
@@ -153,7 +134,6 @@ impl<'ctxt> TypeInfer<'ctxt> {
                 | TypeKind::Param(..)
                 | TypeKind::Function(..)
                 | TypeKind::Byte
-                | TypeKind::Record(..)
                 | TypeKind::Named(..)
                 | TypeKind::Never
                 | TypeKind::Tuple(_)

@@ -1,11 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    collect::TypeDefKind,
-    resolved_ast::{Pattern, PatternField, PatternKind, Var},
-    typecheck::root::FunctionCtxt,
-    typed_ast::{self, FieldId},
-    types::{self, FieldName, Type, TypeKind},
+    collect::TypeDefKind, index_vec::IndexVec, resolved_ast::{Pattern, PatternField, PatternKind, Var}, typecheck::root::FunctionCtxt, typed_ast::{self, FieldId}, types::{self, FieldName, RecordField, Type, TypeKind},
 };
 impl<'ctxt> FunctionCtxt<'_, 'ctxt> {
     pub fn check_pattern(
@@ -160,8 +156,7 @@ impl<'ctxt> FunctionCtxt<'_, 'ctxt> {
             }
             PatternKind::Record(ref pat_fields) => {
                 let expected_type = root.simplify_type(expected_type);
-                let (ty, expected_fields) = match expected_type.kind() {
-                    TypeKind::Record(fields) => (expected_type, Some(fields.clone())),
+                let (ty, expected_fields):(_,Option<IndexVec<FieldId,RecordField>>) = match expected_type.kind() {
                     &TypeKind::Named(id, _, ref args)
                         if let TypeDefKind::Record(fields) = self.ctxt().type_def(id).kind =>
                     {

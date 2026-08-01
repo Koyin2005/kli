@@ -117,10 +117,6 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
         name: crate::ident::Ident,
     ) -> Option<(FieldId, Option<DefId>, Type<'ctxt>)> {
         let field_info = match reciever_ty.kind() {
-            TypeKind::Record(fields) => fields.iter_enumerated().find_map(|(index, field)| {
-                (field.name == FieldName::Named(name.symbol))
-                    .then_some((index, None, field.ty))
-            }),
             &TypeKind::Named(id, _, ref args) => {
                 let ctxt = self.root().ctxt();
                 match ctxt.type_def(id).kind {
@@ -422,12 +418,11 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
         field_inits: &[FieldInit],
         expected_ty: Option<Type<'ctxt>>,
     ) -> typed_ast::Expr<'ctxt> {
-        let expected_fields = match expected_ty
+        let expected_fields: Option<IndexVec<FieldId,RecordField>> = match expected_ty
             .map(|ty| self.root().simplify_type(ty))
             .as_ref()
             .map(|ty| ty.kind())
         {
-            Some(TypeKind::Record(fields)) => Some(fields.clone()),
             _ => None,
         };
         let mut seen_fields = HashSet::new();

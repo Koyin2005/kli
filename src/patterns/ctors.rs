@@ -40,7 +40,7 @@ pub fn constructors_of_ty<'ctxt>(
         | TypeKind::Array(_)
         | TypeKind::String
         | TypeKind::Box(_) => ConstructorSet::NonExhaustive,
-        TypeKind::Record(_) | TypeKind::Tuple(_) => ConstructorSet::Record,
+        TypeKind::Tuple(_) => ConstructorSet::Record,
         TypeKind::Infer(_) => unreachable!("Cannot have infer here"),
         TypeKind::Named(id, _, args) => {
             if !ctxt.same_module(*id, from) && ctxt.is_opaque(*id) {
@@ -87,7 +87,6 @@ pub fn fields_of<'ctxt>(
         | Constructor::Wildcard
         | Constructor::Missing => Vec::new(),
         Constructor::Record => match ty.kind() {
-            TypeKind::Record(fields) => fields.iter().map(|field| field.ty).collect(),
             &TypeKind::Named(id, _, ref args) => ctxt
                 .type_def(id)
                 .fields()

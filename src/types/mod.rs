@@ -5,7 +5,6 @@ use crate::{
     collect::{CtxtRef, TypeDefKind},
     def_ids::DefId,
     define_id,
-    index_vec::IndexVec,
     typed_ast::{Capture, FieldId},
 };
 define_id!(CaseId);
@@ -254,16 +253,10 @@ impl<'ctxt> Type<'ctxt> {
         TypeKind::String.intern(ctxt)
     }
     pub fn record_from_iter(
-        ctxt: CtxtRef<'ctxt>,
-        fields: impl IntoIterator<Item = (FieldName, Self)>,
+        _: CtxtRef<'ctxt>,
+        _: impl IntoIterator<Item = (FieldName, Self)>,
     ) -> Self {
-        TypeKind::Record(
-            fields
-                .into_iter()
-                .map(|(name, ty)| RecordField { name, ty })
-                .collect(),
-        )
-        .intern(ctxt)
+        todo!("get rid of me")
     }
 
     pub fn as_array(self) -> Option<Type<'ctxt>> {
@@ -273,10 +266,10 @@ impl<'ctxt> Type<'ctxt> {
         Some(*element)
     }
     pub fn new_record(
-        ctxt: CtxtRef<'ctxt>,
-        fields: impl IntoIterator<Item = RecordField<'ctxt>>,
+        _: CtxtRef<'ctxt>,
+        _: impl IntoIterator<Item = RecordField<'ctxt>>,
     ) -> Self {
-        TypeKind::Record(fields.into_iter().collect()).intern(ctxt)
+        todo!("remove me")
     }
     pub fn tuple_from_iter(
         ctxt: CtxtRef<'ctxt>,
@@ -349,7 +342,6 @@ pub enum TypeKind<'ctxt> {
     Param(Symbol, usize),
     Function(FunctionSig<'ctxt>),
     Tuple(Vec<Type<'ctxt>>),
-    Record(IndexVec<FieldId, RecordField<'ctxt>>),
     Array(Type<'ctxt>),
     Named(DefId, Symbol, GenericArgs<'ctxt>),
     String,
@@ -396,15 +388,8 @@ impl<'ctxt> TypeKind<'ctxt> {
     pub fn closure_env(fields: impl Iterator<Item = Capture<'ctxt>>) -> Self {
         Self::record_named_fields(fields.map(|capture| (capture.var.0, capture.ty)))
     }
-    pub fn record_named_fields(fields: impl Iterator<Item = (Symbol, Type<'ctxt>)>) -> Self {
-        Self::Record(
-            fields
-                .map(|(name, ty)| RecordField {
-                    name: FieldName::Named(name),
-                    ty,
-                })
-                .collect(),
-        )
+    pub fn record_named_fields(_: impl Iterator<Item = (Symbol, Type<'ctxt>)>) -> Self {
+       todo!("remove me")
     }
     pub fn field_info(
         &self,
@@ -412,9 +397,6 @@ impl<'ctxt> TypeKind<'ctxt> {
         ctxt: CtxtRef<'ctxt>,
     ) -> Option<(Type<'ctxt>, FieldName)> {
         match self {
-            Self::Record(fields) => fields
-                .get(field_id)
-                .map(|field| (field.ty, field.name)),
             Self::Tuple(fields) => fields
                 .get(field_id.into_usize())
                 .map(|ty| (*ty, FieldName::Index(field_id))),
@@ -443,7 +425,6 @@ impl<'ctxt> TypeKind<'ctxt> {
             | Self::Function(..)
             | Self::String => false,
             Self::Never => true,
-            Self::Record(fields) => fields.iter().any(|field| field.ty.is_uninhabited(ctxt)),
             Self::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
             Self::Array(ty) | Self::Box(ty) => ty.is_uninhabited(ctxt),
             Self::Named(def_id, _, generic_args) => {
@@ -475,18 +456,6 @@ impl Display for TypeKind<'_> {
             Self::String => f.pad("string"),
             TypeKind::Byte => f.pad("byte"),
             TypeKind::Never => f.pad("never"),
-            TypeKind::Record(fields) => {
-                f.pad("{")?;
-                let mut first = true;
-                for field in fields {
-                    if !first {
-                        f.pad(", ")?;
-                    }
-                    write!(f, "{}: {}", field.name, field.ty)?;
-                    first = false;
-                }
-                f.pad("}")
-            }
             TypeKind::Tuple(fields) => {
                 f.pad("(")?;
                 let mut first = true;
@@ -553,13 +522,6 @@ pub trait TypeMap<'ctxt> {
             TypeKind::Tuple(fields) => Ok(Type::tuple_from_iter(self.ctxt(), {
                 let fields: Vec<_> = fields.iter()
                     .map(|&field| self.map_type(field))
-                    .collect::<Result<_, _>>()?;
-                fields
-            })),
-            TypeKind::Record(fields) => Ok(Type::new_record(self.ctxt(), {
-                let fields: Vec<RecordField<'ctxt>> = fields
-                    .into_iter()
-                    .map(|&field| self.map_field(field))
                     .collect::<Result<_, _>>()?;
                 fields
             })),

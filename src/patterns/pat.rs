@@ -55,7 +55,6 @@ impl<'ctxt> Pat<'ctxt> {
             Constructor::Record => {
                 use crate::typed_ast::FieldId;
                 let (fields, brackets): (&mut dyn Fn(FieldId) -> _, _) = match self.ty.kind() {
-                    TypeKind::Record(fields) => (&mut |i| Some(fields[i].name), ("{", "}")),
                     &TypeKind::Named(id, ..) => (
                         &mut move |i| {
                             Some(crate::types::FieldName::Named(

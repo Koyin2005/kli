@@ -26,11 +26,6 @@ pub trait Visit<'ctxt> {
                     self.visit_type(ty);
                 }
             }
-            TypeKind::Record(fields) => {
-                for field in fields {
-                    self.visit_type(field.ty);
-                }
-            }
             &(TypeKind::Array(ty) | TypeKind::Box(ty)) => self.visit_type(ty),
             TypeKind::Named(.., generic_args) => {
                 self.visit_generic_args(generic_args);
@@ -72,12 +67,6 @@ pub trait VisitMut<'ctxt> {
             TypeKind::Tuple(fields) => Type::tuple_from_iter(
                 self.ctxt(),
                 fields.iter().map(|&field| self.visit_type(field)),
-            ),
-            TypeKind::Record(fields) => Type::record_from_iter(
-                self.ctxt(),
-                fields
-                    .iter()
-                    .map(|field| (field.name, self.visit_type(field.ty))),
             ),
             &TypeKind::Array(ty) => Type::new_array(self.ctxt(), self.visit_type(ty)),
             &TypeKind::Box(ty) => Type::new_box(self.ctxt(), self.visit_type(ty)),

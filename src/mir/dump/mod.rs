@@ -240,13 +240,12 @@ impl<'ctxt> MirDump<'ctxt> {
                 }
                 _ => unreachable!("only values of function type"),
             },
-            types::TypeKind::Record(_) | types::TypeKind::Tuple(_) => {
+            types::TypeKind::Tuple(_) => {
                 let ConstValue::Record(field_consts) = value else {
                     unreachable!("should be a record")
                 };
                 let (fields, (open_bracket, closing_bracket)) = match ty {
-                    types::TypeKind::Tuple(_) => (&IndexVec::new(), ('(', ')')),
-                    types::TypeKind::Record(fields) => (fields, ('{', '}')),
+                    types::TypeKind::Tuple(_) => (&IndexVec::<FieldId,types::RecordField>::new(), ('(', ')')),
                     _ => unreachable!(),
                 };
                 write!(self.output, "{}", open_bracket)?;
