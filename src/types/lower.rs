@@ -1,12 +1,10 @@
 use std::cell::RefCell;
-use std::collections::HashSet;
-
 use crate::collect::{CtxtRef, Generics};
 use crate::def_ids::DefId;
 use crate::resolved_ast::{self as res, TypeName};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
-use crate::types::{FieldName, GenericArg, GenericArgs, GenericKind, IntegerKind, Type};
+use crate::types::{GenericArg, GenericArgs, GenericKind, IntegerKind, Type};
 pub struct Lower<'a, 'ctxt> {
     ctxt: CtxtRef<'ctxt>,
     _id: DefId,
@@ -161,23 +159,8 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
             res::TypeKind::Tuple(fields) => {
                 Type::tuple_from_iter(self.ctxt, fields.iter().map(|field| self.lower_type(field)))
             }
-            res::TypeKind::Record(fields) => {
-                let mut seen_fields = HashSet::new();
-                Type::record_from_iter(self.ctxt, {
-                    fields.iter().filter_map(|field| {
-                        if !seen_fields.insert(field.name.symbol) {
-                            self.ctxt.diag().add_diagnostic(
-                                format!("Repeated field '{}'", field.name.symbol),
-                                field.name.loc,
-                            );
-                            return None;
-                        }
-                        Some((
-                            FieldName::Named(field.name.symbol),
-                            self.lower_type(&field.ty),
-                        ))
-                    })
-                })
+            res::TypeKind::Record(_) => {
+                todo!("remove me")
             }
             res::TypeKind::Unknown => Type::UNKNOWN,
             &res::TypeKind::Named(name, ref args) => self.lower_type_name(ty.loc, name, args),

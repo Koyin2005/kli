@@ -252,12 +252,7 @@ impl<'ctxt> Type<'ctxt> {
     pub fn new_string(ctxt: CtxtRef<'ctxt>) -> Self {
         TypeKind::String.intern(ctxt)
     }
-    pub fn record_from_iter(
-        _: CtxtRef<'ctxt>,
-        _: impl IntoIterator<Item = (FieldName, Self)>,
-    ) -> Self {
-        todo!("get rid of me")
-    }
+    
 
     pub fn as_array(self) -> Option<Type<'ctxt>> {
         let TypeKind::Array(element) = self.0 else {
@@ -385,11 +380,8 @@ impl<'ctxt> TypeKind<'ctxt> {
         };
         Some((*id, *name, args))
     }
-    pub fn closure_env(fields: impl Iterator<Item = Capture<'ctxt>>) -> Self {
-        Self::record_named_fields(fields.map(|capture| (capture.var.0, capture.ty)))
-    }
-    pub fn record_named_fields(_: impl Iterator<Item = (Symbol, Type<'ctxt>)>) -> Self {
-       todo!("remove me")
+    pub fn closure_env(_: impl Iterator<Item = Capture<'ctxt>>) -> Self {
+       unimplemented!()
     }
     pub fn field_info(
         &self,
