@@ -113,6 +113,14 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     loc,
                 );
             }
+            super::Rvalue::AllocateRawArray { count, .. } => {
+                let count_ty = count.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                self.assert(
+                    count_ty.is_integer_kind(IntegerKind::Unsigned),
+                    || format!("count should be a uint not '{}'", count_ty),
+                    loc,
+                );
+            }
             super::Rvalue::Repeat { ty, value, count } => {
                 let operand_ty = value.type_of(self.ctxt, &self.body.locals, self.body.return_type);
 
@@ -286,7 +294,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             },
             super::Rvalue::Len(place) => {
                 let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                self.assert(ty.as_array().is_some(), || "Expected an array type", loc);
+                self.assert(ty.as_array().or(ty.as_raw_array()).is_some(), || "Expected an array type", loc);
             }
         }
     }

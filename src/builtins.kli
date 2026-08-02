@@ -5,11 +5,13 @@ fun box_alloc[T](value : T) -> Box[T];
 @unsafe
 fun transmute[T,U](x : T) -> U;
 
+# T must be either an array[U] or raw_array[U]
 @builtin
-fun array_len[T](a : array[T]) -> uint;
+fun array_len[T](a : T) -> uint;
 
+# T must be either an array[U] or raw_array[U]
 @builtin
-fun array_addr[T](a : array[T]) -> uint;
+fun array_addr[T](a : T) -> uint;
 
 @builtin
 fun wrapping_add[T](x : T, y : T) -> T;
@@ -22,3 +24,6 @@ fun zero_extend[T,U](x : T) -> U;
 
 @builtin
 fun array_repeat[T](value : T, count : uint) -> array[T];
+
+@builtin
+fun raw_array_alloc[T](size : uint) -> raw_array[T];

@@ -106,6 +106,12 @@ impl<'ctxt> MirDump<'ctxt> {
             Rvalue::Use(operand) => {
                 self.write_operand(operand)?;
             }
+            Rvalue::AllocateRawArray { ty, count } => {
+                write!(self.output, "raw_array_alloc[{ty}]")?;
+                write!(self.output, "(")?;
+                self.write_operand(count)?;
+                write!(self.output, ")")?;
+            }
             Rvalue::AllocateArray(_, elements) => {
                 write!(self.output, "[")?;
                 self.write_with_coma_sep(elements, |this, element| this.write_operand(element))?;
@@ -213,7 +219,10 @@ impl<'ctxt> MirDump<'ctxt> {
         }
         match ty {
             types::TypeKind::String => unreachable!(),
-            types::TypeKind::Infer(_) | types::TypeKind::Param(..) | types::TypeKind::Unknown | types::TypeKind::RawDynArray(_) => {
+            types::TypeKind::Infer(_)
+            | types::TypeKind::Param(..)
+            | types::TypeKind::Unknown
+            | types::TypeKind::RawArray(_) => {
                 write!(self.output, "unknown of '{}'", ty)
             }
             types::TypeKind::Char => {

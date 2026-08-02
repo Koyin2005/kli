@@ -76,13 +76,17 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             ExprKind::Index(reciever, index) => {
                 let receiver = self.check_expr(reciever, None);
                 let index = self.check_expr_coerces_to(index, Some(Type::new_uint(self.ctxt())));
-                let element_ty = receiver.ty.as_array().unwrap_or_else(|| {
-                    self.ctxt().diag().add_diagnostic(
-                        format!("Expected an array type but got '{}'", receiver.ty),
-                        receiver.loc,
-                    );
-                    Type::new_unknown(self.ctxt())
-                });
+                let element_ty = receiver
+                    .ty
+                    .as_array()
+                    .or(receiver.ty.as_raw_array())
+                    .unwrap_or_else(|| {
+                        self.ctxt().diag().add_diagnostic(
+                            format!("Expected an array type but got '{}'", receiver.ty),
+                            receiver.loc,
+                        );
+                        Type::new_unknown(self.ctxt())
+                    });
                 (
                     element_ty,
                     typed_ast::PlaceKind::Index(Box::new(receiver), Box::new(index)),

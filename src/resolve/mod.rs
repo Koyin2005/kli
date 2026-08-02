@@ -36,7 +36,7 @@ enum TypeAlias {
     Box,
     ArrayList,
     Never,
-    RawDynArray
+    RawArray,
 }
 impl TypeAlias {
     fn into_type_name(self) -> res::TypeName {
@@ -45,7 +45,7 @@ impl TypeAlias {
             TypeAlias::Byte => res::TypeName::Byte,
             TypeAlias::ArrayList => res::TypeName::Array,
             TypeAlias::Never => res::TypeName::Never,
-            TypeAlias::RawDynArray => res::TypeName::RawDynArray
+            TypeAlias::RawArray => res::TypeName::RawArray,
         }
     }
 }
@@ -118,7 +118,10 @@ impl<'info> Resolve<'info> {
             (Symbol::intern("byte"), Res::TypeAlias(TypeAlias::Byte)),
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),
-            (Symbol::intern("raw_dyn_array"), Res::TypeAlias(TypeAlias::RawDynArray)),
+            (
+                Symbol::intern("raw_array"),
+                Res::TypeAlias(TypeAlias::RawArray),
+            ),
             (
                 Symbol::intern("array"),
                 Res::TypeAlias(TypeAlias::ArrayList),

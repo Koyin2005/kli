@@ -324,7 +324,6 @@ fn variant_layout<'ctxt>(
 }
 
 fn aggregate_layout(field_layouts: Vec<(FieldId, Layout)>) -> Result<Layout, LayoutError> {
-
     let mut offset = Size::ZERO;
     let mut max_align = field_layouts
         .first()
@@ -361,7 +360,7 @@ fn record_layout<'ctxt>(
         .iter_enumerated()
         .map(|(i, field)| Ok((i, calculate_layout(ctxt, *field)?)))
         .collect::<Result<Vec<_>, _>>()?;
-    
+
     field_layouts.sort_by_key(|(_, layout)| std::cmp::Reverse(layout.alignment));
     aggregate_layout(field_layouts)
 }
@@ -399,7 +398,7 @@ pub fn calculate_layout<'ctxt>(
                 ),
             ]);
         }
-        TypeKind::RawDynArray(_) => {
+        TypeKind::RawArray(_) => {
             return aggregate_layout(vec![
                 (FieldId::new(0), Layout::pointer(true)),
                 (
@@ -410,9 +409,8 @@ pub fn calculate_layout<'ctxt>(
                     FieldId::new(2),
                     Layout::from_scalar(Scalar::Int64(IntegerKind::Unsigned)),
                 ),
-
             ]);
-        },
+        }
         TypeKind::Tuple(fields) => {
             return record_layout(ctxt, fields.iter().copied().collect());
         }

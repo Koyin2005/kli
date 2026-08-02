@@ -45,7 +45,7 @@ impl PlaceProjection {
                     .0
             }
             PlaceProjection::Index(_) | PlaceProjection::ConstantIndex(_) => {
-                let Some(ty) = ty.as_array() else {
+                let Some(ty) = ty.as_array().or_else(|| ty.as_raw_array()) else {
                     unreachable!("Should be an array")
                 };
                 ty
@@ -269,6 +269,10 @@ pub enum Rvalue<'ctxt> {
         value: Operand<'ctxt>,
         count: Operand<'ctxt>,
     },
+    AllocateRawArray {
+        ty: Type<'ctxt>,
+        count: Operand<'ctxt>,
+    },
     AllocateArray(Type<'ctxt>, Vec<Operand<'ctxt>>),
     AllocateBox(Type<'ctxt>, Operand<'ctxt>),
     Use(Operand<'ctxt>),
@@ -302,7 +306,8 @@ impl<'ctxt> Rvalue<'ctxt> {
             Self::AllocateArray(..)
             | Self::AllocateBox(..)
             | Self::Call(..)
-            | Self::Repeat { .. } => false,
+            | Self::Repeat { .. }
+            | Self::AllocateRawArray { .. } => false,
         }
     }
 
@@ -338,6 +343,7 @@ impl<'ctxt> Rvalue<'ctxt> {
             Rvalue::AllocateArray(element, _) | Rvalue::Repeat { ty: element, .. } => {
                 Type::new_array(ctxt, *element)
             }
+            Rvalue::AllocateRawArray { ty, .. } => Type::new_raw_array(ctxt, *ty),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 AggregateKind::Record { field_names: _ } => todo!("remove me"),
                 &AggregateKind::Variant(id, _, ref args)

@@ -3,8 +3,8 @@ use crate::{
     builtins::Builtin,
     def_ids::DefId,
     resolved_ast::AnnotationKind,
-    typed_ast::{ExprKind, Function},
-    typed_ast_visitor::{Visitor, walk_expr},
+    typed_ast::{ExprKind, Function, PlaceKind},
+    typed_ast_visitor::{Visitor, walk_expr, walk_place},
     types::Type,
 };
 
@@ -53,11 +53,22 @@ impl<'ctxt> SafetyCheck<'ctxt> {
     }
 }
 impl<'ctxt> Visitor<'ctxt> for SafetyCheck<'ctxt> {
+    fn visit_place(&mut self, place: &crate::typed_ast::Place<'ctxt>) {
+        if !self.in_unsafe_block
+            && let PlaceKind::Index(ref array, _) = place.kind
+            && array.ty.as_raw_array().is_some()
+        {
+            self.ctxt.diag().add_diagnostic(
+                "cannot index raw array outside of unsafe context",
+                place.loc,
+            );
+        }
+        walk_place(self, place);
+    }
     fn visit_expr(&mut self, expr: &crate::typed_ast::Expr<'ctxt>) {
         let function = match expr.kind {
             ExprKind::Unsafe(ref expr) => {
-                let was_in_unsafe_block = self.in_unsafe_block;
-                self.in_unsafe_block = true;
+                let was_in_unsafe_block = std::mem::replace(&mut self.in_unsafe_block, true);
                 self.visit_expr(expr);
                 self.in_unsafe_block = was_in_unsafe_block;
                 return;

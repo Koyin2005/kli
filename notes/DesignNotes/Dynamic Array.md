@@ -22,4 +22,5 @@ fun set(buf : RawBuf[T], index : uint, value : T);
 @unsafe
 fun realloc(buf : RawBuf[T], new_size : uint) -> RawBuf[T];
 
+RawArray should use checked indexing by default
 ```

@@ -382,7 +382,7 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                 &runtime,
                 &mut constants,
             )
-            .codgen(body);
+            .codegen(body);
             if should_print {
                 println!("{:?}", ctxt.func);
             }
@@ -1088,7 +1088,19 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             &[size_in_bytes, align_in_bytes],
         )
     }
-    fn codgen_static_size_alloc_call(&mut self, ty: Type<'ctxt>, count: u64) -> ir::Value {
+    fn codegen_runtime_size_alloc_call(&mut self, ty: Type<'ctxt>, count: ir::Value) -> ir::Value {
+        let ty_layout = self.layout_for(ty);
+
+        let byte_size =
+            self.build_int_const(Type::new_uint(self.ctxt), ty_layout.size.in_bytes().into());
+        let byte_align = self.build_int_const(
+            Type::new_uint(self.ctxt),
+            ty_layout.alignment.in_bytes().into(),
+        );
+        let byte_size = self.builder.ins().imul(byte_size, count);
+        self.codegen_alloc_call(byte_size, byte_align)
+    }
+    fn codegen_static_size_alloc_call(&mut self, ty: Type<'ctxt>, count: u64) -> ir::Value {
         let ty_layout = self.layout_for(ty);
         let total_size = ty_layout.size.mul(count).in_bytes();
         let size_val = self.build_int_const(Type::new_uint(self.ctxt), total_size.into());
@@ -1238,7 +1250,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             }
         }
     }
-    fn codgen_binary_op(
+    fn codegen_binary_op(
         &mut self,
         place: &mir::Place,
         binary_op: mir::BinaryOp,
@@ -1320,19 +1332,25 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             self.store_immediate(place, left);
         }
     }
-    fn codgen_box(&mut self, place: &mir::Place, ty: Type<'ctxt>, operand: &mir::Operand<'ctxt>) {
+    fn codegen_box(&mut self, place: &mir::Place, ty: Type<'ctxt>, operand: &mir::Operand<'ctxt>) {
         let ty = Scheme::new(ty).bind(self.ctxt, self.args);
-        let ptr = self.codgen_static_size_alloc_call(ty, 1);
+        let ptr = self.codegen_static_size_alloc_call(ty, 1);
         let value = self.eval_operand(operand);
         let box_inner_ptr = MemPlace::new(ptr, self.layout_for(ty), ty);
         self.store_operand_with_mem_place(box_inner_ptr.clone(), value.clone());
-
         let place = self.eval_place(place).unwrap();
         let box_ptr = box_inner_ptr.ptr(self);
         self.store_immediate(place, box_ptr);
     }
-    fn codgen_rvalue_assign(&mut self, place: &mir::Place, value: &mir::Rvalue<'ctxt>) {
+    fn codegen_rvalue_assign(&mut self, place: &mir::Place, value: &mir::Rvalue<'ctxt>) {
         match value {
+            mir::Rvalue::AllocateRawArray { ty, count } => {
+                let dst_place = self.eval_place(place).unwrap();
+                let ty = Scheme::new(*ty).bind(self.ctxt, self.args);
+                let len = self.eval_operand(count).expect_immediate(self);
+                let ptr = self.codegen_runtime_size_alloc_call(ty,len);
+                self.store_immediate_pair(dst_place, ptr, len, layout::POINTER_SIZE);
+            }
             mir::Rvalue::Aggregate(kind, fields) => match kind {
                 AggregateKind::Tuple
                 | AggregateKind::NamedRecord(..)
@@ -1463,7 +1481,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let ty = Scheme::new(*ty).bind(self.ctxt, self.args);
                 let ty_layout = self.layout_for(ty);
                 let len: u64 = fields.len().try_into().unwrap();
-                let ptr = self.codgen_static_size_alloc_call(ty, len);
+                let ptr = self.codegen_static_size_alloc_call(ty, len);
                 if ty_layout.is_zst() || fields.is_empty() {
                     let len_value = self.build_int_const(Type::new_uint(self.ctxt), len.into());
                     self.store_value(
@@ -1501,7 +1519,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 );
             }
             mir::Rvalue::AllocateBox(ty, operand) => {
-                self.codgen_box(place, *ty, operand);
+                self.codegen_box(place, *ty, operand);
             }
             mir::Rvalue::Use(operand) => {
                 self.store_operand(place, operand);
@@ -1511,7 +1529,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             }
             mir::Rvalue::Binary(binary_op, operands) => {
                 let (left, right) = &**operands;
-                self.codgen_binary_op(place, *binary_op, left, right);
+                self.codegen_binary_op(place, *binary_op, left, right);
             }
             mir::Rvalue::AddrOf(array_place) => {
                 let place = self.eval_place(place).unwrap();
@@ -1702,7 +1720,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         };
     }
 
-    fn codgen_print_stmt(&mut self, operand: Option<&mir::Operand<'ctxt>>) {
+    fn codegen_print_stmt(&mut self, operand: Option<&mir::Operand<'ctxt>>) {
         if let Some(operand) = operand {
             let operand = self.eval_operand(operand);
             match operand.ty.kind() {
@@ -1758,19 +1776,19 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             self.print_newline();
         }
     }
-    fn codgen_stmt(&mut self, stmt: &mir::Stmt<'ctxt>) {
+    fn codegen_stmt(&mut self, stmt: &mir::Stmt<'ctxt>) {
         match &stmt.kind {
             mir::StmtKind::Noop => (),
             mir::StmtKind::Assign(place, rvalue) => {
-                self.codgen_rvalue_assign(place, rvalue);
+                self.codegen_rvalue_assign(place, rvalue);
             }
             mir::StmtKind::Print(operand) => {
                 let operand = operand.as_ref();
-                self.codgen_print_stmt(operand);
+                self.codegen_print_stmt(operand);
             }
         }
     }
-    fn codgen(mut self, body: &'_ mir::Body<'ctxt>) {
+    fn codegen(mut self, body: &'_ mir::Body<'ctxt>) {
         let block_map = self.block_map;
 
         for (id, &block) in block_map.blocks.iter_enumerated() {
@@ -1783,7 +1801,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 self.store_params(body);
             }
             for stmt in block.stmts.iter() {
-                self.codgen_stmt(stmt);
+                self.codegen_stmt(stmt);
             }
             match &block.expect_terminator().kind {
                 mir::TerminatorKind::Assert(operand, assert_kind, basic_block_id) => {

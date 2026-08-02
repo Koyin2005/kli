@@ -279,6 +279,10 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::RawArrayAlloc => {
+                let [count] = operands.try_into().unwrap();
+                BuiltinResult::Rvalue(Rvalue::AllocateRawArray { ty, count })
+            }
             Builtin::ArrayRepeat => {
                 let [value, count] = operands.try_into().unwrap();
                 let ty = ty.as_array().unwrap();
