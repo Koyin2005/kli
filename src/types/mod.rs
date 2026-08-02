@@ -531,7 +531,7 @@ pub trait TypeMap<'ctxt> {
             )),
             TypeKind::Array(ty) => Ok(Type::new_array(self.ctxt(), self.map_type(*ty)?)),
             TypeKind::Box(ty) => Ok(Type::new_box(self.ctxt(), self.map_type(*ty)?)),
-            TypeKind::RawArray(ty) => Ok(Type::new_box(self.ctxt(), self.map_type(*ty)?)),
+            TypeKind::RawArray(ty) => Ok(Type::new_array(self.ctxt(), self.map_type(*ty)?)),
         }
     }
     fn super_map_function_type(
