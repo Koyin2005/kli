@@ -281,6 +281,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         match builtin {
             Builtin::RawArrayAlloc => {
                 let [count] = operands.try_into().unwrap();
+                let ty = ty.as_raw_array().unwrap();
                 BuiltinResult::Rvalue(Rvalue::AllocateRawArray { ty, count })
             }
             Builtin::ArrayRepeat => {

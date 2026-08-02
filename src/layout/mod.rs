@@ -389,24 +389,11 @@ pub fn calculate_layout<'ctxt>(
         TypeKind::Never => Layout::zst().uninhabited(),
         TypeKind::Param(_, _) => return Err(LayoutError::TooGeneric),
         TypeKind::Function(_) | TypeKind::Box(_) => Layout::pointer(true),
-        TypeKind::Array(_) | TypeKind::String => {
+        TypeKind::Array(_) | TypeKind::String | TypeKind::RawArray(_) => {
             return aggregate_layout(vec![
                 (FieldId::new(0), Layout::pointer(true)),
                 (
                     FieldId::new(1),
-                    Layout::from_scalar(Scalar::Int64(IntegerKind::Unsigned)),
-                ),
-            ]);
-        }
-        TypeKind::RawArray(_) => {
-            return aggregate_layout(vec![
-                (FieldId::new(0), Layout::pointer(true)),
-                (
-                    FieldId::new(1),
-                    Layout::from_scalar(Scalar::Int64(IntegerKind::Unsigned)),
-                ),
-                (
-                    FieldId::new(2),
                     Layout::from_scalar(Scalar::Int64(IntegerKind::Unsigned)),
                 ),
             ]);

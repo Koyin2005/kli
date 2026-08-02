@@ -1062,7 +1062,16 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     let value = self.load_place(&codegen_place).unwrap();
                     all_args.extend(value.into_iter());
                 }
-                (OperandValueKind::ZeroSized, _) | (_, PassMode::ByPtr) => unreachable!(),
+                (OperandValueKind::ZeroSized,_) => unreachable!(),
+                (OperandValueKind::Value(value),PassMode::ByPtr) => {
+                    let layout = self.layout_for(arg.ty);
+                    let size = layout.size.in_bytes_u32();
+                    let align = layout.alignment.pow_of_2();
+                    let slot = self.builder.create_sized_stack_slot(ir::StackSlotData::new(ir::StackSlotKind::ExplicitSlot,size, align));
+                    let place = MemPlace::new(self.builder.ins().stack_addr(PTR_IR_TYPE, slot, 0), layout, arg.ty);
+                    all_args.push(place.ptr(self));
+                    self.store_scalar_mem(place, value);
+                }
                 (OperandValueKind::Value(scalar_value), PassMode::ByValue(_)) => {
                     all_args.extend(scalar_value.into_iter());
                 }

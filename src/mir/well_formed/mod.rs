@@ -75,7 +75,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 super::PlaceProjection::ConstantIndex(_) | super::PlaceProjection::Index(_) => {
                     ty = self.assert_with_some(
                         ty,
-                        Type::as_array,
+                        |ty| ty.as_array().or(ty.as_raw_array()),
                         || "Cannot take an index for non-array",
                         loc,
                     )
