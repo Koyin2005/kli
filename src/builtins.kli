@@ -29,8 +29,8 @@ fun array_repeat[T](value : T, count : uint) -> array[T];
 fun raw_array_alloc[T](size : uint) -> raw_array[T];
 
 @builtin
-fun array_set_unchecked[T](a : T, index : uint, value : T) -> ();
+fun array_set_unchecked[T,U](a : T, index : uint, value : U) -> ();
 
 @unsafe
 @builtin
-fun array_get_unchecked[T](a : T, index : uint) -> T;
+fun array_get_unchecked[T,U](a : T, index : uint) -> U;
