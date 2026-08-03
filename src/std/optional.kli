@@ -17,7 +17,7 @@ fun expect_value[T](o : Option[T]) -> T =
     | .Some(x) -> x
     | .None -> 
         do
-            std.panic.panic_message("expected Some value but got None")
+            std.panicking.panic_message("expected Some value but got None")
         end
     end
 

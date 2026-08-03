@@ -147,11 +147,30 @@ impl<'s> Lexer<'s> {
     fn string_token(&mut self) -> Option<Token> {
         self.next_char();
         let mut src = String::new();
+        let mut prev_char = None;
         while let Some(c) = self.peek_char()
             && c != '"'
-        {
-            src.push(c);
+        {   
+            if let Some('\\') = prev_char{
+                src.pop();
+                src.push(match c{
+                    '\\' => '\\',
+                    'n' => '\n',
+                    't' => '\t',
+                    _ => {
+                        self.diag.add_diagnostic(format!("invalid escape character '{}'",c), self.current_loc());
+                        self.next_char();
+                        prev_char = Some(c);
+                        continue;
+                    }
+                });
+            }
+             else {
+                src.push(c);
+            }
             self.next_char();
+
+            prev_char = Some(c);
         }
         if self.match_char('"').is_some() {
             Some(Token {

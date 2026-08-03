@@ -1,4 +1,5 @@
 import std.optional.Option
+import std.panicking.panic_message
 
 fun wrapping_add(x : int, y : int) -> int = builtins.wrapping_add(x,y)
 

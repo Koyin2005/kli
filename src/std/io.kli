@@ -1,5 +1,7 @@
 import std.ints.neg
 
+fun print_string(value : string) -> () = builtins.print_string(value)
+
 fun print_int(value : int) -> () = do
     case value of 
     | 0 -> 
@@ -57,4 +59,4 @@ end
 
 
 
-fun read_line() -> string = std.panic.todo("user input")
+fun read_line() -> string = std.panicking.todo("user input")

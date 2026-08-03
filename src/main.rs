@@ -183,7 +183,7 @@ fn find_std_lib() -> FileEntry {
     let cmp_file = include_str!("std/cmp.kli");
     let map_file = include_str!("std/maps.kli");
     let slice_file = include_str!("std/slices.kli");
-    let panic_file = include_str!("std/panic.kli");
+    let panic_file = include_str!("std/panicking.kli");
     fn file_from(name: &str, src: &'static str) -> (Symbol, FileEntry) {
         let name = Symbol::intern(name);
         (
@@ -209,7 +209,7 @@ fn find_std_lib() -> FileEntry {
             file_from("refs", ref_file),
             file_from("strings", string_file),
             file_from("slices", slice_file),
-            file_from("panic", panic_file)
+            file_from("panicking", panic_file)
         ])),
     }
 }
