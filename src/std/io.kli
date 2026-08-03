@@ -1,12 +1,8 @@
 
 
-fun print_int(value : int) -> () = do
-    print(value)
-end
+fun print_int(value : int) -> () = panic
 
-# Prints the value and then prints a newline 
-fun print_newline[T](value : T) -> () = do
-    print(value);
-    print()
-end
+# Prints the string and then prints a newline 
+fun print_newline(value : string) -> () = panic
+
 fun read_line() -> string = panic

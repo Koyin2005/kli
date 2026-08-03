@@ -321,6 +321,7 @@ fn main() {
             std::fs::write("foo.o", obj.emit().unwrap()).unwrap();
         }
         let output = Command::new("gcc")
+            .arg("kli_pal.c")
             .arg("kli_rt.c")
             .arg("-o")
             .arg("output")

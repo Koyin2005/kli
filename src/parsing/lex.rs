@@ -1,4 +1,4 @@
-use std::{iter::Peekable, num::IntErrorKind, str::Chars};
+use std::{iter::Peekable, num::IntErrorKind, str::CharIndices};
 
 use crate::{
     diagnostics::DiagnosticReporter,
@@ -8,7 +8,7 @@ use crate::{
 };
 
 pub struct Lexer<'src> {
-    chars: Peekable<Chars<'src>>,
+    chars: Peekable<CharIndices<'src>>,
     src: &'src str,
     file: Symbol,
     line: u32,
@@ -24,33 +24,33 @@ impl<'s> Lexer<'s> {
             index: 0,
             start_index: 0,
             src,
-            chars: src.chars().peekable(),
+            chars: src.char_indices().peekable(),
             line: 1,
             start_line: 1,
             diag: DiagnosticReporter::new(),
         }
     }
     fn peek_char(&mut self) -> Option<char> {
-        self.chars.peek().copied()
+        self.chars.peek().copied().map(|(_,c)| c)
     }
     fn next_char(&mut self) -> Option<char> {
-        self.chars.next().inspect(|x| {
-            self.index += 1;
-            if *x == '\n' {
+        self.chars.next().map(|(index,c)| {
+            self.index  = (index + c.len_utf8())as u32 ;
+            if c == '\n' {
                 self.line = self.line.checked_add(1).expect("file too big");
             }
+            c
         })
     }
     fn match_char(&mut self, c: char) -> Option<char> {
-        if self.chars.peek().is_some_and(|p| *p == c) {
+        if self.peek_char().is_some_and(|p| p == c) {
             self.next_char()
         } else {
             None
         }
     }
     fn match_char_with(&mut self, f: impl FnOnce(char) -> bool) -> Option<char> {
-        if let Some(&c) = self.chars.peek()
-            && f(c)
+        if self.peek_char().is_some_and(f)
         {
             self.next_char()
         } else {
@@ -58,14 +58,12 @@ impl<'s> Lexer<'s> {
         }
     }
     fn skip_whitespace(&mut self) {
-        while let Some(&c) = self.chars.peek() {
+        while let Some(c) = self.peek_char() {
             if c.is_whitespace() {
                 self.next_char();
             } else if c == '#' {
                 self.next_char();
-                while self.chars.peek().is_some_and(|c| *c != '\n') {
-                    self.next_char();
-                }
+                while self.match_char_with(|c| c != '\n').is_some() {}
             } else {
                 break;
             }
@@ -155,7 +153,6 @@ impl<'s> Lexer<'s> {
             src.push(c);
             self.next_char();
         }
-
         if self.match_char('"').is_some() {
             Some(Token {
                 loc: self.current_loc(),
@@ -217,7 +214,7 @@ impl<'s> Lexer<'s> {
     fn next_token(&mut self) -> Option<Token> {
         self.skip_whitespace();
         let line = self.line;
-        let &c = self.chars.peek()?;
+        let c = self.peek_char()?;
         self.start_line = line;
         self.start_index = self.index;
         match c {
