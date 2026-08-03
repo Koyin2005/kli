@@ -140,7 +140,6 @@ pub enum ExprKind<'ctxt> {
     VariantInit(DefId, CaseId, GenericArgs<'ctxt>, Option<Box<Expr<'ctxt>>>),
     Function(DefId, GenericArgs<'ctxt>),
     Const(DefId, GenericArgs<'ctxt>),
-    Print(Option<Box<Expr<'ctxt>>>),
     Call(Box<Expr<'ctxt>>, Vec<Expr<'ctxt>>),
     Load(Place<'ctxt>),
     Binary(BinaryOp, Box<Expr<'ctxt>>, Box<Expr<'ctxt>>),

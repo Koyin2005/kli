@@ -640,9 +640,6 @@ impl<'info> Resolve<'info> {
             ast::ExprKind::Return(value) => {
                 res::ExprKind::Return(Box::new(self.resolve_expr(*value)))
             }
-            ast::ExprKind::Print(arg) => {
-                res::ExprKind::Print(arg.map(|arg| Box::new(self.resolve_expr(*arg))))
-            }
             ast::ExprKind::Annotate(expr, ty) => res::ExprKind::Annotate(
                 Box::new(self.resolve_expr(*expr)),
                 Box::new(self.resolve_type(*ty)),

@@ -239,7 +239,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             | ExprKind::Load(_)
             | ExprKind::Call(..)
             | ExprKind::Binary(..)
-            | ExprKind::Print(_)
             | ExprKind::For { .. }
             | ExprKind::Assign(..)
             | ExprKind::VariantInit(..)
@@ -549,7 +548,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 Rvalue::Use(Operand::Load(Place::local(temp)))
             }
             ExprKind::For { .. }
-            | ExprKind::Print(_)
             | ExprKind::Assign(..)
             | ExprKind::While(..) => {
                 self.expr_stmt(expr);

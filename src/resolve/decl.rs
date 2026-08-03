@@ -30,11 +30,6 @@ impl DeclareInBody<'_, '_> {
             | ast::ExprKind::Unsafe(expr)
             | ast::ExprKind::Field(expr, _)
             | ast::ExprKind::Deref(expr) => self.declare_in_exprs(expr),
-            ast::ExprKind::Print(expr) => {
-                if let Some(expr) = expr {
-                    self.declare_in_exprs(expr);
-                }
-            }
             ast::ExprKind::Call(callee, args) | ast::ExprKind::MethodCall(callee, _, args) => {
                 self.declare_in_exprs(callee);
                 for arg in args {

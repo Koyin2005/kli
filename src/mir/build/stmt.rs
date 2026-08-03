@@ -1,6 +1,6 @@
 use crate::{
     mir::{
-        Place, StmtKind, TerminatorKind,
+        Place, TerminatorKind,
         build::{Builder, expr::BuiltinResult},
     },
     typed_ast::{Expr, ExprKind},
@@ -31,10 +31,6 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
             }
             ExprKind::Unsafe(expr) => {
                 self.expr_stmt(expr);
-            }
-            ExprKind::Print(value) => {
-                let stmt = StmtKind::Print(value.as_ref().map(|expr| self.operand(expr)));
-                self.push_stmt(expr.loc, stmt);
             }
             ExprKind::For {
                 pattern,

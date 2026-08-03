@@ -125,7 +125,6 @@ pub enum ExprKind {
     Assign(Box<Expr>, Box<Expr>),
     For(Box<ForExpr>),
     Case(Box<Expr>, Box<[CaseArm]>),
-    Print(Option<Box<Expr>>),
     Call(Box<Expr>, Box<[Expr]>),
     Record(Vec<FieldInit>),
     VariantCase(DefId, Box<GenericArgs>),

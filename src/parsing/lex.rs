@@ -208,7 +208,6 @@ impl<'s> Lexer<'s> {
                 "bool" => TokenKind::Bool,
                 "let" => TokenKind::Let,
                 "case" => TokenKind::Case,
-                "print" => TokenKind::Print,
                 "static" => TokenKind::Static,
                 "ref" => TokenKind::Ref,
                 "impl" => TokenKind::Impl,

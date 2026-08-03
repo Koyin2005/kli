@@ -218,7 +218,6 @@ pub enum ExprKind {
     Unsafe(Box<Expr>),
     Annotate(Box<Expr>, Box<Type>),
     String(String),
-    Print(Option<Box<Expr>>),
     Panic,
     Call(Box<Expr>, Vec<Expr>),
     Case(Box<Expr>, Vec<CaseArm>),

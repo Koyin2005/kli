@@ -90,11 +90,6 @@ where
         | ExprKind::Function(..)
         | ExprKind::Unit
         | ExprKind::Panic => (),
-        ExprKind::Print(value) => {
-            if let Some(value) = value {
-                v.visit_expr(value);
-            }
-        }
         ExprKind::BuiltinCall(_, _, exprs) | ExprKind::Tuple(exprs) | ExprKind::Array(exprs) => {
             for expr in exprs {
                 v.visit_expr(expr);

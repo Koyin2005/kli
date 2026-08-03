@@ -98,11 +98,6 @@ impl<'a, 'ctxt> TypeSubst<'a, 'ctxt> {
                 self.subst_expr(first);
                 self.subst_expr(second);
             }
-            ExprKind::Print(expr) => {
-                if let Some(expr) = expr {
-                    self.subst_expr(expr);
-                }
-            }
             ExprKind::VariantInit(.., args, expr) => {
                 self.subst_generic_args(args);
                 if let Some(expr) = expr {

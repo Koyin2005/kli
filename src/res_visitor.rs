@@ -119,11 +119,6 @@ pub trait Visitor {
                     self.visit_expr(&arm.body);
                 }
             }
-            ExprKind::Print(expr) => {
-                if let Some(expr) = expr {
-                    self.visit_expr(expr);
-                }
-            }
             ExprKind::Call(callee, args) | ExprKind::MethodCall(callee, _, args) => {
                 self.visit_expr(callee);
                 for arg in args {

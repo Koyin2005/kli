@@ -530,22 +530,6 @@ impl Parser {
                     kind: ExprKind::Return(Box::new(return_value)),
                 })
             }
-            TokenKind::Print => {
-                self.advance();
-                let _ = self.expect(&TokenKind::LeftParen);
-                let expr = if self.check_token(&TokenKind::RightParen) {
-                    None
-                } else {
-                    let expr = self.parse_expr()?;
-                    Some(expr)
-                };
-                let _ = self.expect(&TokenKind::RightParen);
-
-                Ok(Expr {
-                    loc,
-                    kind: ExprKind::Print(expr.map(Box::new)),
-                })
-            }
             TokenKind::Panic => {
                 self.advance();
                 Ok(Expr {

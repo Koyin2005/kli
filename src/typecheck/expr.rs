@@ -686,14 +686,6 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                     kind: typed_ast::ExprKind::Load(place),
                 }
             }
-            ExprKind::Print(arg) => {
-                let arg = arg.as_ref().map(|arg| Box::new(self.check_expr(arg, None)));
-                make_expr(
-                    Type::new_unit(self.ctxt()),
-                    typed_ast::ExprKind::Print(arg),
-                    loc,
-                )
-            }
             ExprKind::Unit => {
                 let ctxt = self.root().ctxt();
                 make_expr(Type::new_unit(ctxt), typed_ast::ExprKind::Unit, loc)
