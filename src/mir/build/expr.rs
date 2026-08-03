@@ -279,6 +279,23 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::ArrayGetUnchecked => {
+                let [array,index] = operands.try_into().unwrap();
+                let Operand::Load(place) = array else {
+                    unreachable!()
+                };
+                let index = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Load(place.with_index(index))))
+            },
+            Builtin::ArraySetUnchecked => {
+                let [array,index,value] = operands.try_into().unwrap();
+                let Operand::Load(place) = array else {
+                    unreachable!()
+                };
+                let index = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
+                self.assign(args[0].loc, place.with_index(index), Rvalue::Use(value));
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
+            },
             Builtin::RawArrayAlloc => {
                 let [count] = operands.try_into().unwrap();
                 let ty = ty.as_raw_array().unwrap();

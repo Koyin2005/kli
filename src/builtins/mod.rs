@@ -13,6 +13,8 @@ pub enum Builtin {
     ZeroExtend,
     ArrayRepeat,
     RawArrayAlloc,
+    ArraySetUnchecked,
+    ArrayGetUnchecked,
 }
 impl Builtin {
     const _NO_REPEATS: () = {
@@ -34,7 +36,7 @@ impl Builtin {
             i += 1;
         }
     };
-    pub const COUNT: usize = 9;
+    pub const COUNT: usize = 11;
     pub const ALL_BUILTINS: [Self; Self::COUNT] = [
         Builtin::BoxAlloc,
         Builtin::Transmute,
@@ -45,6 +47,8 @@ impl Builtin {
         Builtin::ZeroExtend,
         Builtin::ArrayRepeat,
         Builtin::RawArrayAlloc,
+        Builtin::ArraySetUnchecked,
+        Builtin::ArrayGetUnchecked,
     ];
     pub const fn name(self) -> &'static str {
         match self {
@@ -57,6 +61,8 @@ impl Builtin {
             Builtin::ZeroExtend => "zero_extend",
             Builtin::ArrayRepeat => "array_repeat",
             Builtin::RawArrayAlloc => "raw_array_alloc",
+            Builtin::ArrayGetUnchecked => "array_get_unchecked",
+            Builtin::ArraySetUnchecked => "array_set_unchecked"
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
