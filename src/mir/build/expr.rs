@@ -275,7 +275,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         match builtin {
             Builtin::PrintString => {
                 let [arg] = operands.try_into().unwrap();
-                self.push_stmt(args[0].loc, mir::StmtKind::Print(Some(arg)));
+                self.push_stmt(args[0].loc, mir::StmtKind::Print(arg));
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
             }
             Builtin::ArrayGetUnchecked => {

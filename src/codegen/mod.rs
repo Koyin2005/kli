@@ -1729,30 +1729,11 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         };
     }
 
-    fn codegen_print_stmt(&mut self, operand: Option<&mir::Operand<'ctxt>>) {
-        if let Some(operand) = operand {
+    fn codegen_print_stmt(&mut self, operand: &mir::Operand<'ctxt>) {
             let operand = self.eval_operand(operand);
-            match operand.ty.kind() {
-                TypeKind::Int(_) => {
-                    let value = operand.expect_immediate(self);
-                    self.codegen_direct_void_call(self.runtime_functions.print_int, &[value]);
-                }
-                TypeKind::Bool => {
-                    let value = operand.expect_immediate(self);
-                    let true_value = self.build_string_value("true".to_string());
-                    let false_value = self.build_string_value("false".to_string());
-
-                    let (first_value, second_value) = (
-                        self.builder
-                            .ins()
-                            .select(value, true_value.0, false_value.0),
-                        self.builder
-                            .ins()
-                            .select(value, true_value.1, false_value.1),
-                    );
-                    self.print_string(first_value, second_value);
-                }
-                TypeKind::String => {
+            let TypeKind::String = operand.ty.kind() else {
+                unreachable!()
+            };
                     let (first_val, second_val) = match operand.kind {
                         OperandValueKind::Indirect(CodegenPlace::MemPlace(place)) => {
                             let first_val = self.load_array_ptr(place.clone());
@@ -1765,25 +1746,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         _ => unreachable!("{:?}", operand.kind),
                     };
                     self.print_string(first_val, second_val);
-                }
-                TypeKind::Tuple(fields) => {
-                    if !fields.is_empty() {
-                        todo!("non empty tuples")
-                    }
-                    let (first_val, second_val) = self.build_string_value("()".to_string());
-                    self.print_string(first_val, second_val);
-                }
-                TypeKind::Unknown | TypeKind::Infer(_) => unreachable!(),
-                TypeKind::Never => {
-                    self.builder.ins().trap(TrapCode::unwrap_user(1));
-                    let block = self.builder.create_block();
-                    self.builder.switch_to_block(block);
-                }
-                ref ty => todo!("print for {} {:?}", ty, ty),
-            }
-        } else {
-            self.print_newline();
-        }
+                
     }
     fn codegen_stmt(&mut self, stmt: &mir::Stmt<'ctxt>) {
         match &stmt.kind {
@@ -1792,7 +1755,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 self.codegen_rvalue_assign(place, rvalue);
             }
             mir::StmtKind::Print(operand) => {
-                let operand = operand.as_ref();
                 self.codegen_print_stmt(operand);
             }
         }

@@ -25,9 +25,8 @@ pub trait Visit<'ctxt> {
                 self.visit_assign(loc, place, rvalue);
             }
             StmtKind::Print(operand) => {
-                if let Some(operand) = operand {
                     self.visit_operand(loc, operand);
-                }
+                
             }
         }
     }
@@ -176,9 +175,8 @@ pub trait MutVisit<'ctxt> {
                 self.visit_assign(loc, place, rvalue);
             }
             StmtKind::Print(operand) => {
-                if let Some(operand) = operand {
                     self.visit_operand(loc, operand);
-                }
+                
             }
         }
     }
