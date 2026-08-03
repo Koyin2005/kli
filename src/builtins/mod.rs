@@ -18,7 +18,7 @@ pub enum Builtin {
     ArraySetUnchecked,
     ArrayGetUnchecked,
     PrintString,
-    IntMaxValue
+    IntMaxValue,
 }
 impl Builtin {
     const _NO_REPEATS: () = {
@@ -56,7 +56,7 @@ impl Builtin {
         Builtin::PrintString,
         Builtin::WrappingSub,
         Builtin::OverflowingSub,
-        Builtin::IntMaxValue
+        Builtin::IntMaxValue,
     ];
     pub const fn name(self) -> &'static str {
         match self {
@@ -74,7 +74,7 @@ impl Builtin {
             Builtin::PrintString => "print_string",
             Builtin::OverflowingSub => "overflowing_sub",
             Builtin::WrappingSub => "wrapping_sub",
-            Builtin::IntMaxValue => "int_max_value"
+            Builtin::IntMaxValue => "int_max_value",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {

@@ -294,7 +294,11 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             },
             super::Rvalue::Len(place) => {
                 let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                self.assert(ty.as_array().or(ty.as_raw_array()).is_some(), || "Expected an array type", loc);
+                self.assert(
+                    ty.as_array().or(ty.as_raw_array()).is_some(),
+                    || "Expected an array type",
+                    loc,
+                );
             }
         }
     }

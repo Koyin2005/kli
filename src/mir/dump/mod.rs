@@ -325,8 +325,8 @@ impl<'ctxt> MirDump<'ctxt> {
             match &stmt.kind {
                 StmtKind::Print(value) => {
                     write!(self.output, "print(")?;
-                        self.write_operand(value)?;
-                    
+                    self.write_operand(value)?;
+
                     writeln!(self.output, ")")?;
                 }
                 StmtKind::Noop => writeln!(self.output, "noop")?,

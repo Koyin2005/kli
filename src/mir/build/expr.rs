@@ -1,10 +1,15 @@
 use std::collections::HashMap;
 
 use crate::{
-    Symbol, builtins::Builtin, index_vec::IndexVec, mir::{
+    Symbol,
+    builtins::Builtin,
+    index_vec::IndexVec,
+    mir::{
         self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Rvalue,
         build::Builder,
-    }, typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern}, types::{IntegerKind, Type},
+    },
+    typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
+    types::{IntegerKind, Type},
 };
 pub(super) enum BuiltinResult<'ctxt> {
     Rvalue(Rvalue<'ctxt>),
@@ -279,22 +284,22 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
             }
             Builtin::ArrayGetUnchecked => {
-                let [array,index] = operands.try_into().unwrap();
+                let [array, index] = operands.try_into().unwrap();
                 let Operand::Load(place) = array else {
                     unreachable!()
                 };
                 let index = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Load(place.with_index(index))))
-            },
+            }
             Builtin::ArraySetUnchecked => {
-                let [array,index,value] = operands.try_into().unwrap();
+                let [array, index, value] = operands.try_into().unwrap();
                 let Operand::Load(place) = array else {
                     unreachable!()
                 };
                 let index = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
                 self.assign(args[0].loc, place.with_index(index), Rvalue::Use(value));
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
-            },
+            }
             Builtin::RawArrayAlloc => {
                 let [count] = operands.try_into().unwrap();
                 let ty = ty.as_raw_array().unwrap();
@@ -372,11 +377,13 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             )),
             Builtin::IntMaxValue => {
                 let kind = ty.as_integer().unwrap();
-                let value = match kind{
+                let value = match kind {
                     IntegerKind::Signed => i64::MAX as i128,
-                    IntegerKind::Unsigned => u64::MAX as i128
+                    IntegerKind::Unsigned => u64::MAX as i128,
                 };
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::integer(self.ctxt, kind, value))))
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::integer(
+                    self.ctxt, kind, value,
+                ))))
             }
         }
     }
@@ -442,7 +449,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                         let is_zero = self.assign_equals(
                             expr.loc,
                             right_operand.clone(),
-                            Operand::Constant(Constant::integer(self.ctxt,kind, 0)),
+                            Operand::Constant(Constant::integer(self.ctxt, kind, 0)),
                         );
                         self.finish_assert_to_new_block(
                             expr.loc,
@@ -450,7 +457,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                             mir::AssertKind::DivideByZero,
                         );
 
-                        if matches!(kind,IntegerKind::Signed){
+                        if matches!(kind, IntegerKind::Signed) {
                             let is_left_min = self.assign_equals(
                                 expr.loc,
                                 left_operand.clone(),
@@ -547,9 +554,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let temp = self.expr_into_temp(expr);
                 Rvalue::Use(Operand::Load(Place::local(temp)))
             }
-            ExprKind::For { .. }
-            | ExprKind::Assign(..)
-            | ExprKind::While(..) => {
+            ExprKind::For { .. } | ExprKind::Assign(..) | ExprKind::While(..) => {
                 self.expr_stmt(expr);
                 Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt)))
             }

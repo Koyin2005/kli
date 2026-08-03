@@ -209,7 +209,7 @@ fn find_std_lib() -> FileEntry {
             file_from("refs", ref_file),
             file_from("strings", string_file),
             file_from("slices", slice_file),
-            file_from("panicking", panic_file)
+            file_from("panicking", panic_file),
         ])),
     }
 }

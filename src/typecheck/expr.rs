@@ -414,19 +414,8 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             kind: typed_ast::ExprKind::Block(body),
         }
     }
-    fn check_record(
-        &self,
-        loc: SrcLoc,
-        field_inits: &[FieldInit],
-        expected_ty: Option<Type<'ctxt>>,
-    ) -> typed_ast::Expr<'ctxt> {
-        let expected_fields: Option<IndexVec<FieldId, RecordField>> = match expected_ty
-            .map(|ty| self.root().simplify_type(ty))
-            .as_ref()
-            .map(|ty| ty.kind())
-        {
-            _ => None,
-        };
+    fn check_record(&self, loc: SrcLoc, field_inits: &[FieldInit]) -> typed_ast::Expr<'ctxt> {
+        let expected_fields: Option<IndexVec<FieldId, RecordField>> = None;
         let mut seen_fields = HashSet::new();
         let field_names = expected_fields
             .iter()
@@ -631,7 +620,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                     kind: typed_ast::ExprKind::Tuple(fields),
                 }
             }
-            ExprKind::Record(fields) => self.check_record(loc, fields, expected_ty),
+            ExprKind::Record(fields) => self.check_record(loc, fields),
             ExprKind::Block(block) => self.check_block(loc, block, expected_ty),
             ExprKind::Annotate(expr, ty) => self.check_expr(expr, Some(self.root().lower_type(ty))),
             ExprKind::Err => typed_ast::Expr {

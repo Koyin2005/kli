@@ -187,8 +187,11 @@ impl<'ctxt> Constant<'ctxt> {
             value: ConstValue::Scalar(value as i128),
         }
     }
-    pub fn integer(ctxt: CtxtRef<'ctxt>, kind : IntegerKind, value: i128) -> Self{
-        Self { ty: Type::new_int(ctxt, kind), value: ConstValue::Scalar(value) }
+    pub fn integer(ctxt: CtxtRef<'ctxt>, kind: IntegerKind, value: i128) -> Self {
+        Self {
+            ty: Type::new_int(ctxt, kind),
+            value: ConstValue::Scalar(value),
+        }
     }
     pub fn int(ctxt: CtxtRef<'ctxt>, value: i64) -> Self {
         Self {

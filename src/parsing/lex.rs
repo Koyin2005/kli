@@ -31,11 +31,11 @@ impl<'s> Lexer<'s> {
         }
     }
     fn peek_char(&mut self) -> Option<char> {
-        self.chars.peek().copied().map(|(_,c)| c)
+        self.chars.peek().copied().map(|(_, c)| c)
     }
     fn next_char(&mut self) -> Option<char> {
-        self.chars.next().map(|(index,c)| {
-            self.index  = (index + c.len_utf8())as u32 ;
+        self.chars.next().map(|(index, c)| {
+            self.index = (index + c.len_utf8()) as u32;
             if c == '\n' {
                 self.line = self.line.checked_add(1).expect("file too big");
             }
@@ -50,8 +50,7 @@ impl<'s> Lexer<'s> {
         }
     }
     fn match_char_with(&mut self, f: impl FnOnce(char) -> bool) -> Option<char> {
-        if self.peek_char().is_some_and(f)
-        {
+        if self.peek_char().is_some_and(f) {
             self.next_char()
         } else {
             None
@@ -150,22 +149,24 @@ impl<'s> Lexer<'s> {
         let mut prev_char = None;
         while let Some(c) = self.peek_char()
             && c != '"'
-        {   
-            if let Some('\\') = prev_char{
+        {
+            if let Some('\\') = prev_char {
                 src.pop();
-                src.push(match c{
+                src.push(match c {
                     '\\' => '\\',
                     'n' => '\n',
                     't' => '\t',
                     _ => {
-                        self.diag.add_diagnostic(format!("invalid escape character '{}'",c), self.current_loc());
+                        self.diag.add_diagnostic(
+                            format!("invalid escape character '{}'", c),
+                            self.current_loc(),
+                        );
                         self.next_char();
                         prev_char = Some(c);
                         continue;
                     }
                 });
-            }
-             else {
+            } else {
                 src.push(c);
             }
             self.next_char();
