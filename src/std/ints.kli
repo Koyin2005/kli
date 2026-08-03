@@ -11,8 +11,14 @@ fun checked_add(x : int, y : int) -> Option[int] = do
     end
 end
 
-fun neg(value : int) -> int = panic
-fun rem(value : int, div : int) -> int = panic
+fun neg(value : int) -> int = builtins.wrapping_sub(0,value)
+
+# Computes the remainder of dividing `value` by `div`
+# Panics if div is 0
+fun rem(value : int, div : int) -> int = do
+    let multiple = value / div;
+    value - multiple * div
+end
 
 fun log(value : uint, power : uint) -> uint = 
     case value of 
@@ -39,10 +45,7 @@ fun bitcast_uint_to_int(x : uint) -> int =
     #Safety : uint always has same layout as int
     unsafe builtins.transmute(x) end
 
-fun invalid_value() -> never = do
-    io.print_newline("invalid numeric value");
-    panic
-end
+fun invalid_value() -> never = panic_message("invalid value")
 
 #If x is negative panics otherwise performs a bitcast
 fun strict_cast_int_to_uint(x : int) -> uint = 
@@ -59,7 +62,7 @@ fun strict_cast_uint_to_int(x : uint) -> int =
     | false -> bitcast_uint_to_int(x)
     end
 
-fun int_max_value() -> int = panic
+fun int_max_value() -> int = builtins.int_max_value()
 
 fun min(x : int, y : int) -> int = case x < y of | true -> x | false -> y end
 

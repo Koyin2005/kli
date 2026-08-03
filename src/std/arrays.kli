@@ -1,12 +1,8 @@
 import std.optional.Option
 import builtins
-import std.io.print_newline
+import std.io.panic_message
 
-fun index_out_bounds() -> never = 
-    do
-        print_newline("index out of bounds");
-        panic
-    end
+fun index_out_bounds() -> never = panic_message("index out of bounds")
 
 fun empty[T]() -> array[T] = []
 

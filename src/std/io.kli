@@ -36,8 +36,7 @@ fun print_int(value : int) -> () = do
         | 6 -> "6"
         | 7 -> "7"
         | 8 -> "8"
-        | 9 -> "9"
-        | _ -> panic
+        | _ -> "9"
         end);
         i = i + 1u;
     end;
@@ -53,9 +52,9 @@ end
 # Prints the string and then prints a newline 
 fun print_newline(value : string) -> () = do
     builtins.print_string(value);
-    print();
+    builtins.print_string("\n");
 end
 
 
 
-fun read_line() -> string = panic
+fun read_line() -> string = std.panic.todo("user input")

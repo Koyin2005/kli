@@ -17,8 +17,7 @@ fun expect_value[T](o : Option[T]) -> T =
     | .Some(x) -> x
     | .None -> 
         do
-            print_newline("unwrapped None value");
-            panic
+            std.panic.panic_message("expected Some value but got None")
         end
     end
 

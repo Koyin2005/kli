@@ -20,6 +20,12 @@ fun wrapping_add[T](x : T, y : T) -> T;
 fun overflowing_add[T](x : T, y : T) -> (T, bool);
 
 @builtin
+fun wrapping_sub[T](x : T, y : T) -> T;
+
+@builtin
+fun overflowing_sub[T](x : T, y : T) -> (T, bool);
+
+@builtin
 fun zero_extend[T,U](x : T) -> U;
 
 @builtin
@@ -37,3 +43,6 @@ fun array_get_unchecked[T,U](a : T, index : uint) -> U;
 
 @builtin
 fun print_string(s : string) -> ();
+
+@builtin
+fun int_max_value[T]() -> T;

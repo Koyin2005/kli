@@ -351,10 +351,34 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     right,
                 ))
             }
+            Builtin::WrappingSub => {
+                let [left, right] = operands.try_into().unwrap();
+                BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                    mir::BinaryOp::Wrapping(OverflowOp::Subtract),
+                    left,
+                    right,
+                ))
+            }
+            Builtin::OverflowingSub => {
+                let [left, right] = operands.try_into().unwrap();
+                BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                    mir::BinaryOp::Overflow(OverflowOp::Subtract),
+                    left,
+                    right,
+                ))
+            }
             Builtin::Transmute => BuiltinResult::Rvalue(Rvalue::Cast(
                 mir::CastKind::Transmute(ty),
                 { operands }.swap_remove(0),
             )),
+            Builtin::IntMaxValue => {
+                let kind = ty.as_integer().unwrap();
+                let value = match kind{
+                    IntegerKind::Signed => i64::MAX as i128,
+                    IntegerKind::Unsigned => u64::MAX as i128
+                };
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::integer(self.ctxt, kind, value))))
+            }
         }
     }
     pub fn build_rvalue(&mut self, expr: &Expr<'ctxt>) -> Rvalue<'ctxt> {
