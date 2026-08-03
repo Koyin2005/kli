@@ -94,6 +94,7 @@ pub fn config() -> Result<Config, ConfigError> {
                 "output-instances" => Feature::OutputInstances,
                 "optimise" => Feature::Optimise,
                 "with-mir-pass" => Feature::WithMirPass,
+                "output-backend-ir" => Feature::OutputBackendIr,
                 _ => return None,
             };
             let args = pieces.map(Symbol::intern).collect::<Vec<_>>();

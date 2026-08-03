@@ -1,8 +1,61 @@
+import std.ints.neg
 
+fun print_int(value : int) -> () = do
+    case value of 
+    | 0 -> 
+        do 
+            builtins.print_string("0");
+            return ();
+        end 
+    | _ -> ()
+    end;
+    
+    let mut value = case value < 0 of
+    | true -> do 
+        builtins.print_string("-");
+        std.ints.strict_cast_int_to_uint(neg(value))
+    end
+    | false -> std.ints.bitcast_int_to_uint(value)
+    end;
 
-fun print_int(value : int) -> () = panic
+    let digits = std.ints.log(value,10);
+    let mut arr = arrays.repeat(digits,"");
+
+    let mut i = 0u;
+    while value > 0u do
+        let rest = value / 10u;
+        let digit = value - rest * 10u;
+        value = rest;
+        (arr).[i] = (case digit of
+        | 0 -> "0"
+        | 1 -> "1"
+        | 2 -> "2"
+        | 3 -> "3"
+        | 4 -> "4"
+        | 5 -> "5"
+        | 6 -> "6"
+        | 7 -> "7"
+        | 8 -> "8"
+        | 9 -> "9"
+        | _ -> panic
+        end);
+        i = i + 1u;
+    end;
+    std.arrays.reverse(arr);
+    let mut i = 0u;
+    while i < digits do
+        builtins.print_string((arr).[i]);
+        i = i + 1;
+    end
+
+end
 
 # Prints the string and then prints a newline 
-fun print_newline(value : string) -> () = panic
+fun print_newline(value : string) -> () = do
+    builtins.print_string(value);
+    print();
+end
+
+
 
 fun read_line() -> string = panic

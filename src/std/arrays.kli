@@ -42,3 +42,20 @@ fun copy_from[T](this : array[T], other : array[T]) -> () =
             end
         end
     end
+
+fun reverse[T](this : array[T]) -> () = do
+    let mut i = 0u;
+    let len = builtins.array_len(this);
+    case len of 
+    | 0 -> return ()
+    | 1 -> return ()
+    | _ -> ()
+    end;
+    while i < (len / 2u) do
+        let tmp = (this).[i];
+        (this).[i] = (this).[(len - i) - 1u];
+        (this).[(len - i) - 1u] = tmp;
+        i = i + 1u;
+    end;
+
+end

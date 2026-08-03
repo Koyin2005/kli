@@ -1,15 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    Symbol,
-    builtins::Builtin,
-    index_vec::IndexVec,
-    mir::{
+    Symbol, builtins::Builtin, index_vec::IndexVec, mir::{
         self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Rvalue,
         build::Builder,
-    },
-    typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
-    types::Type,
+    }, typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern}, types::{IntegerKind, Type},
 };
 pub(super) enum BuiltinResult<'ctxt> {
     Rvalue(Rvalue<'ctxt>),
@@ -279,6 +274,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::PrintString => {
+                let [arg] = operands.try_into().unwrap();
+                self.push_stmt(args[0].loc, mir::StmtKind::Print(Some(arg)));
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
+            }
             Builtin::ArrayGetUnchecked => {
                 let [array,index] = operands.try_into().unwrap();
                 let Operand::Load(place) = array else {
@@ -412,41 +412,45 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     BinaryOp::Divide => {
                         let left_operand = self.operand(left);
                         let right_operand = self.operand(right);
+                        let kind = left.ty.as_integer().unwrap();
                         //Division can fail in 2 ways
                         //Divide by zero
                         //Divide int min by -1
                         let is_zero = self.assign_equals(
                             expr.loc,
                             right_operand.clone(),
-                            Operand::Constant(Constant::int(self.ctxt, 0)),
+                            Operand::Constant(Constant::integer(self.ctxt,kind, 0)),
                         );
                         self.finish_assert_to_new_block(
                             expr.loc,
                             Operand::Load(Place::local(is_zero)),
                             mir::AssertKind::DivideByZero,
                         );
-                        let is_left_min = self.assign_equals(
-                            expr.loc,
-                            left_operand.clone(),
-                            Operand::Constant(Constant::int(self.ctxt, ConstValue::MIN_INT)),
-                        );
-                        let is_right_neg_1 = self.assign_equals(
-                            expr.loc,
-                            left_operand.clone(),
-                            Operand::Constant(Constant::int(self.ctxt, -1)),
-                        );
-                        let overflow = self.assign_binary_result(
-                            expr.loc,
-                            Type::new_bool(self.ctxt),
-                            mir::BinaryOp::BitwiseAnd,
-                            Operand::Load(Place::local(is_left_min)),
-                            Operand::Load(Place::local(is_right_neg_1)),
-                        );
-                        self.finish_assert_to_new_block(
-                            expr.loc,
-                            Operand::Load(Place::local(overflow)),
-                            mir::AssertKind::DivideOverflow,
-                        );
+
+                        if matches!(kind,IntegerKind::Signed){
+                            let is_left_min = self.assign_equals(
+                                expr.loc,
+                                left_operand.clone(),
+                                Operand::Constant(Constant::int(self.ctxt, ConstValue::MIN_INT)),
+                            );
+                            let is_right_neg_1 = self.assign_equals(
+                                expr.loc,
+                                left_operand.clone(),
+                                Operand::Constant(Constant::int(self.ctxt, -1)),
+                            );
+                            let overflow = self.assign_binary_result(
+                                expr.loc,
+                                Type::new_bool(self.ctxt),
+                                mir::BinaryOp::BitwiseAnd,
+                                Operand::Load(Place::local(is_left_min)),
+                                Operand::Load(Place::local(is_right_neg_1)),
+                            );
+                            self.finish_assert_to_new_block(
+                                expr.loc,
+                                Operand::Load(Place::local(overflow)),
+                                mir::AssertKind::DivideOverflow,
+                            );
+                        }
                         return Self::binary_op_rvalue(
                             mir::BinaryOp::Divide,
                             left_operand,

@@ -11,6 +11,24 @@ fun checked_add(x : int, y : int) -> Option[int] = do
     end
 end
 
+fun neg(value : int) -> int = panic
+fun rem(value : int, div : int) -> int = panic
+
+fun log(value : uint, power : uint) -> uint = 
+    case value of 
+    | 0 -> invalid_value()
+    | n -> 
+        do
+            let mut pow : uint = 0u;
+            while value > 0u do 
+                value = 
+                    value / power;
+                pow = pow + 1u;
+            end;
+            pow
+        end
+    end
+
 #Performs a bitcast between int and uint
 fun bitcast_int_to_uint(x : int) -> uint = 
     #Safety : int always has same layout as uint

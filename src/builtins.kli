@@ -34,3 +34,6 @@ fun array_set_unchecked[T,U](a : T, index : uint, value : U) -> ();
 @unsafe
 @builtin
 fun array_get_unchecked[T,U](a : T, index : uint) -> U;
+
+@builtin
+fun print_string(s : string) -> ();
