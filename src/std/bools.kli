@@ -19,3 +19,5 @@ fun as_uint(x : bool) -> uint =
 
 fun as_byte(x : bool) -> byte = 
     unsafe builtins.transmute(x) end
+
+fun as_string(x : bool) -> string = case x of | true -> "true" | false -> "false" end

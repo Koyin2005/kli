@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     env,
     fmt::Display,
+    path::{Path, PathBuf},
 };
 
 use crate::Symbol;
@@ -39,14 +40,18 @@ impl FeatureArgSet {
         self.args.iter().copied()
     }
 }
+pub enum CommandArg {
+    Build,
+    Run,
+}
 pub struct Config {
-    path: String,
-    run: bool,
+    path: PathBuf,
+    command: CommandArg,
     features: HashMap<Feature, FeatureArgSet>,
 }
 impl Config {
-    pub fn path(&self) -> &str {
-        &self.path
+    pub fn path(&self) -> &'_ Path {
+        self.path.as_path()
     }
     pub fn arguments_for(&self, feature: Feature) -> Option<&FeatureArgSet> {
         self.features.get(&feature)
@@ -54,32 +59,35 @@ impl Config {
     pub fn has_feature(&self, feature: Feature) -> bool {
         self.features.contains_key(&feature)
     }
-    pub fn run(&self) -> bool {
-        self.run
+    pub fn command(&self) -> &'_ CommandArg {
+        &self.command
     }
 }
 pub struct ConfigError;
+
 pub fn config() -> Result<Config, ConfigError> {
-    let mut args = env::args().skip(1).collect::<Vec<_>>();
-    if args.is_empty() {
+    let mut args = env::args().skip(1);
+
+    let Some(command) = args.next() else {
         eprintln!("Invalid format");
-        eprintln!("Expected 'program_path' and features ");
+        eprintln!("Expected 'command' 'features' ");
         return Err(ConfigError);
-    }
-    let path = args.remove(0);
-    let run = if let Some("run") = args.first().map(String::as_str) {
-        args.remove(0);
-        true
-    } else {
-        false
     };
-    let arg_src = args
-        .into_iter()
-        .fold(String::from(""), |mut output, current| {
-            output.push_str(&current);
-            output.push(' ');
-            output
-        });
+
+    let path = std::env::current_dir().map_err(|_| ConfigError)?;
+    let command = match command.as_str() {
+        "run" => CommandArg::Run,
+        "build" => CommandArg::Build,
+        name => {
+            eprintln!("Unknown command '{name}'");
+            return Err(ConfigError);
+        }
+    };
+    let arg_src = args.fold(String::from(""), |mut output, current| {
+        output.push_str(&current);
+        output.push(' ');
+        output
+    });
     let features = arg_src
         .split("--")
         .filter_map(|src| {
@@ -110,6 +118,6 @@ pub fn config() -> Result<Config, ConfigError> {
     Ok(Config {
         path,
         features,
-        run,
+        command,
     })
 }

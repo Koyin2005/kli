@@ -24,3 +24,17 @@ fun realloc(buf : RawBuf[T], new_size : uint) -> RawBuf[T];
 
 RawArray should use checked indexing by default
 ```
+
+As a primitive type instead
+```
+type DynArray[T] = builtin;
+
+fun with_capacity[T](cap : uint) -> DynArray[T];
+
+fun push(this : DynArray[T], value : T) -> ();
+
+fun pop(this : DynArray[T], value : T) -> Option[T];
+
+fun from_array[T](a : Array[T]) -> DynArray[T];
+
+```

@@ -2,7 +2,7 @@ import std.ints.neg
 
 fun print_string(value : string) -> () = builtins.print_string(value)
 
-fun print_int(value : int) -> () = do
+fun print_uint(value : uint) -> () = do
     case value of 
     | 0 -> 
         do 
@@ -12,14 +12,7 @@ fun print_int(value : int) -> () = do
     | _ -> ()
     end;
     
-    let mut value = case value < 0 of
-    | true -> do 
-        builtins.print_string("-");
-        std.ints.strict_cast_int_to_uint(neg(value))
-    end
-    | false -> std.ints.bitcast_int_to_uint(value)
-    end;
-
+    let mut value = value;
     let digits = std.ints.log(value,10);
     let mut arr = arrays.repeat(digits,"");
 
@@ -49,6 +42,18 @@ fun print_int(value : int) -> () = do
         i = i + 1;
     end
 
+end
+
+
+fun print_int(value : int) -> () = do
+    
+    print_uint(case value < 0 of
+    | true -> do 
+        builtins.print_string("-");
+        std.ints.strict_cast_int_to_uint(neg(value))
+    end
+    | false -> std.ints.bitcast_int_to_uint(value)
+    end);
 end
 
 # Prints the string and then prints a newline 

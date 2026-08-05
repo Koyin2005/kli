@@ -10,7 +10,7 @@ use kli::{
     Arenas, Symbol,
     ast::{self, Module, ModuleId},
     codegen::CodegenRoot,
-    config::{Config, Feature, config},
+    config::{CommandArg, Config, Feature, config},
     mir::{self, passes::passes},
     monomorph::collect::{Instance, InstanceCollector, InstanceKind},
     parsing::parse::Parser,
@@ -226,7 +226,7 @@ fn build_file_tree(config: &Config) -> Result<Files, FileError> {
     let path = config.path();
     let include_std = !config.has_feature(Feature::NoStd);
     let file_tree = {
-        let mut file_tree = find_all_src_files(Path::new(path))?;
+        let mut file_tree = find_all_src_files(path)?;
         file_tree.files.insert(Symbol::BUILTINS, find_builtins());
         if include_std {
             file_tree.files.insert(Symbol::STD, find_std_lib());
@@ -322,9 +322,11 @@ fn main() {
         {
             std::fs::write("foo.o", obj.emit().unwrap()).unwrap();
         }
+        let kli_rt_path = Path::new(option_env!("KLI_RUNTIME_PATH").expect("kli runtime required"));
+
         let output = Command::new("gcc")
-            .arg("kli_pal.c")
-            .arg("kli_rt.c")
+            .arg(kli_rt_path.join("kli_pal.c"))
+            .arg(kli_rt_path.join("kli_rt.c"))
             .arg("-o")
             .arg("output")
             .arg("foo.o")
@@ -337,7 +339,7 @@ fn main() {
             io::stdout().write_all(&output.stdout).unwrap();
             io::stderr().write_all(&output.stderr).unwrap();
         }
-        if success && ctxt.config().run() {
+        if success && matches!(ctxt.config().command(), CommandArg::Run) {
             Command::new(r".\output.exe")
                 .spawn()
                 .unwrap()
