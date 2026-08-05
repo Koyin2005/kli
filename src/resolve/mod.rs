@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::ast::{GenericArgs, ModuleId, NodeId, Path, StmtKind};
-use crate::builtins::{Builtin, Builtins};
 use crate::collect::{Arenas, GlobalContext, build_global_context};
 use crate::config::Config;
 use crate::def_ids::DefId;
@@ -1135,23 +1134,8 @@ impl<'info> Resolve<'info> {
                 .map(|(id, node)| node.unwrap_or_else(|| panic!("missing node for '{:?}'", id)))
                 .collect()
         };
-
-        let mut builtins = Builtins::default();
-        if let Some(builtin_module) = decl_info.builtin_module {
-            for (name, &def) in &decl_info.modules[&builtin_module].items {
-                let Some(builtin) = Builtin::find(*name) else {
-                    continue;
-                };
-                let Def::Function(id) = def else {
-                    continue;
-                };
-                let id = this.def_id_for(id);
-                builtins.insert(builtin, id);
-            }
-        }
-
         let resolved_diag = this.diag;
-        let context = build_global_context(this.config, nodes, builtins, decl_info.parents, arena);
+        let context = build_global_context(this.config, nodes, decl_info.parents, arena);
         if !diag.report_all() & !resolved_diag.report_all() {
             Ok(context)
         } else {

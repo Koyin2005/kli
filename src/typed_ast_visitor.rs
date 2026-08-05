@@ -90,7 +90,7 @@ where
         | ExprKind::Function(..)
         | ExprKind::Unit
         | ExprKind::Panic => (),
-        ExprKind::BuiltinCall(_, _, exprs) | ExprKind::Tuple(exprs) | ExprKind::Array(exprs) => {
+        ExprKind::BuiltinCall(.., exprs) | ExprKind::Tuple(exprs) | ExprKind::Array(exprs) => {
             for expr in exprs {
                 v.visit_expr(expr);
             }

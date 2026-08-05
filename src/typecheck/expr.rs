@@ -320,7 +320,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
         ty_hint: Option<Type<'ctxt>>,
     ) -> typed_ast::Expr<'ctxt> {
         if let ExprKind::Function(id, generic_args) = &callee.kind
-            && let Some(builtin) = self.root().ctxt().builtins().builtin_for(id.0)
+            && let Some(builtin) = self.root().ctxt().builtin_for(id.0)
         {
             let ctxt = self.ctxt();
             let generic_args = self.root().lower_generic_args_for(id.0, loc, generic_args);
@@ -335,6 +335,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 ty,
                 loc,
                 kind: typed_ast::ExprKind::BuiltinCall(
+                    id.0,
                     builtin,
                     generic_args,
                     args.into_boxed_slice(),
@@ -642,7 +643,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                         .signature_of(id)
                         .bind(ctxt, &args)
                         .into_type(ctxt),
-                    if let Some(builtin) = self.root().ctxt().builtins().builtin_for(id) {
+                    if let Some(builtin) = self.root().ctxt().builtin_for(id) {
                         self.root().ctxt().diag().add_diagnostic(
                             format!("cannot use builtin '{}' here", builtin.name()),
                             loc,

@@ -128,7 +128,7 @@ impl<'a, 'ctxt> TypeSubst<'a, 'ctxt> {
             ExprKind::Function(.., args) => {
                 self.subst_generic_args(args);
             }
-            ExprKind::BuiltinCall(_, generic_args, args) => {
+            ExprKind::BuiltinCall(.., generic_args, args) => {
                 self.subst_generic_args(generic_args);
                 for expr in args {
                     self.subst_expr(expr);

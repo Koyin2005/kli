@@ -8,22 +8,7 @@ use std::{
 use typed_arena::Arena;
 
 use crate::{
-    Symbol,
-    builtins::Builtins,
-    captures::{self, captures},
-    config::Config,
-    def_ids::DefId,
-    diagnostics::DiagnosticReporter,
-    ident::Ident,
-    index_vec::IndexVec,
-    lang_items::LangItems,
-    layout::{Layout, LayoutError, calculate_layout},
-    resolved_ast::{self, AnnotationKind, Item, ItemKind, Node, TypeDef, TypeImpl},
-    scheme::Scheme,
-    src_loc::SrcLoc,
-    typecheck::infer::TypeInfer,
-    typed_ast::FieldId,
-    types::{
+    Symbol, builtins::Builtin, captures::{self, captures}, config::Config, def_ids::DefId, diagnostics::DiagnosticReporter, ident::Ident, index_vec::IndexVec, lang_items::LangItems, layout::{Layout, LayoutError, calculate_layout}, resolved_ast::{self, AnnotationKind, Item, ItemKind, Node, TypeDef, TypeImpl}, scheme::Scheme, src_loc::SrcLoc, typecheck::infer::TypeInfer, typed_ast::FieldId, types::{
         self, CaseId, FunctionSig, GenericArg, GenericArgs, GenericArgsRef, GenericKind,
         GenericParam, TagType, Type, TypeKind, lower::Lower,
     },
@@ -252,7 +237,6 @@ pub struct GlobalContext<'ctxt> {
     lang_items: Cache<(), LangItems>,
     parents: HashMap<DefId, DefId>,
     nodes: IndexVec<DefId, Node>,
-    builtins: Builtins,
     std_lib: Cache<(), Option<DefId>>,
     ty_cache: Cache<DefId, Scheme<Type<'ctxt>>>,
     layout_cache: Cache<Type<'ctxt>, Result<Layout, LayoutError>>,
@@ -618,9 +602,6 @@ impl<'ctxt> CtxtRef<'ctxt> {
     pub fn diag(&self) -> &DiagnosticReporter {
         &self.0.diag
     }
-    pub fn builtins(&'_ self) -> &'_ Builtins {
-        &self.0.builtins
-    }
     pub fn builtins_module(self) -> DefId {
         self.0.builtin.compute((), |()| {
             self.top_level_items()
@@ -679,6 +660,9 @@ impl<'ctxt> CtxtRef<'ctxt> {
         self.0
             .layout_cache
             .compute(ty, |ty| calculate_layout(self, ty))
+    }
+    pub fn builtin_for(self, id: DefId) -> Option<Builtin>{
+        Builtin::find(self.expect_ident(id).symbol)
     }
     pub fn intern_ty(self, kind: TypeKind<'ctxt>) -> Type<'ctxt> {
         Type::new(self.0.interners.ty_interner.intern(kind))
@@ -744,7 +728,6 @@ fn lower_type_def(ctxt: CtxtRef<'_>, type_def: &TypeDef) -> TypeDefInfo {
 pub fn build_global_context<'a>(
     config: Config,
     nodes: IndexVec<DefId, Node>,
-    builtins: Builtins,
     parents: HashMap<DefId, DefId>,
     arenas: &'a Arenas<'a>,
 ) -> GlobalContext<'a> {
@@ -761,7 +744,6 @@ pub fn build_global_context<'a>(
         captures: Default::default(),
         nodes,
         diag,
-        builtins,
         builtin: Default::default(),
         std_lib: Default::default(),
         ty_cache: Default::default(),

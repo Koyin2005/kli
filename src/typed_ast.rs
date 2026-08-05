@@ -136,7 +136,7 @@ pub enum ExprKind<'ctxt> {
     Err,
     Panic,
     NeverToAny(Box<Expr<'ctxt>>),
-    BuiltinCall(Builtin, GenericArgs<'ctxt>, Box<[Expr<'ctxt>]>),
+    BuiltinCall(DefId,Builtin, GenericArgs<'ctxt>, Box<[Expr<'ctxt>]>),
     VariantInit(DefId, CaseId, GenericArgs<'ctxt>, Option<Box<Expr<'ctxt>>>),
     Function(DefId, GenericArgs<'ctxt>),
     Const(DefId, GenericArgs<'ctxt>),

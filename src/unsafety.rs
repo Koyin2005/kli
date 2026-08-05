@@ -73,7 +73,7 @@ impl<'ctxt> Visitor<'ctxt> for SafetyCheck<'ctxt> {
                 self.in_unsafe_block = was_in_unsafe_block;
                 return;
             }
-            ExprKind::BuiltinCall(builtin, ref args, _) => {
+            ExprKind::BuiltinCall(id,builtin, ref args, _) => {
                 if let Builtin::Transmute = builtin
                     && let Some(&[crate::types::GenericArg(ty1), crate::types::GenericArg(ty2)]) =
                         args.as_array()
@@ -84,8 +84,6 @@ impl<'ctxt> Visitor<'ctxt> for SafetyCheck<'ctxt> {
                         expr.loc,
                     );
                 }
-                let id = self.ctxt.builtins().expect_id(builtin);
-
                 walk_expr(self, expr);
                 if !is_unsafe(self.ctxt, id) {
                     return;
