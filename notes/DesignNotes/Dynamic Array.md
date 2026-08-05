@@ -35,6 +35,6 @@ fun push(this : DynArray[T], value : T) -> ();
 
 fun pop(this : DynArray[T], value : T) -> Option[T];
 
-fun from_array[T](a : Array[T]) -> DynArray[T];
+fun into_array[T](a : DynArray[T]) -> Array[T];
 
 ```
