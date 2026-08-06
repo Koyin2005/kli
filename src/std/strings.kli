@@ -1,3 +1,15 @@
 @opaque
 @lang_item("string")
 type String = {}
+
+fun empty() -> string = ""
+
+fun clone(s : string) -> string = do
+    let bytes : raw_array[byte] = unsafe builtins.transmute(s) end;
+    let byte_len = builtins.array_len(bytes);
+    let mut bs = builtins.raw_array_alloc(byte_len);
+    for i in 0u..byte_len do
+        unsafe (bs).[i] = (bytes).[i] end;
+    end;
+    unsafe builtins.transmute(bs) end
+end

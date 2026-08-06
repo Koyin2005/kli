@@ -16,7 +16,7 @@ use crate::{
     monomorph::collect::{Instance, InstanceKind},
     scheme::Scheme,
     typed_ast::FieldId,
-    types::{CaseId, FunctionSig, GenericArgsRef, IntegerKind, Type, TypeKind},
+    types::{CaseId, FunctionSig, GenericArgsRef, IntegerKind, Type, TypeKind, TypeMappable},
 };
 use cranelift::{
     codegen::{
@@ -306,7 +306,7 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                     {
                         const MSG: &str = "failed to allocated";
                         let len = const { MSG.len() as i64 };
-                        let msg = constants.constant_for(
+                        let msg = constants.immutable_constant_for(
                             &mut this.module,
                             String::from(MSG).into_bytes().into_boxed_slice(),
                         );
@@ -318,7 +318,7 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                     {
                         const MSG: &str = "\n";
                         let len = const { MSG.len() as i64 };
-                        let msg = constants.constant_for(
+                        let msg = constants.immutable_constant_for(
                             &mut this.module,
                             String::from(MSG).into_bytes().into_boxed_slice(),
                         );
@@ -676,7 +676,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             (CodegenPlace::MemPlace(place), CodegenPlace::MemPlace(dst_place)) => {
                 self.memcopy(place, dst_place)
             }
-
             (ref place, dst_place) => {
                 let Some(value) = self.load_place(place) else {
                     return;
@@ -785,11 +784,19 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let ptr_value = self.load_array_ptr(place);
 
         let (index_value, index_ty) = index(self);
-        let size_value = self.build_int_const(index_ty, layout.size.in_bytes().into());
-        let (offset, overflow) = self.builder.ins().umul_overflow(index_value, size_value);
-        self.builder
-            .ins()
-            .trapnz(overflow, TrapCode::unwrap_user(1));
+
+        let offset = match layout.size.in_bytes() {
+            0 => return MemPlace::new(ptr_value, layout, ty),
+            1 => index_value,
+            size => {
+                let size_value = self.build_int_const(index_ty, size.into());
+                let (offset, overflow) = self.builder.ins().umul_overflow(index_value, size_value);
+                self.builder
+                    .ins()
+                    .trapnz(overflow, TrapCode::unwrap_user(1));
+                offset
+            }
+        };
         let offset_ptr =
             self.builder
                 .ins()
@@ -929,7 +936,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         self.builder.ins().build_imm_const(ty, value, signed)
     }
     fn build_const(&mut self, constant: &Constant<'ctxt>) -> OperandValue<'ctxt> {
-        let ty = Scheme::new(constant.ty).bind(self.ctxt, self.args);
+        let ty = self.monomorphize(constant.ty);
         let kind = match constant.value {
             mir::ConstValue::ZeroSized => OperandValueKind::ZeroSized,
             mir::ConstValue::Named(id, ref args) => {
@@ -1000,8 +1007,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         for (i, value) in byte_values.into_iter().enumerate() {
                             bytes[i] = value;
                         }
-
-                        let ptr = self.alloc_constant(bytes);
+                        let ptr = self.alloc_constant(bytes, true);
                         OperandValueKind::Indirect(CodegenPlace::MemPlace(MemPlace::new(
                             ptr, layout, ty,
                         )))
@@ -1017,14 +1023,14 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         };
         OperandValue { ty, kind }
     }
-    fn alloc_constant(&mut self, bytes: Box<[u8]>) -> ir::Value {
-        let data = self.constants.constant_for(self.module, bytes);
+    fn alloc_constant(&mut self, bytes: Box<[u8]>, writable: bool) -> ir::Value {
+        let data = self.constants.constant_for(self.module, bytes, writable);
         let data = self.module.declare_data_in_func(data, self.builder.func);
         self.builder.ins().symbol_value(PTR_IR_TYPE, data)
     }
     fn build_string_value(&mut self, string: String) -> (ir::Value, ir::Value) {
         let len: u64 = string.len().try_into().unwrap();
-        let first = self.alloc_constant(string.into_bytes().into_boxed_slice());
+        let first = self.alloc_constant(string.into_bytes().into_boxed_slice(), false);
         let second = self.build_int_const(Type::new_uint(self.ctxt), len.into());
         (first, second)
     }
@@ -1176,7 +1182,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             &Operand::Constant(Constant {
                 ty,
                 value: ConstValue::Named(id, ref args),
-            }) => (Scheme::new(ty).bind(self.ctxt, self.args), Ok((id, args))),
+            }) => (self.monomorphize(ty), Ok((id, args))),
             _ => {
                 let operand = self.eval_operand(callee);
                 (operand.ty, Err(operand))
@@ -1192,7 +1198,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         match callee {
             Ok((def_id, generic_args)) => {
                 let function = Instance {
-                    args: Scheme::new(generic_args.clone()).bind(self.ctxt, self.args),
+                    args: self.monomorphize(generic_args.clone()),
                     kind: InstanceKind::Function(def_id),
                 };
                 let id = self
@@ -1351,8 +1357,11 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             self.store_immediate(place, left);
         }
     }
+    fn monomorphize<T: TypeMappable<'ctxt>>(&self, value: T) -> T {
+        Scheme::new(value).bind(self.ctxt, self.args)
+    }
     fn codegen_box(&mut self, place: &mir::Place, ty: Type<'ctxt>, operand: &mir::Operand<'ctxt>) {
-        let ty = Scheme::new(ty).bind(self.ctxt, self.args);
+        let ty = self.monomorphize(ty);
         let ptr = self.codegen_static_size_alloc_call(ty, 1);
         let value = self.eval_operand(operand);
         let box_inner_ptr = MemPlace::new(ptr, self.layout_for(ty), ty);
@@ -1365,7 +1374,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         match value {
             mir::Rvalue::AllocateRawArray { ty, count } => {
                 let dst_place = self.eval_place(place).unwrap();
-                let ty = Scheme::new(*ty).bind(self.ctxt, self.args);
+                let ty = self.monomorphize(*ty);
                 let len = self.eval_operand(count).expect_immediate(self);
                 let ptr = self.codegen_runtime_size_alloc_call(ty, len);
                 self.store_immediate_pair(dst_place, ptr, len, layout::POINTER_SIZE);
@@ -1380,8 +1389,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 }
                 AggregateKind::Variant(id, case, args) => {
                     let type_def = self.ctxt.type_def(*id);
-                    let ty = Scheme::new(Type::named(self.ctxt, *id, type_def.name, args.clone()))
-                        .bind(self.ctxt, self.args);
+                    let ty =
+                        self.monomorphize(Type::named(self.ctxt, *id, type_def.name, args.clone()));
 
                     let name = type_def.case(*case).name;
                     let payload_place = place.clone().with_case_downcast(*case, name);
@@ -1416,7 +1425,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 }
             },
             mir::Rvalue::Repeat { ty, value, count } => {
-                let ty = Scheme::new(*ty).bind(self.ctxt, self.args);
+                let ty = self.monomorphize(*ty);
                 let ty_layout = self.layout_for(ty);
 
                 let byte_size = self
@@ -1497,7 +1506,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 self.store_immediate_pair(place, ptr, count, layout::POINTER_SIZE);
             }
             mir::Rvalue::AllocateArray(ty, fields) => {
-                let ty = Scheme::new(*ty).bind(self.ctxt, self.args);
+                let ty = self.monomorphize(*ty);
                 let ty_layout = self.layout_for(ty);
                 let len: u64 = fields.len().try_into().unwrap();
                 let ptr = self.codegen_static_size_alloc_call(ty, len);
@@ -1570,9 +1579,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         so we store it in memory and then copy that value as a 'to'
                     */
                     let operand = self.eval_operand(operand);
-                    let to_ty = Scheme::new(to).bind(self.ctxt, self.args);
+                    let to_ty = self.monomorphize(to);
                     let to_layout = self.layout_for(to_ty);
-
                     let from_layout = self.layout_for(operand.ty);
                     match (backend_repr(&from_layout), backend_repr(&to_layout)) {
                         (BackendRepr::Scalar(from), BackendRepr::Scalar(to)) => {
@@ -1591,22 +1599,25 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         }
                         _ => (),
                     }
+                    if let OperandValueKind::Indirect(src_place) = operand.kind {
+                        self.copy(src_place, dst_place);
+                    } else {
+                        let intermidiate_slot =
+                            self.builder.create_sized_stack_slot(ir::StackSlotData::new(
+                                ir::StackSlotKind::ExplicitSlot,
+                                to_layout.size.in_bytes_u32(),
+                                to_layout.alignment.pow_of_2(),
+                            ));
+                        let intermidiate_slot = self.builder.ins().stack_addr(
+                            PTR_IR_TYPE,
+                            intermidiate_slot,
+                            Offset32::new(0),
+                        );
 
-                    let intermidiate_slot =
-                        self.builder.create_sized_stack_slot(ir::StackSlotData::new(
-                            ir::StackSlotKind::ExplicitSlot,
-                            to_layout.size.in_bytes_u32(),
-                            to_layout.alignment.pow_of_2(),
-                        ));
-                    let intermidiate_slot = self.builder.ins().stack_addr(
-                        PTR_IR_TYPE,
-                        intermidiate_slot,
-                        Offset32::new(0),
-                    );
-
-                    let transmuted_place = MemPlace::new(intermidiate_slot, to_layout, to_ty);
-                    self.store_operand_with_mem_place(transmuted_place.clone(), operand);
-                    self.copy(CodegenPlace::MemPlace(transmuted_place), dst_place);
+                        let transmuted_place = MemPlace::new(intermidiate_slot, to_layout, to_ty);
+                        self.store_operand_with_mem_place(transmuted_place.clone(), operand);
+                        self.copy(CodegenPlace::MemPlace(transmuted_place), dst_place);
+                    }
                 }
                 mir::CastKind::IntegerCast(cast) => match cast {
                     mir::IntegerCast::ZeroExtendByteTo(kind) => {
@@ -1914,26 +1925,38 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
 #[derive(Default)]
 struct Constants {
     next_constant: usize,
-    constants: HashMap<Box<[u8]>, cranelift_module::DataId>,
+    constants: HashMap<Box<[u8]>, (bool, cranelift_module::DataId)>,
 }
 impl Constants {
     pub fn constant_for(
         &mut self,
         module: &mut impl Module,
         bytes: Box<[u8]>,
+        writable: bool,
     ) -> cranelift_module::DataId {
-        if let Some(constant) = self.constants.get(&bytes) {
+        if let Some((is_writable, constant)) = self.constants.get(&bytes)
+            && *is_writable == writable
+        {
             return *constant;
         }
         let name = format!("const_{}", self.next_constant);
         let data_id = module
-            .declare_data(&name, cranelift_module::Linkage::Local, false, false)
+            .declare_data(&name, cranelift_module::Linkage::Local, writable, false)
             .unwrap();
         let mut data = cranelift_module::DataDescription::new();
-        data.define(bytes);
+        data.define(bytes.clone());
         module.define_data(data_id, &data).unwrap();
+
+        self.constants.insert(bytes, (writable, data_id));
         self.next_constant += 1;
         data_id
+    }
+    pub fn immutable_constant_for(
+        &mut self,
+        module: &mut impl Module,
+        bytes: Box<[u8]>,
+    ) -> cranelift_module::DataId {
+        self.constant_for(module, bytes, false)
     }
 }
 struct BlockMap {
