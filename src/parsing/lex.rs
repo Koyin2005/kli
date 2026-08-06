@@ -238,7 +238,7 @@ impl<'s> Lexer<'s> {
         self.start_index = self.index;
         match c {
             '@' => Some(self.next_token_from_char(TokenKind::At)),
-            '.' => Some(self.next_token_from_char(TokenKind::Dot)),
+            '.' => Some(self.next_token_from_char_or_chars('.', TokenKind::Dot, TokenKind::DotDot)),
             '=' => Some(self.next_token_from_char_or_char_match(
                 TokenKind::Equal,
                 [('>', TokenKind::ThickArrow), ('=', TokenKind::DoubleEqual)],

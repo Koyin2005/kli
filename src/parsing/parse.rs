@@ -478,14 +478,21 @@ impl Parser {
                 self.advance();
                 let pattern = self.parse_pattern()?;
                 let _ = self.expect(&TokenKind::In);
-                let iterator = self.parse_expr()?;
+                let start = self.parse_expr()?;
+                self.expect(&TokenKind::DotDot)?;
+                let end = self.parse_expr()?;
                 let body = {
                     let loc = self.current_loc();
                     self.parse_block_expr(loc)?
                 };
                 Ok(Expr {
                     loc,
-                    kind: ExprKind::For(Box::new(pattern), Box::new(iterator), Box::new(body)),
+                    kind: ExprKind::For(
+                        Box::new(pattern),
+                        Box::new(start),
+                        Box::new(end),
+                        Box::new(body),
+                    ),
                 })
             }
             TokenKind::Unsafe => {

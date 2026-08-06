@@ -558,7 +558,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 self.expr_stmt(expr);
                 Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt)))
             }
-            &ExprKind::BuiltinCall(_,builtin, _, ref args) => {
+            &ExprKind::BuiltinCall(_, builtin, _, ref args) => {
                 self.builtin_call(expr.ty, builtin, args).into()
             }
             ExprKind::Array(fields) => {

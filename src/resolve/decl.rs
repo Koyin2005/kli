@@ -50,10 +50,15 @@ impl DeclareInBody<'_, '_> {
             ast::ExprKind::Assign(expr1, expr2)
             | ast::ExprKind::While(expr1, expr2)
             | ast::ExprKind::Binary(_, expr1, expr2)
-            | ast::ExprKind::For(_, expr1, expr2)
             | ast::ExprKind::Index(expr1, expr2) => {
                 self.declare_in_exprs(expr1);
                 self.declare_in_exprs(expr2);
+            }
+            ast::ExprKind::For(_, expr1, expr2, expr3) => {
+                self.declare_in_exprs(expr1);
+                self.declare_in_exprs(expr2);
+
+                self.declare_in_exprs(expr3);
             }
             ast::ExprKind::Lambda(lambda) => {
                 self.declare.declare_def_id_for(self.module, lambda.id);

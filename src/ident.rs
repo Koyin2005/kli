@@ -34,8 +34,8 @@ impl Symbol {
         "opaque",
         "builtin",
         "array",
-
-// builtins
+        "iter",
+        // builtins
         "box_alloc",
         "transmute",
         "array_len",
@@ -50,32 +50,32 @@ impl Symbol {
         "array_set_unchecked",
         "array_get_unchecked",
         "print_string",
-        "int_max_value"
-        
+        "int_max_value",
     ];
-    const _NO_REPEATS : () = {
+    const _NO_REPEATS: () = {
         let mut i = 0;
-        while i < Self::NAMED_SYMBOLS.len(){
+        while i < Self::NAMED_SYMBOLS.len() {
             let mut j = 0;
-            while j < Self::NAMED_SYMBOLS.len(){
-                if i != j{
-                    assert!(!Self::NAMED_SYMBOLS[i].eq_ignore_ascii_case(Self::NAMED_SYMBOLS[j]),"repeat");
+            while j < Self::NAMED_SYMBOLS.len() {
+                if i != j {
+                    assert!(
+                        !Self::NAMED_SYMBOLS[i].eq_ignore_ascii_case(Self::NAMED_SYMBOLS[j]),
+                        "repeat"
+                    );
                 }
                 j += 1;
             }
             i += 1;
         }
-
     };
-    
-    pub fn index(self) -> usize{
+
+    pub fn index(self) -> usize {
         self.0.into_usize()
     }
     const fn expect_symbol(name: &str) -> Symbol {
         let mut i = 0;
         while i < Self::NAMED_SYMBOLS.len() {
-               if Self::NAMED_SYMBOLS[i].eq_ignore_ascii_case(name)
-             {
+            if Self::NAMED_SYMBOLS[i].eq_ignore_ascii_case(name) {
                 return if i > u32::MAX as usize {
                     panic!("too many symbols")
                 } else {
@@ -98,25 +98,26 @@ impl Symbol {
     pub const OPAQUE: Self = Self::expect_symbol("opaque");
     pub const BUILTIN: Self = Self::expect_symbol("builtin");
     pub const ARRAY: Self = Self::expect_symbol("array");
-    pub const TRANSMUTE : Self = Self::expect_symbol("transmute");
-    pub const ARRAY_LEN : Self = Self::expect_symbol("array_len");
-    pub const BOX_ALLOC : Self = Self::expect_symbol("box_alloc");
-    pub const ARRAY_ADDR : Self = Self::expect_symbol("array_addr");
-    pub const WRAPPING_ADD : Self = Self::expect_symbol("wrapping_add");
-    pub const OVERFLOWING_ADD : Self = Self::expect_symbol("overflowing_add");
-    pub const WRAPPING_SUB : Self = Self::expect_symbol("wrapping_sub");
-    pub const OVERFLOWING_SUB : Self = Self::expect_symbol("overflowing_sub");
-    pub const ZERO_EXTEND : Self = Self::expect_symbol("zero_extend");
-    pub const ARRAY_REPEAT : Self = Self::expect_symbol("array_repeat");
-    pub const RAW_ARRAY_ALLOC : Self = Self::expect_symbol("raw_array_alloc");
-    pub const ARRAY_SET_UNCHECKED : Self = Self::expect_symbol("array_set_unchecked");
-    pub const ARRAY_GET_UNCHECKED : Self = Self::expect_symbol("array_get_unchecked");
-    pub const PRINT_STRING : Self = Self::expect_symbol("print_string");
-    pub const INT_MAX_VALUE : Self = Self::expect_symbol("int_max_value");
+    pub const ITER: Self = Self::expect_symbol("iter");
+    pub const TRANSMUTE: Self = Self::expect_symbol("transmute");
+    pub const ARRAY_LEN: Self = Self::expect_symbol("array_len");
+    pub const BOX_ALLOC: Self = Self::expect_symbol("box_alloc");
+    pub const ARRAY_ADDR: Self = Self::expect_symbol("array_addr");
+    pub const WRAPPING_ADD: Self = Self::expect_symbol("wrapping_add");
+    pub const OVERFLOWING_ADD: Self = Self::expect_symbol("overflowing_add");
+    pub const WRAPPING_SUB: Self = Self::expect_symbol("wrapping_sub");
+    pub const OVERFLOWING_SUB: Self = Self::expect_symbol("overflowing_sub");
+    pub const ZERO_EXTEND: Self = Self::expect_symbol("zero_extend");
+    pub const ARRAY_REPEAT: Self = Self::expect_symbol("array_repeat");
+    pub const RAW_ARRAY_ALLOC: Self = Self::expect_symbol("raw_array_alloc");
+    pub const ARRAY_SET_UNCHECKED: Self = Self::expect_symbol("array_set_unchecked");
+    pub const ARRAY_GET_UNCHECKED: Self = Self::expect_symbol("array_get_unchecked");
+    pub const PRINT_STRING: Self = Self::expect_symbol("print_string");
+    pub const INT_MAX_VALUE: Self = Self::expect_symbol("int_max_value");
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }
-    pub fn with_str<T>(&self, f : impl FnOnce(&str) -> T) -> T {
+    pub fn with_str<T>(&self, f: impl FnOnce(&str) -> T) -> T {
         let lock = INTERNER.lock().unwrap();
         let value = f(lock.resolve(*self));
         drop(lock);

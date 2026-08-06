@@ -24,6 +24,7 @@ pub enum TokenKind {
     Minus,
     Slash,
     End,
+    DotDot,
     Star,
     Caret,
     Of,
@@ -101,6 +102,7 @@ impl Display for TokenKind {
             Self::DoubleEqual => "==",
             Self::Lesser => "<",
             Self::Greater => ">",
+            Self::DotDot => "..",
             Self::StringLiteral(literal) => {
                 f.write_str("\"")?;
                 f.write_str(literal)?;

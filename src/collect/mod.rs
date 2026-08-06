@@ -8,7 +8,22 @@ use std::{
 use typed_arena::Arena;
 
 use crate::{
-    Symbol, builtins::Builtin, captures::{self, captures}, config::Config, def_ids::DefId, diagnostics::DiagnosticReporter, ident::Ident, index_vec::IndexVec, lang_items::LangItems, layout::{Layout, LayoutError, calculate_layout}, resolved_ast::{self, AnnotationKind, Item, ItemKind, Node, TypeDef, TypeImpl}, scheme::Scheme, src_loc::SrcLoc, typecheck::infer::TypeInfer, typed_ast::FieldId, types::{
+    Symbol,
+    builtins::Builtin,
+    captures::{self, captures},
+    config::Config,
+    def_ids::DefId,
+    diagnostics::DiagnosticReporter,
+    ident::Ident,
+    index_vec::IndexVec,
+    lang_items::LangItems,
+    layout::{Layout, LayoutError, calculate_layout},
+    resolved_ast::{self, AnnotationKind, Item, ItemKind, Node, TypeDef, TypeImpl},
+    scheme::Scheme,
+    src_loc::SrcLoc,
+    typecheck::infer::TypeInfer,
+    typed_ast::FieldId,
+    types::{
         self, CaseId, FunctionSig, GenericArg, GenericArgs, GenericArgsRef, GenericKind,
         GenericParam, TagType, Type, TypeKind, lower::Lower,
     },
@@ -661,7 +676,7 @@ impl<'ctxt> CtxtRef<'ctxt> {
             .layout_cache
             .compute(ty, |ty| calculate_layout(self, ty))
     }
-    pub fn builtin_for(self, id: DefId) -> Option<Builtin>{
+    pub fn builtin_for(self, id: DefId) -> Option<Builtin> {
         Builtin::find(self.expect_ident(id).symbol)
     }
     pub fn intern_ty(self, kind: TypeKind<'ctxt>) -> Type<'ctxt> {

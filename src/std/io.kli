@@ -36,10 +36,8 @@ fun print_uint(value : uint) -> () = do
         i = i + 1u;
     end;
     std.arrays.reverse(arr);
-    let mut i = 0u;
-    while i < digits do
+    for i in 0u..digits do
         builtins.print_string((arr).[i]);
-        i = i + 1;
     end
 
 end

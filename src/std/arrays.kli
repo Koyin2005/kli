@@ -31,10 +31,9 @@ fun copy_from[T](this : array[T], other : array[T]) -> () =
     | true -> ()
     | false -> 
         do
-            let mut i = 0u;
-            while i < builtins.array_len(this) and i < builtins.array_len(other) do
+            let min_len = std.ints.umin(builtins.array_len(this),builtins.array_len(other));
+            for i in 0u..min_len do
                 (this).[i] = (other).[i];
-                i = i + 1
             end
         end
     end
@@ -47,11 +46,10 @@ fun reverse[T](this : array[T]) -> () = do
     | 1 -> return ()
     | _ -> ()
     end;
-    while i < (len / 2u) do
+    for i in 0u..(len/2u) do
         let tmp = (this).[i];
         (this).[i] = (this).[(len - i) - 1u];
         (this).[(len - i) - 1u] = tmp;
-        i = i + 1u;
     end;
 
 end

@@ -39,7 +39,7 @@ impl Builtin {
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
-        match name{
+        match name {
             Symbol::BOX_ALLOC => Some(Builtin::BoxAlloc),
             Symbol::TRANSMUTE => Some(Builtin::Transmute),
             Symbol::ARRAY_LEN => Some(Builtin::Len),
@@ -55,7 +55,7 @@ impl Builtin {
             Symbol::ARRAY_GET_UNCHECKED => Some(Builtin::ArrayGetUnchecked),
             Symbol::PRINT_STRING => Some(Builtin::PrintString),
             Symbol::INT_MAX_VALUE => Some(Builtin::IntMaxValue),
-            _ => None
+            _ => None,
         }
     }
 }
