@@ -51,7 +51,7 @@ impl Symbol {
         "array_get_unchecked",
         "print_string",
         "int_max_value",
-        "raw_array_set_zero"
+        "raw_array_set_zero",
     ];
     const _NO_REPEATS: () = {
         let mut i = 0;

@@ -567,7 +567,7 @@ pub struct Stmt<'ctxt> {
 pub enum StmtKind<'ctxt> {
     Noop,
     Assign(Place, Box<Rvalue<'ctxt>>),
-    ClearSlot(Place,Operand<'ctxt>),
+    ClearSlot(Place, Operand<'ctxt>),
     Print(Operand<'ctxt>),
 }
 define_id!(BasicBlockId);

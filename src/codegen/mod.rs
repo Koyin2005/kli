@@ -294,7 +294,7 @@ impl<'ctxt> CodegenRoot<'ctxt> {
 
                     builder.switch_to_block(non_zero_size_block);
                     let single = builder.ins().iconst(PTR_IR_TYPE, 1);
-                    let ptr = builder.ins().call(calloc, &[single,size_arg]);
+                    let ptr = builder.ins().call(calloc, &[single, size_arg]);
                     let ptr = builder.inst_results(ptr)[0];
                     builder
                         .ins()
@@ -774,25 +774,27 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn layout_for(&self, ty: Type<'ctxt>) -> layout::Layout {
         self.ctxt.layout_of(ty).expect("should be monoed enough")
     }
-    fn array_index_place(&mut self, place: MemPlace, element_ty : Type<'ctxt>, index: impl FnOnce(&mut Self) -> (codegen::ir::Value,Type<'ctxt>)) -> MemPlace<'ctxt>{
-            let ty = element_ty;
-                    let layout = self.layout_for(ty);
-                    let ptr_value = self.load_array_ptr(place);
+    fn array_index_place(
+        &mut self,
+        place: MemPlace,
+        element_ty: Type<'ctxt>,
+        index: impl FnOnce(&mut Self) -> (codegen::ir::Value, Type<'ctxt>),
+    ) -> MemPlace<'ctxt> {
+        let ty = element_ty;
+        let layout = self.layout_for(ty);
+        let ptr_value = self.load_array_ptr(place);
 
-                    let (index_value,index_ty) = index(self);
-                    let size_value =
-                        self.build_int_const(index_ty, layout.size.in_bytes().into());
-                    let (offset, overflow) =
-                        self.builder.ins().umul_overflow(index_value, size_value);
-                    self.builder
-                        .ins()
-                        .trapnz(overflow, TrapCode::unwrap_user(1));
-                    let offset_ptr = self.builder.ins().uadd_overflow_trap(
-                        ptr_value,
-                        offset,
-                        TrapCode::unwrap_user(1),
-                    );
-                    MemPlace::new(offset_ptr, layout, ty)
+        let (index_value, index_ty) = index(self);
+        let size_value = self.build_int_const(index_ty, layout.size.in_bytes().into());
+        let (offset, overflow) = self.builder.ins().umul_overflow(index_value, size_value);
+        self.builder
+            .ins()
+            .trapnz(overflow, TrapCode::unwrap_user(1));
+        let offset_ptr =
+            self.builder
+                .ins()
+                .uadd_overflow_trap(ptr_value, offset, TrapCode::unwrap_user(1));
+        MemPlace::new(offset_ptr, layout, ty)
     }
     fn load_array_ptr(&mut self, place: MemPlace) -> codegen::ir::Value {
         let (ptr, offset) = place.ptr_and_offset();
@@ -808,69 +810,71 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             .load(ir::types::I64, MemFlagsData::new(), ptr, offset)
     }
     fn eval_place(&mut self, place: &mir::Place) -> Result<CodegenPlace<'ctxt>, Type<'ctxt>> {
-        let (ty, ptr, projections) = match place.base {
-            PlaceBase::Local(local) => {
-                let local_info = self.local_info.info_for(local);
-                let mut ty = local_info.ty;
-                let base_kind = local_info.kind;
-                let mut projections = &place.projections[..];
-                let ptr = match base_kind {
-                    LocalKind::Memory(addr) => {
-                        self.builder
-                            .ins()
-                            .stack_addr(PTR_IR_TYPE, addr, Offset32::new(0))
-                    }
+        let (mut place_value, projections) = {
+            let (ty, ptr, projections) = match place.base {
+                PlaceBase::Local(local) => {
+                    let local_info = self.local_info.info_for(local);
+                    let mut ty = local_info.ty;
+                    let base_kind = local_info.kind;
+                    let mut projections = &place.projections[..];
+                    let ptr = match base_kind {
+                        LocalKind::Memory(addr) => {
+                            self.builder
+                                .ins()
+                                .stack_addr(PTR_IR_TYPE, addr, Offset32::new(0))
+                        }
 
-                    LocalKind::ZeroSized => return Err(ty),
-                    LocalKind::Scalar(var) => 'a: {
-                        if !projections.is_empty() {
-                            for projection in place.projections.iter() {
-                                projections = &projections[1..];
-                                ty = projection.apply_projection_to_type(ty, self.ctxt);
-                                match projection {
-                                    mir::PlaceProjection::ConstantIndex(_)
-                                    | mir::PlaceProjection::Index(_) => {
-                                        unreachable!("shouldn't be scalar then")
-                                    }
-                                    mir::PlaceProjection::CaseDowncast(..)
-                                    | mir::PlaceProjection::Field(_) => (),
-                                    mir::PlaceProjection::Deref => {
-                                        let value = self
-                                            .load_place(&CodegenPlace::Ssa(ty, var))
-                                            .unwrap()
-                                            .first_value();
-                                        break 'a value;
+                        LocalKind::ZeroSized => return Err(ty),
+                        LocalKind::Scalar(var) => 'a: {
+                            if !projections.is_empty() {
+                                for projection in place.projections.iter() {
+                                    projections = &projections[1..];
+                                    ty = projection.apply_projection_to_type(ty, self.ctxt);
+                                    match projection {
+                                        mir::PlaceProjection::ConstantIndex(_)
+                                        | mir::PlaceProjection::Index(_) => {
+                                            unreachable!("shouldn't be scalar then")
+                                        }
+                                        mir::PlaceProjection::CaseDowncast(..)
+                                        | mir::PlaceProjection::Field(_) => (),
+                                        mir::PlaceProjection::Deref => {
+                                            let value = self
+                                                .load_place(&CodegenPlace::Ssa(ty, var))
+                                                .unwrap()
+                                                .first_value();
+                                            break 'a value;
+                                        }
                                     }
                                 }
+                                if let BackendRepr::ZeroSized = backend_repr(&self.layout_for(ty)) {
+                                    return Err(ty);
+                                }
                             }
-                            if let BackendRepr::ZeroSized = backend_repr(&self.layout_for(ty)) {
-                                return Err(ty);
-                            }
+                            return Ok(CodegenPlace::Ssa(ty, var));
                         }
-                        return Ok(CodegenPlace::Ssa(ty, var));
-                    }
-                };
-                (ty, ptr, projections)
-            }
-            PlaceBase::ReturnPlace => {
-                let ty = self.return_ty;
-                let ptr = match self.local_info.return_slot() {
-                    ReturnSlot::Scalar(variable) => {
-                        return Ok(CodegenPlace::Ssa(ty, variable));
-                    }
-                    ReturnSlot::Arg => self.builder.block_params(self.block_map.entry())[0],
-                    ReturnSlot::Local(return_slot) => {
-                        self.builder
-                            .ins()
-                            .stack_addr(PTR_IR_TYPE, return_slot, Offset32::new(0))
-                    }
-                    ReturnSlot::Void => return Err(ty),
-                };
-                (ty, ptr, &place.projections[..])
-            }
+                    };
+                    (ty, ptr, projections)
+                }
+                PlaceBase::ReturnPlace => {
+                    let ty = self.return_ty;
+                    let ptr = match self.local_info.return_slot() {
+                        ReturnSlot::Scalar(variable) => {
+                            return Ok(CodegenPlace::Ssa(ty, variable));
+                        }
+                        ReturnSlot::Arg => self.builder.block_params(self.block_map.entry())[0],
+                        ReturnSlot::Local(return_slot) => self.builder.ins().stack_addr(
+                            PTR_IR_TYPE,
+                            return_slot,
+                            Offset32::new(0),
+                        ),
+                        ReturnSlot::Void => return Err(ty),
+                    };
+                    (ty, ptr, &place.projections[..])
+                }
+            };
+            let layout = self.layout_for(ty);
+            (MemPlace::new(ptr, layout, ty), projections)
         };
-        let layout = self.layout_for(ty);
-        let mut place_value = MemPlace::new(ptr, layout, ty);
         for projection in projections {
             place_value = match *projection {
                 mir::PlaceProjection::Field(field_id) => {
@@ -887,11 +891,12 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 mir::PlaceProjection::Index(local) => {
                     let ty = projection.apply_projection_to_type(place_value.ty, self.ctxt);
 
-                    self.array_index_place(place_value, ty, |this|{
-                        
-                    let index_place = this.eval_place(&mir::Place::local(local)).unwrap();
-                    (this.load_place(&index_place).unwrap().first_value(),index_place.type_of())
-
+                    self.array_index_place(place_value, ty, |this| {
+                        let index_place = this.eval_place(&mir::Place::local(local)).unwrap();
+                        (
+                            this.load_place(&index_place).unwrap().first_value(),
+                            index_place.type_of(),
+                        )
                     })
                 }
                 mir::PlaceProjection::CaseDowncast(case, ..) => {
@@ -900,16 +905,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 mir::PlaceProjection::Deref => {
                     let ty = projection.apply_projection_to_type(place_value.ty, self.ctxt);
                     let layout = self.layout_for(ty);
-                    let box_ptr = self
-                        .load_place_mem(&MemPlace {
-                            ty,
-                            layout: layout.clone(),
-                            base_ptr: ptr,
-                            offset: 0,
-                            scalar: Some(ScalarType::Single(Scalar::Pointer { non_null: true })),
-                        })
-                        .unwrap()
-                        .first_value();
+                    let box_ptr = self.load_place_mem(&place_value).unwrap().first_value();
                     MemPlace::new(box_ptr, layout, ty)
                 }
             };
@@ -1370,6 +1366,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             mir::Rvalue::AllocateRawArray { ty, count } => {
                 let dst_place = self.eval_place(place).unwrap();
                 let ty = Scheme::new(*ty).bind(self.ctxt, self.args);
+                println!("{}",ty);
                 let len = self.eval_operand(count).expect_immediate(self);
                 let ptr = self.codegen_runtime_size_alloc_call(ty, len);
                 self.store_immediate_pair(dst_place, ptr, len, layout::POINTER_SIZE);
@@ -1759,23 +1756,33 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         };
         self.print_string(first_val, second_val);
     }
-    fn write_zeros(&mut self, place: MemPlace<'ctxt>){
+    fn write_zeros(&mut self, place: MemPlace<'ctxt>) {
         let size = place.layout.size;
         let ptr = place.ptr(self);
-        self.builder.emit_small_memset(self.target_config, ptr, 0, size.in_bytes(), place.layout.alignment.pow_of_2(), MemFlagsData::new());
+        self.builder.emit_small_memset(
+            self.target_config,
+            ptr,
+            0,
+            size.in_bytes(),
+            place.layout.alignment.pow_of_2(),
+            MemFlagsData::new(),
+        );
     }
     fn codegen_stmt(&mut self, stmt: &mir::Stmt<'ctxt>) {
         match &stmt.kind {
             mir::StmtKind::Noop => (),
-            mir::StmtKind::ClearSlot(place,value) => {
+            mir::StmtKind::ClearSlot(place, value) => {
                 let CodegenPlace::MemPlace(array_place) = self.eval_place(place).unwrap() else {
                     unreachable!()
                 };
-                let element_ty = array_place.ty.as_raw_array().expect("should be a raw array");
+                let element_ty = array_place
+                    .ty
+                    .as_raw_array()
+                    .expect("should be a raw array");
 
-                let index_place = self.array_index_place(array_place, element_ty, |this|{
+                let index_place = self.array_index_place(array_place, element_ty, |this| {
                     let operand = this.eval_operand(value);
-                    (operand.expect_immediate(this),operand.ty)
+                    (operand.expect_immediate(this), operand.ty)
                 });
                 self.write_zeros(index_place);
             }

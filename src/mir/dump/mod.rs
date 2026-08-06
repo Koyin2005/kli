@@ -323,11 +323,10 @@ impl<'ctxt> MirDump<'ctxt> {
         for stmt in &block.stmts {
             write!(self.output, "  ")?;
             match &stmt.kind {
-                StmtKind::ClearSlot(place,index) => {
-                    
+                StmtKind::ClearSlot(place, index) => {
                     write!(self.output, "clear_slot(")?;
                     self.write_place(place)?;
-                    write!(self.output,",")?;
+                    write!(self.output, ",")?;
                     self.write_operand(index)?;
 
                     writeln!(self.output, ")")?;

@@ -279,7 +279,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             .collect::<Vec<_>>();
         match builtin {
             Builtin::RawArraySetZero => {
-                let [array,index] = operands.try_into().unwrap();
+                let [array, index] = operands.try_into().unwrap();
                 let Operand::Load(place) = array else {
                     unreachable!()
                 };
