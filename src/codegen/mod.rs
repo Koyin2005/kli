@@ -1366,7 +1366,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             mir::Rvalue::AllocateRawArray { ty, count } => {
                 let dst_place = self.eval_place(place).unwrap();
                 let ty = Scheme::new(*ty).bind(self.ctxt, self.args);
-                println!("{}",ty);
                 let len = self.eval_operand(count).expect_immediate(self);
                 let ptr = self.codegen_runtime_size_alloc_call(ty, len);
                 self.store_immediate_pair(dst_place, ptr, len, layout::POINTER_SIZE);
