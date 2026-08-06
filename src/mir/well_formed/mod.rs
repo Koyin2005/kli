@@ -330,6 +330,12 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     stmt.loc,
                 );
             }
+            StmtKind::ClearSlot(array_place,index) => {
+                let arr_ty = array_place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                self.assert(arr_ty.as_raw_array().is_some(), || format!("Expected raw array not '{}'",arr_ty), stmt.loc);
+                let ind_ty = index.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                self.assert(ind_ty.is_integer_kind(IntegerKind::Unsigned), || format!("Expected uint '{}'",ind_ty), stmt.loc);
+            },
             StmtKind::Noop => (),
             StmtKind::Print(_) => {}
         }

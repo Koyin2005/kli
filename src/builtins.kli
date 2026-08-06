@@ -46,3 +46,7 @@ fun print_string(s : string) -> ();
 
 @builtin
 fun int_max_value[T]() -> T;
+
+@unsafe
+@builtin
+fun raw_array_set_zero[T](a : raw_array[T], index : uint) -> ();

@@ -27,6 +27,10 @@ pub trait Visit<'ctxt> {
             StmtKind::Print(operand) => {
                 self.visit_operand(loc, operand);
             }
+            StmtKind::ClearSlot(place,index) => {
+                self.visit_place(PlaceCtxt::Write, loc,place);
+                self.visit_operand(loc, index);
+            }
         }
     }
     fn super_visit_constant(&mut self, _loc: Location, _constant: &Constant<'ctxt>) {}
@@ -172,6 +176,10 @@ pub trait MutVisit<'ctxt> {
             StmtKind::Noop => (),
             StmtKind::Assign(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
+            }
+            StmtKind::ClearSlot(place,index) => {
+                self.visit_place(loc, place);
+                self.visit_operand(loc, index);
             }
             StmtKind::Print(operand) => {
                 self.visit_operand(loc, operand);

@@ -278,6 +278,14 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::RawArraySetZero => {
+                let [array,index] = operands.try_into().unwrap();
+                let Operand::Load(place) = array else {
+                    unreachable!()
+                };
+                self.push_stmt(args[0].loc, mir::StmtKind::ClearSlot(place, index));
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
+            }
             Builtin::PrintString => {
                 let [arg] = operands.try_into().unwrap();
                 self.push_stmt(args[0].loc, mir::StmtKind::Print(arg));

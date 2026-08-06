@@ -247,8 +247,9 @@ impl<'ctxt> CodegenRoot<'ctxt> {
             },
         );
         let allocate_function = {
-            let malloc = self.declare_function("malloc", cranelift_module::Linkage::Import, &{
+            let calloc = self.declare_function("calloc", cranelift_module::Linkage::Import, &{
                 let mut sig = ir::Signature::new(self.module.target_config().default_call_conv);
+                sig.params.push(AbiParam::new(ir::types::I64));
                 sig.params.push(AbiParam::new(ir::types::I64));
                 sig.returns.push(AbiParam::new(PTR_IR_TYPE));
                 sig
@@ -276,7 +277,7 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                     builder.append_block_param(entry, ir::types::I64);
                     builder.append_block_param(entry, ir::types::I64);
                     let &[size_arg, align_arg] = builder.block_params(entry).as_array().unwrap();
-                    let malloc = this.module.declare_func_in_func(malloc, builder.func);
+                    let calloc = this.module.declare_func_in_func(calloc, builder.func);
                     let non_zero_size_block = builder.create_block();
                     let zero_size_block = builder.create_block();
                     let alloc_failed_block = builder.create_block();
@@ -292,7 +293,8 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                     builder.seal_block(zero_size_block);
 
                     builder.switch_to_block(non_zero_size_block);
-                    let ptr = builder.ins().call(malloc, &[size_arg]);
+                    let single = builder.ins().iconst(PTR_IR_TYPE, 1);
+                    let ptr = builder.ins().call(calloc, &[single,size_arg]);
                     let ptr = builder.inst_results(ptr)[0];
                     builder
                         .ins()
@@ -772,6 +774,26 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn layout_for(&self, ty: Type<'ctxt>) -> layout::Layout {
         self.ctxt.layout_of(ty).expect("should be monoed enough")
     }
+    fn array_index_place(&mut self, place: MemPlace, element_ty : Type<'ctxt>, index: impl FnOnce(&mut Self) -> (codegen::ir::Value,Type<'ctxt>)) -> MemPlace<'ctxt>{
+            let ty = element_ty;
+                    let layout = self.layout_for(ty);
+                    let ptr_value = self.load_array_ptr(place);
+
+                    let (index_value,index_ty) = index(self);
+                    let size_value =
+                        self.build_int_const(index_ty, layout.size.in_bytes().into());
+                    let (offset, overflow) =
+                        self.builder.ins().umul_overflow(index_value, size_value);
+                    self.builder
+                        .ins()
+                        .trapnz(overflow, TrapCode::unwrap_user(1));
+                    let offset_ptr = self.builder.ins().uadd_overflow_trap(
+                        ptr_value,
+                        offset,
+                        TrapCode::unwrap_user(1),
+                    );
+                    MemPlace::new(offset_ptr, layout, ty)
+    }
     fn load_array_ptr(&mut self, place: MemPlace) -> codegen::ir::Value {
         let (ptr, offset) = place.ptr_and_offset();
         self.builder
@@ -864,23 +886,13 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 }
                 mir::PlaceProjection::Index(local) => {
                     let ty = projection.apply_projection_to_type(place_value.ty, self.ctxt);
-                    let layout = self.layout_for(ty);
-                    let ptr_value = self.load_array_ptr(place_value);
-                    let index_place = self.eval_place(&mir::Place::local(local)).unwrap();
-                    let index_value = self.load_place(&index_place).unwrap().first_value();
-                    let size_value =
-                        self.build_int_const(index_place.type_of(), layout.size.in_bytes().into());
-                    let (offset, overflow) =
-                        self.builder.ins().umul_overflow(index_value, size_value);
-                    self.builder
-                        .ins()
-                        .trapnz(overflow, TrapCode::unwrap_user(1));
-                    let offset_ptr = self.builder.ins().uadd_overflow_trap(
-                        ptr_value,
-                        offset,
-                        TrapCode::unwrap_user(1),
-                    );
-                    MemPlace::new(offset_ptr, layout, ty)
+
+                    self.array_index_place(place_value, ty, |this|{
+                        
+                    let index_place = this.eval_place(&mir::Place::local(local)).unwrap();
+                    (this.load_place(&index_place).unwrap().first_value(),index_place.type_of())
+
+                    })
                 }
                 mir::PlaceProjection::CaseDowncast(case, ..) => {
                     place_value.project_downcast(self.ctxt, case)
@@ -1747,9 +1759,26 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         };
         self.print_string(first_val, second_val);
     }
+    fn write_zeros(&mut self, place: MemPlace<'ctxt>){
+        let size = place.layout.size;
+        let ptr = place.ptr(self);
+        self.builder.emit_small_memset(self.target_config, ptr, 0, size.in_bytes(), place.layout.alignment.pow_of_2(), MemFlagsData::new());
+    }
     fn codegen_stmt(&mut self, stmt: &mir::Stmt<'ctxt>) {
         match &stmt.kind {
             mir::StmtKind::Noop => (),
+            mir::StmtKind::ClearSlot(place,value) => {
+                let CodegenPlace::MemPlace(array_place) = self.eval_place(place).unwrap() else {
+                    unreachable!()
+                };
+                let element_ty = array_place.ty.as_raw_array().expect("should be a raw array");
+
+                let index_place = self.array_index_place(array_place, element_ty, |this|{
+                    let operand = this.eval_operand(value);
+                    (operand.expect_immediate(this),operand.ty)
+                });
+                self.write_zeros(index_place);
+            }
             mir::StmtKind::Assign(place, rvalue) => {
                 self.codegen_rvalue_assign(place, rvalue);
             }
