@@ -783,7 +783,7 @@ impl<'info> Resolve<'info> {
                         res::Stmt {
                             loc: var_ident.loc,
                             kind: res::StmtKind::Let(Box::new(res::LetBinding {
-                                pattern: pattern,
+                                pattern,
                                 ty: None,
                                 value: iter_var_value(pat_loc),
                             })),

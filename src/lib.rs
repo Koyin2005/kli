@@ -24,6 +24,7 @@ mod captures;
 pub mod codegen;
 pub mod config;
 mod def_ids;
+pub mod files;
 mod lang_items;
 pub mod layout;
 mod res_visitor;
