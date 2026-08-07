@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     io::{self, Write},
-    path::Path,
     process::Command,
 };
 
@@ -9,7 +8,7 @@ use kli::{
     Arenas,
     codegen::CodegenRoot,
     config::{CommandArg, Feature, config},
-    files::{FileError, build_file_tree},
+    files::{FileError, build_file_tree, kli_runtime_path},
     mir::{self, passes::passes},
     monomorph::collect::{Instance, InstanceCollector, InstanceKind},
     parsing,
@@ -105,7 +104,7 @@ fn main() {
         {
             std::fs::write("foo.o", obj.emit().unwrap()).unwrap();
         }
-        let kli_rt_path = Path::new(option_env!("KLI_RUNTIME_PATH").expect("kli runtime required"));
+        let kli_rt_path = kli_runtime_path().unwrap();
 
         let output = Command::new("gcc")
             .arg(kli_rt_path.join("kli_pal.c"))

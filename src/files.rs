@@ -1,10 +1,33 @@
-use std::{borrow::Cow, collections::BTreeMap, path::Path};
+use std::{
+    borrow::Cow,
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     Symbol,
     config::{Config, Feature},
 };
 
+pub fn kli_path() -> Option<PathBuf> {
+    option_env!("KLI_PATH")
+        .map(Path::new)
+        .map(Path::to_path_buf)
+}
+
+pub fn kli_std_lib_path() -> Option<PathBuf> {
+    kli_path().map(|mut path| {
+        path.push("std");
+        path
+    })
+}
+
+pub fn kli_runtime_path() -> Option<PathBuf> {
+    kli_path().map(|mut path| {
+        path.push("rt");
+        path
+    })
+}
 pub fn build_file_tree(config: &Config) -> Result<Files, FileError> {
     let path = config.path();
     let include_std = !config.has_feature(Feature::NoStd);
@@ -140,46 +163,11 @@ fn find_all_src_files(path: &Path) -> Result<Files, FileError> {
 }
 
 fn find_std_lib() -> FileEntry {
-    let bool_file = include_str!("std/bools.kli");
-    let int_file = include_str!("std/ints.kli");
-    let io_file = include_str!("std/io.kli");
-    let box_file = include_str!("std/boxed.kli");
-    let ref_file = include_str!("std/refs.kli");
-    let string_file = include_str!("std/strings.kli");
-    let array_file = include_str!("std/arrays.kli");
-    let optional_file = include_str!("std/optional.kli");
-    let phantom_file = include_str!("std/phantom.kli");
-    let cmp_file = include_str!("std/cmp.kli");
-    let map_file = include_str!("std/maps.kli");
-    let slice_file = include_str!("std/slices.kli");
-    let panic_file = include_str!("std/panicking.kli");
-    fn file_from(name: &str, src: &'static str) -> (Symbol, FileEntry) {
-        let name = Symbol::intern(name);
-        (
-            name,
-            FileEntry {
-                name,
-                kind: FileEntryKind::Single { src: src.into() },
-            },
-        )
-    }
+    let kli_std_lib_path = kli_std_lib_path().expect("should have std lib path");
+    let files = find_all_src_files(&kli_std_lib_path).unwrap();
     FileEntry {
         name: Symbol::STD,
-        kind: FileEntryKind::Folder(BTreeMap::from([
-            file_from("arrays", array_file),
-            file_from("bools", bool_file),
-            file_from("boxed", box_file),
-            file_from("cmp", cmp_file),
-            file_from("ints", int_file),
-            file_from("io", io_file),
-            file_from("maps", map_file),
-            file_from("optional", optional_file),
-            file_from("phantom", phantom_file),
-            file_from("refs", ref_file),
-            file_from("strings", string_file),
-            file_from("slices", slice_file),
-            file_from("panicking", panic_file),
-        ])),
+        kind: FileEntryKind::Folder(files.files),
     }
 }
 fn find_builtins() -> FileEntry {
