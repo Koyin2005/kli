@@ -51,7 +51,9 @@ impl Symbol {
         "array_get_unchecked",
         "print_string",
         "int_max_value",
-        "raw_array_set_zero",
+        "uninit_zeroed",
+        "uninit_assume_init",
+        "uninit_new"
     ];
     const _NO_REPEATS: () = {
         let mut i = 0;
@@ -115,7 +117,9 @@ impl Symbol {
     pub const ARRAY_GET_UNCHECKED: Self = Self::expect_symbol("array_get_unchecked");
     pub const PRINT_STRING: Self = Self::expect_symbol("print_string");
     pub const INT_MAX_VALUE: Self = Self::expect_symbol("int_max_value");
-    pub const RAW_ARRAY_SET_ZERO: Self = Self::expect_symbol("raw_array_set_zero");
+    pub const UNINIT_ZEROED: Self = Self::expect_symbol("uninit_zeroed");
+    pub const UNINIT_ASSUME_INIT: Self = Self::expect_symbol("uninit_assume_init");
+    pub const UNINIT_NEW: Self = Self::expect_symbol("uninit_new");
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }

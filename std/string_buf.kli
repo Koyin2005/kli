@@ -1,0 +1,31 @@
+import std.(dynarray,strings)
+import dynarray.DynArray
+
+@opaque
+type StringBuf = {
+    buf : DynArray[byte]
+}
+
+# Creates an empty StringBuf
+fun new() -> StringBuf = StringBuf { buf = dynarray.new()}
+
+# Pushes a single string to the StringBuf
+fun push_string(this : StringBuf, s : string) -> () = 
+    dynarray.append_array(this.buf,unsafe strings.as_bytes(s) end)
+
+# Clones the current string in the StringBuf
+fun into_string(this : StringBuf) -> string = 
+    unsafe builtins.transmute(dynarray.into_array(this.buf)) end
+
+
+# Clears the StringBuf and leaves it empty
+fun clear(this : StringBuf) -> () = do
+    dynarray.clear(this.buf)
+end
+
+# Returns the current string, and clears the StringBuf
+fun drain_into_string(this : StringBuf) -> string = do
+    let s = into_string(this);
+    clear(this);
+    s
+end

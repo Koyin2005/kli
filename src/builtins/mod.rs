@@ -17,7 +17,9 @@ pub enum Builtin {
     ArrayGetUnchecked,
     PrintString,
     IntMaxValue,
-    RawArraySetZero,
+    UninitZeroed,
+    UninitAssumeInit,
+    UninitNew
 }
 impl Builtin {
     pub const fn name(self) -> &'static str {
@@ -37,7 +39,9 @@ impl Builtin {
             Builtin::OverflowingSub => "overflowing_sub",
             Builtin::WrappingSub => "wrapping_sub",
             Builtin::IntMaxValue => "int_max_value",
-            Builtin::RawArraySetZero => "raw_array_set_zero",
+            Builtin::UninitAssumeInit => "uninit_assume_init",
+            Builtin::UninitZeroed => "uninit_zeroed",
+            Builtin::UninitNew => "uninit_new"
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
@@ -57,7 +61,9 @@ impl Builtin {
             Symbol::ARRAY_GET_UNCHECKED => Some(Builtin::ArrayGetUnchecked),
             Symbol::PRINT_STRING => Some(Builtin::PrintString),
             Symbol::INT_MAX_VALUE => Some(Builtin::IntMaxValue),
-            Symbol::RAW_ARRAY_SET_ZERO => Some(Builtin::RawArraySetZero),
+            Symbol::UNINIT_ZEROED => Some(Builtin::UninitZeroed),
+            Symbol::UNINIT_ASSUME_INIT => Some(Builtin::UninitAssumeInit),
+            Symbol::UNINIT_NEW => Some(Builtin::UninitNew),
             _ => None,
         }
     }

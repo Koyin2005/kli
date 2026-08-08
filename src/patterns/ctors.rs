@@ -40,7 +40,7 @@ pub fn constructors_of_ty<'ctxt>(
         | TypeKind::Array(_)
         | TypeKind::String
         | TypeKind::Box(_)
-        | TypeKind::RawArray(_) => ConstructorSet::NonExhaustive,
+        | TypeKind::Uninit(_) => ConstructorSet::NonExhaustive,
         TypeKind::Tuple(_) => ConstructorSet::Record,
         TypeKind::Infer(_) => unreachable!("Cannot have infer here"),
         TypeKind::Named(id, _, args) => {

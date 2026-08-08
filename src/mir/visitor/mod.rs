@@ -27,10 +27,6 @@ pub trait Visit<'ctxt> {
             StmtKind::Print(operand) => {
                 self.visit_operand(loc, operand);
             }
-            StmtKind::ClearSlot(place, index) => {
-                self.visit_place(PlaceCtxt::Write, loc, place);
-                self.visit_operand(loc, index);
-            }
         }
     }
     fn super_visit_constant(&mut self, _loc: Location, _constant: &Constant<'ctxt>) {}
@@ -65,6 +61,7 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue<'ctxt>) {
         match rvalue {
+            Rvalue::UninitZeroed(_) => (),
             Rvalue::AllocateRawArray { ty: _, count } => self.visit_operand(loc, count),
             Rvalue::Discriminant(place) => self.visit_place(PlaceCtxt::Read, loc, place),
             Rvalue::Len(place) => self.visit_place(PlaceCtxt::Read, loc, place),
@@ -177,10 +174,6 @@ pub trait MutVisit<'ctxt> {
             StmtKind::Assign(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
             }
-            StmtKind::ClearSlot(place, index) => {
-                self.visit_place(loc, place);
-                self.visit_operand(loc, index);
-            }
             StmtKind::Print(operand) => {
                 self.visit_operand(loc, operand);
             }
@@ -218,6 +211,7 @@ pub trait MutVisit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &mut Rvalue<'ctxt>) {
         match rvalue {
+            Rvalue::UninitZeroed(_) => (),
             Rvalue::Discriminant(place) => self.visit_place(loc, place),
             Rvalue::Len(place) => self.visit_place(loc, place),
             Rvalue::Use(operand) | Rvalue::AllocateBox(_, operand) => {

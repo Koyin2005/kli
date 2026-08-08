@@ -161,6 +161,15 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
                 };
                 Type::new_raw_array(self.ctxt, ty)
             }
+            TypeName::Uninit => {
+                let args = self.lower_generic_args_with(Generics::default(), 1, loc, args);
+                let ty = if let Ok([GenericArg(ty)]) = <[_; _]>::try_from(args) {
+                    ty
+                } else {
+                    Type::new_unknown(self.ctxt)
+                };
+                Type::new_uninit(self.ctxt, ty)
+            }
         }
     }
     pub fn lower_type(&self, ty: &res::Type) -> Type<'ctxt> {

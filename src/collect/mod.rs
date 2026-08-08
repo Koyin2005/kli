@@ -677,7 +677,15 @@ impl<'ctxt> CtxtRef<'ctxt> {
             .compute(ty, |ty| calculate_layout(self, ty))
     }
     pub fn builtin_for(self, id: DefId) -> Option<Builtin> {
-        Builtin::find(self.expect_ident(id).symbol)
+        let name = self.ident(id)?;
+        if self
+            .annotations(id)
+            .iter()
+            .all(|annotation| !matches!(annotation.kind, AnnotationKind::Builtin))
+        {
+            return None;
+        }
+        Builtin::find(name.symbol)
     }
     pub fn intern_ty(self, kind: TypeKind<'ctxt>) -> Type<'ctxt> {
         Type::new(self.0.interners.ty_interner.intern(kind))

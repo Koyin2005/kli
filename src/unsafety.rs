@@ -3,14 +3,21 @@ use crate::{
     builtins::Builtin,
     def_ids::DefId,
     resolved_ast::AnnotationKind,
-    typed_ast::{ExprKind, Function, PlaceKind},
-    typed_ast_visitor::{Visitor, walk_expr, walk_place},
+    typed_ast::{ExprKind, Function},
+    typed_ast_visitor::{Visitor, walk_expr},
     types::Type,
 };
 
 pub fn transmutable<'ctxt>(ctxt: CtxtRef<'ctxt>, from: Type<'ctxt>, to: Type<'ctxt>) -> bool {
     match (from, to) {
         (from, to) if from == to => true,
+        (from, to)
+            if let (Ok(inner), Err(ty)) | (Err(ty), Ok(inner)) =
+                (from.as_uninit().ok_or(from), to.as_uninit().ok_or(to))
+                && inner == ty =>
+        {
+            true
+        }
         _ => match (ctxt.layout_of(from), ctxt.layout_of(to)) {
             (Ok(from_layout), Ok(to_layout)) => from_layout.size == to_layout.size,
             _ => false,
@@ -53,18 +60,6 @@ impl<'ctxt> SafetyCheck<'ctxt> {
     }
 }
 impl<'ctxt> Visitor<'ctxt> for SafetyCheck<'ctxt> {
-    fn visit_place(&mut self, place: &crate::typed_ast::Place<'ctxt>) {
-        if !self.in_unsafe_block
-            && let PlaceKind::Index(ref array, _) = place.kind
-            && array.ty.as_raw_array().is_some()
-        {
-            self.ctxt.diag().add_diagnostic(
-                "cannot index raw array outside of unsafe context",
-                place.loc,
-            );
-        }
-        walk_place(self, place);
-    }
     fn visit_expr(&mut self, expr: &crate::typed_ast::Expr<'ctxt>) {
         let function = match expr.kind {
             ExprKind::Unsafe(ref expr) => {

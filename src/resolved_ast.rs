@@ -224,6 +224,7 @@ pub enum TypeName {
     RawArray,
     Param(Symbol, usize),
     Never,
+    Uninit,
 }
 #[derive(Debug)]
 pub enum TypeKind {

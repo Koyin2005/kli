@@ -75,7 +75,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 super::PlaceProjection::ConstantIndex(_) | super::PlaceProjection::Index(_) => {
                     ty = self.assert_with_some(
                         ty,
-                        |ty| ty.as_array().or(ty.as_raw_array()),
+                        |ty| ty.as_array(),
                         || "Cannot take an index for non-array",
                         loc,
                     )
@@ -91,6 +91,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         self.super_visit_rvalue(loc, rvalue);
         let loc = self.body.src_info(loc);
         match rvalue {
+            super::Rvalue::UninitZeroed(_) => (),
             super::Rvalue::AllocateBox(ty, operand) => {
                 self.assert(
                     *ty == operand.type_of(self.ctxt, &self.body.locals, self.body.return_type),
@@ -294,11 +295,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             },
             super::Rvalue::Len(place) => {
                 let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                self.assert(
-                    ty.as_array().or(ty.as_raw_array()).is_some(),
-                    || "Expected an array type",
-                    loc,
-                );
+                self.assert(ty.as_array().is_some(), || "Expected an array type", loc);
             }
         }
     }
@@ -327,21 +324,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                             lhs_ty, rhs_ty, lhs, rhs
                         )
                     },
-                    stmt.loc,
-                );
-            }
-            StmtKind::ClearSlot(array_place, index) => {
-                let arr_ty =
-                    array_place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                self.assert(
-                    arr_ty.as_raw_array().is_some(),
-                    || format!("Expected raw array not '{}'", arr_ty),
-                    stmt.loc,
-                );
-                let ind_ty = index.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                self.assert(
-                    ind_ty.is_integer_kind(IntegerKind::Unsigned),
-                    || format!("Expected uint '{}'", ind_ty),
                     stmt.loc,
                 );
             }

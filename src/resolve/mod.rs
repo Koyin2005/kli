@@ -36,6 +36,7 @@ enum TypeAlias {
     ArrayList,
     Never,
     RawArray,
+    Uninit,
 }
 impl TypeAlias {
     fn into_type_name(self) -> res::TypeName {
@@ -45,6 +46,7 @@ impl TypeAlias {
             TypeAlias::ArrayList => res::TypeName::Array,
             TypeAlias::Never => res::TypeName::Never,
             TypeAlias::RawArray => res::TypeName::RawArray,
+            TypeAlias::Uninit => res::TypeName::Uninit,
         }
     }
 }
@@ -125,6 +127,7 @@ impl<'info> Resolve<'info> {
                 Symbol::intern("array"),
                 Res::TypeAlias(TypeAlias::ArrayList),
             ),
+            (Symbol::intern("uninit"), Res::TypeAlias(TypeAlias::Uninit)),
         ]);
         Self {
             config,

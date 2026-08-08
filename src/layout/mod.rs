@@ -260,6 +260,7 @@ pub enum LayoutKind {
         cases: IndexVec<CaseId, Layout>,
     },
     Scalar(Scalar),
+    Uninit,
 }
 
 #[derive(Clone)]
@@ -369,6 +370,15 @@ pub fn calculate_layout<'ctxt>(
     ty: Type<'ctxt>,
 ) -> Result<Layout, LayoutError> {
     Ok(match ty.kind() {
+        &TypeKind::Uninit(ty) => {
+            let layout = calculate_layout(ctxt, ty)?;
+
+            Layout {
+                size: layout.size,
+                alignment: layout.alignment,
+                kind: LayoutKind::Uninit,
+            }
+        }
         TypeKind::Infer(_) | TypeKind::Unknown => return Err(LayoutError::Unknown),
         TypeKind::Int(integer_kind) => Layout {
             size: INT_SIZE,
@@ -389,7 +399,7 @@ pub fn calculate_layout<'ctxt>(
         TypeKind::Never => Layout::zst().uninhabited(),
         TypeKind::Param(_, _) => return Err(LayoutError::TooGeneric),
         TypeKind::Function(_) | TypeKind::Box(_) => Layout::pointer(true),
-        TypeKind::Array(_) | TypeKind::String | TypeKind::RawArray(_) => {
+        TypeKind::Array(_) | TypeKind::String => {
             return aggregate_layout(vec![
                 (FieldId::new(0), Layout::pointer(true)),
                 (

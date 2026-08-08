@@ -182,11 +182,11 @@ pub struct Type<'ctxt>(&'ctxt TypeKind<'ctxt>);
 impl<'ctxt> Type<'ctxt> {
     pub const UNKNOWN: Self = Self(&TypeKind::Unknown);
     pub const BYTE: Self = Self(&TypeKind::Unknown);
-    pub fn new_raw_array(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
-        TypeKind::RawArray(ty).intern(ctxt)
+    pub fn new_uninit(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
+        TypeKind::Uninit(ty).intern(ctxt)
     }
-    pub fn as_raw_array(self) -> Option<Self> {
-        let &TypeKind::RawArray(ty) = self.0 else {
+    pub fn as_uninit(self) -> Option<Self> {
+        let &TypeKind::Uninit(ty) = self.0 else {
             return None;
         };
         Some(ty)
@@ -253,6 +253,12 @@ impl<'ctxt> Type<'ctxt> {
             return None;
         };
         Some(ty)
+    }
+    pub fn new_raw_array(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
+        Self::new_array(ctxt, Self::new_uninit(ctxt, ty))
+    }
+    pub fn as_raw_array(self) -> Option<Self> {
+        self.as_array()?.as_uninit()
     }
     pub fn new_array(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
         TypeKind::Array(ty).intern(ctxt)
@@ -341,9 +347,8 @@ pub enum TypeKind<'ctxt> {
     Array(Type<'ctxt>),
     Named(DefId, Symbol, GenericArgs<'ctxt>),
     String,
-    /// A heap allocated array of type T that may contain uninit data
-    RawArray(Type<'ctxt>),
     Box(Type<'ctxt>),
+    Uninit(Type<'ctxt>),
 }
 impl<'ctxt> TypeKind<'ctxt> {
     pub const UNIT: Self = Self::Tuple(Vec::new());
@@ -417,7 +422,7 @@ impl<'ctxt> TypeKind<'ctxt> {
             | Self::Function(..)
             | Self::String
             | Self::Array(_)
-            | Self::RawArray(_) => false,
+            | Self::Uninit(_) => false,
             Self::Never => true,
             Self::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
             Self::Box(ty) => ty.is_uninhabited(ctxt),
@@ -447,7 +452,6 @@ impl Display for TypeKind<'_> {
             Self::Box(ty) => {
                 write!(f, "Box[{ty}]")
             }
-            Self::RawArray(ty) => write!(f, "raw_array[{}]", ty),
             Self::String => f.pad("string"),
             TypeKind::Byte => f.pad("byte"),
             TypeKind::Never => f.pad("never"),
@@ -494,6 +498,7 @@ impl Display for TypeKind<'_> {
                 write!(f, "{}{}", name, display_generic_args(args))
             }
             TypeKind::Array(ty) => write!(f, "array[{}]", ty),
+            TypeKind::Uninit(ty) => write!(f, "uninit[{}]", ty),
         }
     }
 }
@@ -531,7 +536,7 @@ pub trait TypeMap<'ctxt> {
             )),
             TypeKind::Array(ty) => Ok(Type::new_array(self.ctxt(), self.map_type(*ty)?)),
             TypeKind::Box(ty) => Ok(Type::new_box(self.ctxt(), self.map_type(*ty)?)),
-            TypeKind::RawArray(ty) => Ok(Type::new_raw_array(self.ctxt(), self.map_type(*ty)?)),
+            TypeKind::Uninit(ty) => Ok(Type::new_uninit(self.ctxt(), self.map_type(*ty)?)),
         }
     }
     fn super_map_function_type(

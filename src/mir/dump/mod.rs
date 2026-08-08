@@ -103,6 +103,9 @@ impl<'ctxt> MirDump<'ctxt> {
     }
     fn write_rvalue(&mut self, rvalue: &Rvalue) -> std::io::Result<()> {
         match rvalue {
+            Rvalue::UninitZeroed(ty) => {
+                write!(self.output, "uninit[{}]", ty)?;
+            }
             Rvalue::Use(operand) => {
                 self.write_operand(operand)?;
             }
@@ -222,7 +225,7 @@ impl<'ctxt> MirDump<'ctxt> {
             types::TypeKind::Infer(_)
             | types::TypeKind::Param(..)
             | types::TypeKind::Unknown
-            | types::TypeKind::RawArray(_) => {
+            | types::TypeKind::Uninit(_) => {
                 write!(self.output, "unknown of '{}'", ty)
             }
             types::TypeKind::Char => {
@@ -323,14 +326,6 @@ impl<'ctxt> MirDump<'ctxt> {
         for stmt in &block.stmts {
             write!(self.output, "  ")?;
             match &stmt.kind {
-                StmtKind::ClearSlot(place, index) => {
-                    write!(self.output, "clear_slot(")?;
-                    self.write_place(place)?;
-                    write!(self.output, ",")?;
-                    self.write_operand(index)?;
-
-                    writeln!(self.output, ")")?;
-                }
                 StmtKind::Print(value) => {
                     write!(self.output, "print(")?;
                     self.write_operand(value)?;

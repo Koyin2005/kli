@@ -1,15 +1,22 @@
+import std.dynarray
 @opaque
 @lang_item("string")
 type String = {}
 
+@unsafe
+fun as_bytes(this : string) -> array[byte] = builtins.transmute(this)
+
+
 fun empty() -> string = ""
 
 fun clone(s : string) -> string = do
-    let bytes : raw_array[byte] = unsafe builtins.transmute(s) end;
+    let bytes : array[byte] = unsafe as_bytes(s) end;
     let byte_len = builtins.array_len(bytes);
-    let mut bs = builtins.raw_array_alloc(byte_len);
+    let mut bs : array[uninit[byte]] = builtins.raw_array_alloc[byte](byte_len);
     for i in 0u..byte_len do
-        unsafe (bs).[i] = (bytes).[i] end;
+        (bs).[i] = builtins.uninit_new(bytes.[i]);
     end;
     unsafe builtins.transmute(bs) end
 end
+
+

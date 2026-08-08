@@ -14,12 +14,12 @@ fun repeat[T](count : uint, value : T) -> array[T] = builtins.array_repeat(value
 
 fun get_checked[T](this : array[T], index : uint) -> Option[T] = 
     case index < len(this) of 
-    | true -> Option.Some((this).[index])
-    | false -> Option.None
+    | true -> Option.Some(this.[index])
+    | false -> Option.None[T]
     end
 
 fun get[T](this : array[T], index : uint) -> T = 
-    (this).[index]
+    this.[index]
 
 
 fun set[T](this : array[T], index : uint, value : T) -> () = 
@@ -48,8 +48,31 @@ fun reverse[T](this : array[T]) -> () = do
     end;
     for i in 0u..(len/2u) do
         let tmp = (this).[i];
-        (this).[i] = (this).[(len - i) - 1u];
-        (this).[(len - i) - 1u] = tmp;
+        this.[i] = (this).[(len - i) - 1u];
+        this.[(len - i) - 1u] = tmp;
     end;
 
 end
+
+fun for_each[T](elements : array[T], f : fun(uint,T) -> ()) -> () =
+    for i in 0u..len(elements) do 
+        f(i,elements.[i])
+    end
+    
+
+fun for_each_with_ctxt[C,T](ctxt : C, elements : array[T], f : fun(C, uint,T) -> C) -> C = 
+    do
+        for i in 0u..len(elements) do 
+            ctxt = f(ctxt,i,elements.[i])
+        end;
+        ctxt
+    end
+
+
+fun zero_slot[T](this : array[uninit[T]], index : uint) -> () = 
+    this.[index] = builtins.uninit_zeroed[T]()
+
+# Safety: 
+# `index` must be in bounds for `this`
+@unsafe
+fun zero_slot_unchecked[T](this : array[uninit[T]], index : uint) -> () = builtins.array_set_unchecked(this,index,builtins.uninit_zeroed[T]())

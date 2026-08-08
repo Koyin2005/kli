@@ -1372,6 +1372,15 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     }
     fn codegen_rvalue_assign(&mut self, place: &mir::Place, value: &mir::Rvalue<'ctxt>) {
         match value {
+            mir::Rvalue::UninitZeroed(_) => {
+                let Ok(place) = self.eval_place(place) else {
+                    return;
+                };
+                let CodegenPlace::MemPlace(place) = place else {
+                    unreachable!("Uninit should be in memory")
+                };
+                self.write_zeros(place);
+            }
             mir::Rvalue::AllocateRawArray { ty, count } => {
                 let dst_place = self.eval_place(place).unwrap();
                 let ty = self.monomorphize(*ty);
@@ -1781,21 +1790,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn codegen_stmt(&mut self, stmt: &mir::Stmt<'ctxt>) {
         match &stmt.kind {
             mir::StmtKind::Noop => (),
-            mir::StmtKind::ClearSlot(place, value) => {
-                let CodegenPlace::MemPlace(array_place) = self.eval_place(place).unwrap() else {
-                    unreachable!()
-                };
-                let element_ty = array_place
-                    .ty
-                    .as_raw_array()
-                    .expect("should be a raw array");
-
-                let index_place = self.array_index_place(array_place, element_ty, |this| {
-                    let operand = this.eval_operand(value);
-                    (operand.expect_immediate(this), operand.ty)
-                });
-                self.write_zeros(index_place);
-            }
             mir::StmtKind::Assign(place, rvalue) => {
                 self.codegen_rvalue_assign(place, rvalue);
             }

@@ -45,7 +45,7 @@ impl PlaceProjection {
                     .0
             }
             PlaceProjection::Index(_) | PlaceProjection::ConstantIndex(_) => {
-                let Some(ty) = ty.as_array().or_else(|| ty.as_raw_array()) else {
+                let Some(ty) = ty.as_array() else {
                     unreachable!("Should be an array")
                 };
                 ty
@@ -269,6 +269,7 @@ pub enum CastKind<'ctxt> {
 }
 #[derive(Clone, Debug)]
 pub enum Rvalue<'ctxt> {
+    UninitZeroed(Type<'ctxt>),
     Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Operand<'ctxt>>),
     Repeat {
         ty: Type<'ctxt>,
@@ -298,7 +299,8 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::Use(_)
             | Self::AddrOf(_)
             | Self::Len(_)
-            | Self::Discriminant(_) => true,
+            | Self::Discriminant(_)
+            | Self::UninitZeroed(_) => true,
             Self::Repeat {
                 ty: _,
                 value: _,
@@ -324,6 +326,7 @@ impl<'ctxt> Rvalue<'ctxt> {
         return_type: Type<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
+            &Rvalue::UninitZeroed(ty) => Type::new_uninit(ctxt, ty),
             &Rvalue::AllocateBox(ty, _) => Type::new_box(ctxt, ty),
             Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),
             Rvalue::Len(_) => Type::new_uint(ctxt),
@@ -567,7 +570,6 @@ pub struct Stmt<'ctxt> {
 pub enum StmtKind<'ctxt> {
     Noop,
     Assign(Place, Box<Rvalue<'ctxt>>),
-    ClearSlot(Place, Operand<'ctxt>),
     Print(Operand<'ctxt>),
 }
 define_id!(BasicBlockId);
