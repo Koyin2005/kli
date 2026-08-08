@@ -2,7 +2,7 @@ import std.arrays
 import std.optional.(Option,expect_value)
 import std.boxed
 import std.ints
-import std.io.print_newline
+import std.panicking
 
 @opaque
 type DynArrayInner[T] = {
@@ -107,12 +107,12 @@ end
 fun pop[T](this : DynArray[T]) -> Option[T] = do
     case this.inner^.len of
     | 0 -> Option.None
-    | _ ->
+    | old_len ->
         do
-            let len = this.inner^.len  - 1u;
-            let value = unsafe builtins.uninit_assume_init(builtins.array_get_unchecked(this.inner^.buf,len)) end;
-            unsafe arrays.zero_slot_unchecked(this.inner^.buf,len) end;
-            this.inner^.len = len;
+            let new_len = builtins.wrapping_sub(old_len,1u);
+            let value = unsafe builtins.uninit_assume_init(builtins.array_get_unchecked(this.inner^.buf,new_len)) end;
+            unsafe arrays.zero_slot_unchecked(this.inner^.buf,new_len) end;
+            this.inner^.len = new_len;
             Option.Some(value)
         end
     end
@@ -140,7 +140,9 @@ fun remove[T](arr : DynArray[T], index : uint) -> T = do
     | true -> arrays.index_out_bounds()
     | false -> ()
     end;
-    let value : T = unsafe builtins.transmute((arr.inner^.buf).[index]) end;
+    let value : T = unsafe 
+        builtins.transmute(builtins.array_get_unchecked(arr.inner^.buf,index)) 
+    end;
     unsafe 
         arrays.zero_slot_unchecked((arr.inner^.buf),index);
     end;
@@ -151,10 +153,18 @@ fun remove[T](arr : DynArray[T], index : uint) -> T = do
     value
 end
 
+fun remove_last[T](arr : DynArray[T]) -> T = 
+    case pop(arr) of 
+    | .Some(value) -> value 
+    | .None -> panicking.panic_message("cannot remove from empty list")
+    end
+
 fun append_array[T](this : DynArray[T], arr : array[T]) -> () = do
-    reserve(this,builtins.array_len(arr));
-    for i in 0u..builtins.array_len(arr) do
-        push(this,arr.[i]);
+    let len = builtins.array_len(arr);
+    reserve(this,len);
+    for i in 0u..len do
+        let value = unsafe builtins.array_get_unchecked(arr,i) end;
+        push(this,value);
     end
 end
 
