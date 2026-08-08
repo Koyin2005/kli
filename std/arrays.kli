@@ -75,4 +75,37 @@ fun zero_slot[T](this : array[uninit[T]], index : uint) -> () =
 # Safety: 
 # `index` must be in bounds for `this`
 @unsafe
-fun zero_slot_unchecked[T](this : array[uninit[T]], index : uint) -> () = builtins.array_set_unchecked(this,index,builtins.uninit_zeroed[T]())
+fun zero_slot_unchecked[T](this : array[uninit[T]], index : uint) -> () = builtins.array_set_unchecked(this,index,builtins.uninit_zeroed())
+
+# Copies all elements in the range `src_start` .. `src_start` + `count` of `src`
+# to range `dst_start` .. `dst_start` + `count` of `dst`
+# Panics:
+#  if any index in the destination range is out of bounds for `dst`
+#  if any index in the source range is out of bounds for `src`
+fun copy[T](dst : array[T], src : array[T], dst_start : uint, src_start : uint, count : uint) -> () = do
+    let dst_len = builtins.array_len(dst);
+    let src_len = builtins.array_len(src);
+    case (dst_start + dst_len) > count or (src_start + src_len) > count of
+    | true -> index_out_bounds()
+    | false -> ()
+    end;
+    unsafe 
+        copy_unchecked(src,dst,src_start,dst_start,count)
+    end
+end
+
+# Copies all elements in the range `src_start` .. `src_start` + `count` of `src`
+# to range `dst_start` .. `dst_start` + `count` of `dst`
+# Safety:
+#  all indices in the destination range are in bounds for `dst`
+#  all indices in the source range are in bounds for `src` 
+fun copy_unchecked[T](dst : array[T], src : array[T], dst_start : uint, src_start : uint, count : uint) -> () = do
+    for i in 0u..count do
+        let dst_index = dst_start + i;
+        let src_index = src_start + i;
+        unsafe
+            let value = unsafe builtins.array_get_unchecked(src,src_index) end;
+            builtins.array_set_unchecked(dst,dst_index,value);
+        end;
+    end
+end

@@ -5,6 +5,19 @@ fun wrapping_add(x : int, y : int) -> int = builtins.wrapping_add(x,y)
 
 fun overflowing_add(x : int, y : int) -> (int,bool) = builtins.overflowing_add(x,y)
 
+fun wrapping_sub(x : int, y : int) -> int = builtins.wrapping_sub(x,y)
+
+fun overflowing_sub(x : int, y : int) -> (int,bool) = builtins.overflowing_sub(x,y)
+
+
+fun wrapping_uadd(x : uint, y : uint) -> uint = builtins.wrapping_add(x,y)
+
+fun overflowing_uadd(x : uint, y : uint) -> (uint,bool) = builtins.overflowing_add(x,y)
+
+fun wrapping_usub(x : uint, y : uint) -> uint = builtins.wrapping_sub(x,y)
+
+fun overflowing_usub(x : uint, y : uint) -> (uint,bool) = builtins.overflowing_sub(x,y)
+
 fun checked_add(x : int, y : int) -> Option[int] = do 
     case builtins.overflowing_add(x,y) of 
     | (_,false) -> Option.None

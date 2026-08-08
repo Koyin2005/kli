@@ -27,7 +27,7 @@ fun from_array[T](arr : array[T]) -> DynArray[T] = do
     let len = builtins.array_len(arr);
     let dyn_arr = with_capacity(len);
     unsafe 
-        copy_unchecked[T](dyn_arr.inner^.buf,builtins.transmute(arr),0,len);
+        arrays.copy_unchecked(dyn_arr.inner^.buf,builtins.transmute(arr),0,0,len);
     end;
     dyn_arr.inner^.len = len;
     dyn_arr
@@ -52,7 +52,7 @@ fun ensure_capacity[T](arr : DynArray[T], target_cap : uint) -> () = do
             let new_cap = ints.umax(target_cap,current_cap * 2u);
             let new_buf = builtins.raw_array_alloc[T](new_cap);
             unsafe 
-                copy_unchecked[T](new_buf,old_buf,0,len)
+                arrays.copy_unchecked(new_buf,old_buf,0,0,len)
             end;
             arr.inner^.buf = new_buf;
         end
@@ -119,36 +119,34 @@ fun pop[T](this : DynArray[T]) -> Option[T] = do
 end
 
 fun insert[T](arr : DynArray[T], index : uint, value : T) -> () = do
-    case index > arr.inner^.len  of
+    let old_len = arr.inner^.len;
+    case index > old_len  of
     | true -> arrays.index_out_bounds()
     | false -> ()
     end;
-    let new_len = arr.inner^.len + 1u;
+    let new_len = old_len + 1u;
     reserve(arr,1);
-    let mut i = new_len;
-    while i > index  do 
-        let prev_i = i - 1u;
-        unsafe copy_at_unchecked(
-            arr.inner^.buf,
-            arr.inner^.buf,
-            i,prev_i
-        ) end;
-        i = prev_i;
-    end;
+
+    let elems_to_move = std.ints.wrapping_usub(old_len,index);
+    unsafe arrays.copy_unchecked(arr.inner^.buf,arr.inner^.buf,index + 1, index, elems_to_move) end;
     unsafe builtins.array_set_unchecked(arr.inner^.buf,index,builtins.transmute(value)) end;
     arr.inner^.len = new_len;
 end
 
 
 fun remove[T](arr : DynArray[T], index : uint) -> T = do
+    let old_len = arr.inner^.len;
+    case index > old_len  of
+    | true -> arrays.index_out_bounds()
+    | false -> ()
+    end;
     let value : T = unsafe builtins.transmute((arr.inner^.buf).[index]) end;
     unsafe 
         arrays.zero_slot_unchecked((arr.inner^.buf),index);
     end;
     let new_len = arr.inner^.len - 1u;
-    for i in 0u..new_len  do 
-        unsafe copy_at_unchecked(arr.inner^.buf,arr.inner^.buf,i,i + 1u) end;
-    end;
+    let elems_to_move = std.ints.wrapping_usub(old_len,index);
+    unsafe arrays.copy_unchecked(arr.inner^.buf,arr.inner^.buf,index, index + 1, elems_to_move) end;
     arr.inner^.len = new_len;
     value
 end
@@ -169,9 +167,7 @@ fun into_array[T](arr : DynArray[T]) -> array[T] = do
     | 0 -> []
     | len -> do
         let buf = builtins.raw_array_alloc[T](len);
-        unsafe
-            copy_unchecked(buf,arr.inner^.buf,0,len)
-        end;
+        unsafe arrays.copy_unchecked(buf,arr.inner^.buf,0,0,len) end;
         unsafe builtins.transmute(buf) end
         end
     end
@@ -181,27 +177,4 @@ fun drain_to_array[T](this : DynArray[T]) -> array[T] = do
     let arr = into_array(this);
     clear(this);
     arr
-end
-
-# Safety : 
-# dst_index must be in bounds for dst
-# the element at dst_index  in dst must be initialised
-# src_index must be in bounds for src
-# the element at src_index in src must be initialised
-@unsafe
-fun copy_at_unchecked[T](dst : raw_array[T], src : raw_array[T], dst_index : uint, src_index : uint) -> () = do
-    let value : uninit[T] = unsafe builtins.array_get_unchecked(src,src_index) end;
-    builtins.array_set_unchecked(dst,dst_index,value);
-end
-
-# Safety : 
-# `dst` and `src` must have at least `count` elements
-# the elements between `start` and `count` in dst and src must be initialised
-@unsafe
-fun copy_unchecked[T](dst : raw_array[T], src : raw_array[T], start : uint, count : uint) -> () = do
-    for i in start..count do
-        unsafe
-            copy_at_unchecked[T](dst,src,i,i)
-        end;
-    end;
 end
