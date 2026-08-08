@@ -17,10 +17,15 @@ use crate::{
     },
     src_loc::SrcLoc,
 };
+enum InstancePathOr<T> {
+    InstancePath(InstancePath),
+    Other(T),
+}
 enum ParseAction {
     Stop,
     Continue,
 }
+#[must_use = "should propagate this"]
 pub struct ParseError;
 pub struct Parser {
     diag: DiagnosticReporter,
@@ -434,20 +439,40 @@ impl Parser {
             kind: ExprKind::Tuple(exprs),
         })
     }
-    fn parse_path_with_generics(&mut self) -> Result<InstancePath, ParseError> {
+    fn parse_path_or<T>(
+        &mut self,
+        mut other: impl FnMut(&mut Self, SrcLoc, InstancePath) -> Result<T, ParseError>,
+    ) -> Result<InstancePathOr<T>, ParseError> {
         let Some(name) = self.match_ident() else {
             unreachable!("Should be an ident here")
         };
         let mut path = vec![name];
         while self.matches_token(&TokenKind::Dot) {
-            let name = self.expect_ident("field name or sub path")?;
-            path.push(name);
+            if let Some(ident) = self.match_ident() {
+                path.push(ident);
+            } else {
+                let value = other(
+                    self,
+                    name.loc,
+                    InstancePath {
+                        path: Path::new(path),
+                        generic_args: None,
+                    },
+                )?;
+                return Ok(InstancePathOr::Other(value));
+            }
         }
         let generic_args = self.parse_optional_generic_args()?;
-        Ok(InstancePath {
+        Ok(InstancePathOr::InstancePath(InstancePath {
             path: Path::new(path),
             generic_args,
-        })
+        }))
+    }
+    fn parse_path_with_generics(&mut self) -> Result<InstancePath, ParseError> {
+        let InstancePathOr::InstancePath(path) = self.parse_path_or(|this, _, _| {
+            Err::<std::convert::Infallible, _>(this.expect_error("valid field or sub path"))
+        })?;
+        Ok(path)
     }
     fn parse_expr_prefix(&mut self) -> Result<Expr, ParseError> {
         let loc = self.current_loc();
@@ -504,7 +529,23 @@ impl Parser {
                 })
             }
             TokenKind::Ident(_) => {
-                let path = self.parse_path_with_generics()?;
+                let path_or_expr = self.parse_path_or(|this, head, path| {
+                    let expr = Expr {
+                        loc: head,
+                        kind: ExprKind::Path(path),
+                    };
+                    if this.check_token(&TokenKind::LeftBracket) {
+                        this.parse_index_tail(expr)
+                    } else {
+                        Err(this.expect_error("sub field or path"))
+                    }
+                })?;
+                let path = match path_or_expr {
+                    InstancePathOr::InstancePath(path) => path,
+                    InstancePathOr::Other(expr) => {
+                        return Ok(expr);
+                    }
+                };
                 if self.check_token(&TokenKind::LeftBrace) {
                     let fields = self.parse_record_expr_fields()?;
                     return Ok(Expr {
@@ -603,10 +644,19 @@ impl Parser {
             }
         }
     }
-    fn parse_expr_postfix(&mut self) -> Result<Expr, ParseError> {
-        let mut expr = self.parse_expr_prefix()?;
-        loop {
-            expr = match self.peek_token().kind {
+    fn parse_index_tail(&mut self, expr: Expr) -> Result<Expr, ParseError> {
+        self.advance();
+        let index = self.parse_expr()?;
+        self.expect(&TokenKind::RightBracket)?;
+        Ok(Expr {
+            loc: expr.loc,
+            kind: ExprKind::Index(Box::new(expr), Box::new(index)),
+        })
+    }
+    fn parse_expr_postfix_single(&mut self, expr: Expr) -> Result<(ParseAction, Expr), ParseError> {
+        Ok((
+            ParseAction::Continue,
+            match self.peek_token().kind {
                 TokenKind::LeftParen => {
                     self.advance();
                     let args = self.delimited_coma_sep(&TokenKind::RightParen, Self::parse_expr)?;
@@ -624,13 +674,8 @@ impl Parser {
                 }
                 TokenKind::Dot => {
                     self.advance();
-                    if self.matches_token(&TokenKind::LeftBracket) {
-                        let index = self.parse_expr()?;
-                        self.expect(&TokenKind::RightBracket)?;
-                        Expr {
-                            loc: expr.loc,
-                            kind: ExprKind::Index(Box::new(expr), Box::new(index)),
-                        }
+                    if self.check_token(&TokenKind::LeftBracket) {
+                        self.parse_index_tail(expr)?
                     } else {
                         let name = self.expect_ident("field name")?;
                         Expr {
@@ -649,9 +694,22 @@ impl Parser {
                         kind: ExprKind::MethodCall(Box::new(expr), name, args),
                     }
                 }
-                _ => break Ok(expr),
+                _ => return Ok((ParseAction::Stop, expr)),
+            },
+        ))
+    }
+    fn parse_expr_postfix_tail(&mut self, mut expr: Expr) -> Result<Expr, ParseError> {
+        loop {
+            let action;
+            (action, expr) = self.parse_expr_postfix_single(expr)?;
+            if let ParseAction::Stop = action {
+                break Ok(expr);
             }
         }
+    }
+    fn parse_expr_postfix(&mut self) -> Result<Expr, ParseError> {
+        let expr = self.parse_expr_prefix()?;
+        self.parse_expr_postfix_tail(expr)
     }
     fn parse_expr_binding_power(&mut self, min_bp: u32) -> Result<Expr, ParseError> {
         let mut expr = self.parse_expr_postfix()?;
@@ -1038,7 +1096,7 @@ impl Parser {
                         continue;
                     };
                     let Some(item) = item else {
-                        self.expect_error("valid item");
+                        let _ = self.expect_error("valid item");
                         recovery = true;
                         continue;
                     };
