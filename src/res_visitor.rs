@@ -78,7 +78,7 @@ pub trait Visitor {
             | ExprKind::Bool(_)
             | ExprKind::String(_)
             | ExprKind::Var(..)
-            | ExprKind::Panic 
+            | ExprKind::Panic
             | ExprKind::Char(_) => (),
             ExprKind::Lambda(lambda) => {
                 self.visit_body(

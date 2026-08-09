@@ -75,7 +75,7 @@ pub enum TokenKind {
     And,
     Return,
     Unsafe,
-    CharLiteral(char)
+    CharLiteral(char),
 }
 
 impl Display for TokenKind {
@@ -85,7 +85,7 @@ impl Display for TokenKind {
                 f.write_str("\'")?;
                 f.write_char(*c)?;
                 return f.write_str("\'");
-            },
+            }
             Self::At => "@",
             Self::Semi => ";",
             Self::LeftBrace => "{",

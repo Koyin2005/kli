@@ -668,9 +668,11 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 };
                 make_expr(ty, kind, loc)
             }
-            &ExprKind::Char(char) => {
-                make_expr(Type::new_char(self.ctxt()), typed_ast::ExprKind::Char(char), loc)
-            }
+            &ExprKind::Char(char) => make_expr(
+                Type::new_char(self.ctxt()),
+                typed_ast::ExprKind::Char(char),
+                loc,
+            ),
             ExprKind::Var(_) | ExprKind::Field(..) | ExprKind::Index(..) | ExprKind::Deref(_) => {
                 let place = self.check_place(expr, expected_ty);
                 typed_ast::Expr {

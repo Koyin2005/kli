@@ -200,8 +200,11 @@ impl<'ctxt> Constant<'ctxt> {
             value: ConstValue::Scalar(value as i128),
         }
     }
-    pub fn char(ctxt: CtxtRef<'ctxt>, value : char) -> Self{
-        Self { ty: Type::new_char(ctxt), value: ConstValue::Scalar(value as i128) }
+    pub fn char(ctxt: CtxtRef<'ctxt>, value: char) -> Self {
+        Self {
+            ty: Type::new_char(ctxt),
+            value: ConstValue::Scalar(value as i128),
+        }
     }
     pub fn uint(ctxt: CtxtRef<'ctxt>, value: u64) -> Self {
         Self {

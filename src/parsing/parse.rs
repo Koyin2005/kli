@@ -530,7 +530,10 @@ impl Parser {
             }
             TokenKind::CharLiteral(char) => {
                 self.advance();
-                Ok(Expr { loc, kind: ExprKind::Char(char) })
+                Ok(Expr {
+                    loc,
+                    kind: ExprKind::Char(char),
+                })
             }
             TokenKind::Ident(_) => {
                 let path_or_expr = self.parse_path_or(|this, head, path| {
