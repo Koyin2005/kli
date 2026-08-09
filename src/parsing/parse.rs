@@ -806,20 +806,6 @@ impl Parser {
     fn parse_type(&mut self) -> Result<Type, ParseError> {
         let loc = self.current_loc();
         match self.peek_token().kind {
-            TokenKind::Int => {
-                self.advance();
-                Ok(Type {
-                    loc,
-                    kind: TypeKind::Int,
-                })
-            }
-            TokenKind::Uint => {
-                self.advance();
-                Ok(Type {
-                    loc,
-                    kind: TypeKind::Uint,
-                })
-            }
             TokenKind::Bool => {
                 self.advance();
                 Ok(Type {

@@ -271,8 +271,6 @@ pub struct RecordType {
 }
 #[derive(Debug)]
 pub enum TypeKind {
-    Int,
-    Uint,
     Bool,
     String,
     Char,

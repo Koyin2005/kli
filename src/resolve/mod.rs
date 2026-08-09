@@ -37,6 +37,8 @@ enum TypeAlias {
     Never,
     RawArray,
     Uninit,
+    Int,
+    Uint
 }
 impl TypeAlias {
     fn into_type_name(self) -> res::TypeName {
@@ -47,6 +49,8 @@ impl TypeAlias {
             TypeAlias::Never => res::TypeName::Never,
             TypeAlias::RawArray => res::TypeName::RawArray,
             TypeAlias::Uninit => res::TypeName::Uninit,
+            TypeAlias::Int => res::TypeName::Int,
+            TypeAlias::Uint => res::TypeName::Uint
         }
     }
 }
@@ -117,6 +121,8 @@ impl<'info> Resolve<'info> {
     fn new(config: Config, results: &'info DeclareResults) -> Self {
         let env = Scope::from_iter([
             (Symbol::intern("byte"), Res::TypeAlias(TypeAlias::Byte)),
+            (Symbol::intern("int"), Res::TypeAlias(TypeAlias::Int)),
+            (Symbol::intern("uint"), Res::TypeAlias(TypeAlias::Uint)),
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),
             (
@@ -283,12 +289,6 @@ impl<'info> Resolve<'info> {
             }
             ast::TypeKind::Bool => {
                 res::TypeKind::Named(res::TypeName::Bool, Box::new(res::GenericArgs::NONE))
-            }
-            ast::TypeKind::Int => {
-                res::TypeKind::Named(res::TypeName::Int, Box::new(res::GenericArgs::NONE))
-            }
-            ast::TypeKind::Uint => {
-                res::TypeKind::Named(res::TypeName::Uint, Box::new(res::GenericArgs::NONE))
             }
             ast::TypeKind::String => {
                 res::TypeKind::Named(res::TypeName::String, Box::new(res::GenericArgs::NONE))
