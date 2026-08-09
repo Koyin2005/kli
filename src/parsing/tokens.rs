@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Display, Write};
 
 use crate::src_loc::SrcLoc;
 
@@ -75,11 +75,17 @@ pub enum TokenKind {
     And,
     Return,
     Unsafe,
+    CharLiteral(char)
 }
 
 impl Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let txt = match self {
+            Self::CharLiteral(c) => {
+                f.write_str("\'")?;
+                f.write_char(*c)?;
+                return f.write_str("\'");
+            },
             Self::At => "@",
             Self::Semi => ";",
             Self::LeftBrace => "{",
