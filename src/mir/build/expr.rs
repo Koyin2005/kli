@@ -282,15 +282,27 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         match builtin {
             Builtin::BitwiseOr => {
                 let [first, second] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Self::binary_op_rvalue(mir::BinaryOp::BitwiseOr, first, second))
+                BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                    mir::BinaryOp::BitwiseOr,
+                    first,
+                    second,
+                ))
             }
             Builtin::ShiftLeft => {
                 let [first, second] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Self::binary_op_rvalue(mir::BinaryOp::ShiftLeft, first, second))
+                BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                    mir::BinaryOp::ShiftLeft,
+                    first,
+                    second,
+                ))
             }
             Builtin::ShiftRight => {
                 let [first, second] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Self::binary_op_rvalue(mir::BinaryOp::ShiftRight, first, second))
+                BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                    mir::BinaryOp::ShiftRight,
+                    first,
+                    second,
+                ))
             }
             Builtin::ReadLine => BuiltinResult::Rvalue(Rvalue::ReadLine),
             Builtin::UninitNew => {

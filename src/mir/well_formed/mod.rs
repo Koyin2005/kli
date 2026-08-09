@@ -249,17 +249,21 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     right.type_of(self.ctxt, &self.body.locals, self.body.return_type),
                 ) {
                     (
-                        BinaryOp::BitwiseAnd
-                        | BinaryOp::ShiftLeft
-                        | BinaryOp::ShiftRight
-                        | BinaryOp::Divide
-                        | BinaryOp::Overflow(_)
-                        | BinaryOp::Wrapping(_)
-                        | BinaryOp::Lesser
-                        | BinaryOp::Greater,
+                        BinaryOp::Divide | BinaryOp::Overflow(_) | BinaryOp::Wrapping(_),
                         left,
                         right,
-                    ) if left == right && left.is_builtin_scalar() && right.is_builtin_scalar() => {
+                    ) if left == right && left.is_integer() => (),
+                    (BinaryOp::Lesser | BinaryOp::Greater, left, right)
+                        if left == right && left.is_builtin_scalar() => {}
+                    (BinaryOp::BitwiseAnd | BinaryOp::BitwiseOr, left, right)
+                        if left == right
+                            && (left.is_integer() || left.is_bool() || left.is_byte()) =>
+                    {
+                        ()
+                    }
+                    (BinaryOp::ShiftLeft | BinaryOp::ShiftRight, left, right)
+                        if left == right && (left.is_integer() || left.is_byte()) =>
+                    {
                         ()
                     }
                     (BinaryOp::Equals, left, right) => self.assert(
@@ -269,7 +273,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     ),
                     (op, left, right) => self.assert(
                         false,
-                        || format!("invalid '{op:?}'  with operands {} and {}", left, right),
+                        || format!("invalid '{op:?}' with operands {} and {}", left, right),
                         loc,
                     ),
                 }
