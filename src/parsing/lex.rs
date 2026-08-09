@@ -216,7 +216,7 @@ impl<'s> Lexer<'s> {
                     + fifth_byte,
             );
         };
-        char::encode_utf8('a', &mut[]);
+        char::encode_utf8('a', &mut []);
         char::from_u32(
             (first_byte << 15)
                 + (second_byte << 12)

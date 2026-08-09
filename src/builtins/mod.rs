@@ -21,6 +21,9 @@ pub enum Builtin {
     UninitAssumeInit,
     UninitNew,
     ReadLine,
+    ShiftLeft,
+    ShiftRight,
+    BitwiseOr,
 }
 impl Builtin {
     pub const fn name(self) -> &'static str {
@@ -44,6 +47,9 @@ impl Builtin {
             Builtin::UninitZeroed => "uninit_zeroed",
             Builtin::UninitNew => "uninit_new",
             Builtin::ReadLine => "read_line",
+            Builtin::BitwiseOr => "bitwise_or",
+            Builtin::ShiftLeft => "shift_left",
+            Builtin::ShiftRight => "shift_right",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
@@ -67,6 +73,9 @@ impl Builtin {
             Symbol::UNINIT_ASSUME_INIT => Some(Builtin::UninitAssumeInit),
             Symbol::UNINIT_NEW => Some(Builtin::UninitNew),
             Symbol::READ_LINE => Some(Builtin::ReadLine),
+            Symbol::BITWISE_OR => Some(Builtin::BitwiseOr),
+            Symbol::SHIFT_LEFT => Some(Builtin::ShiftLeft),
+            Symbol::SHIFT_RIGHT => Some(Builtin::ShiftRight),
             _ => None,
         }
     }

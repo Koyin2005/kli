@@ -280,6 +280,15 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::BitwiseOr => {
+                todo!("Add bitwise or")
+            }
+            Builtin::ShiftLeft => {
+                todo!("Add shift left")
+            }
+            Builtin::ShiftRight => {
+                todo!("Add shift right")
+            }
             Builtin::ReadLine => BuiltinResult::Rvalue(Rvalue::ReadLine),
             Builtin::UninitNew => {
                 let [operand] = operands.try_into().unwrap();

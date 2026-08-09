@@ -55,6 +55,9 @@ impl Symbol {
         "uninit_assume_init",
         "uninit_new",
         "read_line",
+        "bitwise_or",
+        "shift_left",
+        "shift_right",
     ];
     const _NO_REPEATS: () = {
         let mut i = 0;
@@ -122,6 +125,9 @@ impl Symbol {
     pub const UNINIT_ASSUME_INIT: Self = Self::expect_symbol("uninit_assume_init");
     pub const UNINIT_NEW: Self = Self::expect_symbol("uninit_new");
     pub const READ_LINE: Self = Self::expect_symbol("read_line");
+    pub const SHIFT_LEFT: Self = Self::expect_symbol("shift_left");
+    pub const SHIFT_RIGHT: Self = Self::expect_symbol("shift_right");
+    pub const BITWISE_OR: Self = Self::expect_symbol("bitwise_or");
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }
