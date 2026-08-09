@@ -1325,13 +1325,15 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 )
             }
             BinaryOp::Greater => {
-                let kind = left_operand.ty.as_integer().unwrap();
                 (
+                    
                     self.builder.ins().icmp(
-                        match kind {
-                            IntegerKind::Signed => ir::condcodes::IntCC::SignedGreaterThan,
-                            IntegerKind::Unsigned => ir::condcodes::IntCC::UnsignedGreaterThan,
-                            IntegerKind::Var(_) => unreachable!(),
+                        match left_operand.ty.kind() {
+                            TypeKind::Int(IntegerKind::Signed) => ir::condcodes::IntCC::SignedGreaterThan,
+                            TypeKind::Int(IntegerKind::Unsigned) 
+                            | TypeKind::Char 
+                            | TypeKind::Byte => ir::condcodes::IntCC::UnsignedGreaterThan,
+                            _ => unreachable!(),
                         },
                         left_value,
                         right_value,
@@ -1340,13 +1342,14 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 )
             }
             BinaryOp::Lesser => {
-                let kind = left_operand.ty.as_integer().unwrap();
                 (
                     self.builder.ins().icmp(
-                        match kind {
-                            IntegerKind::Signed => ir::condcodes::IntCC::SignedLessThan,
-                            IntegerKind::Unsigned => ir::condcodes::IntCC::UnsignedLessThan,
-                            IntegerKind::Var(_) => unreachable!(),
+                        match left_operand.ty.kind() {
+                            TypeKind::Int(IntegerKind::Signed) => ir::condcodes::IntCC::SignedLessThan,
+                            TypeKind::Int(IntegerKind::Unsigned) 
+                            | TypeKind::Char 
+                            | TypeKind::Byte => ir::condcodes::IntCC::UnsignedLessThan,
+                            _ => unreachable!(),
                         },
                         left_value,
                         right_value,

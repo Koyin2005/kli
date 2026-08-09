@@ -59,4 +59,4 @@ fun next(iter : CharIter) -> Option[char] = do
 end
 
 
-fun next_char(current_index : Uint, bytes : array[byte]) -> Option[(Uint,char)] = Option.None;
+fun next_char(current_index : Uint, bytes : array[byte]) -> Option[(Uint,char)] = Option.None

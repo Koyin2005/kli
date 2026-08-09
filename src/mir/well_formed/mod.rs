@@ -257,7 +257,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                         | BinaryOp::Greater,
                         left,
                         right,
-                    ) if left == right && left.is_integer() && right.is_integer() => (),
+                    ) if left == right && left.is_builtin_scalar() && right.is_builtin_scalar() => (),
                     (BinaryOp::BitwiseAnd, left, right) if left.is_bool() && right.is_bool() => (),
                     (BinaryOp::Equals, left, right) => self.assert(
                         left == right,

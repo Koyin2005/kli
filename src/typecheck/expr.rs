@@ -495,10 +495,8 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 let operand_tys = expected_ty.filter(|ty| ty.is_integer());
                 (operand_tys, operand_tys)
             }
-            BinaryOp::Equals => (None, None),
-            BinaryOp::Lesser | BinaryOp::Greater => {
-                let operand_tys = expected_ty.filter(|ty| ty.is_integer());
-                (operand_tys, operand_tys)
+            BinaryOp::Equals  | BinaryOp::Lesser | BinaryOp::Greater => {
+                (None,None)
             }
             BinaryOp::And | BinaryOp::Or => (Some(bool_ty), Some(bool_ty)),
         };
@@ -509,14 +507,10 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 .root()
                 .try_unify(left.ty, right.ty)
                 .and_then(|result| result.is_integer().then_some(result)),
-            BinaryOp::Equals => self
+            BinaryOp::Equals| BinaryOp::Lesser | BinaryOp::Greater => self
                 .root()
                 .try_unify(left.ty, right.ty)
                 .and_then(|result| result.is_builtin_scalar().then_some(bool_ty)),
-            BinaryOp::Lesser | BinaryOp::Greater => self
-                .root()
-                .try_unify(left.ty, right.ty)
-                .and_then(|result| result.is_integer().then_some(bool_ty)),
             BinaryOp::And | BinaryOp::Or => Some(bool_ty),
         };
         let result = result_ty.unwrap_or_else(|| {
