@@ -56,6 +56,11 @@ impl<'s> Lexer<'s> {
             None
         }
     }
+    fn match_char_mapped<T>(&mut self, f : impl FnOnce(char) -> Option<T>) -> Option<T>{
+        let value = self.peek_char().and_then(f)?;
+        self.next_char();
+        Some(value)
+    }
     fn skip_whitespace(&mut self) {
         while let Some(c) = self.peek_char() {
             if c.is_whitespace() {
@@ -185,16 +190,35 @@ impl<'s> Lexer<'s> {
             None
         }
     }
+    fn char_escape(&mut self) -> Option<char>{
+        let first_byte = self.match_char_mapped(|c|{
+            c.to_digit(16)
+        })?;
+        let second_byte = self.match_char_mapped(|c|{
+            c.to_digit(16)
+        })?;
+        let third_byte = self.match_char_mapped(|c|{
+            c.to_digit(16)
+        })?;
+        let fourth_byte = self.match_char_mapped(|c|{
+            c.to_digit(16)
+        })?;
+
+        let code = fourth_byte + (third_byte * 16) + (second_byte * 256) + (first_byte * 4096);
+        char::from_u32(code)
+    }
     fn char_literal(&mut self) -> Option<Token> {
         self.next_char()?;
-        '"';
         let c = if self.match_char('\\').is_some() {
-            match self.peek_char()? {
+            let c = match self.next_char()? {
                 'n' => '\n',
                 't' => '\t',
                 'r' => '\r',
                 '\\' => '\\',
                 '\'' => '\'',
+                'u' if let Some(c) = self.char_escape() => {
+                    c
+                }
                 c => {
                     self.diag.add_diagnostic(
                         format!("Invalid character escape '{c}'",),
@@ -202,7 +226,8 @@ impl<'s> Lexer<'s> {
                     );
                     return None;
                 }
-            }
+            };
+            c
         } else {
             self.next_char()?
         };
