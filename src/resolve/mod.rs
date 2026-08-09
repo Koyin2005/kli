@@ -606,6 +606,7 @@ impl<'info> Resolve<'info> {
     fn resolve_expr(&mut self, expr: ast::Expr) -> res::Expr {
         let loc = expr.loc;
         let kind = match expr.kind {
+            ast::ExprKind::Char(char) => todo!("resolve me"),
             ast::ExprKind::Unsafe(expr) => {
                 let expr = self.resolve_expr(*expr);
                 res::ExprKind::Unsafe(Box::new(expr))

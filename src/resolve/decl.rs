@@ -25,7 +25,8 @@ impl DeclareInBody<'_, '_> {
             | ast::ExprKind::Bool(_)
             | ast::ExprKind::Number(..)
             | ast::ExprKind::Panic
-            | ast::ExprKind::Path(..) => (),
+            | ast::ExprKind::Path(..)
+            | ast::ExprKind::Char(_) => (),
             ast::ExprKind::Annotate(expr, _)
             | ast::ExprKind::Unsafe(expr)
             | ast::ExprKind::Field(expr, _)

@@ -214,6 +214,7 @@ pub struct InstancePath {
 #[derive(Debug)]
 pub enum ExprKind {
     Unit,
+    Char(char),
     Deref(Box<Expr>),
     Unsafe(Box<Expr>),
     Annotate(Box<Expr>, Box<Type>),
