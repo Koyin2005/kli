@@ -34,15 +34,15 @@ fun bitcast_int(x : Uint) -> Int =
 fun strict_cast_int(x : Uint) -> Int = 
     case x > int.bitcast_uint(int.max_value()) of
     | true -> panic_message("Uint value too large for signed Int")
-    | false -> int.bitcast_uint(x)
+    | false -> bitcast_int(x)
     end
 
 
 fun max_value() -> Uint = builtins.int_max_value()
 
-fun min(x : Uint, y : Uint) -> Int = case x < y of | true -> x | false -> y end
+fun min(x : Uint, y : Uint) -> Uint = case x < y of | true -> x | false -> y end
 
-fun max(x : Uint, y : Uint) -> Int = case x > y of | true -> x | false -> y end
+fun max(x : Uint, y : Uint) -> Uint = case x > y of | true -> x | false -> y end
 
 
 fun is_zero(x : Uint) -> bool = 
