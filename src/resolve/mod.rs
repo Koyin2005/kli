@@ -38,7 +38,7 @@ enum TypeAlias {
     RawArray,
     Uninit,
     Int,
-    Uint
+    Uint,
 }
 impl TypeAlias {
     fn into_type_name(self) -> res::TypeName {
@@ -50,7 +50,7 @@ impl TypeAlias {
             TypeAlias::RawArray => res::TypeName::RawArray,
             TypeAlias::Uninit => res::TypeName::Uninit,
             TypeAlias::Int => res::TypeName::Int,
-            TypeAlias::Uint => res::TypeName::Uint
+            TypeAlias::Uint => res::TypeName::Uint,
         }
     }
 }

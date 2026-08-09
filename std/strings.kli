@@ -29,13 +29,34 @@ fun chars(s : string) -> CharIter = CharIter {
     index = boxed.alloc(0)
 }
 
-fun utf8_len(c : char) -> Uint = panicking.todo("find width")
+fun utf8_len(c : char) -> Uint = 
+    case c < '\u00FF' of
+    | true -> 1
+    | _ -> 
+        case c < '\u07FF' of 
+        | true -> 2
+        | _ -> 
+            case c < '\uFFFF' of 
+            | true -> 3
+            | _ -> 4
+            end
+        end
+    end
+
 
 fun encode_char(c : char, bs : array[byte]) -> () = do
     let len = utf8_len(c);
     case len > arrays.len(bs) of
     | true -> ()
-    | false -> panicking.todo("implement encoding")
+    | false -> 
+        case len of 
+        | 1 -> ()
+        | 2 -> ()
+        | 3 -> ()
+        | 4 -> ()
+        | _ -> ()
+        end
+
     end
 end
 

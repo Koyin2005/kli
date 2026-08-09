@@ -1324,39 +1324,36 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     None,
                 )
             }
-            BinaryOp::Greater => {
-                (
-                    
-                    self.builder.ins().icmp(
-                        match left_operand.ty.kind() {
-                            TypeKind::Int(IntegerKind::Signed) => ir::condcodes::IntCC::SignedGreaterThan,
-                            TypeKind::Int(IntegerKind::Unsigned) 
-                            | TypeKind::Char 
-                            | TypeKind::Byte => ir::condcodes::IntCC::UnsignedGreaterThan,
-                            _ => unreachable!(),
-                        },
-                        left_value,
-                        right_value,
-                    ),
-                    None,
-                )
-            }
-            BinaryOp::Lesser => {
-                (
-                    self.builder.ins().icmp(
-                        match left_operand.ty.kind() {
-                            TypeKind::Int(IntegerKind::Signed) => ir::condcodes::IntCC::SignedLessThan,
-                            TypeKind::Int(IntegerKind::Unsigned) 
-                            | TypeKind::Char 
-                            | TypeKind::Byte => ir::condcodes::IntCC::UnsignedLessThan,
-                            _ => unreachable!(),
-                        },
-                        left_value,
-                        right_value,
-                    ),
-                    None,
-                )
-            }
+            BinaryOp::Greater => (
+                self.builder.ins().icmp(
+                    match left_operand.ty.kind() {
+                        TypeKind::Int(IntegerKind::Signed) => {
+                            ir::condcodes::IntCC::SignedGreaterThan
+                        }
+                        TypeKind::Int(IntegerKind::Unsigned) | TypeKind::Char | TypeKind::Byte => {
+                            ir::condcodes::IntCC::UnsignedGreaterThan
+                        }
+                        _ => unreachable!(),
+                    },
+                    left_value,
+                    right_value,
+                ),
+                None,
+            ),
+            BinaryOp::Lesser => (
+                self.builder.ins().icmp(
+                    match left_operand.ty.kind() {
+                        TypeKind::Int(IntegerKind::Signed) => ir::condcodes::IntCC::SignedLessThan,
+                        TypeKind::Int(IntegerKind::Unsigned) | TypeKind::Char | TypeKind::Byte => {
+                            ir::condcodes::IntCC::UnsignedLessThan
+                        }
+                        _ => unreachable!(),
+                    },
+                    left_value,
+                    right_value,
+                ),
+                None,
+            ),
             BinaryOp::Equals => (
                 self.builder
                     .ins()

@@ -56,7 +56,7 @@ impl<'s> Lexer<'s> {
             None
         }
     }
-    fn match_char_mapped<T>(&mut self, f : impl FnOnce(char) -> Option<T>) -> Option<T>{
+    fn match_char_mapped<T>(&mut self, f: impl FnOnce(char) -> Option<T>) -> Option<T> {
         let value = self.peek_char().and_then(f)?;
         self.next_char();
         Some(value)
@@ -190,22 +190,41 @@ impl<'s> Lexer<'s> {
             None
         }
     }
-    fn char_escape(&mut self) -> Option<char>{
-        let first_byte = self.match_char_mapped(|c|{
-            c.to_digit(16)
-        })?;
-        let second_byte = self.match_char_mapped(|c|{
-            c.to_digit(16)
-        })?;
-        let third_byte = self.match_char_mapped(|c|{
-            c.to_digit(16)
-        })?;
-        let fourth_byte = self.match_char_mapped(|c|{
-            c.to_digit(16)
-        })?;
+    fn char_escape(&mut self) -> Option<char> {
+        let first_byte = self.match_char_mapped(|c| c.to_digit(16))?;
 
-        let code = fourth_byte + (third_byte * 16) + (second_byte * 256) + (first_byte * 4096);
-        char::from_u32(code)
+        let Some(second_byte) = self.match_char_mapped(|c| c.to_digit(16)) else {
+            return char::from_u32(first_byte);
+        };
+        let Some(third_byte) = self.match_char_mapped(|c| c.to_digit(16)) else {
+            return char::from_u32((first_byte << 3) + second_byte);
+        };
+        let Some(fourth_byte) = self.match_char_mapped(|c| c.to_digit(16)) else {
+            return char::from_u32((first_byte << 6) + (second_byte << 3) + third_byte);
+        };
+        let Some(fifth_byte) = self.match_char_mapped(|c| c.to_digit(16)) else {
+            return char::from_u32(
+                (first_byte << 9) + (second_byte << 6) + (third_byte << 3) + fourth_byte,
+            );
+        };
+        let Some(sixth_byte) = self.match_char_mapped(|c| c.to_digit(16)) else {
+            return char::from_u32(
+                (first_byte << 12)
+                    + (second_byte << 9)
+                    + (third_byte << 6)
+                    + (fourth_byte << 3)
+                    + fifth_byte,
+            );
+        };
+        char::encode_utf8('a', &mut[]);
+        char::from_u32(
+            (first_byte << 15)
+                + (second_byte << 12)
+                + (third_byte << 9)
+                + (fourth_byte << 6)
+                + (fifth_byte << 3)
+                + sixth_byte,
+        )
     }
     fn char_literal(&mut self) -> Option<Token> {
         self.next_char()?;
@@ -216,14 +235,10 @@ impl<'s> Lexer<'s> {
                 'r' => '\r',
                 '\\' => '\\',
                 '\'' => '\'',
-                'u' if let Some(c) = self.char_escape() => {
-                    c
-                }
-                c => {
-                    self.diag.add_diagnostic(
-                        format!("Invalid character escape '{c}'",),
-                        self.current_loc(),
-                    );
+                'u' if let Some(c) = self.char_escape() => c,
+                _ => {
+                    self.diag
+                        .add_diagnostic(format!("Invalid character escape"), self.current_loc());
                     return None;
                 }
             };
