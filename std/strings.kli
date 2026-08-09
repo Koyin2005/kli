@@ -47,24 +47,6 @@ fun char_to_uint(c : char) -> Uint =
     # This is the definitions of hack
     builtins.zero_extend(c)
 
-fun encode_char(c : char, bs : array[byte]) -> () = do
-    let len = utf8_len(c);
-    case len > arrays.len(bs) of
-    | true -> ()
-    | false -> 
-        do
-            case len of 
-            | 1 -> ()
-            | 2 -> ()
-            | 3 -> ()
-            | 4 -> ()
-            | _ -> ()
-            end
-        end
-
-    end
-end
-
 @opaque
 type CharIter =  {    
     string_bytes : array[byte],
@@ -85,4 +67,6 @@ fun next(iter : CharIter) -> Option[char] = do
 end
 
 
-fun next_char(current_index : Uint, bytes : array[byte]) -> Option[(Uint,char)] = Option.None
+fun next_char(current_index : Uint, bytes : array[byte]) -> Option[(Uint,char)] = do
+    Option.None
+end
