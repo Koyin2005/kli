@@ -353,7 +353,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let [operand] = operands.try_into().unwrap();
                 let kind = ty.as_integer().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Cast(
-                    mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendByteTo(kind)),
+                    if ty.is_char() {
+                        mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendChar)
+                    } else {
+                        mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendByteTo(kind))
+                    },
                     operand,
                 ))
             }

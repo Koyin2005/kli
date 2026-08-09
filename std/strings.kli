@@ -43,6 +43,9 @@ fun utf8_len(c : char) -> Uint =
         end
     end
 
+fun char_to_uint(c : char) -> Uint = 
+    # This is the definitions of hack
+    builtins.zero_extend(c)
 
 fun encode_char(c : char, bs : array[byte]) -> () = do
     let len = utf8_len(c);

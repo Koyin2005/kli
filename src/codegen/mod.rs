@@ -1686,6 +1686,13 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         let place = self.eval_place(place).unwrap();
                         self.store_immediate(place, value);
                     }
+                    mir::IntegerCast::ZeroExtendChar => {
+                        let ty = ir::types::I64;
+                        let value = self.eval_operand(operand).expect_immediate(self);
+                        let value = self.builder.ins().uextend(ty, value);
+                        let place = self.eval_place(place).unwrap();
+                        self.store_immediate(place, value);
+                    }
                 },
             },
             mir::Rvalue::Len(array_place) => {

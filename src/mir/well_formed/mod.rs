@@ -298,6 +298,16 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                             loc,
                         );
                     }
+                    IntegerCast::ZeroExtendChar => {
+                        let from =
+                            operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                        let to = Type::new_uint(self.ctxt);
+                        self.assert(
+                            from.is_char(),
+                            || format!("Cannot extend {} into {}", from, to),
+                            loc,
+                        );
+                    }
                 },
             },
             super::Rvalue::Len(place) => {

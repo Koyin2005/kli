@@ -271,6 +271,7 @@ pub enum BinaryOp {
 #[derive(Clone, Debug, Copy)]
 pub enum IntegerCast {
     ZeroExtendByteTo(IntegerKind),
+    ZeroExtendChar,
 }
 #[derive(Clone, Debug, Copy)]
 pub enum CastKind<'ctxt> {
@@ -385,6 +386,7 @@ impl<'ctxt> Rvalue<'ctxt> {
             },
             &Rvalue::Cast(cast, _) => match cast {
                 CastKind::Transmute(ty) => ty,
+                CastKind::IntegerCast(IntegerCast::ZeroExtendChar) => Type::new_uint(ctxt),
                 CastKind::IntegerCast(IntegerCast::ZeroExtendByteTo(kind)) => {
                     Type::new_int(ctxt, kind)
                 }

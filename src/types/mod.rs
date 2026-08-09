@@ -222,6 +222,9 @@ impl<'ctxt> Type<'ctxt> {
     pub fn is_byte(self) -> bool {
         matches!(self.0, TypeKind::Byte)
     }
+    pub fn is_char(self) -> bool {
+        matches!(self.0, TypeKind::Char)
+    }
 
     pub fn new(kind: &'ctxt TypeKind) -> Self {
         Self(kind)
