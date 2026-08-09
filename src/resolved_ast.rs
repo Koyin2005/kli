@@ -379,6 +379,13 @@ impl Item {
     pub fn expect_function_def(&self) -> &Function {
         self.function_def().expect("should be a function")
     }
+    #[track_caller]
+    pub fn expect_module(&self) -> &Module {
+        let ItemKind::Module(module) = &self.kind else {
+            panic!("expected a module")
+        };
+        module
+    }
 }
 
 #[derive(Debug)]

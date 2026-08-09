@@ -171,6 +171,7 @@ pub struct RecordField<'ctxt> {
 pub enum IntegerKind {
     Signed,
     Unsigned,
+    Var(usize),
 }
 impl IntegerKind {
     pub const fn is_signed(self) -> bool {
@@ -475,6 +476,7 @@ impl Display for TypeKind<'_> {
             TypeKind::Int(kind) => match kind {
                 IntegerKind::Signed => f.pad("int"),
                 IntegerKind::Unsigned => f.pad("uint"),
+                IntegerKind::Var(_) => f.pad("{integer}"),
             },
             TypeKind::Unknown => f.pad("{unknown}"),
             TypeKind::Infer(_) => f.pad("_"),

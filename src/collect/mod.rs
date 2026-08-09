@@ -434,6 +434,13 @@ impl<'ctxt> CtxtRef<'ctxt> {
             })
         })
     }
+    pub fn child_of_module_with_name(self, module: DefId, name: Symbol) -> Option<DefId> {
+        let module = self.expect_item(module).expect_module();
+        Some(*module.items.iter().find(|&&item_id| {
+            self.ident(item_id)
+                .is_some_and(|ident| ident.symbol == name)
+        })?)
+    }
     pub fn def_id_for_path(self, mut path: impl Iterator<Item = Symbol>) -> Option<DefId> {
         let mut item = {
             let top_level_tem_name = path.next()?;

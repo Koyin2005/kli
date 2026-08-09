@@ -132,10 +132,10 @@ impl<'ctxt> RootCtxt<'ctxt> {
     ) -> (Type<'ctxt>, u64) {
         let integer_ty = match lit.kind {
             res::IntegerLiteralKind::Implicit => {
-                if hint == Some(Type::new_uint(self.ctxt())) {
-                    types::IntegerKind::Unsigned
+                if let Some(kind) = hint.and_then(|hint| hint.as_integer()) {
+                    kind
                 } else {
-                    types::IntegerKind::Signed
+                    types::IntegerKind::Var(self.infer.borrow_mut().fresh_ty(loc))
                 }
             }
             res::IntegerLiteralKind::Signed => types::IntegerKind::Signed,

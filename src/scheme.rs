@@ -2,7 +2,7 @@ use crate::{
     CtxtRef,
     types::{GenericArg, GenericArgsRef, Type, TypeKind, TypeMap, TypeMappable},
 };
-#[derive(Clone, Eq, PartialEq,Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Scheme<T> {
     value: T,
 }

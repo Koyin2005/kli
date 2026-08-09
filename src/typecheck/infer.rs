@@ -69,9 +69,7 @@ impl<'ctxt> TypeInfer<'ctxt> {
     }
     pub fn unify_ty(&mut self, ty1: Type<'ctxt>, ty2: Type<'ctxt>) -> Option<Type<'ctxt>> {
         match (ty1.kind(), ty2.kind()) {
-            (TypeKind::Int(IntegerKind::Signed), TypeKind::Int(IntegerKind::Signed))
-            | (TypeKind::Int(IntegerKind::Unsigned), TypeKind::Int(IntegerKind::Unsigned))
-            | (TypeKind::Bool, TypeKind::Bool)
+            (TypeKind::Bool, TypeKind::Bool)
             | (TypeKind::Unknown, TypeKind::Unknown)
             | (TypeKind::Char, TypeKind::Char)
             | (TypeKind::Byte, TypeKind::Byte)
@@ -123,6 +121,22 @@ impl<'ctxt> TypeInfer<'ctxt> {
                 let args = self.unify_generic_args(args1.clone(), args2.clone())?;
                 Some(Type::named(self.ctxt, id1, name, args))
             }
+            (&TypeKind::Int(int_kind_1), &TypeKind::Int(int_kind_2)) => {
+                match (int_kind_1, int_kind_2) {
+                    (IntegerKind::Signed, IntegerKind::Signed)
+                    | (IntegerKind::Unsigned, IntegerKind::Unsigned) => Some(ty1),
+                    (
+                        IntegerKind::Var(var),
+                        kind @ (IntegerKind::Signed | IntegerKind::Unsigned),
+                    )
+                    | (
+                        kind @ (IntegerKind::Signed | IntegerKind::Unsigned),
+                        IntegerKind::Var(var),
+                    ) => self.unify_var_ty(var, Type::new_int(self.ctxt, kind)),
+                    (IntegerKind::Var(var1), IntegerKind::Var(var2)) if var1 == var2 => Some(ty1),
+                    (IntegerKind::Signed | IntegerKind::Unsigned | IntegerKind::Var(_), _) => None,
+                }
+            }
             (&TypeKind::Infer(var1), &TypeKind::Infer(var2)) if var1 == var2 => {
                 Some(Type::infer_var(self.ctxt, var1))
             }
@@ -130,7 +144,7 @@ impl<'ctxt> TypeInfer<'ctxt> {
             (_, &TypeKind::Infer(var)) => self.unify_var_ty(var, ty1),
             //This will fail to compile if new variants are not matched
             (
-                TypeKind::Int(IntegerKind::Signed | IntegerKind::Unsigned)
+                TypeKind::Int(IntegerKind::Signed | IntegerKind::Unsigned | IntegerKind::Var(_))
                 | TypeKind::Bool
                 | TypeKind::Unknown
                 | TypeKind::Char
@@ -157,7 +171,7 @@ impl<'ctxt> TypeMap<'ctxt> for Simplify<'_, 'ctxt> {
         self.0.ctxt
     }
     fn map_type(&mut self, ty: Type<'ctxt>) -> Result<Type<'ctxt>, Self::Error> {
-        let &TypeKind::Infer(var) = ty.kind() else {
+        let (&TypeKind::Infer(var) | &TypeKind::Int(IntegerKind::Var(var))) = ty.kind() else {
             return self.super_map_type(ty);
         };
         if let &TypeVarInfo {

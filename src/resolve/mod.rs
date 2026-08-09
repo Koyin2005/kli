@@ -802,22 +802,38 @@ impl<'info> Resolve<'info> {
                         },
                     ]
                     .into_boxed_slice();
+
+                    let wrapping_add_function = res::Expr {
+                        loc: body_loc,
+                        kind: this.resolve_path_as_expr(
+                            body_loc,
+                            Path::new(vec![
+                                Ident::new(Symbol::BUILTINS, body_loc),
+                                Ident::new(Symbol::WRAPPING_ADD, body_loc),
+                            ]),
+                            None,
+                        ),
+                    };
+
                     let increment = res::Expr {
                         loc: body_loc,
                         kind: res::ExprKind::Assign(
                             Box::new(iter_var_value(body_loc)),
                             Box::new(res::Expr {
                                 loc: body_loc,
-                                kind: res::ExprKind::Binary(
-                                    ast::BinaryOp::Add,
-                                    Box::new(iter_var_value(body_loc)),
-                                    Box::new(res::Expr {
-                                        loc: body_loc,
-                                        kind: res::ExprKind::Int(res::IntegerLiteral {
-                                            value: 1,
-                                            kind: res::IntegerLiteralKind::Implicit,
-                                        }),
-                                    }),
+                                kind: res::ExprKind::Call(
+                                    Box::new(wrapping_add_function),
+                                    vec![
+                                        iter_var_value(body_loc),
+                                        res::Expr {
+                                            loc: body_loc,
+                                            kind: res::ExprKind::Int(res::IntegerLiteral {
+                                                value: 1,
+                                                kind: res::IntegerLiteralKind::Implicit,
+                                            }),
+                                        },
+                                    ]
+                                    .into_boxed_slice(),
                                 ),
                             }),
                         ),

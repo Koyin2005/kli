@@ -5,9 +5,7 @@ use crate::{
     collect::TypeDefKind,
     def_ids::DefId,
     index_vec::IndexVec,
-    resolved_ast::{
-        self, BlockBody, Expr, ExprKind, FieldInit, FunctionDefId, Lambda, Pattern, Var,
-    },
+    resolved_ast::{self, BlockBody, Expr, ExprKind, FieldInit, FunctionDefId, Lambda, Var},
     src_loc::SrcLoc,
     typecheck::{
         coercion::Coercion,
@@ -76,16 +74,13 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             ExprKind::Index(reciever, index) => {
                 let receiver = self.check_expr(reciever, None);
                 let index = self.check_expr_coerces_to(index, Some(Type::new_uint(self.ctxt())));
-                let element_ty = receiver
-                    .ty
-                    .as_array()
-                    .unwrap_or_else(|| {
-                        self.ctxt().diag().add_diagnostic(
-                            format!("Expected an array type but got '{}'", receiver.ty),
-                            receiver.loc,
-                        );
-                        Type::new_unknown(self.ctxt())
-                    });
+                let element_ty = receiver.ty.as_array().unwrap_or_else(|| {
+                    self.ctxt().diag().add_diagnostic(
+                        format!("Expected an array type but got '{}'", receiver.ty),
+                        receiver.loc,
+                    );
+                    Type::new_unknown(self.ctxt())
+                });
                 (
                     element_ty,
                     typed_ast::PlaceKind::Index(Box::new(receiver), Box::new(index)),
@@ -149,10 +144,13 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
     fn check_for_loop(
         &self,
         loc: SrcLoc,
-        pattern: &Pattern,
-        iterator: &Expr,
-        body: &Expr,
+        for_expr: &resolved_ast::ForExpr,
     ) -> typed_ast::Expr<'ctxt> {
+        let resolved_ast::ForExpr {
+            iterator,
+            pattern,
+            body,
+        } = for_expr;
         let iterator = self.check_expr(iterator, None);
         let element = self.root().iterator_element(iterator.ty);
         let (iterator_type, element) = match element {
@@ -507,15 +505,18 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
         let left = self.check_expr(left, left_ty);
         let right = self.check_expr(right, right_ty);
         let result_ty = match binary_op {
-            BinaryOp::Add | BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Divide => {
-                (left.ty == right.ty && left.ty.is_integer()).then_some(right.ty)
-            }
-            BinaryOp::Equals => {
-                (left.ty == right.ty && left.ty.is_builtin_scalar()).then_some(bool_ty)
-            }
-            BinaryOp::Lesser | BinaryOp::Greater => {
-                (left.ty == right.ty && left.ty.is_integer()).then_some(bool_ty)
-            }
+            BinaryOp::Add | BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Divide => self
+                .root()
+                .try_unify(left.ty, right.ty)
+                .and_then(|result| result.is_integer().then_some(result)),
+            BinaryOp::Equals => self
+                .root()
+                .try_unify(left.ty, right.ty)
+                .and_then(|result| result.is_builtin_scalar().then_some(bool_ty)),
+            BinaryOp::Lesser | BinaryOp::Greater => self
+                .root()
+                .try_unify(left.ty, right.ty)
+                .and_then(|result| result.is_integer().then_some(bool_ty)),
             BinaryOp::And | BinaryOp::Or => Some(bool_ty),
         };
         let result = result_ty.unwrap_or_else(|| {
@@ -701,9 +702,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 self.check_binary_op(loc, *binary_op, left, right, expected_ty)
             }
             ExprKind::Lambda(lambda) => self.check_lambda(loc, lambda.id, lambda, expected_ty),
-            ExprKind::For(for_expr) => {
-                self.check_for_loop(loc, &for_expr.pattern, &for_expr.iterator, &for_expr.body)
-            }
+            ExprKind::For(for_expr) => self.check_for_loop(loc, for_expr),
             ExprKind::Case(matched, case_arms) => {
                 let matched = self.check_expr(matched, None);
                 let mut patterns = Vec::with_capacity(case_arms.len());

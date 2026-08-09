@@ -2,7 +2,7 @@ use crate::{
     CtxtRef,
     typecheck::infer::TypeInfer,
     typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
-    types::{GenericArgs, Type, TypeKind, visit::VisitMut},
+    types::{GenericArgs, IntegerKind, Type, TypeKind, visit::VisitMut},
 };
 
 impl<'ctxt> VisitMut<'ctxt> for TypeSubst<'_, 'ctxt> {
@@ -10,7 +10,7 @@ impl<'ctxt> VisitMut<'ctxt> for TypeSubst<'_, 'ctxt> {
         self.ctxt
     }
     fn visit_type(&mut self, ty: Type<'ctxt>) -> Type<'ctxt> {
-        if let &TypeKind::Infer(_) = ty.kind() {
+        if let TypeKind::Infer(_) | TypeKind::Int(IntegerKind::Var(_)) = ty.kind() {
             return self.infer.simplify_type(ty);
         }
         self.super_visit_type(ty)

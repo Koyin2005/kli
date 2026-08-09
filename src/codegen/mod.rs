@@ -1303,6 +1303,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     match kind {
                         IntegerKind::Signed => self.builder.ins().sdiv(left_value, right_value),
                         IntegerKind::Unsigned => self.builder.ins().udiv(left_value, right_value),
+                        IntegerKind::Var(_) => unreachable!(),
                     },
                     None,
                 )
@@ -1314,6 +1315,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         match kind {
                             IntegerKind::Signed => ir::condcodes::IntCC::SignedGreaterThan,
                             IntegerKind::Unsigned => ir::condcodes::IntCC::UnsignedGreaterThan,
+                            IntegerKind::Var(_) => unreachable!(),
                         },
                         left_value,
                         right_value,
@@ -1328,6 +1330,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         match kind {
                             IntegerKind::Signed => ir::condcodes::IntCC::SignedLessThan,
                             IntegerKind::Unsigned => ir::condcodes::IntCC::UnsignedLessThan,
+                            IntegerKind::Var(_) => unreachable!(),
                         },
                         left_value,
                         right_value,
@@ -1635,6 +1638,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         let value = match kind {
                             IntegerKind::Unsigned => self.builder.ins().uextend(ty, value),
                             IntegerKind::Signed => self.builder.ins().uextend(ty, value),
+                            IntegerKind::Var(_) => unreachable!(),
                         };
                         let place = self.eval_place(place).unwrap();
                         self.store_immediate(place, value);

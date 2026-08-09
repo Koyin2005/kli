@@ -392,6 +392,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let value = match kind {
                     IntegerKind::Signed => i64::MAX as i128,
                     IntegerKind::Unsigned => u64::MAX as i128,
+                    IntegerKind::Var(_) => unreachable!(),
                 };
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::integer(
                     self.ctxt, kind, value,

@@ -19,7 +19,7 @@ pub enum Builtin {
     IntMaxValue,
     UninitZeroed,
     UninitAssumeInit,
-    UninitNew
+    UninitNew,
 }
 impl Builtin {
     pub const fn name(self) -> &'static str {
@@ -41,7 +41,7 @@ impl Builtin {
             Builtin::IntMaxValue => "int_max_value",
             Builtin::UninitAssumeInit => "uninit_assume_init",
             Builtin::UninitZeroed => "uninit_zeroed",
-            Builtin::UninitNew => "uninit_new"
+            Builtin::UninitNew => "uninit_new",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {

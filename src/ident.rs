@@ -53,7 +53,7 @@ impl Symbol {
         "int_max_value",
         "uninit_zeroed",
         "uninit_assume_init",
-        "uninit_new"
+        "uninit_new",
     ];
     const _NO_REPEATS: () = {
         let mut i = 0;

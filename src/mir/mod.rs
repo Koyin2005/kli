@@ -173,6 +173,7 @@ impl<'ctxt> Constant<'ctxt> {
         match kind {
             IntegerKind::Signed => Self::int(ctxt, 0),
             IntegerKind::Unsigned => Self::uint(ctxt, 0),
+            IntegerKind::Var(_) => unreachable!(),
         }
     }
     pub fn bool(ctxt: CtxtRef<'ctxt>, value: bool) -> Self {
