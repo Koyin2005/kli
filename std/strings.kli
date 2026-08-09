@@ -1,4 +1,9 @@
-import std.dynarray
+import std.(
+    dynarray,
+    optional.Option,
+    boxed,
+    panicking
+    )
 @opaque
 @lang_item("string")
 type String = {}
@@ -19,4 +24,39 @@ fun clone(s : string) -> string = do
     unsafe builtins.transmute(bs) end
 end
 
+fun chars(s : string) -> CharIter = CharIter {
+    string_bytes = unsafe as_bytes(s) end,
+    index = boxed.alloc(0)
+}
 
+fun utf8_len(c : char) -> Uint = panicking.todo("find width")
+
+fun encode_char(c : char, bs : array[byte]) -> () = do
+    let len = utf8_len(c);
+    case len > arrays.len(bs) of
+    | true -> ()
+    | false -> panicking.todo("implement encoding")
+    end
+end
+
+@opaque
+type CharIter =  {    
+    string_bytes : array[byte],
+    index : Box[Uint]
+}
+
+fun next(iter : CharIter) -> Option[char] = do
+    let current = iter.index^;
+    case next_char(current,iter.string_bytes) of
+    | .None -> Option.None
+    | .Some((next_index,next)) -> 
+        do
+            iter.index^ = next_index;
+            Option.Some(next)
+        end
+    end
+
+end
+
+
+fun next_char(current_index : Uint, bytes : array[byte]) -> Option[(Uint,char)] = Option.None;
