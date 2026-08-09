@@ -126,12 +126,15 @@ impl<'s> Lexer<'s> {
             src.push(c);
         }
         if let "0" = src.as_str()
-            && self.match_char('x').is_some()
+            && let Some(radix) = self
+                .match_char('x')
+                .map(|_| 16)
+                .or_else(|| self.match_char('b').map(|_| 2))
         {
             src.pop();
             let mut num = 0u32;
-            while let Some(d) = self.match_char_mapped(|c| char::to_digit(c, 16)) {
-                num = if let Some(num) = num.checked_mul(16u32).and_then(|num| num.checked_add(d)) {
+            while let Some(d) = self.match_char_mapped(|c| char::to_digit(c, radix)) {
+                num = if let Some(num) = num.checked_mul(radix).and_then(|num| num.checked_add(d)) {
                     num
                 } else {
                     let loc = self.current_loc();
