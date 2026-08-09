@@ -132,6 +132,7 @@ pub enum ExprKind<'ctxt> {
     String(Rc<str>),
     Bool(bool),
     Int(u64),
+    Char(char),
     Unit,
     Err,
     Panic,

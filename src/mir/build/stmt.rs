@@ -91,7 +91,8 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
             | ExprKind::NamedRecord(..)
             | ExprKind::Logic(..)
             | ExprKind::Tuple(..)
-            | ExprKind::Array(..) => {
+            | ExprKind::Array(..)
+            | ExprKind::Char(_) => {
                 self.expr_into_temp(expr);
             }
         }

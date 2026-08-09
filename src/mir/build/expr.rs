@@ -254,7 +254,8 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             | ExprKind::NamedRecord(..)
             | ExprKind::While(..)
             | ExprKind::Tuple(..)
-            | ExprKind::Array(..) => {
+            | ExprKind::Array(..)
+            | ExprKind::Char(_) => {
                 let rvalue = self.build_rvalue(expr);
                 self.assign(expr.loc, dest, rvalue);
             }
@@ -412,7 +413,8 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             | ExprKind::Const(..)
             | ExprKind::VariantInit(.., None)
             | ExprKind::String(..)
-            | ExprKind::Lambda(_) => {
+            | ExprKind::Lambda(_)
+            | ExprKind::Char(_) => {
                 let operand = self
                     .as_operand(expr)
                     .unwrap_or_else(|| unreachable!("should be an constant operand '{:?}' ", expr));

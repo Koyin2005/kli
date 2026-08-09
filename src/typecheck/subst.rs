@@ -87,6 +87,7 @@ impl<'a, 'ctxt> TypeSubst<'a, 'ctxt> {
                 self.subst_expr(expr);
             }
             ExprKind::Bool(_)
+            | ExprKind::Char(_)
             | ExprKind::Err
             | ExprKind::Unit
             | ExprKind::Int(_)

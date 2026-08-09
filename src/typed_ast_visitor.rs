@@ -84,6 +84,7 @@ where
         }
         ExprKind::Err
         | ExprKind::Int(_)
+        | ExprKind::Char(_)
         | ExprKind::Const(..)
         | ExprKind::Bool(_)
         | ExprKind::String(_)
