@@ -11,7 +11,7 @@ fun overflowing_sub(x : Int, y : Int) -> (Int,bool) = builtins.overflowing_sub(x
 
 fun shift_left(x : Int, y : Int) -> Int = builtins.shift_left(x,y)
 
-fun shift_right(x : Int, y : Int) -> (Int,bool) = builtins.shift_right(x,y)
+fun shift_right(x : Int, y : Int) -> Int = builtins.shift_right(x,y)
 
 fun bitwise_or(x : Int, y : Int) -> Int = builtins.bitwise_or(x,y)
 
