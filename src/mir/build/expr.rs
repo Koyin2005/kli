@@ -351,12 +351,18 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
             Builtin::ZeroExtend => {
                 let [operand] = operands.try_into().unwrap();
-                let kind = ty.as_integer().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Cast(
-                    if args[0].ty.is_char() {
+                    if args[0].ty.is_byte() && ty.is_char() {
+                        mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendByteToChar)
+                    } else if let Some(kind) = ty.as_integer()
+                        && args[0].ty.is_byte()
+                    {
+                        mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendByteTo(kind))
+                    } else if args[0].ty.is_char() {
+                        println!("{}", ty);
                         mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendChar)
                     } else {
-                        mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendByteTo(kind))
+                        unreachable!("cannot cast this '{}' at {:?}", ty, args[0].loc)
                     },
                     operand,
                 ))

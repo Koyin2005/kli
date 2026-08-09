@@ -288,6 +288,16 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     );
                 }
                 CastKind::IntegerCast(kind) => match kind {
+                    IntegerCast::ZeroExtendByteToChar => {
+                        let from =
+                            operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                        let to = Type::new_char(self.ctxt);
+                        self.assert(
+                            from.is_byte(),
+                            || format!("Cannot extend {} into {}", from, to),
+                            loc,
+                        );
+                    }
                     IntegerCast::ZeroExtendByteTo(kind) => {
                         let from =
                             operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);

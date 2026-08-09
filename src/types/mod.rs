@@ -178,6 +178,9 @@ impl IntegerKind {
     pub const fn is_signed(self) -> bool {
         matches!(self, Self::Signed)
     }
+    pub const fn is_byte(self) -> bool {
+        matches!(self, Self::Byte)
+    }
 }
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Type<'ctxt>(&'ctxt TypeKind<'ctxt>);

@@ -68,5 +68,14 @@ end
 
 
 fun next_char(current_index : Uint, bytes : array[byte]) -> Option[(Uint,char)] = do
+    let first_byte = case current_index < builtins.array_len(bytes) of 
+    | false -> return Option.None
+    | true -> bytes.[current_index]
+    end;
+    current_index = current_index + 1;
+    case first_byte < (128:byte) of 
+    | true -> return Option.Some((current_index,builtins.zero_extend(first_byte)))
+    | false -> ()
+    end;
     Option.None
 end

@@ -41,7 +41,7 @@ fn scalar_to_cranelift_type(scalar: layout::Scalar) -> codegen::ir::Type {
         layout::Scalar::Pointer { non_null: _ } => PTR_IR_TYPE,
     }
 }
-fn scalar_for_int(integer: IntegerKind) -> (bool, codegen::ir::Type) {
+fn cranelift_ir_type_for_int(integer: IntegerKind) -> (bool, codegen::ir::Type) {
     match integer {
         IntegerKind::Byte => (false, codegen::ir::types::I8),
         IntegerKind::Signed => (true, codegen::ir::types::I64),
@@ -403,7 +403,9 @@ impl<'ctxt> CodegenRoot<'ctxt> {
             if should_print {
                 println!("{:?}", ctxt.func);
             }
-            self.module.define_function(id, &mut ctxt).unwrap();
+            if let Err(err) = self.module.define_function(id, &mut ctxt) {
+                panic!("{}", err)
+            }
             self.module.clear_context(&mut ctxt);
         }
         self.module.finish()
@@ -637,6 +639,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             builder,
         }
     }
+    #[track_caller]
     fn store_immediate(&mut self, dst_place: CodegenPlace, value: ir::Value) {
         match dst_place {
             CodegenPlace::MemPlace(place) => self.store_immediate_mem(place, value),
@@ -749,8 +752,9 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             OperandValueKind::Value(value) => self.store_scalar_mem(dst_place, value),
         }
     }
+    #[track_caller]
     fn store_var_imm(&mut self, var: frontend::Variable, value: codegen::ir::Value) {
-        self.builder.def_var(var, value);
+        self.builder.try_def_var(var, value).unwrap();
     }
     fn store_value(&mut self, place: &mir::Place, value: OperandValue<'ctxt>) {
         let Ok(dst_place) = self.eval_place(place) else {
@@ -946,7 +950,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 false,
             ),
             TypeKind::Int(kind) => {
-                let (signed, ty) = scalar_for_int(*kind);
+                let (signed, ty) = cranelift_ir_type_for_int(*kind);
                 (
                     ty,
                     codegen::ir::immediates::Imm64::new(value as i64),
@@ -1406,17 +1410,20 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn codegen_rvalue_assign(&mut self, place: &mir::Place, value: &mir::Rvalue<'ctxt>) {
         match value {
             mir::Rvalue::ReadLine => {
-                let ptr = self.codegen_static_size_alloc_call(
-                    Type::new_uninit(self.ctxt, Type::new_byte(self.ctxt)),
-                    4096,
-                );
-                let len =
-                    self.build_scalar_const(Type::new_int(self.ctxt, IntegerKind::Signed), 4096);
+                let size = 4096;
+                let slot = self.builder.create_sized_stack_slot(ir::StackSlotData::new(
+                    ir::StackSlotKind::ExplicitSlot,
+                    size,
+                    1,
+                ));
+                let ptr = self.builder.ins().stack_addr(PTR_IR_TYPE, slot, 0);
+                let len = self
+                    .build_scalar_const(Type::new_int(self.ctxt, IntegerKind::Signed), size.into());
                 let written = self.codegen_direct_call_single_scalar_return(
                     self.runtime_functions.read_string,
                     &[ptr, len],
                 );
-
+                "".chars().next();
                 let dst_ptr = self.codegen_runtime_size_alloc_call(
                     Type::new_uninit(self.ctxt, Type::new_byte(self.ctxt)),
                     written,
@@ -1687,7 +1694,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 }
                 mir::CastKind::IntegerCast(cast) => match cast {
                     mir::IntegerCast::ZeroExtendByteTo(kind) => {
-                        let ty = ir::types::I64;
+                        let (_, ty) = cranelift_ir_type_for_int(*kind);
                         let value = self.eval_operand(operand).expect_immediate(self);
                         let value = match kind {
                             IntegerKind::Unsigned => self.builder.ins().uextend(ty, value),
@@ -1698,10 +1705,15 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         let place = self.eval_place(place).unwrap();
                         self.store_immediate(place, value);
                     }
-                    mir::IntegerCast::ZeroExtendChar => {
-                        let ty = ir::types::I64;
+                    mir::IntegerCast::ZeroExtendByteToChar => {
                         let value = self.eval_operand(operand).expect_immediate(self);
-                        let value = self.builder.ins().uextend(ty, value);
+                        let value = self.builder.ins().uextend(ir::types::I32, value);
+                        let place = self.eval_place(place).unwrap();
+                        self.store_immediate(place, value);
+                    }
+                    mir::IntegerCast::ZeroExtendChar => {
+                        let value = self.eval_operand(operand).expect_immediate(self);
+                        let value = self.builder.ins().uextend(ir::types::I64, value);
                         let place = self.eval_place(place).unwrap();
                         self.store_immediate(place, value);
                     }
@@ -1725,12 +1737,18 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         CodegenPlace::MemPlace(place) => {
                             let tag_place = place.project_field(self.ctxt, FieldId::FIRST_FIELD);
                             let value = self.load_place_mem(&tag_place).unwrap().first_value();
-                            (value, !tag_place.ty.is_integer())
+                            (
+                                value,
+                                tag_place.ty.as_integer().is_some_and(IntegerKind::is_byte),
+                            )
                         }
                         CodegenPlace::Ssa(ty, .., var) => {
                             let (id, ..) = ty.as_named().unwrap();
                             let tag_ty = self.ctxt.type_def(id).tag_type().into_type(self.ctxt);
-                            (self.builder.use_var(var), !tag_ty.is_integer())
+                            (
+                                self.builder.use_var(var),
+                                tag_ty.as_integer().is_some_and(IntegerKind::is_byte),
+                            )
                         }
                     },
                     Err(_) => {
@@ -1806,7 +1824,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     LocalKind::Scalar(_) => {
                         self.store_scalar(place, value);
                     }
-                    _ => (),
+                    LocalKind::ZeroSized => (),
                 }
             }
         }
