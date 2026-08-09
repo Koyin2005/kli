@@ -1361,6 +1361,9 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 None,
             ),
             BinaryOp::BitwiseAnd => (self.builder.ins().band(left_value, right_value), None),
+            BinaryOp::BitwiseOr => (self.builder.ins().bor(left_value, right_value), None),
+            BinaryOp::ShiftLeft => (self.builder.ins().ishl(left_value, right_value), None),
+            BinaryOp::ShiftRight => (self.builder.ins().ushr(left_value, right_value), None),
         };
         let place = self.eval_place(place).unwrap();
         if let Some(right) = right {

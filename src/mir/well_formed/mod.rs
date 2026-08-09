@@ -250,6 +250,8 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 ) {
                     (
                         BinaryOp::BitwiseAnd
+                        | BinaryOp::ShiftLeft
+                        | BinaryOp::ShiftRight
                         | BinaryOp::Divide
                         | BinaryOp::Overflow(_)
                         | BinaryOp::Wrapping(_)
@@ -260,7 +262,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     ) if left == right && left.is_builtin_scalar() && right.is_builtin_scalar() => {
                         ()
                     }
-                    (BinaryOp::BitwiseAnd, left, right) if left.is_bool() && right.is_bool() => (),
                     (BinaryOp::Equals, left, right) => self.assert(
                         left == right,
                         || format!("Cannot equate '{}' and '{}'", left, right),

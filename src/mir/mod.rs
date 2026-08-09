@@ -262,8 +262,11 @@ pub enum BinaryOp {
     Greater,
     Divide,
     Equals,
-    BitwiseAnd,
     Lesser,
+    BitwiseAnd,
+    BitwiseOr,
+    ShiftLeft,
+    ShiftRight,
 }
 #[derive(Clone, Debug, Copy)]
 pub enum IntegerCast {
@@ -353,8 +356,11 @@ impl<'ctxt> Rvalue<'ctxt> {
                     left_and_right.0.type_of(ctxt, locals, return_type),
                     Type::new_bool(ctxt),
                 ),
-                BinaryOp::Wrapping(_) => left_and_right.0.type_of(ctxt, locals, return_type),
-                BinaryOp::BitwiseAnd => Type::new_bool(ctxt),
+                BinaryOp::Wrapping(_)
+                | BinaryOp::BitwiseAnd
+                | BinaryOp::BitwiseOr
+                | BinaryOp::ShiftLeft
+                | BinaryOp::ShiftRight => left_and_right.0.type_of(ctxt, locals, return_type),
                 BinaryOp::Divide => left_and_right.0.type_of(ctxt, locals, return_type),
                 BinaryOp::Equals => Type::new_bool(ctxt),
                 BinaryOp::Lesser | BinaryOp::Greater => Type::new_bool(ctxt),
