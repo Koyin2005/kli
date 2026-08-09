@@ -52,12 +52,14 @@ fun encode_char(c : char, bs : array[byte]) -> () = do
     case len > arrays.len(bs) of
     | true -> ()
     | false -> 
-        case len of 
-        | 1 -> ()
-        | 2 -> ()
-        | 3 -> ()
-        | 4 -> ()
-        | _ -> ()
+        do
+            case len of 
+            | 1 -> ()
+            | 2 -> ()
+            | 3 -> ()
+            | 4 -> ()
+            | _ -> ()
+            end
         end
 
     end
