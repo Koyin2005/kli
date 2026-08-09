@@ -185,6 +185,38 @@ impl<'s> Lexer<'s> {
             None
         }
     }
+    fn char_literal(&mut self) -> Option<Token> {
+        self.next_char()?;
+        '"';
+        let c = if self.match_char('\\').is_some() {
+            match self.peek_char()? {
+                'n' => '\n',
+                't' => '\t',
+                'r' => '\r',
+                '\\' => '\\',
+                '\'' => '\'',
+                c => {
+                    self.diag.add_diagnostic(
+                        format!("Invalid character escape '{c}'",),
+                        self.current_loc(),
+                    );
+                    return None;
+                }
+            }
+        } else {
+            self.next_char()?
+        };
+        if self.match_char('\'').is_some() {
+            Some(Token {
+                loc: self.current_loc(),
+                kind: TokenKind::CharLiteral(c),
+            })
+        } else {
+            self.diag
+                .add_diagnostic(format!("Expected ' at end of char",), self.current_loc());
+            return None;
+        }
+    }
     fn current_token_src(&self) -> &str {
         &self.src[self.start_index as usize..self.index as usize]
     }
@@ -253,6 +285,7 @@ impl<'s> Lexer<'s> {
             '-' => {
                 Some(self.next_token_from_char_or_chars('>', TokenKind::Minus, TokenKind::Arrow))
             }
+            '\'' => self.char_literal(),
             '/' => Some(self.next_token_from_char(TokenKind::Slash)),
             '*' => Some(self.next_token_from_char(TokenKind::Star)),
             ',' => Some(self.next_token_from_char(TokenKind::Coma)),
