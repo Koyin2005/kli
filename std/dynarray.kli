@@ -1,13 +1,13 @@
 import std.arrays
 import std.optional.(Option,expect_value)
 import std.boxed
-import std.ints
+import std.num.(uint,int)
 import std.panicking
 
 @opaque
 type DynArrayInner[T] = {
     buf : raw_array[T],
-    len : uint
+    len : Uint
 }
 @opaque
 type DynArray[T] = {
@@ -34,7 +34,7 @@ fun from_array[T](arr : array[T]) -> DynArray[T] = do
 
 end
 
-fun with_capacity[T](cap : uint) -> DynArray[T] = DynArray {
+fun with_capacity[T](cap : Uint) -> DynArray[T] = DynArray {
     inner = boxed.alloc(
         DynArrayInner{
             buf = builtins.raw_array_alloc[T](cap),
@@ -42,14 +42,14 @@ fun with_capacity[T](cap : uint) -> DynArray[T] = DynArray {
         })
     }
 
-fun ensure_capacity[T](arr : DynArray[T], target_cap : uint) -> () = do
+fun ensure_capacity[T](arr : DynArray[T], target_cap : Uint) -> () = do
     let current_cap = builtins.array_len(arr.inner^.buf);
     let {buf = old_buf, len = len} = arr.inner^;
     case target_cap < current_cap of 
     | true -> ()
     | false ->
         do
-            let new_cap = ints.umax(target_cap,current_cap * 2u);
+            let new_cap = uint.max(target_cap,current_cap * 2u);
             let new_buf = builtins.raw_array_alloc[T](new_cap);
             unsafe 
                 arrays.copy_unchecked(new_buf,old_buf,0,0,len)
@@ -59,7 +59,7 @@ fun ensure_capacity[T](arr : DynArray[T], target_cap : uint) -> () = do
     end
 end
 
-fun reserve[T](arr : DynArray[T], extra : uint) -> () = do
+fun reserve[T](arr : DynArray[T], extra : Uint) -> () = do
     case extra of 
     | 0 -> ()
     | n -> ensure_capacity(arr,arr.inner^.len + extra)
@@ -76,7 +76,7 @@ fun clear[T](this : DynArray[T]) -> () = do
     end
 end
 
-fun set[T](arr : DynArray[T], index : uint, element : T) -> () = do
+fun set[T](arr : DynArray[T], index : Uint, element : T) -> () = do
     case index < arr.inner^.len of
     | false -> arrays.index_out_bounds()
     | true -> 
@@ -86,7 +86,7 @@ fun set[T](arr : DynArray[T], index : uint, element : T) -> () = do
     end
 end
 
-fun get[T](arr : DynArray[T], index : uint) -> T = do
+fun get[T](arr : DynArray[T], index : Uint) -> T = do
     case index < arr.inner^.len of
     | false -> arrays.index_out_bounds()
     | true -> 
@@ -118,7 +118,7 @@ fun pop[T](this : DynArray[T]) -> Option[T] = do
     end
 end
 
-fun insert[T](arr : DynArray[T], index : uint, value : T) -> () = do
+fun insert[T](arr : DynArray[T], index : Uint, value : T) -> () = do
     let old_len = arr.inner^.len;
     case index > old_len  of
     | true -> arrays.index_out_bounds()
@@ -127,14 +127,14 @@ fun insert[T](arr : DynArray[T], index : uint, value : T) -> () = do
     let new_len = old_len + 1u;
     reserve(arr,1);
 
-    let elems_to_move = std.ints.wrapping_usub(old_len,index);
+    let elems_to_move = uint.wrapping_sub(old_len,index);
     unsafe arrays.copy_unchecked(arr.inner^.buf,arr.inner^.buf,index + 1, index, elems_to_move) end;
     unsafe builtins.array_set_unchecked(arr.inner^.buf,index,builtins.transmute(value)) end;
     arr.inner^.len = new_len;
 end
 
 
-fun remove[T](arr : DynArray[T], index : uint) -> T = do
+fun remove[T](arr : DynArray[T], index : Uint) -> T = do
     let old_len = arr.inner^.len;
     case index > old_len  of
     | true -> arrays.index_out_bounds()
@@ -147,7 +147,7 @@ fun remove[T](arr : DynArray[T], index : uint) -> T = do
         arrays.zero_slot_unchecked((arr.inner^.buf),index);
     end;
     let new_len = arr.inner^.len - 1u;
-    let elems_to_move = std.ints.wrapping_usub(old_len,index);
+    let elems_to_move = uint.wrapping_sub(old_len,index);
     unsafe arrays.copy_unchecked(arr.inner^.buf,arr.inner^.buf,index, index + 1, elems_to_move) end;
     arr.inner^.len = new_len;
     value
@@ -168,9 +168,9 @@ fun append_array[T](this : DynArray[T], arr : array[T]) -> () = do
     end
 end
 
-fun len[T](arr : DynArray[T]) -> uint = arr.inner^.len
+fun len[T](arr : DynArray[T]) -> Uint = arr.inner^.len
 
-fun capacity[T](arr : DynArray[T]) -> uint = builtins.array_len(arr.inner^.buf)
+fun capacity[T](arr : DynArray[T]) -> Uint = builtins.array_len(arr.inner^.buf)
 
 fun into_array[T](arr : DynArray[T]) -> array[T] = do
     case arr.inner^.len of

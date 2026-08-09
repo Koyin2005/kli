@@ -1,16 +1,16 @@
 import std.optional.Option
 import std.panicking.panic_message
-import std.num.int as ints
+import std.num.int
 
-fun wrapping_add(x : uint, y : uint) -> uint = builtins.wrapping_add(x,y)
+fun wrapping_add(x : Uint, y : Uint) -> Uint = builtins.wrapping_add(x,y)
 
-fun overflowing_add(x : uint, y : uint) -> (uint,bool) = builtins.overflowing_add(x,y)
+fun overflowing_add(x : Uint, y : Uint) -> (Uint,bool) = builtins.overflowing_add(x,y)
 
-fun wrapping_sub(x : uint, y : uint) -> uint = builtins.wrapping_sub(x,y)
+fun wrapping_sub(x : Uint, y : Uint) -> Uint = builtins.wrapping_sub(x,y)
 
-fun overflowing_sub(x : uint, y : uint) -> (uint,bool) = builtins.overflowing_sub(x,y)
+fun overflowing_sub(x : Uint, y : Uint) -> (Uint,bool) = builtins.overflowing_sub(x,y)
 
-fun checked_add(x : uint, y : uint) -> Option[uint] = do 
+fun checked_add(x : Uint, y : Uint) -> Option[Uint] = do 
     case builtins.overflowing_add(x,y) of 
     | (_,false) -> Option.None
     | (res,true) -> Option.Some(res)
@@ -19,55 +19,55 @@ end
 
 # Computes the remainder of dividing `value` by `div`
 # Panics if div is 0
-fun rem(value : uint, div : uint) -> uint = do
+fun rem(value : Uint, div : Uint) -> Uint = do
     let multiple = value / div;
     value - multiple * div
 end
 
 
-# Performs a bitcast between uint and int
-fun bitcast_int(x : uint) -> int = 
-    #Safety : int always has same layout as uint
+# Performs a bitcast between Uint and int
+fun bitcast_int(x : Uint) -> Int = 
+    #Safety : Int always has same layout as Uint
     unsafe builtins.transmute(x) end
 
 # If x is negative panics otherwise performs a bitcast
-fun strict_cast_int(x : uint) -> int = 
-    case x > ints.bitcast_uint(ints.max_value()) of
-    | true -> panic_message("unsigned int too large for signed int")
-    | false -> bitcast_int_to_uint(x)
+fun strict_cast_int(x : Uint) -> Int = 
+    case x > int.bitcast_uint(int.max_value()) of
+    | true -> panic_message("Uint value too large for signed Int")
+    | false -> int.bitcast_uint(x)
     end
 
 
-fun max_value() -> uint = builtins.int_max_value()
+fun max_value() -> Uint = builtins.int_max_value()
 
-fun min(x : uint, y : uint) -> int = case x < y of | true -> x | false -> y end
+fun min(x : Uint, y : Uint) -> Int = case x < y of | true -> x | false -> y end
 
-fun max(x : uint, y : uint) -> int = case x > y of | true -> x | false -> y end
+fun max(x : Uint, y : Uint) -> Int = case x > y of | true -> x | false -> y end
 
 
-fun is_zero(x : uint) -> bool = 
+fun is_zero(x : Uint) -> bool = 
     x == 0
 
-fun is_positive(x : uint) -> bool = 
+fun is_positive(x : Uint) -> bool = 
     x > 0
 
-fun contains_exclusive(x : uint, start : uint , end_ : uint) -> bool = x > start and x < end_
+fun contains_exclusive(x : Uint, start : Uint , end_ : Uint) -> bool = x > start and x < end_
 
-fun as_bool(x : uint) -> Option[bool] = 
+fun as_bool(x : Uint) -> Option[bool] = 
     case x of 
     | 0 -> Option.Some(false)
     | 1 -> Option.Some(true)
     | _ -> Option.None
     end
 
-fun extend_byte(x : byte) -> uint = builtins.zero_extend(x)
+fun extend_byte(x : byte) -> Uint = builtins.zero_extend(x)
 
-fun log(value : uint, power : uint) -> uint = 
+fun log(value : Uint, power : Uint) -> Uint = 
     case value of 
     | 0 -> panic_message("cannot take log of 0")
     | n -> 
         do
-            let mut pow : uint = 0u;
+            let mut pow : Uint = 0u;
             while value > 0u do 
                 value = 
                     value / power;

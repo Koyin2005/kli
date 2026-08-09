@@ -8,10 +8,10 @@ fun box_alloc[T](value : T) -> Box[T];
 fun transmute[T,U](x : T) -> U;
 
 @builtin
-fun array_len[T](a : array[T]) -> uint;
+fun array_len[T](a : array[T]) -> Uint;
 
 @builtin
-fun array_addr[T](a : array[T]) -> uint;
+fun array_addr[T](a : array[T]) -> Uint;
 
 @builtin
 fun wrapping_add[T](x : T, y : T) -> T;
@@ -29,23 +29,23 @@ fun overflowing_sub[T](x : T, y : T) -> (T, bool);
 fun zero_extend[T,U](x : T) -> U;
 
 @builtin
-fun array_repeat[T](value : T, count : uint) -> array[T];
+fun array_repeat[T](value : T, count : Uint) -> array[T];
 
 @builtin
-fun raw_array_alloc[T](size : uint) -> array[uninit[T]];
+fun raw_array_alloc[T](size : Uint) -> array[uninit[T]];
 
 # Safety:
 # `index` must be in bounds for `a`
 @unsafe
 @builtin
-fun array_set_unchecked[T](a : array[T], index : uint, value : T) -> ();
+fun array_set_unchecked[T](a : array[T], index : Uint, value : T) -> ();
 
 
 # Safety:
 # `index` must be in bounds for `a`
 @unsafe
 @builtin
-fun array_get_unchecked[T](a : array[T], index : uint) -> T;
+fun array_get_unchecked[T](a : array[T], index : Uint) -> T;
 
 @builtin
 fun print_string(s : string) -> ();
