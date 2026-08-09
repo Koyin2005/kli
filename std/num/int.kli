@@ -70,3 +70,4 @@ fun log(this : int, power : int) -> uint =
     case this < 0 or power < 2 of 
     | true -> panic_message("log requires non-negative value and power > 2")
     | false -> std.num.uint.log(bitcast_uint(this),bitcast_uint(power))
+    end
