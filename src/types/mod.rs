@@ -474,8 +474,8 @@ impl Display for TypeKind<'_> {
             TypeKind::Char => f.pad("char"),
             TypeKind::Bool => f.pad("bool"),
             TypeKind::Int(kind) => match kind {
-                IntegerKind::Signed => f.pad("int"),
-                IntegerKind::Unsigned => f.pad("uint"),
+                IntegerKind::Signed => f.pad("Int"),
+                IntegerKind::Unsigned => f.pad("Uint"),
                 IntegerKind::Var(_) => f.pad("{integer}"),
             },
             TypeKind::Unknown => f.pad("{unknown}"),
