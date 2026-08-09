@@ -281,13 +281,16 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             .collect::<Vec<_>>();
         match builtin {
             Builtin::BitwiseOr => {
-                todo!("Add bitwise or")
+                let [first, second] = operands.try_into().unwrap();
+                BuiltinResult::Rvalue(Self::binary_op_rvalue(mir::BinaryOp::BitwiseOr, first, second))
             }
             Builtin::ShiftLeft => {
-                todo!("Add shift left")
+                let [first, second] = operands.try_into().unwrap();
+                BuiltinResult::Rvalue(Self::binary_op_rvalue(mir::BinaryOp::ShiftLeft, first, second))
             }
             Builtin::ShiftRight => {
-                todo!("Add shift right")
+                let [first, second] = operands.try_into().unwrap();
+                BuiltinResult::Rvalue(Self::binary_op_rvalue(mir::BinaryOp::ShiftRight, first, second))
             }
             Builtin::ReadLine => BuiltinResult::Rvalue(Rvalue::ReadLine),
             Builtin::UninitNew => {
