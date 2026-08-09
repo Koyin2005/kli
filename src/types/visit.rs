@@ -11,7 +11,6 @@ pub trait Visit<'ctxt> {
             | TypeKind::Int(_)
             | TypeKind::Bool
             | TypeKind::Char
-            | TypeKind::Byte
             | TypeKind::Never
             | TypeKind::String
             | TypeKind::Param(..) => (),
@@ -53,7 +52,6 @@ pub trait VisitMut<'ctxt> {
             | TypeKind::Int(_)
             | TypeKind::Bool
             | TypeKind::Char
-            | TypeKind::Byte
             | TypeKind::Never
             | TypeKind::String
             | TypeKind::Param(..) => ty,

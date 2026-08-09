@@ -171,6 +171,7 @@ pub struct RecordField<'ctxt> {
 pub enum IntegerKind {
     Signed,
     Unsigned,
+    Byte,
     Var(usize),
 }
 impl IntegerKind {
@@ -214,13 +215,13 @@ impl<'ctxt> Type<'ctxt> {
         TypeKind::UNIT.intern(ctxt)
     }
     pub fn new_byte(ctxt: CtxtRef<'ctxt>) -> Self {
-        TypeKind::Byte.intern(ctxt)
+        Self::new_int(ctxt, IntegerKind::Byte)
     }
     pub fn is_bool(self) -> bool {
         matches!(self.0, TypeKind::Bool)
     }
     pub fn is_byte(self) -> bool {
-        matches!(self.0, TypeKind::Byte)
+        matches!(self.0, TypeKind::Int(IntegerKind::Byte))
     }
     pub fn is_char(self) -> bool {
         matches!(self.0, TypeKind::Char)
@@ -343,7 +344,6 @@ pub enum TypeKind<'ctxt> {
     Int(IntegerKind),
     Bool,
     Char,
-    Byte,
     Never,
     Param(Symbol, usize),
     Function(FunctionSig<'ctxt>),
@@ -378,7 +378,7 @@ impl<'ctxt> TypeKind<'ctxt> {
     }
 
     pub const fn is_builtin_scalar(&self) -> bool {
-        matches!(self, Self::Int(_) | Self::Bool | Self::Byte | Self::Char)
+        matches!(self, Self::Int(_) | Self::Bool | Self::Char)
     }
     pub fn array(element: Type<'ctxt>) -> Self {
         Self::Array(element)
@@ -421,7 +421,6 @@ impl<'ctxt> TypeKind<'ctxt> {
             | Self::Int(_)
             | Self::Bool
             | Self::Char
-            | Self::Byte
             | Self::Param(..)
             | Self::Function(..)
             | Self::String
@@ -457,7 +456,6 @@ impl Display for TypeKind<'_> {
                 write!(f, "Box[{ty}]")
             }
             Self::String => f.pad("string"),
-            TypeKind::Byte => f.pad("byte"),
             TypeKind::Never => f.pad("never"),
             TypeKind::Tuple(fields) => {
                 f.pad("(")?;
@@ -479,6 +477,7 @@ impl Display for TypeKind<'_> {
             TypeKind::Int(kind) => match kind {
                 IntegerKind::Signed => f.pad("Int"),
                 IntegerKind::Unsigned => f.pad("Uint"),
+                IntegerKind::Byte => f.pad("byte"),
                 IntegerKind::Var(_) => f.pad("{integer}"),
             },
             TypeKind::Unknown => f.pad("{unknown}"),
@@ -517,7 +516,6 @@ pub trait TypeMap<'ctxt> {
             | TypeKind::Char
             | TypeKind::Int(_)
             | TypeKind::Unknown
-            | TypeKind::Byte
             | TypeKind::Infer(_)
             | TypeKind::Param(..)
             | TypeKind::Never => Ok(ty),

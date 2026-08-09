@@ -36,9 +36,17 @@ mod locals;
 fn scalar_to_cranelift_type(scalar: layout::Scalar) -> codegen::ir::Type {
     match scalar {
         layout::Scalar::Bool | layout::Scalar::Byte => codegen::ir::types::I8,
-        layout::Scalar::Int64(_) => PTR_IR_TYPE,
+        layout::Scalar::Int64 { signed: _ } => codegen::ir::types::I64,
         layout::Scalar::Uint32 => codegen::ir::types::I32,
-        layout::Scalar::Pointer { non_null: _ } => codegen::ir::types::I64,
+        layout::Scalar::Pointer { non_null: _ } => PTR_IR_TYPE,
+    }
+}
+fn scalar_for_int(integer: IntegerKind) -> (bool, codegen::ir::Type) {
+    match integer {
+        IntegerKind::Byte => (false, codegen::ir::types::I8),
+        IntegerKind::Signed => (true, codegen::ir::types::I64),
+        IntegerKind::Unsigned => (false, codegen::ir::types::I64),
+        IntegerKind::Var(_) => unreachable!(),
     }
 }
 fn pass_mode_to_cranelift_types(mode: PassMode) -> impl Iterator<Item = codegen::ir::Type> {
@@ -932,16 +940,19 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     }
     fn build_scalar_const(&mut self, ty: Type<'ctxt>, value: i128) -> codegen::ir::Value {
         let (ty, value, signed) = match ty.kind() {
-            TypeKind::Bool | TypeKind::Byte => (
+            TypeKind::Bool => (
                 codegen::ir::types::I8,
                 codegen::ir::immediates::Imm64::new(value as i64),
                 false,
             ),
-            TypeKind::Int(kind) => (
-                codegen::ir::types::I64,
-                codegen::ir::immediates::Imm64::new(value as i64),
-                kind.is_signed(),
-            ),
+            TypeKind::Int(kind) => {
+                let (signed, ty) = scalar_for_int(*kind);
+                (
+                    ty,
+                    codegen::ir::immediates::Imm64::new(value as i64),
+                    signed,
+                )
+            }
             TypeKind::Char => (
                 codegen::ir::types::I32,
                 codegen::ir::immediates::Imm64::new(value as i64),
@@ -1318,7 +1329,9 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 (
                     match kind {
                         IntegerKind::Signed => self.builder.ins().sdiv(left_value, right_value),
-                        IntegerKind::Unsigned => self.builder.ins().udiv(left_value, right_value),
+                        IntegerKind::Unsigned | IntegerKind::Byte => {
+                            self.builder.ins().udiv(left_value, right_value)
+                        }
                         IntegerKind::Var(_) => unreachable!(),
                     },
                     None,
@@ -1330,9 +1343,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         TypeKind::Int(IntegerKind::Signed) => {
                             ir::condcodes::IntCC::SignedGreaterThan
                         }
-                        TypeKind::Int(IntegerKind::Unsigned) | TypeKind::Char | TypeKind::Byte => {
-                            ir::condcodes::IntCC::UnsignedGreaterThan
-                        }
+                        TypeKind::Int(IntegerKind::Unsigned | IntegerKind::Byte)
+                        | TypeKind::Char => ir::condcodes::IntCC::UnsignedGreaterThan,
                         _ => unreachable!(),
                     },
                     left_value,
@@ -1344,9 +1356,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 self.builder.ins().icmp(
                     match left_operand.ty.kind() {
                         TypeKind::Int(IntegerKind::Signed) => ir::condcodes::IntCC::SignedLessThan,
-                        TypeKind::Int(IntegerKind::Unsigned) | TypeKind::Char | TypeKind::Byte => {
-                            ir::condcodes::IntCC::UnsignedLessThan
-                        }
+                        TypeKind::Int(IntegerKind::Unsigned | IntegerKind::Byte)
+                        | TypeKind::Char => ir::condcodes::IntCC::UnsignedLessThan,
                         _ => unreachable!(),
                     },
                     left_value,
@@ -1682,6 +1693,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                             IntegerKind::Unsigned => self.builder.ins().uextend(ty, value),
                             IntegerKind::Signed => self.builder.ins().uextend(ty, value),
                             IntegerKind::Var(_) => unreachable!(),
+                            IntegerKind::Byte => value,
                         };
                         let place = self.eval_place(place).unwrap();
                         self.store_immediate(place, value);

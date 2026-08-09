@@ -72,7 +72,6 @@ impl<'ctxt> TypeInfer<'ctxt> {
             (TypeKind::Bool, TypeKind::Bool)
             | (TypeKind::Unknown, TypeKind::Unknown)
             | (TypeKind::Char, TypeKind::Char)
-            | (TypeKind::Byte, TypeKind::Byte)
             | (TypeKind::Never, TypeKind::Never)
             | (TypeKind::String, TypeKind::String) => Some(ty1),
             (&TypeKind::Param(name1, index1), &TypeKind::Param(name2, index2))
@@ -123,7 +122,8 @@ impl<'ctxt> TypeInfer<'ctxt> {
             }
             (&TypeKind::Int(int_kind_1), &TypeKind::Int(int_kind_2)) => {
                 match (int_kind_1, int_kind_2) {
-                    (IntegerKind::Signed, IntegerKind::Signed)
+                    (IntegerKind::Byte, IntegerKind::Byte)
+                    | (IntegerKind::Signed, IntegerKind::Signed)
                     | (IntegerKind::Unsigned, IntegerKind::Unsigned) => Some(ty1),
                     (
                         IntegerKind::Var(var),
@@ -134,7 +134,13 @@ impl<'ctxt> TypeInfer<'ctxt> {
                         IntegerKind::Var(var),
                     ) => self.unify_var_ty(var, Type::new_int(self.ctxt, kind)),
                     (IntegerKind::Var(var1), IntegerKind::Var(var2)) if var1 == var2 => Some(ty1),
-                    (IntegerKind::Signed | IntegerKind::Unsigned | IntegerKind::Var(_), _) => None,
+                    (
+                        IntegerKind::Signed
+                        | IntegerKind::Unsigned
+                        | IntegerKind::Var(_)
+                        | IntegerKind::Byte,
+                        _,
+                    ) => None,
                 }
             }
             (&TypeKind::Infer(var1), &TypeKind::Infer(var2)) if var1 == var2 => {
@@ -144,13 +150,17 @@ impl<'ctxt> TypeInfer<'ctxt> {
             (_, &TypeKind::Infer(var)) => self.unify_var_ty(var, ty1),
             //This will fail to compile if new variants are not matched
             (
-                TypeKind::Int(IntegerKind::Signed | IntegerKind::Unsigned | IntegerKind::Var(_))
+                TypeKind::Int(
+                    IntegerKind::Signed
+                    | IntegerKind::Unsigned
+                    | IntegerKind::Var(_)
+                    | IntegerKind::Byte,
+                )
                 | TypeKind::Bool
                 | TypeKind::Unknown
                 | TypeKind::Char
                 | TypeKind::Param(..)
                 | TypeKind::Function(..)
-                | TypeKind::Byte
                 | TypeKind::Named(..)
                 | TypeKind::Never
                 | TypeKind::Tuple(_)

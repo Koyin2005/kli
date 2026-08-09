@@ -227,7 +227,7 @@ pub enum Scalar {
     Bool,
     Pointer { non_null: bool },
     Uint32,
-    Int64(IntegerKind),
+    Int64 { signed: bool },
 }
 impl Scalar {
     pub const fn size(self) -> Size {
@@ -235,14 +235,14 @@ impl Scalar {
             Scalar::Byte | Scalar::Bool => Size::BYTE,
             Scalar::Pointer { non_null: _ } => POINTER_SIZE,
             Scalar::Uint32 => Size::BYTE.mul(4),
-            Scalar::Int64(_) => INT_SIZE,
+            Scalar::Int64 { .. } => INT_SIZE,
         }
     }
     pub const fn align(self) -> Align {
         match self {
             Self::Bool | Self::Byte => Align::BYTE,
             Self::Uint32 => Align::FOUR_BYTE,
-            Self::Int64(_) => INT_ALIGN,
+            Self::Int64 { .. } => INT_ALIGN,
             Self::Pointer { non_null: _ } => POINTER_ALIGN,
         }
     }
@@ -300,7 +300,7 @@ fn variant_layout<'ctxt>(
     let (tag_size, tag_scalar, tag_align) = if let TagType::Byte | TagType::Never = tag_type {
         (Size::BYTE, Scalar::Byte, Align::BYTE)
     } else {
-        (INT_SIZE, Scalar::Int64(IntegerKind::Unsigned), INT_ALIGN)
+        (INT_SIZE, Scalar::Int64 { signed: false }, INT_ALIGN)
     };
 
     let biggest_size = case_layouts
@@ -380,10 +380,12 @@ pub fn calculate_layout<'ctxt>(
             }
         }
         TypeKind::Infer(_) | TypeKind::Unknown => return Err(LayoutError::Unknown),
-        TypeKind::Int(integer_kind) => Layout {
-            size: INT_SIZE,
-            alignment: INT_ALIGN,
-            kind: LayoutKind::Scalar(Scalar::Int64(*integer_kind)),
+        TypeKind::Int(integer_kind) => match integer_kind {
+            IntegerKind::Byte => Layout::from_scalar(Scalar::Byte),
+            IntegerKind::Signed | IntegerKind::Unsigned => Layout::from_scalar(Scalar::Int64 {
+                signed: integer_kind.is_signed(),
+            }),
+            IntegerKind::Var(_) => return Err(LayoutError::Unknown),
         },
         TypeKind::Bool => Layout {
             size: Size::BYTE,
@@ -395,7 +397,6 @@ pub fn calculate_layout<'ctxt>(
             alignment: Align::FOUR_BYTE,
             kind: LayoutKind::Scalar(Scalar::Uint32),
         },
-        TypeKind::Byte => Layout::BYTE,
         TypeKind::Never => Layout::zst().uninhabited(),
         TypeKind::Param(_, _) => return Err(LayoutError::TooGeneric),
         TypeKind::Function(_) | TypeKind::Box(_) => Layout::pointer(true),
@@ -404,7 +405,7 @@ pub fn calculate_layout<'ctxt>(
                 (FieldId::new(0), Layout::pointer(true)),
                 (
                     FieldId::new(1),
-                    Layout::from_scalar(Scalar::Int64(IntegerKind::Unsigned)),
+                    Layout::from_scalar(Scalar::Int64 { signed: false }),
                 ),
             ]);
         }

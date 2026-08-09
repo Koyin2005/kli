@@ -174,6 +174,7 @@ impl<'ctxt> Constant<'ctxt> {
             IntegerKind::Signed => Self::int(ctxt, 0),
             IntegerKind::Unsigned => Self::uint(ctxt, 0),
             IntegerKind::Var(_) => unreachable!(),
+            IntegerKind::Byte => Self::byte(ctxt, 0),
         }
     }
     pub fn bool(ctxt: CtxtRef<'ctxt>, value: bool) -> Self {
