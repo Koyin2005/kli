@@ -10,6 +10,12 @@ fun wrapping_sub(x : Uint, y : Uint) -> Uint = builtins.wrapping_sub(x,y)
 
 fun overflowing_sub(x : Uint, y : Uint) -> (Uint,bool) = builtins.overflowing_sub(x,y)
 
+fun shift_left(x : Uint, y : Uint) -> Uint = builtins.shift_left(x,y)
+
+fun shift_right(x : Uint, y : Uint) -> (Uint,bool) = builtins.shift_right(x,y)
+
+fun bitwise_or(x : Uint, y : Uint) -> Uint = builtins.bitwise_or(x,y)
+
 fun checked_add(x : Uint, y : Uint) -> Option[Uint] = do 
     case builtins.overflowing_add(x,y) of 
     | (_,false) -> Option.None
