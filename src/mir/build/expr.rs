@@ -56,6 +56,9 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     value: ConstValue::Variant(case, None),
                 })
             }
+            ExprKind::Char(char) => {
+                Some(Constant::char(self.ctxt, char))
+            }
             _ => None,
         }
     }
