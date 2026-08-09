@@ -40,9 +40,66 @@
             fflush(stdout);
         }
     }
+    size_t kli_read_string(uint8_t *ptr, size_t len) {
+        if (!len){
+            return 0;
+        }
+        HANDLE stdin_handle = GetStdHandle(STD_INPUT_HANDLE);
+        DWORD mode;
+        // Is stdin attached to a console
+        if (GetConsoleMode(stdin_handle, &mode))
+        {
+            #define BUF_SIZE 4096
+            wchar_t buffer[BUF_SIZE];
+
+            CONSOLE_READCONSOLE_CONTROL control = (CONSOLE_READCONSOLE_CONTROL){
+                .nLength = sizeof(CONSOLE_READCONSOLE_CONTROL),
+                .nInitialChars = 0,
+                .dwControlKeyState = 0,
+                .dwCtrlWakeupMask = 1 << 0x1A
+            };
+            DWORD read;
+            uint8_t succeeded = ReadConsoleW(
+                stdin_handle,
+                buffer,
+                BUF_SIZE - 1,
+                &read,
+                &control);
+            
+            
+            if (!succeeded) {
+                return 0;
+            } 
+            while (read > 0 &&
+               (buffer[read - 1] == L'\n' ||
+                buffer[read - 1] == L'\r'))
+            {
+                read--;
+            }
+            int byte_len = WideCharToMultiByte(
+                CP_UTF8,
+                WC_ERR_INVALID_CHARS,
+                buffer,
+                read,
+                ptr,
+                len,
+                NULL,
+                NULL
+            );
+            return byte_len;
+        }
+        else
+        {
+            return fread(ptr, 1,len, stdin);
+        }
+    }
 #else 
     void kli_print_string(uint8_t *ptr, size_t len){
         fwrite(ptr,1,len,stdout);
         fflush(stdout);
+    }
+
+    uint8_t kli_read_byte() {
+        return getchar()
     }
 #endif

@@ -62,4 +62,4 @@ end
 
 
 
-fun read_line() -> string = std.panicking.todo("user input")
+fun read_line() -> string = builtins.read_line()

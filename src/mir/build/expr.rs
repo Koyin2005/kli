@@ -278,6 +278,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::ReadLine => BuiltinResult::Rvalue(Rvalue::ReadLine),
             Builtin::UninitNew => {
                 let [operand] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute(ty), operand))

@@ -54,6 +54,7 @@ impl Symbol {
         "uninit_zeroed",
         "uninit_assume_init",
         "uninit_new",
+        "read_line",
     ];
     const _NO_REPEATS: () = {
         let mut i = 0;
@@ -120,6 +121,7 @@ impl Symbol {
     pub const UNINIT_ZEROED: Self = Self::expect_symbol("uninit_zeroed");
     pub const UNINIT_ASSUME_INIT: Self = Self::expect_symbol("uninit_assume_init");
     pub const UNINIT_NEW: Self = Self::expect_symbol("uninit_new");
+    pub const READ_LINE: Self = Self::expect_symbol("read_line");
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }

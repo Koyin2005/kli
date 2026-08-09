@@ -115,6 +115,7 @@ struct RuntimeFunctions {
     panic: FuncId,
     alloc: FuncId,
     print_string: FuncId,
+    read_string: FuncId,
 }
 struct FunctionMap<'ctxt> {
     functions: HashMap<Instance<'ctxt>, FunctionInfo>,
@@ -336,10 +337,20 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                 },
             )
         };
+        let read_string = {
+            self.declare_function("kli_read_string", cranelift_module::Linkage::Import, &{
+                let mut sig = Signature::new(self.module.target_config().default_call_conv);
+                sig.params.push(AbiParam::new(PTR_IR_TYPE));
+                sig.params.push(AbiParam::new(ir::types::I64));
+                sig.returns.push(AbiParam::new(ir::types::I64));
+                sig
+            })
+        };
         let runtime = RuntimeFunctions {
             panic: panic_function,
             alloc: allocate_function,
             print_string,
+            read_string,
         };
 
         for instance in self.instances {
@@ -1375,6 +1386,27 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     }
     fn codegen_rvalue_assign(&mut self, place: &mir::Place, value: &mir::Rvalue<'ctxt>) {
         match value {
+            mir::Rvalue::ReadLine => {
+                let ptr = self.codegen_static_size_alloc_call(
+                    Type::new_uninit(self.ctxt, Type::new_byte(self.ctxt)),
+                    4096,
+                );
+                let len = self.build_int_const(Type::new_int(self.ctxt, IntegerKind::Signed), 4096);
+                let written = self.codegen_direct_call_single_scalar_return(
+                    self.runtime_functions.read_string,
+                    &[ptr, len],
+                );
+
+                let dst_ptr = self.codegen_runtime_size_alloc_call(
+                    Type::new_uninit(self.ctxt, Type::new_byte(self.ctxt)),
+                    written,
+                );
+                self.builder
+                    .call_memcpy(self.target_config, dst_ptr, ptr, written);
+
+                let dst_place = self.eval_place(place).unwrap();
+                self.store_immediate_pair(dst_place, ptr, written, layout::POINTER_SIZE);
+            }
             mir::Rvalue::UninitZeroed(_) => {
                 let Ok(place) = self.eval_place(place) else {
                     return;

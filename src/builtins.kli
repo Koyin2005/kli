@@ -64,3 +64,6 @@ fun uninit_assume_init[T](value : uninit[T]) -> T;
 
 @builtin
 fun uninit_new[T](value : T) -> uninit[T];
+
+@builtin
+fun read_line() -> string;

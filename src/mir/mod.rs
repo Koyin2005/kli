@@ -270,6 +270,7 @@ pub enum CastKind<'ctxt> {
 }
 #[derive(Clone, Debug)]
 pub enum Rvalue<'ctxt> {
+    ReadLine,
     UninitZeroed(Type<'ctxt>),
     Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Operand<'ctxt>>),
     Repeat {
@@ -316,7 +317,8 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::AllocateBox(..)
             | Self::Call(..)
             | Self::Repeat { .. }
-            | Self::AllocateRawArray { .. } => false,
+            | Self::AllocateRawArray { .. }
+            | Self::ReadLine => false,
         }
     }
 
@@ -327,6 +329,7 @@ impl<'ctxt> Rvalue<'ctxt> {
         return_type: Type<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
+            Rvalue::ReadLine => Type::new_string(ctxt),
             &Rvalue::UninitZeroed(ty) => Type::new_uninit(ctxt, ty),
             &Rvalue::AllocateBox(ty, _) => Type::new_box(ctxt, ty),
             Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),

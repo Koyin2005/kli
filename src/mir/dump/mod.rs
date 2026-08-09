@@ -103,6 +103,9 @@ impl<'ctxt> MirDump<'ctxt> {
     }
     fn write_rvalue(&mut self, rvalue: &Rvalue) -> std::io::Result<()> {
         match rvalue {
+            Rvalue::ReadLine => {
+                write!(self.output, "read_line")?;
+            }
             Rvalue::UninitZeroed(ty) => {
                 write!(self.output, "uninit[{}]", ty)?;
             }

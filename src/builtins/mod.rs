@@ -20,6 +20,7 @@ pub enum Builtin {
     UninitZeroed,
     UninitAssumeInit,
     UninitNew,
+    ReadLine,
 }
 impl Builtin {
     pub const fn name(self) -> &'static str {
@@ -42,6 +43,7 @@ impl Builtin {
             Builtin::UninitAssumeInit => "uninit_assume_init",
             Builtin::UninitZeroed => "uninit_zeroed",
             Builtin::UninitNew => "uninit_new",
+            Builtin::ReadLine => "read_line",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
@@ -64,6 +66,7 @@ impl Builtin {
             Symbol::UNINIT_ZEROED => Some(Builtin::UninitZeroed),
             Symbol::UNINIT_ASSUME_INIT => Some(Builtin::UninitAssumeInit),
             Symbol::UNINIT_NEW => Some(Builtin::UninitNew),
+            Symbol::READ_LINE => Some(Builtin::ReadLine),
             _ => None,
         }
     }
