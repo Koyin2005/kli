@@ -125,6 +125,22 @@ impl<'s> Lexer<'s> {
         while let Some(c) = self.match_char_with(|c| char::is_digit(c, 10)) {
             src.push(c);
         }
+        if let "0" = src.as_str()
+            && self.match_char('x').is_some()
+        {
+            src.pop();
+            let mut num = 0u32;
+            while let Some(d) = self.match_char_mapped(|c| char::to_digit(c, 16)) {
+                num = if let Some(num) = num.checked_mul(16u32).and_then(|num| num.checked_add(d)) {
+                    num
+                } else {
+                    let loc = self.current_loc();
+                    self.diag.add_diagnostic("Integer too large", loc);
+                    return None;
+                }
+            }
+            src = num.to_string();
+        }
         let sign = match self.peek_char() {
             Some('u') => Some(NumberKind::Unsigned),
             Some('i') => Some(NumberKind::Signed),
@@ -133,6 +149,7 @@ impl<'s> Lexer<'s> {
         if sign.is_some() {
             self.next_char();
         }
+
         match src.parse::<u64>() {
             Ok(n) => Some(self.new_token(TokenKind::Number(n, sign))),
             Err(e) => match e.kind() {
