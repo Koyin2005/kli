@@ -117,6 +117,7 @@ pub enum ExprKind {
     Int(IntegerLiteral),
     Bool(bool),
     String(Rc<str>),
+    Char(char),
     Var(Var),
     Function(FunctionDefId, Box<GenericArgs>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
