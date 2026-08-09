@@ -1423,7 +1423,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     self.runtime_functions.read_string,
                     &[ptr, len],
                 );
-                "".chars().next();
                 let dst_ptr = self.codegen_runtime_size_alloc_call(
                     Type::new_uninit(self.ctxt, Type::new_byte(self.ctxt)),
                     written,
