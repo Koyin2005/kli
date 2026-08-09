@@ -477,12 +477,16 @@ impl Display for TypeKind<'_> {
             }
             TypeKind::Char => f.pad("char"),
             TypeKind::Bool => f.pad("bool"),
-            TypeKind::Int(kind) => match kind {
-                IntegerKind::Signed => f.pad("Int"),
-                IntegerKind::Unsigned => f.pad("Uint"),
-                IntegerKind::Byte => f.pad("byte"),
-                IntegerKind::Var(_) => f.pad("{integer}"),
-            },
+            TypeKind::Int(kind) => write!(
+                f,
+                "{}",
+                match kind {
+                    IntegerKind::Signed => Symbol::INT_TYPE_NAME,
+                    IntegerKind::Unsigned => Symbol::UINT_TYPE_NAME,
+                    IntegerKind::Byte => return f.pad("byte"),
+                    IntegerKind::Var(_) => return f.pad("{integer}"),
+                }
+            ),
             TypeKind::Unknown => f.pad("{unknown}"),
             TypeKind::Infer(_) => f.pad("_"),
             &TypeKind::Param(name, _) => write!(f, "{}", name),

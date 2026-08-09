@@ -33,13 +33,13 @@ fun rem(value : Int, div : Int) -> Int = do
 end
 
 
-# Performs a bitcast between Int and Uint
-fun bitcast_uint(x : Int) -> Uint = 
-    #Safety : Int always has same layout as Uint
+# Performs a bitcast between Int and UInt
+fun bitcast_uint(x : Int) -> UInt = 
+    #Safety : Int always has same layout as UInt
     unsafe builtins.transmute(x) end
 
 #If x is negative panics otherwise performs a bitcast
-fun strict_cast_uint(x : Int) -> Uint = 
+fun strict_cast_uint(x : Int) -> UInt = 
     case x < 0 of
     | true -> panic_message("cannot cast negative int to uint")
     | false -> bitcast_uint(x)
@@ -73,7 +73,7 @@ fun as_bool(x : Int) -> Option[bool] =
 
 fun extend_byte(x : byte) -> Int = builtins.zero_extend(x)
 
-fun log(this : Int, power : Int) -> Uint = 
+fun log(this : Int, power : Int) -> UInt = 
     case this < 0 or power < 2 of 
     | true -> panic_message("log requires non-negative value and power > 2")
     | false -> std.num.uint.log(bitcast_uint(this),bitcast_uint(power))

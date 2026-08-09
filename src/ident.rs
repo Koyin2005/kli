@@ -23,6 +23,10 @@ pub struct Symbol(SymbolId);
 impl Symbol {
     const NAMED_SYMBOLS: &[&str] = &[
         "",
+        "box",
+        // type names
+        "Int",
+        "UInt",
         "main",
         "std",
         "builtins",
@@ -30,7 +34,6 @@ impl Symbol {
         "copy",
         "unsafe",
         "lang_item",
-        "box",
         "opaque",
         "builtin",
         "array",
@@ -128,6 +131,8 @@ impl Symbol {
     pub const SHIFT_LEFT: Self = Self::expect_symbol("shift_left");
     pub const SHIFT_RIGHT: Self = Self::expect_symbol("shift_right");
     pub const BITWISE_OR: Self = Self::expect_symbol("bitwise_or");
+    pub const INT_TYPE_NAME: Self = Self::expect_symbol("Int");
+    pub const UINT_TYPE_NAME: Self = Self::expect_symbol("UInt");
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }

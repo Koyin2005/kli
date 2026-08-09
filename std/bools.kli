@@ -11,7 +11,7 @@ fun as_int(x : bool) -> Int =
     end
 
 
-fun as_uint(x : bool) -> Uint = 
+fun as_uint(x : bool) -> UInt = 
     case x of 
     | true -> 1
     | false -> 0

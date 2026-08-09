@@ -121,8 +121,8 @@ impl<'info> Resolve<'info> {
     fn new(config: Config, results: &'info DeclareResults) -> Self {
         let env = Scope::from_iter([
             (Symbol::intern("byte"), Res::TypeAlias(TypeAlias::Byte)),
-            (Symbol::intern("Int"), Res::TypeAlias(TypeAlias::Int)),
-            (Symbol::intern("Uint"), Res::TypeAlias(TypeAlias::Uint)),
+            (Symbol::INT_TYPE_NAME, Res::TypeAlias(TypeAlias::Int)),
+            (Symbol::UINT_TYPE_NAME, Res::TypeAlias(TypeAlias::Uint)),
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),
             (
