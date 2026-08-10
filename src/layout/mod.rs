@@ -5,7 +5,7 @@ use crate::{
     collect::TypeDefKind,
     index_vec::IndexVec,
     typed_ast::FieldId,
-    types::{CaseId, IntegerKind, TagType, Type, TypeKind},
+    types::{CaseId, IntegerSize, TagType, Type, TypeKind},
 };
 
 pub const BITS_IN_BYTE: u8 = 8;
@@ -151,7 +151,10 @@ impl Layout {
     pub const BYTE: Self = Self {
         size: Size::BYTE,
         alignment: Align::BYTE,
-        kind: LayoutKind::Scalar(Scalar::Byte),
+        kind: LayoutKind::Scalar(Scalar::Int {
+            signed: false,
+            size: IntegerSize::Int8,
+        }),
     };
     ///Produces an aggregate with only layout as its field, but
     /// is prefixed by prefix size
@@ -223,26 +226,39 @@ impl Layout {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Scalar {
-    Byte,
     Bool,
-    Pointer { non_null: bool },
     Uint32,
-    Int64 { signed: bool },
+    Pointer { non_null: bool },
+    Int { signed: bool, size: IntegerSize },
 }
 impl Scalar {
+    pub const BYTE: Self = Self::uint(IntegerSize::Int8);
+
+    pub const fn integer(signed: bool, size: IntegerSize) -> Self {
+        Self::Int { signed, size }
+    }
+    pub const fn uint(size: IntegerSize) -> Self {
+        Self::integer(false, size)
+    }
     pub const fn size(self) -> Size {
         match self {
-            Scalar::Byte | Scalar::Bool => Size::BYTE,
+            Scalar::Bool => Size::BYTE,
             Scalar::Pointer { non_null: _ } => POINTER_SIZE,
             Scalar::Uint32 => Size::BYTE.mul(4),
-            Scalar::Int64 { .. } => INT_SIZE,
+            Scalar::Int { size, .. } => match size {
+                IntegerSize::Int64 => Size::BYTE.mul(8),
+                IntegerSize::Int8 => Size::BYTE,
+            },
         }
     }
     pub const fn align(self) -> Align {
         match self {
-            Self::Bool | Self::Byte => Align::BYTE,
+            Self::Bool => Align::BYTE,
             Self::Uint32 => Align::FOUR_BYTE,
-            Self::Int64 { .. } => INT_ALIGN,
+            Self::Int { size, .. } => match size {
+                IntegerSize::Int8 => Align::BYTE,
+                IntegerSize::Int64 => INT_ALIGN,
+            },
             Self::Pointer { non_null: _ } => POINTER_ALIGN,
         }
     }
@@ -297,10 +313,14 @@ fn variant_layout<'ctxt>(
             }
         })
         .collect::<Result<IndexVec<CaseId, _>, _>>()?;
-    let (tag_size, tag_scalar, tag_align) = if let TagType::Byte | TagType::Never = tag_type {
-        (Size::BYTE, Scalar::Byte, Align::BYTE)
+    let (tag_size, tag_scalar, tag_align) = if let TagType::UInt8 | TagType::Never = tag_type {
+        (Size::BYTE, Scalar::BYTE, Align::BYTE)
     } else {
-        (INT_SIZE, Scalar::Int64 { signed: false }, INT_ALIGN)
+        (
+            INT_SIZE,
+            Scalar::integer(false, IntegerSize::Int64),
+            INT_ALIGN,
+        )
     };
 
     let biggest_size = case_layouts
@@ -379,14 +399,13 @@ pub fn calculate_layout<'ctxt>(
                 kind: LayoutKind::Uninit,
             }
         }
-        TypeKind::Infer(_) | TypeKind::Unknown => return Err(LayoutError::Unknown),
-        TypeKind::Int(integer_kind) => match integer_kind {
-            IntegerKind::Byte => Layout::from_scalar(Scalar::Byte),
-            IntegerKind::Signed | IntegerKind::Unsigned => Layout::from_scalar(Scalar::Int64 {
-                signed: integer_kind.is_signed(),
-            }),
-            IntegerKind::Var(_) => return Err(LayoutError::Unknown),
-        },
+        TypeKind::Infer(_) | TypeKind::Unknown | TypeKind::IntVar(_) => {
+            return Err(LayoutError::Unknown);
+        }
+        TypeKind::Int(integer_kind) => {
+            let (signed, size) = integer_kind.signed_and_size();
+            Layout::from_scalar(Scalar::integer(signed, size))
+        }
         TypeKind::Bool => Layout {
             size: Size::BYTE,
             alignment: Align::BYTE,
@@ -405,7 +424,7 @@ pub fn calculate_layout<'ctxt>(
                 (FieldId::new(0), Layout::pointer(true)),
                 (
                     FieldId::new(1),
-                    Layout::from_scalar(Scalar::Int64 { signed: false }),
+                    Layout::from_scalar(Scalar::uint(IntegerSize::Int64)),
                 ),
             ]);
         }

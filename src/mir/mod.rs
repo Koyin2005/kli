@@ -11,7 +11,7 @@ use crate::{
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
     typed_ast::FieldId,
-    types::{CaseId, FieldName, GenericArgs, IntegerKind, Type, TypeKind},
+    types::{CaseId, FieldName, GenericArgs, IntegerKind, IntegerSize, Type, TypeKind},
 };
 pub mod basic_blocks;
 pub mod build;
@@ -154,7 +154,6 @@ pub enum ConstValue<'ctxt> {
     String(Symbol),
 }
 impl<'ctxt> ConstValue<'ctxt> {
-    pub const MIN_INT: i64 = i64::MIN;
     fn as_scalar(&self) -> Option<i128> {
         match self {
             Self::Scalar(value) => Some(*value),
@@ -171,10 +170,8 @@ pub struct Constant<'ctxt> {
 impl<'ctxt> Constant<'ctxt> {
     pub fn zero(ctxt: CtxtRef<'ctxt>, kind: IntegerKind) -> Self {
         match kind {
-            IntegerKind::Signed => Self::int(ctxt, 0),
-            IntegerKind::Unsigned => Self::uint(ctxt, 0),
-            IntegerKind::Var(_) => unreachable!(),
-            IntegerKind::Byte => Self::byte(ctxt, 0),
+            IntegerKind::Signed(size) => Self::int(ctxt, size, 0),
+            IntegerKind::Unsigned(size) => Self::uint(ctxt, size, 0),
         }
     }
     pub fn bool(ctxt: CtxtRef<'ctxt>, value: bool) -> Self {
@@ -183,23 +180,14 @@ impl<'ctxt> Constant<'ctxt> {
             value: ConstValue::Scalar(value as i128),
         }
     }
-    pub fn byte(ctxt: CtxtRef<'ctxt>, value: u8) -> Self {
-        Self {
-            ty: Type::new_byte(ctxt),
-            value: ConstValue::Scalar(value as i128),
-        }
-    }
     pub fn integer(ctxt: CtxtRef<'ctxt>, kind: IntegerKind, value: i128) -> Self {
         Self {
-            ty: Type::new_int(ctxt, kind),
+            ty: Type::new_integer(ctxt, kind),
             value: ConstValue::Scalar(value),
         }
     }
-    pub fn int(ctxt: CtxtRef<'ctxt>, value: i64) -> Self {
-        Self {
-            ty: Type::new_int(ctxt, IntegerKind::Signed),
-            value: ConstValue::Scalar(value as i128),
-        }
+    pub fn int(ctxt: CtxtRef<'ctxt>, size: IntegerSize, value: i64) -> Self {
+        Self::integer(ctxt, IntegerKind::Signed(size), value.into())
     }
     pub fn char(ctxt: CtxtRef<'ctxt>, value: char) -> Self {
         Self {
@@ -207,11 +195,8 @@ impl<'ctxt> Constant<'ctxt> {
             value: ConstValue::Scalar(value as i128),
         }
     }
-    pub fn uint(ctxt: CtxtRef<'ctxt>, value: u64) -> Self {
-        Self {
-            ty: Type::new_uint(ctxt),
-            value: ConstValue::Scalar(value as i128),
-        }
+    pub fn uint(ctxt: CtxtRef<'ctxt>, size: IntegerSize, value: u64) -> Self {
+        Self::integer(ctxt, IntegerKind::Unsigned(size), value.into())
     }
     pub const fn zero_sized(ty: Type<'ctxt>) -> Self {
         Self {
@@ -271,9 +256,10 @@ pub enum BinaryOp {
 }
 #[derive(Clone, Debug, Copy)]
 pub enum IntegerCast {
-    ZeroExtendByteTo(IntegerKind),
-    ZeroExtendByteToChar,
-    ZeroExtendChar,
+    SignExtend(IntegerSize),
+    ZeroExtend(IntegerSize),
+    ZeroExtendUInt8ToChar,
+    ZeroExtendCharToUint64,
 }
 #[derive(Clone, Debug, Copy)]
 pub enum CastKind<'ctxt> {
@@ -345,7 +331,7 @@ impl<'ctxt> Rvalue<'ctxt> {
             &Rvalue::UninitZeroed(ty) => Type::new_uninit(ctxt, ty),
             &Rvalue::AllocateBox(ty, _) => Type::new_box(ctxt, ty),
             Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),
-            Rvalue::Len(_) => Type::new_uint(ctxt),
+            Rvalue::Len(_) => Type::new_uint(ctxt, IntegerSize::Int64),
             Rvalue::Call(operand, _) => {
                 let Some(function) = operand.type_of(ctxt, locals, return_type).as_function()
                 else {
@@ -388,14 +374,15 @@ impl<'ctxt> Rvalue<'ctxt> {
             },
             &Rvalue::Cast(cast, _) => match cast {
                 CastKind::Transmute(ty) => ty,
-                CastKind::IntegerCast(IntegerCast::ZeroExtendChar) => Type::new_uint(ctxt),
-                CastKind::IntegerCast(IntegerCast::ZeroExtendByteToChar) => Type::new_char(ctxt),
-                CastKind::IntegerCast(IntegerCast::ZeroExtendByteTo(kind)) => {
-                    Type::new_int(ctxt, kind)
+                CastKind::IntegerCast(IntegerCast::ZeroExtendCharToUint64) => {
+                    Type::new_uint(ctxt, IntegerSize::Int64)
                 }
+                CastKind::IntegerCast(IntegerCast::ZeroExtendUInt8ToChar) => Type::new_char(ctxt),
+                CastKind::IntegerCast(IntegerCast::ZeroExtend(to)) => Type::new_uint(ctxt, to),
+                CastKind::IntegerCast(IntegerCast::SignExtend(to)) => Type::new_int(ctxt, to),
             },
-            Rvalue::Discriminant(_) => Type::new_uint(ctxt),
-            Rvalue::AddrOf(_) => Type::new_uint(ctxt),
+            Rvalue::Discriminant(_) => Type::new_uint(ctxt, IntegerSize::Int64),
+            Rvalue::AddrOf(_) => Type::new_uint(ctxt, IntegerSize::Int64),
         }
     }
 }

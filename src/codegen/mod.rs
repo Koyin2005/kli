@@ -16,7 +16,9 @@ use crate::{
     monomorph::collect::{Instance, InstanceKind},
     scheme::Scheme,
     typed_ast::FieldId,
-    types::{CaseId, FunctionSig, GenericArgsRef, IntegerKind, Type, TypeKind, TypeMappable},
+    types::{
+        CaseId, FunctionSig, GenericArgsRef, IntegerKind, IntegerSize, Type, TypeKind, TypeMappable,
+    },
 };
 use cranelift::{
     codegen::{
@@ -35,18 +37,16 @@ mod locals;
 
 fn scalar_to_cranelift_type(scalar: layout::Scalar) -> codegen::ir::Type {
     match scalar {
-        layout::Scalar::Bool | layout::Scalar::Byte => codegen::ir::types::I8,
-        layout::Scalar::Int64 { signed: _ } => codegen::ir::types::I64,
+        layout::Scalar::Bool => codegen::ir::types::I8,
+        layout::Scalar::Int { signed: _, size } => integer_size_to_cranelift_type(size),
         layout::Scalar::Uint32 => codegen::ir::types::I32,
         layout::Scalar::Pointer { non_null: _ } => PTR_IR_TYPE,
     }
 }
-fn cranelift_ir_type_for_int(integer: IntegerKind) -> (bool, codegen::ir::Type) {
+fn integer_size_to_cranelift_type(integer: IntegerSize) -> codegen::ir::Type {
     match integer {
-        IntegerKind::Byte => (false, codegen::ir::types::I8),
-        IntegerKind::Signed => (true, codegen::ir::types::I64),
-        IntegerKind::Unsigned => (false, codegen::ir::types::I64),
-        IntegerKind::Var(_) => unreachable!(),
+        IntegerSize::Int64 => codegen::ir::types::I64,
+        IntegerSize::Int8 => codegen::ir::types::I8,
     }
 }
 fn pass_mode_to_cranelift_types(mode: PassMode) -> impl Iterator<Item = codegen::ir::Type> {
@@ -950,7 +950,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 false,
             ),
             TypeKind::Int(kind) => {
-                let (signed, ty) = cranelift_ir_type_for_int(*kind);
+                let (signed, size) = kind.signed_and_size();
+                let ty = integer_size_to_cranelift_type(size);
                 (
                     ty,
                     codegen::ir::immediates::Imm64::new(value as i64),
@@ -1062,7 +1063,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn build_string_value(&mut self, string: String) -> (ir::Value, ir::Value) {
         let len: u64 = string.len().try_into().unwrap();
         let first = self.alloc_constant(string.into_bytes().into_boxed_slice(), false);
-        let second = self.build_scalar_const(Type::new_uint(self.ctxt), len.into());
+        let second =
+            self.build_scalar_const(Type::new_uint(self.ctxt, IntegerSize::Int64), len.into());
         (first, second)
     }
     fn eval_operand(&mut self, operand: &mir::Operand<'ctxt>) -> OperandValue<'ctxt> {
@@ -1149,10 +1151,12 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn codegen_runtime_size_alloc_call(&mut self, ty: Type<'ctxt>, count: ir::Value) -> ir::Value {
         let ty_layout = self.layout_for(ty);
 
-        let byte_size =
-            self.build_scalar_const(Type::new_uint(self.ctxt), ty_layout.size.in_bytes().into());
+        let byte_size = self.build_scalar_const(
+            Type::new_uint(self.ctxt, IntegerSize::Int64),
+            ty_layout.size.in_bytes().into(),
+        );
         let byte_align = self.build_scalar_const(
-            Type::new_uint(self.ctxt),
+            Type::new_uint(self.ctxt, IntegerSize::Int64),
             ty_layout.alignment.in_bytes().into(),
         );
         let byte_size = self.builder.ins().imul(byte_size, count);
@@ -1161,9 +1165,12 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn codegen_static_size_alloc_call(&mut self, ty: Type<'ctxt>, count: u64) -> ir::Value {
         let ty_layout = self.layout_for(ty);
         let total_size = ty_layout.size.mul(count).in_bytes();
-        let size_val = self.build_scalar_const(Type::new_uint(self.ctxt), total_size.into());
+        let size_val = self.build_scalar_const(
+            Type::new_uint(self.ctxt, IntegerSize::Int64),
+            total_size.into(),
+        );
         let align = self.build_scalar_const(
-            Type::new_uint(self.ctxt),
+            Type::new_uint(self.ctxt, IntegerSize::Int64),
             ty_layout.alignment.in_bytes().into(),
         );
         self.codegen_alloc_call(size_val, align)
@@ -1281,7 +1288,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         left: codegen::ir::Value,
         right: codegen::ir::Value,
     ) -> (codegen::ir::Value, codegen::ir::Value) {
-        let signed = matches!(kind, IntegerKind::Signed);
+        let signed = kind.is_signed();
         match op {
             OverflowOp::Add => {
                 if signed {
@@ -1332,11 +1339,10 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let kind = left_operand.ty.as_integer().unwrap();
                 (
                     match kind {
-                        IntegerKind::Signed => self.builder.ins().sdiv(left_value, right_value),
-                        IntegerKind::Unsigned | IntegerKind::Byte => {
+                        IntegerKind::Signed(_) => self.builder.ins().sdiv(left_value, right_value),
+                        IntegerKind::Unsigned(_) => {
                             self.builder.ins().udiv(left_value, right_value)
                         }
-                        IntegerKind::Var(_) => unreachable!(),
                     },
                     None,
                 )
@@ -1344,11 +1350,12 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             BinaryOp::Greater => (
                 self.builder.ins().icmp(
                     match left_operand.ty.kind() {
-                        TypeKind::Int(IntegerKind::Signed) => {
+                        &TypeKind::Int(IntegerKind::Signed(_)) => {
                             ir::condcodes::IntCC::SignedGreaterThan
                         }
-                        TypeKind::Int(IntegerKind::Unsigned | IntegerKind::Byte)
-                        | TypeKind::Char => ir::condcodes::IntCC::UnsignedGreaterThan,
+                        TypeKind::Int(IntegerKind::Unsigned(_)) | TypeKind::Char => {
+                            ir::condcodes::IntCC::UnsignedGreaterThan
+                        }
                         _ => unreachable!(),
                     },
                     left_value,
@@ -1359,9 +1366,12 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             BinaryOp::Lesser => (
                 self.builder.ins().icmp(
                     match left_operand.ty.kind() {
-                        TypeKind::Int(IntegerKind::Signed) => ir::condcodes::IntCC::SignedLessThan,
-                        TypeKind::Int(IntegerKind::Unsigned | IntegerKind::Byte)
-                        | TypeKind::Char => ir::condcodes::IntCC::UnsignedLessThan,
+                        TypeKind::Int(IntegerKind::Signed(_)) => {
+                            ir::condcodes::IntCC::SignedLessThan
+                        }
+                        TypeKind::Int(IntegerKind::Unsigned(_)) | TypeKind::Char => {
+                            ir::condcodes::IntCC::UnsignedLessThan
+                        }
                         _ => unreachable!(),
                     },
                     left_value,
@@ -1418,13 +1428,13 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 ));
                 let ptr = self.builder.ins().stack_addr(PTR_IR_TYPE, slot, 0);
                 let len = self
-                    .build_scalar_const(Type::new_int(self.ctxt, IntegerKind::Signed), size.into());
+                    .build_scalar_const(Type::new_uint(self.ctxt, IntegerSize::Int64), size.into());
                 let written = self.codegen_direct_call_single_scalar_return(
                     self.runtime_functions.read_string,
                     &[ptr, len],
                 );
                 let dst_ptr = self.codegen_runtime_size_alloc_call(
-                    Type::new_uninit(self.ctxt, Type::new_byte(self.ctxt)),
+                    Type::new_uninit(self.ctxt, Type::new_uint(self.ctxt, IntegerSize::Int8)),
                     written,
                 );
                 self.builder
@@ -1499,11 +1509,11 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let ty_layout = self.layout_for(ty);
 
                 let byte_size = self.build_scalar_const(
-                    Type::new_uint(self.ctxt),
+                    Type::new_uint(self.ctxt, IntegerSize::Int64),
                     ty_layout.size.in_bytes().into(),
                 );
                 let byte_align = self.build_scalar_const(
-                    Type::new_uint(self.ctxt),
+                    Type::new_uint(self.ctxt, IntegerSize::Int64),
                     ty_layout.alignment.in_bytes().into(),
                 );
                 let value = self.eval_operand(value);
@@ -1537,7 +1547,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let loop_end = self.builder.create_block();
                 let loop_count = self.builder.declare_var(ir::types::I64);
                 {
-                    let zero_value = self.build_scalar_const(Type::new_uint(self.ctxt), 0);
+                    let zero_value =
+                        self.build_scalar_const(Type::new_uint(self.ctxt, IntegerSize::Int64), 0);
                     self.builder.def_var(loop_count, zero_value);
                     self.builder.ins().jump(loop_condition, &[]);
                 }
@@ -1567,7 +1578,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     let place_value = MemPlace::new(ptr, ty_layout.clone(), ty);
                     self.store_operand_with_mem_place(place_value, value);
 
-                    let one_value = self.build_scalar_const(Type::new_uint(self.ctxt), 1);
+                    let one_value =
+                        self.build_scalar_const(Type::new_uint(self.ctxt, IntegerSize::Int64), 1);
                     let new_val = self.builder.ins().iadd(var_use, one_value);
                     self.builder.def_var(loop_count, new_val);
 
@@ -1583,7 +1595,10 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let len: u64 = fields.len().try_into().unwrap();
                 let ptr = self.codegen_static_size_alloc_call(ty, len);
                 if ty_layout.is_zst() || fields.is_empty() {
-                    let len_value = self.build_scalar_const(Type::new_uint(self.ctxt), len.into());
+                    let len_value = self.build_scalar_const(
+                        Type::new_uint(self.ctxt, IntegerSize::Int64),
+                        len.into(),
+                    );
                     self.store_value(
                         place,
                         OperandValue {
@@ -1605,7 +1620,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     let value = self.eval_operand(operand);
                     self.store_operand_with_mem_place(place_value.offset_in_bytes(offset), value);
                 }
-                let len_value = self.build_scalar_const(Type::new_uint(self.ctxt), len.into());
+                let len_value = self
+                    .build_scalar_const(Type::new_uint(self.ctxt, IntegerSize::Int64), len.into());
                 self.store_value(
                     place,
                     OperandValue {
@@ -1691,32 +1707,40 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         self.copy(CodegenPlace::MemPlace(transmuted_place), dst_place);
                     }
                 }
-                mir::CastKind::IntegerCast(cast) => match cast {
-                    mir::IntegerCast::ZeroExtendByteTo(kind) => {
-                        let (_, ty) = cranelift_ir_type_for_int(*kind);
-                        let value = self.eval_operand(operand).expect_immediate(self);
-                        let value = match kind {
-                            IntegerKind::Unsigned => self.builder.ins().uextend(ty, value),
-                            IntegerKind::Signed => self.builder.ins().uextend(ty, value),
-                            IntegerKind::Var(_) => unreachable!(),
-                            IntegerKind::Byte => value,
-                        };
-                        let place = self.eval_place(place).unwrap();
-                        self.store_immediate(place, value);
-                    }
-                    mir::IntegerCast::ZeroExtendByteToChar => {
-                        let value = self.eval_operand(operand).expect_immediate(self);
-                        let value = self.builder.ins().uextend(ir::types::I32, value);
-                        let place = self.eval_place(place).unwrap();
-                        self.store_immediate(place, value);
-                    }
-                    mir::IntegerCast::ZeroExtendChar => {
-                        let value = self.eval_operand(operand).expect_immediate(self);
-                        let value = self.builder.ins().uextend(ir::types::I64, value);
-                        let place = self.eval_place(place).unwrap();
-                        self.store_immediate(place, value);
-                    }
-                },
+                mir::CastKind::IntegerCast(cast) => {
+                    let place = self.eval_place(place).unwrap();
+                    let operand_value = self.eval_operand(operand);
+                    let value = operand_value.expect_immediate(self);
+                    let value = match *cast {
+                        mir::IntegerCast::SignExtend(to_size) => {
+                            let from_size = operand_value.ty.as_integer().unwrap().size();
+                            match (from_size, to_size) {
+                                (from_size, to_size) if from_size == to_size => value,
+                                (IntegerSize::Int8 | IntegerSize::Int64, _) => self
+                                    .builder
+                                    .ins()
+                                    .sextend(integer_size_to_cranelift_type(to_size), value),
+                            }
+                        }
+                        mir::IntegerCast::ZeroExtend(to_size) => {
+                            let from_size = operand_value.ty.as_integer().unwrap().size();
+                            match (from_size, to_size) {
+                                (from_size, to_size) if from_size == to_size => value,
+                                (IntegerSize::Int8 | IntegerSize::Int64, _) => self
+                                    .builder
+                                    .ins()
+                                    .uextend(integer_size_to_cranelift_type(to_size), value),
+                            }
+                        }
+                        mir::IntegerCast::ZeroExtendUInt8ToChar => {
+                            self.builder.ins().uextend(ir::types::I32, value)
+                        }
+                        mir::IntegerCast::ZeroExtendCharToUint64 => {
+                            self.builder.ins().uextend(ir::types::I64, value)
+                        }
+                    };
+                    self.store_immediate(place, value);
+                }
             },
             mir::Rvalue::Len(array_place) => {
                 let place = self.eval_place(place).unwrap();
@@ -1738,7 +1762,10 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                             let value = self.load_place_mem(&tag_place).unwrap().first_value();
                             (
                                 value,
-                                tag_place.ty.as_integer().is_some_and(IntegerKind::is_byte),
+                                tag_place
+                                    .ty
+                                    .as_integer()
+                                    .is_some_and(|kind| kind.size().is_byte_sized()),
                             )
                         }
                         CodegenPlace::Ssa(ty, .., var) => {
@@ -1746,7 +1773,9 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                             let tag_ty = self.ctxt.type_def(id).tag_type().into_type(self.ctxt);
                             (
                                 self.builder.use_var(var),
-                                tag_ty.as_integer().is_some_and(IntegerKind::is_byte),
+                                tag_ty
+                                    .as_integer()
+                                    .is_some_and(|kind| kind.size().is_byte_sized()),
                             )
                         }
                     },

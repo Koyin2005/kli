@@ -4,7 +4,7 @@ use crate::{
     mir::{BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind, build::Builder},
     src_loc::SrcLoc,
     typed_ast::{CaseArm, Expr, FieldId, Pattern, PatternKind},
-    types::{CaseId, Type},
+    types::{CaseId, IntegerSize, Type},
 };
 
 struct MatchInfo<'a, 'ctxt> {
@@ -224,7 +224,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 self.switch_to_block(start_block);
                 let disrciminant = self.assign_to_temp(
                     loc,
-                    Type::new_uint(self.ctxt),
+                    Type::new_uint(self.ctxt, IntegerSize::Int64),
                     Rvalue::Discriminant(place),
                 );
                 self.finish_block_with_switch_targets(

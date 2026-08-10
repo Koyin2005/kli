@@ -13,7 +13,8 @@ pub trait Visit<'ctxt> {
             | TypeKind::Char
             | TypeKind::Never
             | TypeKind::String
-            | TypeKind::Param(..) => (),
+            | TypeKind::Param(..)
+            | TypeKind::IntVar(_) => (),
             TypeKind::Function(function_type) => {
                 for &param in function_type.params.iter() {
                     self.visit_type(param);
@@ -54,7 +55,8 @@ pub trait VisitMut<'ctxt> {
             | TypeKind::Char
             | TypeKind::Never
             | TypeKind::String
-            | TypeKind::Param(..) => ty,
+            | TypeKind::Param(..)
+            | TypeKind::IntVar(_) => ty,
             TypeKind::Function(function_type) => {
                 let params = function_type
                     .params

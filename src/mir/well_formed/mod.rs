@@ -8,7 +8,7 @@ use crate::{
         visitor::{PlaceCtxt, Visit},
     },
     src_loc::SrcLoc,
-    types::{FunctionSig, IntegerKind, Type},
+    types::{FunctionSig, IntegerKind, IntegerSize, Type},
     unsafety,
 };
 pub struct WellFormed<'ctxt, 'body> {
@@ -117,7 +117,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             super::Rvalue::AllocateRawArray { count, .. } => {
                 let count_ty = count.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 self.assert(
-                    count_ty.is_integer_kind(IntegerKind::Unsigned),
+                    count_ty.is_integer_kind(IntegerKind::Unsigned(IntegerSize::Int64)),
                     || format!("count should be a uint not '{}'", count_ty),
                     loc,
                 );
@@ -133,7 +133,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
 
                 let count_ty = count.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 self.assert(
-                    count_ty.is_integer_kind(IntegerKind::Unsigned),
+                    count_ty.is_integer_kind(IntegerKind::Unsigned(IntegerSize::Int64)),
                     || format!("count should be a uint not '{}'", count_ty),
                     loc,
                 );
@@ -256,13 +256,12 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     (BinaryOp::Lesser | BinaryOp::Greater, left, right)
                         if left == right && left.is_builtin_scalar() => {}
                     (BinaryOp::BitwiseAnd | BinaryOp::BitwiseOr, left, right)
-                        if left == right
-                            && (left.is_integer() || left.is_bool() || left.is_byte()) =>
+                        if left == right && (left.is_integer() || left.is_bool()) =>
                     {
                         ()
                     }
                     (BinaryOp::ShiftLeft | BinaryOp::ShiftRight, left, right)
-                        if left == right && (left.is_integer() || left.is_byte()) =>
+                        if left == right && left.is_integer() =>
                     {
                         ()
                     }
@@ -288,30 +287,70 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     );
                 }
                 CastKind::IntegerCast(kind) => match kind {
-                    IntegerCast::ZeroExtendByteToChar => {
+                    IntegerCast::ZeroExtendUInt8ToChar => {
                         let from =
                             operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                         let to = Type::new_char(self.ctxt);
                         self.assert(
-                            from.is_byte(),
+                            from.is_integer_kind(IntegerKind::Unsigned(IntegerSize::Int8)),
                             || format!("Cannot extend {} into {}", from, to),
                             loc,
                         );
                     }
-                    IntegerCast::ZeroExtendByteTo(kind) => {
-                        let from =
+                    IntegerCast::ZeroExtend(to) => {
+                        let from_ty =
                             operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                        let to = Type::new_int(self.ctxt(), kind);
+
+                        let from = self.assert_with_some(
+                            from_ty,
+                            |from| {
+                                from.as_integer().map(IntegerKind::size)
+                            },
+                            || "Should be an integer",
+                            loc,
+                        );
+
                         self.assert(
-                            from.is_byte(),
-                            || format!("Cannot extend {} into {}", from, to),
+                            from.bit_width() < to.bit_width(),
+                            || {
+                                format!(
+                                    "Cannot extend {} into {}",
+                                    from_ty,
+                                    IntegerKind::Unsigned(to)
+                                )
+                            },
                             loc,
                         );
                     }
-                    IntegerCast::ZeroExtendChar => {
+                    IntegerCast::SignExtend(to) => {
+                        let from_ty =
+                            operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+
+                        let from = self.assert_with_some(
+                            from_ty,
+                            |from| {
+                                from.as_integer().map(IntegerKind::size)
+                            },
+                            || "Should be an integer",
+                            loc,
+                        );
+
+                        self.assert(
+                            from.bit_width() <= to.bit_width(),
+                            || {
+                                format!(
+                                    "Cannot extend {} into {}",
+                                    from_ty,
+                                    IntegerKind::Signed(to)
+                                )
+                            },
+                            loc,
+                        );
+                    }
+                    IntegerCast::ZeroExtendCharToUint64 => {
                         let from =
                             operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                        let to = Type::new_uint(self.ctxt);
+                        let to = Type::new_uint(self.ctxt, IntegerSize::Int64);
                         self.assert(
                             from.is_char(),
                             || format!("Cannot extend {} into {}", from, to),

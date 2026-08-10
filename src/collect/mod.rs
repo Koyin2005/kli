@@ -99,10 +99,10 @@ impl TypeDefInfo {
     #[track_caller]
     pub fn tag_type(&self) -> TagType {
         let cases = self.expect_cases();
-        if cases.len() < 256 {
-            TagType::Byte
+        if u8::try_from(cases.len()).is_ok() {
+            TagType::UInt8
         } else {
-            TagType::Uint
+            TagType::Uint64
         }
     }
     #[track_caller]

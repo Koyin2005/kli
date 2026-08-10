@@ -13,16 +13,16 @@ pub mod visit;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TagType {
-    Byte,
-    Uint,
+    UInt8,
+    Uint64,
     Never,
 }
 impl TagType {
     pub fn into_type<'ctxt>(self, ctxt: CtxtRef<'ctxt>) -> Type<'ctxt> {
         match self {
             Self::Never => Type::new_never(ctxt),
-            Self::Byte => Type::new_byte(ctxt),
-            Self::Uint => Type::new_uint(ctxt),
+            Self::UInt8 => Type::new_uint(ctxt, IntegerSize::Int8),
+            Self::Uint64 => Type::new_uint(ctxt, IntegerSize::Int64),
         }
     }
 }
@@ -167,19 +167,85 @@ pub struct RecordField<'ctxt> {
     pub name: FieldName,
     pub ty: Type<'ctxt>,
 }
+
+#[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
+pub enum IntegerSize {
+    Int8,
+    Int64,
+}
+impl IntegerSize {
+    pub const fn bit_width(self) -> u8 {
+        match self {
+            Self::Int8 => 8,
+            Self::Int64 => 64,
+        }
+    }
+    pub const fn is_byte_sized(self) -> bool {
+        matches!(self, IntegerSize::Int8)
+    }
+
+    pub fn name_str(self, signed: bool) -> &'static str {
+        match (self, signed) {
+            (IntegerSize::Int8, true) => "Int8",
+            (IntegerSize::Int8, false) => "UInt8",
+            (IntegerSize::Int64, true) => "Int64",
+            (IntegerSize::Int64, false) => "UInt64",
+        }
+    }
+}
 #[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
 pub enum IntegerKind {
-    Signed,
-    Unsigned,
-    Byte,
-    Var(usize),
+    Signed(IntegerSize),
+    Unsigned(IntegerSize),
 }
 impl IntegerKind {
-    pub const fn is_signed(self) -> bool {
-        matches!(self, Self::Signed)
+    pub const UINT8: Self = IntegerKind::Unsigned(IntegerSize::Int8);
+
+    pub fn name_str(self) -> &'static str {
+        match self {
+            IntegerKind::Signed(IntegerSize::Int8) => "Int8",
+            IntegerKind::Signed(IntegerSize::Int64) => "Int64",
+            IntegerKind::Unsigned(IntegerSize::Int8) => "UInt8",
+            IntegerKind::Unsigned(IntegerSize::Int64) => "UInt64",
+        }
     }
-    pub const fn is_byte(self) -> bool {
-        matches!(self, Self::Byte)
+    pub const fn min_value_scalar(self) -> i128 {
+        match self {
+            Self::Signed(IntegerSize::Int8) => i8::MIN as i128,
+            Self::Unsigned(IntegerSize::Int8) => u8::MIN as i128,
+            Self::Signed(IntegerSize::Int64) => i64::MIN as i128,
+            Self::Unsigned(IntegerSize::Int64) => u64::MIN as i128,
+        }
+    }
+    pub const fn max_value_scalar(self) -> i128 {
+        match self {
+            Self::Signed(size) => match size {
+                IntegerSize::Int64 => i64::MAX as i128,
+                IntegerSize::Int8 => i8::MAX as i128,
+            },
+            Self::Unsigned(size) => match size {
+                IntegerSize::Int8 => u8::MAX as i128,
+                IntegerSize::Int64 => u64::MAX as i128,
+            },
+        }
+    }
+    pub const fn size(self) -> IntegerSize {
+        let (Self::Signed(size) | Self::Unsigned(size)) = self;
+        size
+    }
+    pub const fn is_signed(self) -> bool {
+        matches!(self, Self::Signed(_))
+    }
+    pub const fn signed_and_size(self) -> (bool, IntegerSize) {
+        match self {
+            Self::Signed(size) => (true, size),
+            Self::Unsigned(size) => (false, size),
+        }
+    }
+}
+impl Display for IntegerKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.pad(self.name_str())
     }
 }
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
@@ -196,14 +262,20 @@ impl<'ctxt> Type<'ctxt> {
         };
         Some(ty)
     }
-    pub fn new_int(ctxt: CtxtRef<'ctxt>, kind: IntegerKind) -> Self {
+    pub fn new_integer(ctxt: CtxtRef<'ctxt>, kind: IntegerKind) -> Self {
         TypeKind::Int(kind).intern(ctxt)
+    }
+    pub fn new_integer_var(ctxt: CtxtRef<'ctxt>, var: usize) -> Self {
+        TypeKind::IntVar(var).intern(ctxt)
+    }
+    pub fn new_int(ctxt: CtxtRef<'ctxt>, size: IntegerSize) -> Self {
+        Self::new_integer(ctxt, IntegerKind::Signed(size))
     }
     pub fn new_bool(ctxt: CtxtRef<'ctxt>) -> Self {
         TypeKind::Bool.intern(ctxt)
     }
-    pub fn new_uint(ctxt: CtxtRef<'ctxt>) -> Self {
-        TypeKind::UINT.intern(ctxt)
+    pub fn new_uint(ctxt: CtxtRef<'ctxt>, size: IntegerSize) -> Self {
+        Self::new_integer(ctxt, IntegerKind::Unsigned(size))
     }
     pub fn new_char(ctxt: CtxtRef<'ctxt>) -> Self {
         TypeKind::Char.intern(ctxt)
@@ -217,14 +289,8 @@ impl<'ctxt> Type<'ctxt> {
     pub fn new_unit(ctxt: CtxtRef<'ctxt>) -> Self {
         TypeKind::UNIT.intern(ctxt)
     }
-    pub fn new_byte(ctxt: CtxtRef<'ctxt>) -> Self {
-        Self::new_int(ctxt, IntegerKind::Byte)
-    }
     pub fn is_bool(self) -> bool {
         matches!(self.0, TypeKind::Bool)
-    }
-    pub fn is_byte(self) -> bool {
-        matches!(self.0, TypeKind::Int(IntegerKind::Byte))
     }
     pub fn is_char(self) -> bool {
         matches!(self.0, TypeKind::Char)
@@ -311,6 +377,9 @@ impl<'ctxt> Type<'ctxt> {
     pub const fn is_integer(self) -> bool {
         matches!(self.0, TypeKind::Int(_))
     }
+    pub fn is_uint(self, size: IntegerSize) -> bool {
+        self.is_integer_kind(IntegerKind::Unsigned(size))
+    }
     pub fn is_integer_kind(self, kind: IntegerKind) -> bool {
         let &TypeKind::Int(int_kind) = self.0 else {
             return false;
@@ -345,6 +414,7 @@ pub enum TypeKind<'ctxt> {
     Infer(usize),
     Unknown,
     Int(IntegerKind),
+    IntVar(usize),
     Bool,
     Char,
     Never,
@@ -359,8 +429,6 @@ pub enum TypeKind<'ctxt> {
 }
 impl<'ctxt> TypeKind<'ctxt> {
     pub const UNIT: Self = Self::Tuple(Vec::new());
-    pub const UINT: Self = Self::Int(IntegerKind::Unsigned);
-    pub const INT: Self = Self::Int(IntegerKind::Signed);
     pub fn intern(self, ctxt: CtxtRef<'ctxt>) -> Type<'ctxt> {
         ctxt.intern_ty(self)
     }
@@ -428,7 +496,8 @@ impl<'ctxt> TypeKind<'ctxt> {
             | Self::Function(..)
             | Self::String
             | Self::Array(_)
-            | Self::Uninit(_) => false,
+            | Self::Uninit(_)
+            | Self::IntVar(_) => false,
             Self::Never => true,
             Self::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
             Self::Box(ty) => ty.is_uninhabited(ctxt),
@@ -477,18 +546,10 @@ impl Display for TypeKind<'_> {
             }
             TypeKind::Char => f.pad("char"),
             TypeKind::Bool => f.pad("bool"),
-            TypeKind::Int(kind) => write!(
-                f,
-                "{}",
-                match kind {
-                    IntegerKind::Signed => Symbol::INT_TYPE_NAME,
-                    IntegerKind::Unsigned => Symbol::UINT_TYPE_NAME,
-                    IntegerKind::Byte => return f.pad("byte"),
-                    IntegerKind::Var(_) => return f.pad("{integer}"),
-                }
-            ),
+            TypeKind::Int(kind) => write!(f, "{}", kind),
             TypeKind::Unknown => f.pad("{unknown}"),
             TypeKind::Infer(_) => f.pad("_"),
+            TypeKind::IntVar(_) => f.pad("{integer}"),
             &TypeKind::Param(name, _) => write!(f, "{}", name),
             TypeKind::Function(FunctionSig {
                 params,
@@ -525,6 +586,7 @@ pub trait TypeMap<'ctxt> {
             | TypeKind::Unknown
             | TypeKind::Infer(_)
             | TypeKind::Param(..)
+            | TypeKind::IntVar(_)
             | TypeKind::Never => Ok(ty),
             TypeKind::Function(function_type) => Ok(self
                 .map_function_type(function_type.clone())?

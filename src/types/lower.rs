@@ -3,7 +3,7 @@ use crate::def_ids::DefId;
 use crate::resolved_ast::{self as res, TypeName};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
-use crate::types::{GenericArg, GenericArgs, GenericKind, IntegerKind, Type};
+use crate::types::{GenericArg, GenericArgs, GenericKind, IntegerSize, Type};
 use std::cell::RefCell;
 pub struct Lower<'a, 'ctxt> {
     ctxt: CtxtRef<'ctxt>,
@@ -106,21 +106,21 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
                 let args = self.lower_generic_args(id, loc, args);
                 Type::named(self.ctxt, id, self.ctxt.expect_ident(id).symbol, args)
             }
-            TypeName::Byte => {
+            TypeName::UInt8 => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                Type::new_byte(self.ctxt)
+                Type::new_uint(self.ctxt, IntegerSize::Int8)
             }
             TypeName::Bool => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::new_bool(self.ctxt)
             }
-            TypeName::Int => {
+            TypeName::Int64 => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                Type::new_int(self.ctxt, IntegerKind::Signed)
+                Type::new_int(self.ctxt, IntegerSize::Int64)
             }
-            TypeName::Uint => {
+            TypeName::UInt64 => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                Type::new_uint(self.ctxt)
+                Type::new_uint(self.ctxt, IntegerSize::Int64)
             }
             TypeName::Char => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);

@@ -31,26 +31,26 @@ pub(super) struct ModuleInfo {
 }
 #[derive(Clone, Copy, Debug)]
 enum TypeAlias {
-    Byte,
+    UInt8,
     Box,
     ArrayList,
     Never,
     RawArray,
     Uninit,
-    Int,
-    Uint,
+    Int64,
+    UInt64,
 }
 impl TypeAlias {
     fn into_type_name(self) -> res::TypeName {
         match self {
             TypeAlias::Box => res::TypeName::Box,
-            TypeAlias::Byte => res::TypeName::Byte,
+            TypeAlias::UInt8 => res::TypeName::UInt8,
             TypeAlias::ArrayList => res::TypeName::Array,
             TypeAlias::Never => res::TypeName::Never,
             TypeAlias::RawArray => res::TypeName::RawArray,
             TypeAlias::Uninit => res::TypeName::Uninit,
-            TypeAlias::Int => res::TypeName::Int,
-            TypeAlias::Uint => res::TypeName::Uint,
+            TypeAlias::Int64 => res::TypeName::Int64,
+            TypeAlias::UInt64 => res::TypeName::UInt64,
         }
     }
 }
@@ -120,9 +120,9 @@ pub struct Resolve<'info> {
 impl<'info> Resolve<'info> {
     fn new(config: Config, results: &'info DeclareResults) -> Self {
         let env = Scope::from_iter([
-            (Symbol::intern("byte"), Res::TypeAlias(TypeAlias::Byte)),
-            (Symbol::INT_TYPE_NAME, Res::TypeAlias(TypeAlias::Int)),
-            (Symbol::UINT_TYPE_NAME, Res::TypeAlias(TypeAlias::Uint)),
+            (Symbol::intern("UInt8"), Res::TypeAlias(TypeAlias::UInt8)),
+            (Symbol::INT_TYPE_NAME, Res::TypeAlias(TypeAlias::Int64)),
+            (Symbol::UINT_TYPE_NAME, Res::TypeAlias(TypeAlias::UInt64)),
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),
             (

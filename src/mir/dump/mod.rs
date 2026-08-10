@@ -225,9 +225,11 @@ impl<'ctxt> MirDump<'ctxt> {
         }
         match ty {
             types::TypeKind::String => unreachable!(),
+
             types::TypeKind::Infer(_)
             | types::TypeKind::Param(..)
             | types::TypeKind::Unknown
+            | types::TypeKind::IntVar(_)
             | types::TypeKind::Uninit(_) => {
                 write!(self.output, "unknown of '{}'", ty)
             }

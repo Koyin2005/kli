@@ -9,7 +9,7 @@ use crate::{
         build::Builder,
     },
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
-    types::{IntegerKind, Type},
+    types::{IntegerKind, IntegerSize, Type},
 };
 pub(super) enum BuiltinResult<'ctxt> {
     Rvalue(Rvalue<'ctxt>),
@@ -95,7 +95,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let index = self.expr_into_temp(index);
                 let len = self.assign_to_temp(
                     place.loc,
-                    Type::new_uint(self.ctxt),
+                    Type::new_uint(self.ctxt, IntegerSize::Int64),
                     Rvalue::Len(base.clone()),
                 );
                 let in_bounds = self.assign_to_temp(
@@ -352,18 +352,29 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             Builtin::ZeroExtend => {
                 let [operand] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Cast(
-                    if args[0].ty.is_byte() && ty.is_char() {
-                        mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendByteToChar)
-                    } else if let Some(kind) = ty.as_integer()
-                        && args[0].ty.is_byte()
-                    {
-                        mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendByteTo(kind))
-                    } else if args[0].ty.is_char() {
-                        println!("{}", ty);
-                        mir::CastKind::IntegerCast(mir::IntegerCast::ZeroExtendChar)
-                    } else {
-                        unreachable!("cannot cast this '{}' at {:?}", ty, args[0].loc)
-                    },
+                    mir::CastKind::IntegerCast(
+                        if args[0].ty.is_char() && ty.is_uint(IntegerSize::Int64) {
+                            mir::IntegerCast::ZeroExtendCharToUint64
+                        } else if let Some(IntegerKind::Unsigned(IntegerSize::Int8)) =
+                            args[0].ty.as_integer()
+                            && ty.is_char()
+                        {
+                            mir::IntegerCast::ZeroExtendUInt8ToChar
+                        } else if let Some(from) = args[0].ty.as_integer()
+                            && let Some(to) = ty.as_integer()
+                        {
+                            match (from, to) {
+                                (_, IntegerKind::Signed(to_size)) => {
+                                    mir::IntegerCast::SignExtend(to_size)
+                                }
+                                (_, IntegerKind::Unsigned(to_size)) => {
+                                    mir::IntegerCast::ZeroExtend(to_size)
+                                }
+                            }
+                        } else {
+                            unreachable!("invalid zero extension")
+                        },
+                    ),
                     operand,
                 ))
             }
@@ -426,12 +437,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             )),
             Builtin::IntMaxValue => {
                 let kind = ty.as_integer().unwrap();
-                let value = match kind {
-                    IntegerKind::Signed => i64::MAX as i128,
-                    IntegerKind::Unsigned => u64::MAX as i128,
-                    IntegerKind::Byte => u8::MAX as i128,
-                    IntegerKind::Var(_) => unreachable!(),
-                };
+                let value = kind.max_value_scalar();
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::integer(
                     self.ctxt, kind, value,
                 ))))
@@ -509,16 +515,20 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                             mir::AssertKind::DivideByZero,
                         );
 
-                        if matches!(kind, IntegerKind::Signed) {
+                        if let IntegerKind::Signed(size) = kind {
                             let is_left_min = self.assign_equals(
                                 expr.loc,
                                 left_operand.clone(),
-                                Operand::Constant(Constant::int(self.ctxt, ConstValue::MIN_INT)),
+                                Operand::Constant(Constant::integer(
+                                    self.ctxt,
+                                    kind,
+                                    kind.min_value_scalar(),
+                                )),
                             );
                             let is_right_neg_1 = self.assign_equals(
                                 expr.loc,
                                 left_operand.clone(),
-                                Operand::Constant(Constant::int(self.ctxt, -1)),
+                                Operand::Constant(Constant::int(self.ctxt, size, -1)),
                             );
                             let overflow = self.assign_binary_result(
                                 expr.loc,

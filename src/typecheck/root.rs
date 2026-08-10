@@ -133,25 +133,28 @@ impl<'ctxt> RootCtxt<'ctxt> {
         let integer_ty = match lit.kind {
             res::IntegerLiteralKind::Implicit => {
                 if let Some(kind) = hint.and_then(|hint| hint.as_integer()) {
-                    kind
+                    Type::new_integer(self.ctxt(), kind)
                 } else {
-                    types::IntegerKind::Var(self.infer.borrow_mut().fresh_ty(loc))
+                    Type::new_integer_var(self.ctxt(), self.infer.borrow_mut().fresh_ty(loc))
                 }
             }
-            res::IntegerLiteralKind::Signed => types::IntegerKind::Signed,
-            res::IntegerLiteralKind::Unsigned => types::IntegerKind::Unsigned,
+            res::IntegerLiteralKind::Signed => {
+                Type::new_int(self.ctxt(), types::IntegerSize::Int64)
+            }
+            res::IntegerLiteralKind::Unsigned => {
+                Type::new_uint(self.ctxt(), types::IntegerSize::Int64)
+            }
         };
-        let ty = Type::new_int(self.ctxt(), integer_ty);
         let value = lit.value;
-        if let types::IntegerKind::Signed = integer_ty
-            && value > i64::MAX as u64
+        if let TypeKind::Int(int) = integer_ty.kind()
+            && (value as i128) > int.max_value_scalar()
         {
             self.ctxt.diag().add_diagnostic(
-                format!("Integer literal '{value}' too large for '{}'", ty),
+                format!("Integer literal '{value}' too large for '{}'", integer_ty),
                 loc,
             );
         }
-        (ty, value)
+        (integer_ty, value)
     }
     pub(super) fn iterator_element(
         &self,
