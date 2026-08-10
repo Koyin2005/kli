@@ -43,9 +43,11 @@ fun utf8_len(c : char) -> UInt64 =
         end
     end
 
-fun char_to_uint(c : char) -> UInt64 = 
-    # This is the definitions of hack
-    builtins.zero_extend(c)
+fun char_to_uint32(c : char) -> UInt32 = 
+    unsafe builtins.transmute(c) end
+
+fun char_to_uint64(c : char) -> UInt64 = 
+    builtins.zero_extend(char_to_uint32(c))
 
 @opaque
 type CharIter =  {    
