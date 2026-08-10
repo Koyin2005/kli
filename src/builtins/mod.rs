@@ -9,13 +9,15 @@ pub enum IntegerBuiltin {
     OverflowingAdd,
     WrappingSub,
     OverflowingSub,
-    ZeroExtend,
+    Truncate,
+    Widen,
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Builtin {
     // Reinterpretation
     Transmute,
+    Bitcast,
 
     // Allocation
     BoxAlloc,
@@ -44,9 +46,11 @@ impl Builtin {
     pub const fn name(self) -> &'static str {
         match self {
             Builtin::Transmute => "transmute",
+            Builtin::Bitcast => "bitcast",
             Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd) => "wrapping_add",
             Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingAdd) => "overflowing_add",
-            Builtin::IntegerBuiltin(IntegerBuiltin::ZeroExtend) => "zero_extend",
+            Builtin::IntegerBuiltin(IntegerBuiltin::Widen) => "widen",
+            Builtin::IntegerBuiltin(IntegerBuiltin::Truncate) => "trunc",
             Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub) => "overflowing_sub",
             Builtin::IntegerBuiltin(IntegerBuiltin::WrappingSub) => "wrapping_sub",
             Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue) => "int_max_value",
@@ -82,7 +86,9 @@ impl Builtin {
             Symbol::OVERFLOWING_SUB => {
                 Some(Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub))
             }
-            Symbol::ZERO_EXTEND => Some(Builtin::IntegerBuiltin(IntegerBuiltin::ZeroExtend)),
+            Symbol::WIDEN => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Widen)),
+            Symbol::TRUNC => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Truncate)),
+            Symbol::BITCAST => Some(Builtin::Bitcast),
             Symbol::INT_MAX_VALUE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue)),
             Symbol::ARRAY_REPEAT => Some(Builtin::ArrayRepeat),
             Symbol::RAW_ARRAY_ALLOC => Some(Builtin::RawArrayAlloc),

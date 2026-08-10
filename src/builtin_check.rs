@@ -4,7 +4,7 @@ use crate::{
     src_loc::SrcLoc,
     typed_ast::{ExprKind, Function},
     typed_ast_visitor::{Visitor, walk_expr},
-    types::{GenericArg, GenericArgsRef, IntegerKind},
+    types::{GenericArg, GenericArgsRef, IntegerKind, IntegerSize, TypeKind},
     unsafety,
 };
 
@@ -31,18 +31,29 @@ impl<'ctxt> BuiltinCheck<'ctxt> {
         builtin: Builtin,
         generic_args: GenericArgsRef<'_, 'ctxt>,
     ) {
-        self.errored |= match builtin {
+        let error = match builtin {
+            Builtin::Bitcast => {
+                let [from, to] = generic_args.as_array().unwrap().map(GenericArg::expect_ty);
+                let is_valid_bitcast = matches!(
+                    (from.kind(), to.kind()),
+                    (
+                        TypeKind::Bool,
+                        TypeKind::Int(
+                            IntegerKind::Signed(IntegerSize::Int8)
+                                | IntegerKind::Unsigned(IntegerSize::Int8),
+                        ),
+                    ) | (TypeKind::Char, TypeKind::Int(IntegerKind::UINT32))
+                ) || from
+                    .as_integer()
+                    .and_then(|from| to.as_integer().map(|to| (from, to)))
+                    .is_some_and(|(from, to)| from.size() == to.size());
+
+                (!is_valid_bitcast).then(|| format!("cannot bitcast from '{}' to '{}'", from, to))
+            }
             Builtin::Transmute => {
                 let [from, to] = generic_args.as_array().unwrap().map(GenericArg::expect_ty);
-                if !unsafety::transmutable(self.ctxt, from, to) {
-                    self.ctxt.diag().add_diagnostic(
-                        format!("cannot transmute from '{}' to '{}'", from, to),
-                        loc,
-                    );
-                    true
-                } else {
-                    false
-                }
+                let valid_transmute = unsafety::transmutable(self.ctxt, from, to);
+                (!valid_transmute).then(|| format!("cannot transmute from '{}' to '{}'", from, to))
             }
             Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
                 IntegerBuiltin::IntMaxValue
@@ -53,46 +64,59 @@ impl<'ctxt> BuiltinCheck<'ctxt> {
                 | IntegerBuiltin::WrappingAdd
                 | IntegerBuiltin::WrappingSub => {
                     let ty = generic_args[0].expect_ty();
-                    if !ty.is_integer() {
-                        self.ctxt.diag().add_diagnostic(
-                            format!(
-                                "cannot call '{}' with non-integer type '{}'",
-                                builtin.name(),
-                                ty
-                            ),
-                            loc,
-                        );
-                        true
-                    } else {
-                        false
-                    }
+                    (!ty.is_integer()).then(|| {
+                        format!(
+                            "cannot call '{}' with non-integer type '{}'",
+                            builtin.name(),
+                            ty
+                        )
+                    })
                 }
-                IntegerBuiltin::ZeroExtend => {
+                IntegerBuiltin::Widen => {
                     let [from, to] = generic_args.as_array().unwrap().map(GenericArg::expect_ty);
                     let from_int = from.as_integer();
                     let to_int = to.as_integer();
-                    match (from_int, to_int) {
+
+                    let can_widen = match (from_int, to_int) {
                         (
                             Some(IntegerKind::Signed(from_size)),
                             Some(IntegerKind::Signed(to_size)),
-                        ) if from_size.bit_width() < to_size.bit_width() => false,
+                        ) => from_size.bit_width() < to_size.bit_width(),
                         (
                             Some(IntegerKind::Unsigned(from_size)),
                             Some(IntegerKind::Unsigned(to_size)),
-                        ) if from_size.bit_width() < to_size.bit_width() => false,
-                        (Some(IntegerKind::UINT8), None) if to.is_char() => false,
-                        _ => {
-                            self.ctxt.diag().add_diagnostic(
-                                format!("cannot zero extend '{}' to '{}'", from, to),
-                                loc,
-                            );
-                            true
-                        }
-                    }
+                        ) => from_size.bit_width() < to_size.bit_width(),
+                        (Some(IntegerKind::UINT8), None) => to.is_char(),
+                        _ => false,
+                    };
+
+                    (!can_widen).then(|| format!("cannot widen '{}' to '{}'", from, to))
+                }
+                IntegerBuiltin::Truncate => {
+                    let [from, to] = generic_args.as_array().unwrap().map(GenericArg::expect_ty);
+                    let from_int = from.as_integer();
+                    let to_int = to.as_integer();
+                    let valid_truncate = match (from_int, to_int) {
+                        (
+                            Some(IntegerKind::Signed(from_size)),
+                            Some(IntegerKind::Signed(to_size)),
+                        ) => from_size.bit_width() > to_size.bit_width(),
+                        (
+                            Some(IntegerKind::Unsigned(from_size)),
+                            Some(IntegerKind::Unsigned(to_size)),
+                        ) => from_size.bit_width() > to_size.bit_width(),
+                        (None, Some(IntegerKind::UINT8)) => from.is_char(),
+                        _ => false,
+                    };
+                    (!valid_truncate).then(|| format!("cannot truncate '{}' to '{}'", from, to))
                 }
             },
-            _ => false,
+            _ => None,
         };
+        if let Some(error) = error {
+            self.ctxt.diag().add_diagnostic(error, loc);
+            self.errored = true;
+        }
     }
 }
 

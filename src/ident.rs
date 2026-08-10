@@ -47,7 +47,9 @@ impl Symbol {
         "overflowing_add",
         "wrapping_sub",
         "overflowing_sub",
-        "zero_extend",
+        "widen",
+        "trunc",
+        "bitcast",
         "array_repeat",
         "raw_array_alloc",
         "array_set_unchecked",
@@ -117,7 +119,9 @@ impl Symbol {
     pub const OVERFLOWING_ADD: Self = Self::expect_symbol("overflowing_add");
     pub const WRAPPING_SUB: Self = Self::expect_symbol("wrapping_sub");
     pub const OVERFLOWING_SUB: Self = Self::expect_symbol("overflowing_sub");
-    pub const ZERO_EXTEND: Self = Self::expect_symbol("zero_extend");
+    pub const WIDEN: Self = Self::expect_symbol("widen");
+    pub const TRUNC: Self = Self::expect_symbol("trunc");
+    pub const BITCAST: Self = Self::expect_symbol("bitcast");
     pub const ARRAY_REPEAT: Self = Self::expect_symbol("array_repeat");
     pub const RAW_ARRAY_ALLOC: Self = Self::expect_symbol("raw_array_alloc");
     pub const ARRAY_SET_UNCHECKED: Self = Self::expect_symbol("array_set_unchecked");

@@ -280,6 +280,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::Bitcast => {
+                let [arg] = operands.try_into().unwrap();
+                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute(ty), arg))
+            }
+            Builtin::IntegerBuiltin(IntegerBuiltin::Truncate) => todo!("truncate"),
             Builtin::IntegerBuiltin(IntegerBuiltin::ShiftLeft) => {
                 let [first, second] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Self::binary_op_rvalue(
@@ -341,7 +346,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let ty = ty.as_array().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Repeat { ty, value, count })
             }
-            Builtin::IntegerBuiltin(IntegerBuiltin::ZeroExtend) => {
+            Builtin::IntegerBuiltin(IntegerBuiltin::Widen) => {
                 let [operand] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Cast(
                     mir::CastKind::IntegerCast(

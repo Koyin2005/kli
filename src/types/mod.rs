@@ -193,6 +193,7 @@ pub enum IntegerKind {
 }
 impl IntegerKind {
     pub const UINT8: Self = IntegerKind::Unsigned(IntegerSize::Int8);
+    pub const UINT32: Self = IntegerKind::Unsigned(IntegerSize::Int32);
 
     pub fn name_str(self) -> &'static str {
         match self {

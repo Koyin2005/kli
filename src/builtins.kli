@@ -26,7 +26,13 @@ fun wrapping_sub[T](x : T, y : T) -> T;
 fun overflowing_sub[T](x : T, y : T) -> (T, bool);
 
 @builtin
-fun zero_extend[T,U](x : T) -> U;
+fun widen[T,U](x : T) -> U;
+
+@builtin
+fun truncate[T,U](x : T) -> U;
+
+@builtin
+fun bitcast[T,U](x : T) -> U;
 
 @builtin
 fun array_repeat[T](value : T, count : UInt64) -> array[T];
