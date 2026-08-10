@@ -49,6 +49,10 @@ fun char_to_uint32(c : char) -> UInt32 =
 fun char_to_uint64(c : char) -> UInt64 = 
     builtins.zero_extend(char_to_uint32(c))
 
+fun uint8_to_char(value : UInt8) -> char = 
+    builtins.zero_extend(value)
+
+
 @opaque
 type CharIter =  {    
     string_bytes : array[UInt8],
@@ -76,8 +80,9 @@ fun next_char(current_index : UInt64, bytes : array[UInt8]) -> Option[(UInt64,ch
     end;
     current_index = current_index + 1;
     case first_byte < (128:UInt8) of 
-    | true -> return Option.Some((current_index,builtins.zero_extend(first_byte)))
+    | true -> return Option.Some((current_index,uint8_to_char(first_byte)))
     | false -> ()
     end;
+
     Option.None
 end
