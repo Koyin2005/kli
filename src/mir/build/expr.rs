@@ -280,14 +280,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
-            Builtin::BitwiseOr => {
-                let [first, second] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                    mir::BinaryOp::BitwiseOr,
-                    first,
-                    second,
-                ))
-            }
             Builtin::ShiftLeft => {
                 let [first, second] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Self::binary_op_rvalue(

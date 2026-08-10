@@ -69,9 +69,6 @@ fun uninit_new[T](value : T) -> uninit[T];
 fun read_line() -> string;
 
 @builtin
-fun bitwise_or[T](x : T, y : T) -> T;
-
-@builtin
 fun shift_left[T](x : T, y : T) -> T;
 
 @builtin
