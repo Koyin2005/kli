@@ -506,8 +506,11 @@ impl Parser {
                 let pattern = self.parse_pattern()?;
                 let _ = self.expect(&TokenKind::In);
                 let start = self.parse_expr()?;
-                self.expect(&TokenKind::DotDot)?;
-                let end = self.parse_expr()?;
+                let end = if self.matches_token(&TokenKind::DotDot) {
+                    Some(self.parse_expr()?)
+                } else {
+                    None
+                };
                 let body = {
                     let loc = self.current_loc();
                     self.parse_block_expr(loc)?
@@ -517,7 +520,7 @@ impl Parser {
                     kind: ExprKind::For(
                         Box::new(pattern),
                         Box::new(start),
-                        Box::new(end),
+                        end.map(Box::new),
                         Box::new(body),
                     ),
                 })

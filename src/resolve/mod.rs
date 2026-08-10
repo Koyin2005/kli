@@ -752,8 +752,32 @@ impl<'info> Resolve<'info> {
                 )
             }
             ast::ExprKind::For(pattern, start, end, body) => {
+                /*
+                   for i in start..end body
+
+                   do
+                       let iter_var = start;
+                       while iter_var < end do
+                           let i = iter_var;
+                           body;
+                           iter_var = iter_var +& 1;
+                       end
+                   end
+
+                   for i in option_expr body
+
+                   do
+                       let iter_var = true;
+                       while iter_var do
+                           case option_expr do
+                           | .Some(i) -> body
+                           | .None -> iter_var = false
+                           end
+                       end
+                   end
+                */
                 let start = self.resolve_expr(*start);
-                let end = self.resolve_expr(*end);
+                let end = end.map(|end| self.resolve_expr(*end));
                 self.in_scope(|this| {
                     let iter_var = this.declare_var(Symbol::ITER);
                     let var_ident = Ident {
@@ -764,11 +788,23 @@ impl<'info> Resolve<'info> {
                         loc,
                         kind: res::ExprKind::Var(res::Var(var_ident.symbol, iter_var)),
                     };
+
+                    let (start_value, iter_value) = if end.is_some() {
+                        (start, None)
+                    } else {
+                        (
+                            res::Expr {
+                                loc: start.loc,
+                                kind: res::ExprKind::Bool(true),
+                            },
+                            Some(start),
+                        )
+                    };
                     let setup_stmts = vec![res::Stmt {
-                        loc: start.loc,
+                        loc: start_value.loc,
                         kind: res::StmtKind::Let(Box::new(res::LetBinding {
                             pattern: res::Pattern {
-                                loc: start.loc,
+                                loc: start_value.loc,
                                 kind: res::PatternKind::Binding(
                                     ast::Mutable::Mutable,
                                     var_ident,
@@ -776,91 +812,138 @@ impl<'info> Resolve<'info> {
                                 ),
                             },
                             ty: None,
-                            value: start,
+                            value: start_value,
                         })),
                     }]
                     .into_boxed_slice();
-                    let condition = res::Expr {
-                        loc: var_ident.loc,
-                        kind: res::ExprKind::Binary(
-                            ast::BinaryOp::Lesser,
-                            Box::new(iter_var_value(var_ident.loc)),
-                            Box::new(end),
-                        ),
+
+                    let range_iter = end.is_some();
+                    let condition = if let Some(end) = end {
+                        res::Expr {
+                            loc: var_ident.loc,
+                            kind: res::ExprKind::Binary(
+                                ast::BinaryOp::Lesser,
+                                Box::new(iter_var_value(var_ident.loc)),
+                                Box::new(end),
+                            ),
+                        }
+                    } else {
+                        iter_var_value(var_ident.loc)
                     };
                     let body_loc;
                     let pattern = this.resolve_pattern(*pattern);
-                    let pat_loc = pattern.loc;
-                    let inner_body_stmts = vec![
-                        //Assign to pattern
-                        res::Stmt {
-                            loc: var_ident.loc,
-                            kind: res::StmtKind::Let(Box::new(res::LetBinding {
-                                pattern,
-                                ty: None,
-                                value: iter_var_value(pat_loc),
-                            })),
-                        },
-                        //Actual loop body
-                        {
-                            let body = this.resolve_expr(*body);
-                            body_loc = body.loc;
+
+                    let body = if range_iter {
+                        let pat_loc = pattern.loc;
+                        let inner_body_stmts = vec![
+                            //Assign to pattern
                             res::Stmt {
-                                loc: body.loc,
-                                kind: res::StmtKind::Expr(body),
-                            }
-                        },
-                    ]
-                    .into_boxed_slice();
+                                loc: var_ident.loc,
+                                kind: res::StmtKind::Let(Box::new(res::LetBinding {
+                                    pattern,
+                                    ty: None,
+                                    value: iter_var_value(pat_loc),
+                                })),
+                            },
+                            //Actual loop body
+                            {
+                                let body = this.resolve_expr(*body);
+                                body_loc = body.loc;
+                                res::Stmt {
+                                    loc: body.loc,
+                                    kind: res::StmtKind::Expr(body),
+                                }
+                            },
+                        ]
+                        .into_boxed_slice();
 
-                    let wrapping_add_function = res::Expr {
-                        loc: body_loc,
-                        kind: this.resolve_path_as_expr(
-                            body_loc,
-                            Path::new(vec![
-                                Ident::new(Symbol::BUILTINS, body_loc),
-                                Ident::new(Symbol::WRAPPING_ADD, body_loc),
-                            ]),
-                            None,
-                        ),
-                    };
+                        let wrapping_add_function = res::Expr {
+                            loc: body_loc,
+                            kind: this.resolve_path_as_expr(
+                                body_loc,
+                                Path::new(vec![
+                                    Ident::new(Symbol::BUILTINS, body_loc),
+                                    Ident::new(Symbol::WRAPPING_ADD, body_loc),
+                                ]),
+                                None,
+                            ),
+                        };
 
-                    let increment = res::Expr {
-                        loc: body_loc,
-                        kind: res::ExprKind::Assign(
-                            Box::new(iter_var_value(body_loc)),
-                            Box::new(res::Expr {
-                                loc: body_loc,
-                                kind: res::ExprKind::Call(
-                                    Box::new(wrapping_add_function),
-                                    vec![
-                                        iter_var_value(body_loc),
-                                        res::Expr {
+                        let increment = res::Expr {
+                            loc: body_loc,
+                            kind: res::ExprKind::Assign(
+                                Box::new(iter_var_value(body_loc)),
+                                Box::new(res::Expr {
+                                    loc: body_loc,
+                                    kind: res::ExprKind::Call(
+                                        Box::new(wrapping_add_function),
+                                        vec![
+                                            iter_var_value(body_loc),
+                                            res::Expr {
+                                                loc: body_loc,
+                                                kind: res::ExprKind::Int(res::IntegerLiteral {
+                                                    value: 1,
+                                                    kind: res::IntegerLiteralKind::Implicit,
+                                                }),
+                                            },
+                                        ]
+                                        .into_boxed_slice(),
+                                    ),
+                                }),
+                            ),
+                        };
+                        res::Expr {
+                            loc: body_loc,
+                            kind: res::ExprKind::Block(Box::new(res::BlockBody {
+                                stmts: inner_body_stmts,
+                                expr: Box::new(increment),
+                            })),
+                        }
+                    } else {
+                        body_loc = body.loc;
+                        res::Expr {
+                            loc: body_loc,
+                            kind: res::ExprKind::Case(
+                                Box::new(iter_value.unwrap()),
+                                vec![
+                                    res::CaseArm {
+                                        pattern: res::Pattern {
                                             loc: body_loc,
-                                            kind: res::ExprKind::Int(res::IntegerLiteral {
-                                                value: 1,
-                                                kind: res::IntegerLiteralKind::Implicit,
-                                            }),
+                                            kind: res::PatternKind::Case(
+                                                Ident::new(Symbol::intern("Some"), body_loc),
+                                                Some(Box::new(pattern)),
+                                            ),
                                         },
-                                    ]
-                                    .into_boxed_slice(),
-                                ),
-                            }),
-                        ),
+                                        body: this.resolve_expr(*body),
+                                    },
+                                    res::CaseArm {
+                                        pattern: res::Pattern {
+                                            loc: body_loc,
+                                            kind: res::PatternKind::Case(
+                                                Ident::new(Symbol::intern("None"), body_loc),
+                                                None,
+                                            ),
+                                        },
+                                        body: res::Expr {
+                                            loc,
+                                            kind: res::ExprKind::Assign(
+                                                Box::new(iter_var_value(body_loc)),
+                                                Box::new(res::Expr {
+                                                    loc,
+                                                    kind: res::ExprKind::Bool(false),
+                                                }),
+                                            ),
+                                        },
+                                    },
+                                ]
+                                .into_boxed_slice(),
+                            ),
+                        }
                     };
                     res::ExprKind::Block(Box::new(res::BlockBody {
                         stmts: setup_stmts,
                         expr: Box::new(res::Expr {
-                            kind: res::ExprKind::While(
-                                Box::new(condition),
-                                Box::new(res::Expr {
-                                    loc: body_loc,
-                                    kind: res::ExprKind::Block(Box::new(res::BlockBody {
-                                        stmts: inner_body_stmts,
-                                        expr: Box::new(increment),
-                                    })),
-                                }),
-                            ),
+                            kind: res::ExprKind::While(Box::new(condition), Box::new(body)),
                             loc,
                         }),
                     }))
