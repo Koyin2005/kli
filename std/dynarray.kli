@@ -7,7 +7,7 @@ import std.panicking
 @opaque
 type DynArrayInner[T] = {
     buf : raw_array[T],
-    len : UInt
+    len : UInt64
 }
 @opaque
 type DynArray[T] = {
@@ -34,7 +34,7 @@ fun from_array[T](arr : array[T]) -> DynArray[T] = do
 
 end
 
-fun with_capacity[T](cap : UInt) -> DynArray[T] = DynArray {
+fun with_capacity[T](cap : UInt64) -> DynArray[T] = DynArray {
     inner = boxed.alloc(
         DynArrayInner{
             buf = builtins.raw_array_alloc[T](cap),
@@ -42,7 +42,7 @@ fun with_capacity[T](cap : UInt) -> DynArray[T] = DynArray {
         })
     }
 
-fun ensure_capacity[T](arr : DynArray[T], target_cap : UInt) -> () = do
+fun ensure_capacity[T](arr : DynArray[T], target_cap : UInt64) -> () = do
     let current_cap = builtins.array_len(arr.inner^.buf);
     let {buf = old_buf, len = len} = arr.inner^;
     case target_cap < current_cap of 
@@ -59,7 +59,7 @@ fun ensure_capacity[T](arr : DynArray[T], target_cap : UInt) -> () = do
     end
 end
 
-fun reserve[T](arr : DynArray[T], extra : UInt) -> () = do
+fun reserve[T](arr : DynArray[T], extra : UInt64) -> () = do
     case extra of 
     | 0 -> ()
     | n -> ensure_capacity(arr,arr.inner^.len + extra)
@@ -76,7 +76,7 @@ fun clear[T](this : DynArray[T]) -> () = do
     end
 end
 
-fun set[T](arr : DynArray[T], index : UInt, element : T) -> () = do
+fun set[T](arr : DynArray[T], index : UInt64, element : T) -> () = do
     case index < arr.inner^.len of
     | false -> arrays.index_out_bounds()
     | true -> 
@@ -86,7 +86,7 @@ fun set[T](arr : DynArray[T], index : UInt, element : T) -> () = do
     end
 end
 
-fun get[T](arr : DynArray[T], index : UInt) -> T = do
+fun get[T](arr : DynArray[T], index : UInt64) -> T = do
     case index < arr.inner^.len of
     | false -> arrays.index_out_bounds()
     | true -> 
@@ -118,7 +118,7 @@ fun pop[T](this : DynArray[T]) -> Option[T] = do
     end
 end
 
-fun insert[T](arr : DynArray[T], index : UInt, value : T) -> () = do
+fun insert[T](arr : DynArray[T], index : UInt64, value : T) -> () = do
     let old_len = arr.inner^.len;
     case index > old_len  of
     | true -> arrays.index_out_bounds()
@@ -134,7 +134,7 @@ fun insert[T](arr : DynArray[T], index : UInt, value : T) -> () = do
 end
 
 
-fun remove[T](arr : DynArray[T], index : UInt) -> T = do
+fun remove[T](arr : DynArray[T], index : UInt64) -> T = do
     let old_len = arr.inner^.len;
     case index > old_len  of
     | true -> arrays.index_out_bounds()
@@ -168,9 +168,9 @@ fun append_array[T](this : DynArray[T], arr : array[T]) -> () = do
     end
 end
 
-fun len[T](arr : DynArray[T]) -> UInt = arr.inner^.len
+fun len[T](arr : DynArray[T]) -> UInt64 = arr.inner^.len
 
-fun capacity[T](arr : DynArray[T]) -> UInt = builtins.array_len(arr.inner^.buf)
+fun capacity[T](arr : DynArray[T]) -> UInt64 = builtins.array_len(arr.inner^.buf)
 
 fun into_array[T](arr : DynArray[T]) -> array[T] = do
     case arr.inner^.len of

@@ -4,7 +4,7 @@ import int.neg
 
 fun print_string(value : string) -> () = builtins.print_string(value)
 
-fun print_uint(value : UInt) -> () = do
+fun print_uint(value : UInt64) -> () = do
     case value of 
     | 0 -> 
         do 
@@ -45,7 +45,7 @@ fun print_uint(value : UInt) -> () = do
 end
 
 
-fun print_int(value : Int) -> () = do
+fun print_int(value : Int64) -> () = do
     
     print_uint(int.strict_cast_uint(case value < 0 of
     | true -> do 

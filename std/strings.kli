@@ -29,7 +29,7 @@ fun chars(s : string) -> CharIter = CharIter {
     index = boxed.alloc(0)
 }
 
-fun utf8_len(c : char) -> UInt = 
+fun utf8_len(c : char) -> UInt64 = 
     case c < '\u00FF' of
     | true -> 1
     | _ -> 
@@ -43,14 +43,14 @@ fun utf8_len(c : char) -> UInt =
         end
     end
 
-fun char_to_uint(c : char) -> UInt = 
+fun char_to_uint(c : char) -> UInt64 = 
     # This is the definitions of hack
     builtins.zero_extend(c)
 
 @opaque
 type CharIter =  {    
     string_bytes : array[UInt8],
-    index : Box[UInt]
+    index : Box[UInt64]
 }
 
 fun next(iter : CharIter) -> Option[char] = do
@@ -67,7 +67,7 @@ fun next(iter : CharIter) -> Option[char] = do
 end
 
 
-fun next_char(current_index : UInt, bytes : array[UInt8]) -> Option[(UInt,char)] = do
+fun next_char(current_index : UInt64, bytes : array[UInt8]) -> Option[(UInt64,char)] = do
     let first_byte = case current_index < builtins.array_len(bytes) of 
     | false -> return Option.None
     | true -> bytes.[current_index]

@@ -4,14 +4,14 @@ fun not(x : bool) -> bool =
     | false -> true 
     end
 
-fun as_int(x : bool) -> Int = 
+fun as_int(x : bool) -> Int64 = 
     case x of 
     | true -> 1
     | false -> 0
     end
 
 
-fun as_uint(x : bool) -> UInt = 
+fun as_uint(x : bool) -> UInt64 = 
     case x of 
     | true -> 1
     | false -> 0
