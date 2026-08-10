@@ -498,7 +498,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 let operand_tys = expected_ty.filter(|ty| ty.is_integer());
                 (operand_tys, operand_tys)
             }
-            BinaryOp::Bor => {
+            BinaryOp::Bor | BinaryOp::Band => {
                 let operand_tys = expected_ty.filter(|ty| ty.is_integer() || ty.is_bool());
                 (operand_tys, operand_tys)
             }
@@ -517,7 +517,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 .try_unify(left.ty, right.ty)
                 .and_then(|result| result.is_builtin_scalar().then_some(bool_ty)),
             BinaryOp::And | BinaryOp::Or => Some(bool_ty),
-            BinaryOp::Bor => self
+            BinaryOp::Bor | BinaryOp::Band => self
                 .root()
                 .try_unify(left.ty, right.ty)
                 .and_then(|result| (result.is_integer() || result.is_bool()).then_some(result))
@@ -542,7 +542,8 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             BinaryOp::Greater => Ok(typed_ast::BinaryOp::Greater),
             BinaryOp::Or => Err(typed_ast::LogicalOp::Or),
             BinaryOp::And => Err(typed_ast::LogicalOp::And),
-            BinaryOp::Bor => Ok(typed_ast::BinaryOp::BitwiseOr)
+            BinaryOp::Bor => Ok(typed_ast::BinaryOp::BitwiseOr),
+            BinaryOp::Band => Ok(typed_ast::BinaryOp::BitwiseAnd)
         };
         typed_ast::Expr {
             loc,

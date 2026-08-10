@@ -117,7 +117,8 @@ pub enum BinaryOp {
     Equals,
     Greater,
     Lesser,
-    BitwiseOr
+    BitwiseOr,
+    BitwiseAnd
 }
 
 #[derive(Debug)]

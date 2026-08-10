@@ -62,7 +62,8 @@ pub enum BinaryOp {
     Greater,
     And,
     Or,
-    Bor
+    Bor,
+    Band
 }
 impl Display for BinaryOp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -76,7 +77,8 @@ impl Display for BinaryOp {
             BinaryOp::Greater => f.write_str(">"),
             BinaryOp::And => f.write_str("and"),
             BinaryOp::Or => f.write_str("or"),
-            BinaryOp::Bor => f.write_str("|")
+            BinaryOp::Bor => f.write_str("bor"),
+            BinaryOp::Band => f.write_str("band"),
         }
     }
 }

@@ -587,6 +587,15 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                             right_operand,
                         );
                     }
+                    BinaryOp::BitwiseAnd => {
+                        let left_operand = self.operand(left);
+                        let right_operand = self.operand(right);
+                        return Self::binary_op_rvalue(
+                            mir::BinaryOp::BitwiseAnd,
+                            left_operand,
+                            right_operand,
+                        );
+                    }
                 };
                 let checked_result = self.assign_to_temp(
                     expr.loc,
