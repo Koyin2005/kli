@@ -117,6 +117,7 @@ pub enum BinaryOp {
     Equals,
     Greater,
     Lesser,
+    BitwiseOr
 }
 
 #[derive(Debug)]

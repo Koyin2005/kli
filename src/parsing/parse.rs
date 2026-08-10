@@ -183,13 +183,14 @@ impl Parser {
     /// otherwise returns `None`
     fn binary_op(&mut self) -> Option<(u32, BinaryOp)> {
         match self.peek_token().kind {
-            TokenKind::Plus => Some((35, BinaryOp::Add)),
-            TokenKind::Minus => Some((35, BinaryOp::Subtract)),
             TokenKind::Slash => Some((40, BinaryOp::Divide)),
             TokenKind::Star => Some((40, BinaryOp::Multiply)),
-            TokenKind::DoubleEqual => Some((10, BinaryOp::Equals)),
+            TokenKind::Plus => Some((35, BinaryOp::Add)),
+            TokenKind::Minus => Some((35, BinaryOp::Subtract)),
             TokenKind::Lesser => Some((20, BinaryOp::Lesser)),
             TokenKind::Greater => Some((20, BinaryOp::Greater)),
+            TokenKind::Pipe => Some((15,BinaryOp::Bor)),
+            TokenKind::DoubleEqual => Some((10, BinaryOp::Equals)),
             TokenKind::And => Some((2, BinaryOp::And)),
             TokenKind::Or => Some((1, BinaryOp::Or)),
             _ => None,
