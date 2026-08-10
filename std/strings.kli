@@ -9,15 +9,15 @@ import std.(
 type String = {}
 
 @unsafe
-fun as_bytes(this : string) -> array[byte] = builtins.transmute(this)
+fun as_bytes(this : string) -> array[UInt8] = builtins.transmute(this)
 
 
 fun empty() -> string = ""
 
 fun clone(s : string) -> string = do
-    let bytes : array[byte] = unsafe as_bytes(s) end;
+    let bytes = unsafe as_bytes(s) end;
     let byte_len = builtins.array_len(bytes);
-    let mut bs : array[uninit[byte]] = builtins.raw_array_alloc[byte](byte_len);
+    let mut bs = builtins.raw_array_alloc[UInt8](byte_len);
     for i in 0u..byte_len do
         (bs).[i] = builtins.uninit_new(bytes.[i]);
     end;
@@ -49,7 +49,7 @@ fun char_to_uint(c : char) -> UInt =
 
 @opaque
 type CharIter =  {    
-    string_bytes : array[byte],
+    string_bytes : array[UInt8],
     index : Box[UInt]
 }
 
@@ -67,13 +67,13 @@ fun next(iter : CharIter) -> Option[char] = do
 end
 
 
-fun next_char(current_index : UInt, bytes : array[byte]) -> Option[(UInt,char)] = do
+fun next_char(current_index : UInt, bytes : array[UInt8]) -> Option[(UInt,char)] = do
     let first_byte = case current_index < builtins.array_len(bytes) of 
     | false -> return Option.None
     | true -> bytes.[current_index]
     end;
     current_index = current_index + 1;
-    case first_byte < (128:byte) of 
+    case first_byte < (128:UInt8) of 
     | true -> return Option.Some((current_index,builtins.zero_extend(first_byte)))
     | false -> ()
     end;

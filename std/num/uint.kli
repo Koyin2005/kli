@@ -66,7 +66,7 @@ fun as_bool(x : UInt) -> Option[bool] =
     | _ -> Option.None
     end
 
-fun extend_byte(x : byte) -> UInt = builtins.zero_extend(x)
+fun extend_uint8(x : UInt8) -> UInt = builtins.zero_extend(x)
 
 fun log(value : UInt, power : UInt) -> UInt = 
     case value of 

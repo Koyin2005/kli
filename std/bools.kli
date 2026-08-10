@@ -17,7 +17,10 @@ fun as_uint(x : bool) -> UInt =
     | false -> 0
     end
 
-fun as_byte(x : bool) -> byte = 
-    unsafe builtins.transmute(x) end
+fun as_uint8(x : bool) -> UInt8 = 
+    case x of
+    | true -> 1
+    | false -> 0
+    end
 
 fun as_string(x : bool) -> string = case x of | true -> "true" | false -> "false" end

@@ -71,7 +71,7 @@ fun as_bool(x : Int) -> Option[bool] =
     | _ -> Option.None
     end
 
-fun extend_byte(x : byte) -> Int = builtins.zero_extend(x)
+fun extend_uint8(x : UInt8) -> Int = builtins.zero_extend(x)
 
 fun log(this : Int, power : Int) -> UInt = 
     case this < 0 or power < 2 of 

@@ -3,7 +3,7 @@ import dynarray.DynArray
 
 @opaque
 type StringBuf = {
-    buf : DynArray[byte]
+    buf : DynArray[UInt8]
 }
 
 # Creates an empty StringBuf
