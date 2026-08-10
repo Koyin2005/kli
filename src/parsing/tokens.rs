@@ -75,7 +75,7 @@ pub enum TokenKind {
     Unsafe,
     CharLiteral(char),
     Bor,
-    Band
+    Band,
 }
 
 impl Display for TokenKind {

@@ -19,6 +19,7 @@ pub use collect::Arenas;
 pub use collect::CtxtRef;
 pub use ident::Symbol;
 pub mod arenas;
+pub mod builtin_check;
 mod builtins;
 mod captures;
 pub mod codegen;

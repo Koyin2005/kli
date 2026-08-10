@@ -6,6 +6,7 @@ use std::{
 
 use kli::{
     Arenas,
+    builtin_check::BuiltinCheck,
     codegen::CodegenRoot,
     config::{CommandArg, Feature, config},
     files::{FileError, build_file_tree, kli_runtime_path},
@@ -50,6 +51,7 @@ fn main() {
             had_error |= PatternCheck::new(ctxt, id).check(body);
         }
         had_error |= SafetyCheck::check(ctxt, id, function).is_err();
+        had_error |= BuiltinCheck::check(ctxt, function);
     }
     if had_error {
         return;

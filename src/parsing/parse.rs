@@ -185,10 +185,10 @@ impl Parser {
         match self.peek_token().kind {
             TokenKind::Slash => Some((40, BinaryOp::Divide)),
             TokenKind::Star => Some((40, BinaryOp::Multiply)),
-            TokenKind::Band => Some((40,BinaryOp::Band)),
+            TokenKind::Band => Some((40, BinaryOp::Band)),
             TokenKind::Plus => Some((35, BinaryOp::Add)),
             TokenKind::Minus => Some((35, BinaryOp::Subtract)),
-            TokenKind::Bor => Some((35,BinaryOp::Bor)),
+            TokenKind::Bor => Some((35, BinaryOp::Bor)),
             TokenKind::Lesser => Some((20, BinaryOp::Lesser)),
             TokenKind::Greater => Some((20, BinaryOp::Greater)),
             TokenKind::DoubleEqual => Some((10, BinaryOp::Equals)),

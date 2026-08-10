@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     Symbol,
-    builtins::Builtin,
+    builtins::{Builtin, IntegerBuiltin},
     index_vec::IndexVec,
     mir::{
         self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Rvalue,
@@ -280,7 +280,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
-            Builtin::ShiftLeft => {
+            Builtin::IntegerBuiltin(IntegerBuiltin::ShiftLeft) => {
                 let [first, second] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Self::binary_op_rvalue(
                     mir::BinaryOp::ShiftLeft,
@@ -288,7 +288,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     second,
                 ))
             }
-            Builtin::ShiftRight => {
+            Builtin::IntegerBuiltin(IntegerBuiltin::ShiftRight) => {
                 let [first, second] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Self::binary_op_rvalue(
                     mir::BinaryOp::ShiftRight,
@@ -341,7 +341,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let ty = ty.as_array().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Repeat { ty, value, count })
             }
-            Builtin::ZeroExtend => {
+            Builtin::IntegerBuiltin(IntegerBuiltin::ZeroExtend) => {
                 let [operand] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Cast(
                     mir::CastKind::IntegerCast(
@@ -391,7 +391,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 };
                 BuiltinResult::Rvalue(Rvalue::AddrOf(place))
             }
-            Builtin::WrappingAdd => {
+            Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd) => {
                 let [left, right] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Self::binary_op_rvalue(
                     mir::BinaryOp::Wrapping(OverflowOp::Add),
@@ -399,7 +399,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     right,
                 ))
             }
-            Builtin::OverflowingAdd => {
+            Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingAdd) => {
                 let [left, right] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Self::binary_op_rvalue(
                     mir::BinaryOp::Overflow(OverflowOp::Add),
@@ -407,7 +407,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     right,
                 ))
             }
-            Builtin::WrappingSub => {
+            Builtin::IntegerBuiltin(IntegerBuiltin::WrappingSub) => {
                 let [left, right] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Self::binary_op_rvalue(
                     mir::BinaryOp::Wrapping(OverflowOp::Subtract),
@@ -415,7 +415,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     right,
                 ))
             }
-            Builtin::OverflowingSub => {
+            Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub) => {
                 let [left, right] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Self::binary_op_rvalue(
                     mir::BinaryOp::Overflow(OverflowOp::Subtract),
@@ -427,7 +427,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 mir::CastKind::Transmute(ty),
                 { operands }.swap_remove(0),
             )),
-            Builtin::IntMaxValue => {
+            Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue) => {
                 let kind = ty.as_integer().unwrap();
                 let value = kind.max_value_scalar();
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::integer(

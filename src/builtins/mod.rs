@@ -1,53 +1,69 @@
 use crate::Symbol;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub enum Builtin {
-    BoxAlloc,
-    Transmute,
-    Len,
-    ArrayAddr,
+pub enum IntegerBuiltin {
+    IntMaxValue,
+    ShiftLeft,
+    ShiftRight,
     WrappingAdd,
     OverflowingAdd,
     WrappingSub,
     OverflowingSub,
     ZeroExtend,
-    ArrayRepeat,
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum Builtin {
+    // Reinterpretation
+    Transmute,
+
+    // Allocation
+    BoxAlloc,
     RawArrayAlloc,
+
+    // Arrays
+    ArrayRepeat,
     ArraySetUnchecked,
     ArrayGetUnchecked,
+    Len,
+    ArrayAddr,
+
+    // IO
     PrintString,
-    IntMaxValue,
+    ReadLine,
+
+    // Integers
+    IntegerBuiltin(IntegerBuiltin),
+
+    // Memory
     UninitZeroed,
     UninitAssumeInit,
     UninitNew,
-    ReadLine,
-    ShiftLeft,
-    ShiftRight,
 }
 impl Builtin {
     pub const fn name(self) -> &'static str {
         match self {
             Builtin::Transmute => "transmute",
-            Builtin::WrappingAdd => "wrapping_add",
-            Builtin::OverflowingAdd => "overflowing_add",
+            Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd) => "wrapping_add",
+            Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingAdd) => "overflowing_add",
+            Builtin::IntegerBuiltin(IntegerBuiltin::ZeroExtend) => "zero_extend",
+            Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub) => "overflowing_sub",
+            Builtin::IntegerBuiltin(IntegerBuiltin::WrappingSub) => "wrapping_sub",
+            Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue) => "int_max_value",
+            Builtin::IntegerBuiltin(IntegerBuiltin::ShiftLeft) => "shift_left",
+            Builtin::IntegerBuiltin(IntegerBuiltin::ShiftRight) => "shift_right",
             Builtin::ArrayAddr => "array_addr",
             Builtin::Len => "array_len",
             Builtin::BoxAlloc => "box_alloc",
-            Builtin::ZeroExtend => "zero_extend",
             Builtin::ArrayRepeat => "array_repeat",
             Builtin::RawArrayAlloc => "raw_array_alloc",
             Builtin::ArrayGetUnchecked => "array_get_unchecked",
             Builtin::ArraySetUnchecked => "array_set_unchecked",
             Builtin::PrintString => "print_string",
-            Builtin::OverflowingSub => "overflowing_sub",
-            Builtin::WrappingSub => "wrapping_sub",
-            Builtin::IntMaxValue => "int_max_value",
             Builtin::UninitAssumeInit => "uninit_assume_init",
             Builtin::UninitZeroed => "uninit_zeroed",
             Builtin::UninitNew => "uninit_new",
             Builtin::ReadLine => "read_line",
-            Builtin::ShiftLeft => "shift_left",
-            Builtin::ShiftRight => "shift_right",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
@@ -56,23 +72,27 @@ impl Builtin {
             Symbol::TRANSMUTE => Some(Builtin::Transmute),
             Symbol::ARRAY_LEN => Some(Builtin::Len),
             Symbol::ARRAY_ADDR => Some(Builtin::ArrayAddr),
-            Symbol::WRAPPING_ADD => Some(Builtin::WrappingAdd),
-            Symbol::OVERFLOWING_ADD => Some(Builtin::OverflowingAdd),
-            Symbol::WRAPPING_SUB => Some(Builtin::WrappingSub),
-            Symbol::OVERFLOWING_SUB => Some(Builtin::OverflowingSub),
-            Symbol::ZERO_EXTEND => Some(Builtin::ZeroExtend),
+            Symbol::WRAPPING_ADD => Some(Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd)),
+            Symbol::OVERFLOWING_ADD => {
+                Some(Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingAdd))
+            }
+            Symbol::SHIFT_LEFT => Some(Builtin::IntegerBuiltin(IntegerBuiltin::ShiftLeft)),
+            Symbol::SHIFT_RIGHT => Some(Builtin::IntegerBuiltin(IntegerBuiltin::ShiftRight)),
+            Symbol::WRAPPING_SUB => Some(Builtin::IntegerBuiltin(IntegerBuiltin::WrappingSub)),
+            Symbol::OVERFLOWING_SUB => {
+                Some(Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub))
+            }
+            Symbol::ZERO_EXTEND => Some(Builtin::IntegerBuiltin(IntegerBuiltin::ZeroExtend)),
+            Symbol::INT_MAX_VALUE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue)),
             Symbol::ARRAY_REPEAT => Some(Builtin::ArrayRepeat),
             Symbol::RAW_ARRAY_ALLOC => Some(Builtin::RawArrayAlloc),
             Symbol::ARRAY_SET_UNCHECKED => Some(Builtin::ArraySetUnchecked),
             Symbol::ARRAY_GET_UNCHECKED => Some(Builtin::ArrayGetUnchecked),
             Symbol::PRINT_STRING => Some(Builtin::PrintString),
-            Symbol::INT_MAX_VALUE => Some(Builtin::IntMaxValue),
             Symbol::UNINIT_ZEROED => Some(Builtin::UninitZeroed),
             Symbol::UNINIT_ASSUME_INIT => Some(Builtin::UninitAssumeInit),
             Symbol::UNINIT_NEW => Some(Builtin::UninitNew),
             Symbol::READ_LINE => Some(Builtin::ReadLine),
-            Symbol::SHIFT_LEFT => Some(Builtin::ShiftLeft),
-            Symbol::SHIFT_RIGHT => Some(Builtin::ShiftRight),
             _ => None,
         }
     }

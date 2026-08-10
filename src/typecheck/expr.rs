@@ -520,7 +520,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             BinaryOp::Bor | BinaryOp::Band => self
                 .root()
                 .try_unify(left.ty, right.ty)
-                .and_then(|result| (result.is_integer() || result.is_bool()).then_some(result))
+                .and_then(|result| (result.is_integer() || result.is_bool()).then_some(result)),
         };
         let result = result_ty.unwrap_or_else(|| {
             self.ctxt().diag().add_diagnostic(
@@ -543,7 +543,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             BinaryOp::Or => Err(typed_ast::LogicalOp::Or),
             BinaryOp::And => Err(typed_ast::LogicalOp::And),
             BinaryOp::Bor => Ok(typed_ast::BinaryOp::BitwiseOr),
-            BinaryOp::Band => Ok(typed_ast::BinaryOp::BitwiseAnd)
+            BinaryOp::Band => Ok(typed_ast::BinaryOp::BitwiseAnd),
         };
         typed_ast::Expr {
             loc,
