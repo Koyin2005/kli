@@ -8,6 +8,7 @@ use crate::{
         self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Rvalue,
         build::Builder,
     },
+    src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
     types::{IntegerKind, IntegerSize, Type},
 };
@@ -271,6 +272,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
     }
     pub(super) fn builtin_call(
         &mut self,
+        _: SrcLoc,
         ty: Type<'ctxt>,
         builtin: Builtin,
         args: &[Expr<'ctxt>],
@@ -282,33 +284,96 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         match builtin {
             Builtin::Bitcast => {
                 let [arg] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute(ty), arg))
+                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, arg, ty))
             }
-            Builtin::IntegerBuiltin(IntegerBuiltin::Truncate) => todo!("truncate"),
-            Builtin::IntegerBuiltin(IntegerBuiltin::ShiftLeft) => {
-                let [first, second] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                    mir::BinaryOp::ShiftLeft,
-                    first,
-                    second,
-                ))
-            }
-            Builtin::IntegerBuiltin(IntegerBuiltin::ShiftRight) => {
-                let [first, second] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                    mir::BinaryOp::ShiftRight,
-                    first,
-                    second,
-                ))
-            }
+            Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
+                IntegerBuiltin::IntMaxValue => {
+                    let kind = ty.as_integer().unwrap();
+                    let value = kind.max_value_scalar();
+                    BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::integer(
+                        self.ctxt, kind, value,
+                    ))))
+                }
+                IntegerBuiltin::ShiftLeft => {
+                    let [first, second] = operands.try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::ShiftLeft,
+                        first,
+                        second,
+                    ))
+                }
+                IntegerBuiltin::ShiftRight => {
+                    let [first, second] = operands.try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::ShiftRight,
+                        first,
+                        second,
+                    ))
+                }
+                IntegerBuiltin::WrappingAdd => {
+                    let [left, right] = operands.try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::Wrapping(OverflowOp::Add),
+                        left,
+                        right,
+                    ))
+                }
+                IntegerBuiltin::OverflowingAdd => {
+                    let [left, right] = operands.try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::Overflow(OverflowOp::Add),
+                        left,
+                        right,
+                    ))
+                }
+                IntegerBuiltin::WrappingSub => {
+                    let [left, right] = operands.try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::Wrapping(OverflowOp::Subtract),
+                        left,
+                        right,
+                    ))
+                }
+                IntegerBuiltin::OverflowingSub => {
+                    let [left, right] = operands.try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::Overflow(OverflowOp::Subtract),
+                        left,
+                        right,
+                    ))
+                }
+                IntegerBuiltin::Truncate => {
+                    let [arg] = operands.try_into().unwrap();
+                    let kind = ty.as_integer().unwrap();
+                    BuiltinResult::Rvalue(Rvalue::Cast(
+                        mir::CastKind::IntegerCast(mir::IntegerCast::Truncate(kind)),
+                        arg,
+                        ty,
+                    ))
+                }
+                IntegerBuiltin::Widen => {
+                    let [operand] = operands.try_into().unwrap();
+                    let kind = ty.as_simple_scalar().unwrap();
+                    let (signed, size) = kind.as_integer().signed_and_size();
+                    BuiltinResult::Rvalue(Rvalue::Cast(
+                        mir::CastKind::IntegerCast(if signed {
+                            mir::IntegerCast::SignExtend(size)
+                        } else {
+                            mir::IntegerCast::ZeroExtend(size)
+                        }),
+                        operand,
+                        ty,
+                    ))
+                }
+            },
             Builtin::ReadLine => BuiltinResult::Rvalue(Rvalue::ReadLine),
             Builtin::UninitNew => {
                 let [operand] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute(ty), operand))
+                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, operand, ty))
             }
             Builtin::UninitAssumeInit => {
                 let [operand] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute(ty), operand))
+                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, operand, ty))
             }
             Builtin::UninitZeroed => {
                 let ty = ty.as_uninit().unwrap();
@@ -346,35 +411,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let ty = ty.as_array().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Repeat { ty, value, count })
             }
-            Builtin::IntegerBuiltin(IntegerBuiltin::Widen) => {
-                let [operand] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Cast(
-                    mir::CastKind::IntegerCast(
-                        if args[0].ty.is_char() && ty.is_uint(IntegerSize::Int64) {
-                            mir::IntegerCast::ZeroExtendCharToUint64
-                        } else if let Some(IntegerKind::Unsigned(IntegerSize::Int8)) =
-                            args[0].ty.as_integer()
-                            && ty.is_char()
-                        {
-                            mir::IntegerCast::ZeroExtendUInt8ToChar
-                        } else if let Some(from) = args[0].ty.as_integer()
-                            && let Some(to) = ty.as_integer()
-                        {
-                            match (from, to) {
-                                (_, IntegerKind::Signed(to_size)) => {
-                                    mir::IntegerCast::SignExtend(to_size)
-                                }
-                                (_, IntegerKind::Unsigned(to_size)) => {
-                                    mir::IntegerCast::ZeroExtend(to_size)
-                                }
-                            }
-                        } else {
-                            unreachable!("invalid zero extension")
-                        },
-                    ),
-                    operand,
-                ))
-            }
             Builtin::BoxAlloc => {
                 let [operand] = operands.try_into().unwrap();
                 let Some(ty) = ty.as_box() else {
@@ -396,49 +432,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 };
                 BuiltinResult::Rvalue(Rvalue::AddrOf(place))
             }
-            Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd) => {
-                let [left, right] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                    mir::BinaryOp::Wrapping(OverflowOp::Add),
-                    left,
-                    right,
-                ))
-            }
-            Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingAdd) => {
-                let [left, right] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                    mir::BinaryOp::Overflow(OverflowOp::Add),
-                    left,
-                    right,
-                ))
-            }
-            Builtin::IntegerBuiltin(IntegerBuiltin::WrappingSub) => {
-                let [left, right] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                    mir::BinaryOp::Wrapping(OverflowOp::Subtract),
-                    left,
-                    right,
-                ))
-            }
-            Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub) => {
-                let [left, right] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                    mir::BinaryOp::Overflow(OverflowOp::Subtract),
-                    left,
-                    right,
-                ))
-            }
             Builtin::Transmute => BuiltinResult::Rvalue(Rvalue::Cast(
-                mir::CastKind::Transmute(ty),
+                mir::CastKind::Transmute,
                 { operands }.swap_remove(0),
+                ty,
             )),
-            Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue) => {
-                let kind = ty.as_integer().unwrap();
-                let value = kind.max_value_scalar();
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::integer(
-                    self.ctxt, kind, value,
-                ))))
-            }
         }
     }
     pub fn build_rvalue(&mut self, expr: &Expr<'ctxt>) -> Rvalue<'ctxt> {
@@ -636,7 +634,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt)))
             }
             &ExprKind::BuiltinCall(_, builtin, _, ref args) => {
-                self.builtin_call(expr.ty, builtin, args).into()
+                self.builtin_call(expr.loc, expr.ty, builtin, args).into()
             }
             ExprKind::Array(fields) => {
                 let ty = expr.ty.as_array().unwrap();

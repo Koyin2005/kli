@@ -33,8 +33,7 @@ end
 
 # Performs a bitcast between Int64 and UInt
 fun bitcast_uint(x : Int64) -> UInt64 = 
-    #Safety : Int always has same layout as UInt
-    unsafe builtins.transmute(x) end
+    builtins.bitcast(x)
 
 #If x is negative panics otherwise performs a bitcast
 fun strict_cast_uint(x : Int64) -> UInt64 = 
@@ -69,9 +68,9 @@ fun as_bool(x : Int64) -> Option[bool] =
     | _ -> Option.None
     end
 
-fun extend_uint8(x : UInt8) -> Int64 = unsafe builtins.zero_extend((builtins.transmute(x) : Int8)) end
+fun extend_uint8(x : UInt8) -> Int64 = unsafe builtins.widen((builtins.bitcast(x) : Int8)) end
 
-fun extend_int8(x : Int8) -> Int64 = builtins.zero_extend(x)
+fun extend_int8(x : Int8) -> Int64 = builtins.widen(x)
 
 fun log(this : Int64, power : Int64) -> UInt64 = 
     case this < 0 or power < 2 of 

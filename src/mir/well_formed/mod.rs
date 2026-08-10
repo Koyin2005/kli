@@ -8,7 +8,7 @@ use crate::{
         visitor::{PlaceCtxt, Visit},
     },
     src_loc::SrcLoc,
-    types::{FunctionSig, IntegerKind, IntegerSize, Type},
+    types::{FunctionSig, IntegerKind, IntegerSize, SimpleScalar, Type},
     unsafety,
 };
 pub struct WellFormed<'ctxt, 'body> {
@@ -277,26 +277,16 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     ),
                 }
             }
-            &super::Rvalue::Cast(cast_kind, ref operand) => match cast_kind {
-                CastKind::Transmute(to) => {
+            &super::Rvalue::Cast(cast_kind, ref operand, to_ty) => match cast_kind {
+                CastKind::Transmute => {
                     let from = operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                     self.assert(
-                        unsafety::transmutable(self.ctxt, from, to),
-                        || format!("Cannot transmute {} into {}", from, to),
+                        unsafety::transmutable(self.ctxt, from, to_ty),
+                        || format!("Cannot transmute {} into {}", from, to_ty),
                         loc,
                     );
                 }
                 CastKind::IntegerCast(kind) => match kind {
-                    IntegerCast::ZeroExtendUInt8ToChar => {
-                        let from =
-                            operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                        let to = Type::new_char(self.ctxt);
-                        self.assert(
-                            from.is_integer_kind(IntegerKind::Unsigned(IntegerSize::Int8)),
-                            || format!("Cannot extend {} into {}", from, to),
-                            loc,
-                        );
-                    }
                     IntegerCast::ZeroExtend(to) => {
                         let from_ty =
                             operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
@@ -324,12 +314,14 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                         let from_ty =
                             operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
 
-                        let from = self.assert_with_some(
-                            from_ty,
-                            |from| from.as_integer().map(IntegerKind::size),
-                            || "Should be an integer",
-                            loc,
-                        );
+                        let from = self
+                            .assert_with_some(
+                                from_ty,
+                                |from| from.as_simple_scalar().map(SimpleScalar::as_integer),
+                                || "Should be an integer",
+                                loc,
+                            )
+                            .size();
 
                         self.assert(
                             from.bit_width() <= to.bit_width(),
@@ -343,13 +335,29 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                             loc,
                         );
                     }
-                    IntegerCast::ZeroExtendCharToUint64 => {
-                        let from =
+                    IntegerCast::Truncate(to) => {
+                        let from_ty =
                             operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                        let to = Type::new_uint(self.ctxt, IntegerSize::Int64);
+
+                        let from = self
+                            .assert_with_some(
+                                from_ty,
+                                |from| from.as_simple_scalar().map(SimpleScalar::as_integer),
+                                || "Should be an integer",
+                                loc,
+                            )
+                            .size();
+
+                        let to = to.size();
                         self.assert(
-                            from.is_char(),
-                            || format!("Cannot extend {} into {}", from, to),
+                            from.bit_width() <= to.bit_width(),
+                            || {
+                                format!(
+                                    "Cannot extend {} into {}",
+                                    from_ty,
+                                    IntegerKind::Signed(to)
+                                )
+                            },
                             loc,
                         );
                     }

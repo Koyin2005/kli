@@ -100,7 +100,7 @@ pub trait Visit<'ctxt> {
             Rvalue::AddrOf(place) => {
                 self.visit_place(PlaceCtxt::Write, loc, place);
             }
-            Rvalue::Cast(_, operand) => {
+            Rvalue::Cast(_, operand, _) => {
                 self.visit_operand(loc, operand);
             }
         }
@@ -249,7 +249,7 @@ pub trait MutVisit<'ctxt> {
             Rvalue::AddrOf(place) => {
                 self.visit_place(loc, place);
             }
-            Rvalue::Cast(_, operand) => {
+            Rvalue::Cast(_, operand, _) => {
                 self.visit_operand(loc, operand);
             }
             Rvalue::AllocateRawArray { ty: _, count } => self.visit_operand(loc, count),

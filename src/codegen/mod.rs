@@ -1417,6 +1417,104 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let box_ptr = box_inner_ptr.ptr(self);
         self.store_immediate(place, box_ptr);
     }
+    fn codegen_cast(
+        &mut self,
+        place: &mir::Place,
+        cast: mir::CastKind,
+        operand: &Operand<'ctxt>,
+        to: Type<'ctxt>,
+    ) {
+        match cast {
+            mir::CastKind::Transmute => {
+                //Zero sized transmutes are no ops
+                let Ok(dst_place) = self.eval_place(place) else {
+                    return;
+                };
+                /*
+                    We need to reinterpret out 'from' value based of its byte representation,
+                    so we store it in memory and then copy that value as a 'to'
+                */
+                let operand = self.eval_operand(operand);
+                let to_ty = self.monomorphize(to);
+                let to_layout = self.layout_for(to_ty);
+                let from_layout = self.layout_for(operand.ty);
+                match (backend_repr(&from_layout), backend_repr(&to_layout)) {
+                    (BackendRepr::Scalar(from), BackendRepr::Scalar(to)) => {
+                        let from = scalar_to_cranelift_type(from);
+                        let to = scalar_to_cranelift_type(to);
+                        let mut value = operand.expect_immediate(self);
+                        if from != to {
+                            value = self.builder.ins().bitcast(to, MemFlagsData::new(), value);
+                        }
+                        self.store_immediate(dst_place, value);
+                        return;
+                    }
+                    _ if from_layout == to_layout => {
+                        self.store_value(place, operand);
+                        return;
+                    }
+                    _ => (),
+                }
+                if let OperandValueKind::Indirect(src_place) = operand.kind {
+                    self.copy(src_place, dst_place);
+                } else {
+                    let intermidiate_slot =
+                        self.builder.create_sized_stack_slot(ir::StackSlotData::new(
+                            ir::StackSlotKind::ExplicitSlot,
+                            to_layout.size.in_bytes_u32(),
+                            to_layout.alignment.pow_of_2(),
+                        ));
+                    let intermidiate_slot = self.builder.ins().stack_addr(
+                        PTR_IR_TYPE,
+                        intermidiate_slot,
+                        Offset32::new(0),
+                    );
+
+                    let transmuted_place = MemPlace::new(intermidiate_slot, to_layout, to_ty);
+                    self.store_operand_with_mem_place(transmuted_place.clone(), operand);
+                    self.copy(CodegenPlace::MemPlace(transmuted_place), dst_place);
+                }
+            }
+            mir::CastKind::IntegerCast(cast) => {
+                let place = self.eval_place(place).unwrap();
+                let operand_value = self.eval_operand(operand);
+                let value = operand_value.expect_immediate(self);
+                let value = match cast {
+                    mir::IntegerCast::SignExtend(to_size) => {
+                        let from_size = operand_value.ty.as_integer().unwrap().size();
+                        if from_size == to_size {
+                            value
+                        } else {
+                            self.builder
+                                .ins()
+                                .sextend(integer_size_to_cranelift_type(to_size), value)
+                        }
+                    }
+                    mir::IntegerCast::ZeroExtend(to_size) => {
+                        let from_size = operand_value.ty.as_integer().unwrap().size();
+                        if from_size == to_size {
+                            value
+                        } else {
+                            self.builder
+                                .ins()
+                                .uextend(integer_size_to_cranelift_type(to_size), value)
+                        }
+                    }
+                    mir::IntegerCast::Truncate(to_kind) => {
+                        let from_kind = operand_value.ty.as_integer().unwrap();
+                        if from_kind == to_kind {
+                            value
+                        } else {
+                            self.builder
+                                .ins()
+                                .ireduce(integer_size_to_cranelift_type(to_kind.size()), value)
+                        }
+                    }
+                };
+                self.store_immediate(place, value);
+            }
+        }
+    }
     fn codegen_rvalue_assign(&mut self, place: &mir::Place, value: &mir::Rvalue<'ctxt>) {
         match value {
             mir::Rvalue::ReadLine => {
@@ -1656,92 +1754,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let addr = self.load_array_ptr(array_place);
                 self.store_immediate(place, addr);
             }
-            mir::Rvalue::Cast(kind, operand) => match kind {
-                &mir::CastKind::Transmute(to) => {
-                    //Zero sized transmutes are no ops
-                    let Ok(dst_place) = self.eval_place(place) else {
-                        return;
-                    };
-                    /*
-                        We need to reinterpret out 'from' value based of its byte representation,
-                        so we store it in memory and then copy that value as a 'to'
-                    */
-                    let operand = self.eval_operand(operand);
-                    let to_ty = self.monomorphize(to);
-                    let to_layout = self.layout_for(to_ty);
-                    let from_layout = self.layout_for(operand.ty);
-                    match (backend_repr(&from_layout), backend_repr(&to_layout)) {
-                        (BackendRepr::Scalar(from), BackendRepr::Scalar(to)) => {
-                            let from = scalar_to_cranelift_type(from);
-                            let to = scalar_to_cranelift_type(to);
-                            let mut value = operand.expect_immediate(self);
-                            if from != to {
-                                value = self.builder.ins().bitcast(to, MemFlagsData::new(), value);
-                            }
-                            self.store_immediate(dst_place, value);
-                            return;
-                        }
-                        _ if from_layout == to_layout => {
-                            self.store_value(place, operand);
-                            return;
-                        }
-                        _ => (),
-                    }
-                    if let OperandValueKind::Indirect(src_place) = operand.kind {
-                        self.copy(src_place, dst_place);
-                    } else {
-                        let intermidiate_slot =
-                            self.builder.create_sized_stack_slot(ir::StackSlotData::new(
-                                ir::StackSlotKind::ExplicitSlot,
-                                to_layout.size.in_bytes_u32(),
-                                to_layout.alignment.pow_of_2(),
-                            ));
-                        let intermidiate_slot = self.builder.ins().stack_addr(
-                            PTR_IR_TYPE,
-                            intermidiate_slot,
-                            Offset32::new(0),
-                        );
-
-                        let transmuted_place = MemPlace::new(intermidiate_slot, to_layout, to_ty);
-                        self.store_operand_with_mem_place(transmuted_place.clone(), operand);
-                        self.copy(CodegenPlace::MemPlace(transmuted_place), dst_place);
-                    }
-                }
-                mir::CastKind::IntegerCast(cast) => {
-                    let place = self.eval_place(place).unwrap();
-                    let operand_value = self.eval_operand(operand);
-                    let value = operand_value.expect_immediate(self);
-                    let value = match *cast {
-                        mir::IntegerCast::SignExtend(to_size) => {
-                            let from_size = operand_value.ty.as_integer().unwrap().size();
-                            if from_size == to_size {
-                                value
-                            } else {
-                                self.builder
-                                    .ins()
-                                    .sextend(integer_size_to_cranelift_type(to_size), value)
-                            }
-                        }
-                        mir::IntegerCast::ZeroExtend(to_size) => {
-                            let from_size = operand_value.ty.as_integer().unwrap().size();
-                            if from_size == to_size {
-                                value
-                            } else {
-                                self.builder
-                                    .ins()
-                                    .uextend(integer_size_to_cranelift_type(to_size), value)
-                            }
-                        }
-                        mir::IntegerCast::ZeroExtendUInt8ToChar => {
-                            self.builder.ins().uextend(ir::types::I32, value)
-                        }
-                        mir::IntegerCast::ZeroExtendCharToUint64 => {
-                            self.builder.ins().uextend(ir::types::I64, value)
-                        }
-                    };
-                    self.store_immediate(place, value);
-                }
-            },
+            mir::Rvalue::Cast(kind, operand, ty) => self.codegen_cast(place, *kind, operand, *ty),
             mir::Rvalue::Len(array_place) => {
                 let place = self.eval_place(place).unwrap();
                 let array_place = self.eval_place(array_place).unwrap();

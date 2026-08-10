@@ -45,13 +45,10 @@ fun utf8_len(c : char) -> UInt64 =
     end
 
 fun char_to_uint32(c : char) -> UInt32 = 
-    unsafe builtins.transmute(c) end
-
-fun char_to_uint64(c : char) -> UInt64 = 
-    builtins.zero_extend(char_to_uint32(c))
+    builtins.bitcast(c)
 
 fun uint8_to_char(value : UInt8) -> char = 
-    builtins.zero_extend(value)
+    builtins.widen(value)
 
 
 @opaque

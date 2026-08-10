@@ -87,7 +87,7 @@ impl Builtin {
                 Some(Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub))
             }
             Symbol::WIDEN => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Widen)),
-            Symbol::TRUNC => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Truncate)),
+            Symbol::TRUNCATE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Truncate)),
             Symbol::BITCAST => Some(Builtin::Bitcast),
             Symbol::INT_MAX_VALUE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue)),
             Symbol::ARRAY_REPEAT => Some(Builtin::ArrayRepeat),

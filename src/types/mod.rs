@@ -12,6 +12,22 @@ pub mod lower;
 pub mod visit;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SimpleScalar {
+    Int(IntegerKind),
+    Bool,
+    Char,
+}
+impl SimpleScalar {
+    pub fn as_integer(self) -> IntegerKind {
+        match self {
+            SimpleScalar::Int(integer_kind) => integer_kind,
+            SimpleScalar::Bool => IntegerKind::UINT8,
+            SimpleScalar::Char => IntegerKind::UINT32,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TagType {
     UInt8,
     Uint64,
@@ -299,7 +315,7 @@ impl<'ctxt> Type<'ctxt> {
     pub fn new(kind: &'ctxt TypeKind) -> Self {
         Self(kind)
     }
-    pub fn kind(&self) -> &'_ TypeKind<'ctxt> {
+    pub const fn kind(&self) -> &'_ TypeKind<'ctxt> {
         self.0
     }
     pub fn named(
@@ -380,11 +396,22 @@ impl<'ctxt> Type<'ctxt> {
     pub fn is_uint(self, size: IntegerSize) -> bool {
         self.is_integer_kind(IntegerKind::Unsigned(size))
     }
+    pub fn is_signed_int(self) -> bool {
+        self.as_integer().is_some_and(|num| num.is_signed())
+    }
     pub fn is_integer_kind(self, kind: IntegerKind) -> bool {
         let &TypeKind::Int(int_kind) = self.0 else {
             return false;
         };
         int_kind == kind
+    }
+    pub const fn as_simple_scalar(self) -> Option<SimpleScalar> {
+        match *self.kind() {
+            TypeKind::Int(int) => Some(SimpleScalar::Int(int)),
+            TypeKind::Bool => Some(SimpleScalar::Bool),
+            TypeKind::Char => Some(SimpleScalar::Char),
+            _ => None,
+        }
     }
     pub fn as_function(self) -> Option<&'ctxt FunctionSig<'ctxt>> {
         let TypeKind::Function(function) = self.0 else {

@@ -258,12 +258,11 @@ pub enum BinaryOp {
 pub enum IntegerCast {
     SignExtend(IntegerSize),
     ZeroExtend(IntegerSize),
-    ZeroExtendUInt8ToChar,
-    ZeroExtendCharToUint64,
+    Truncate(IntegerKind),
 }
 #[derive(Clone, Debug, Copy)]
-pub enum CastKind<'ctxt> {
-    Transmute(Type<'ctxt>),
+pub enum CastKind {
+    Transmute,
     IntegerCast(IntegerCast),
 }
 #[derive(Clone, Debug)]
@@ -286,7 +285,7 @@ pub enum Rvalue<'ctxt> {
     Call(Operand<'ctxt>, Vec<Operand<'ctxt>>),
     Binary(BinaryOp, Box<(Operand<'ctxt>, Operand<'ctxt>)>),
     AddrOf(Place),
-    Cast(CastKind<'ctxt>, Operand<'ctxt>),
+    Cast(CastKind, Operand<'ctxt>, Type<'ctxt>),
     Len(Place),
     Discriminant(Place),
 }
@@ -372,15 +371,7 @@ impl<'ctxt> Rvalue<'ctxt> {
                         .map(|operand| operand.type_of(ctxt, locals, return_type)),
                 ),
             },
-            &Rvalue::Cast(cast, _) => match cast {
-                CastKind::Transmute(ty) => ty,
-                CastKind::IntegerCast(IntegerCast::ZeroExtendCharToUint64) => {
-                    Type::new_uint(ctxt, IntegerSize::Int64)
-                }
-                CastKind::IntegerCast(IntegerCast::ZeroExtendUInt8ToChar) => Type::new_char(ctxt),
-                CastKind::IntegerCast(IntegerCast::ZeroExtend(to)) => Type::new_uint(ctxt, to),
-                CastKind::IntegerCast(IntegerCast::SignExtend(to)) => Type::new_int(ctxt, to),
-            },
+            &Rvalue::Cast(.., ty) => ty,
             Rvalue::Discriminant(_) => Type::new_uint(ctxt, IntegerSize::Int64),
             Rvalue::AddrOf(_) => Type::new_uint(ctxt, IntegerSize::Int64),
         }
