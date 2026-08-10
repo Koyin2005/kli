@@ -75,6 +75,7 @@ pub enum TokenKind {
     Unsafe,
     CharLiteral(char),
     Bor,
+    Band
 }
 
 impl Display for TokenKind {
@@ -133,6 +134,7 @@ impl Display for TokenKind {
             Self::Ref => "ref",
             Self::Impl => "impl",
             Self::Bor => "bor",
+            Self::Band => "band",
             Self::Number(number, sign) => {
                 return write!(
                     f,
