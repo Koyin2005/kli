@@ -75,11 +75,12 @@ impl<'ctxt> BuiltinCheck<'ctxt> {
                         (
                             Some(IntegerKind::Signed(from_size)),
                             Some(IntegerKind::Signed(to_size)),
-                        ) if from_size.bit_width() <= to_size.bit_width() => false,
+                        ) if from_size.bit_width() < to_size.bit_width() => false,
                         (
                             Some(IntegerKind::Unsigned(from_size)),
                             Some(IntegerKind::Unsigned(to_size)),
-                        ) if from_size.bit_width() <= to_size.bit_width() => false,
+                        ) if from_size.bit_width() < to_size.bit_width() => false,
+                        (Some(IntegerKind::UINT8), None) if to.is_char() => false,
                         _ => {
                             self.ctxt.diag().add_diagnostic(
                                 format!("cannot zero extend '{}' to '{}'", from, to),

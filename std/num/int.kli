@@ -69,7 +69,7 @@ fun as_bool(x : Int64) -> Option[bool] =
     | _ -> Option.None
     end
 
-fun extend_uint8(x : UInt8) -> Int64 = builtins.zero_extend(x)
+fun extend_uint8(x : UInt8) -> Int64 = unsafe builtins.zero_extend((builtins.transmute(x) : Int8)) end
 
 fun extend_int8(x : Int8) -> Int64 = builtins.zero_extend(x)
 
