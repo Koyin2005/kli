@@ -73,6 +73,8 @@ fun as_bool(x : Int) -> Option[bool] =
 
 fun extend_uint8(x : UInt8) -> Int = builtins.zero_extend(x)
 
+fun extend_int8(x : Int8) -> Int = builtins.zero_extend(x)
+
 fun log(this : Int, power : Int) -> UInt = 
     case this < 0 or power < 2 of 
     | true -> panic_message("log requires non-negative value and power > 2")

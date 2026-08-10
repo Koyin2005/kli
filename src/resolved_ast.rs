@@ -213,6 +213,7 @@ pub struct FunctionType {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TypeName {
+    Int8,
     Int64,
     UInt64,
     Bool,

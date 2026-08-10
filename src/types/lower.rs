@@ -106,6 +106,10 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
                 let args = self.lower_generic_args(id, loc, args);
                 Type::named(self.ctxt, id, self.ctxt.expect_ident(id).symbol, args)
             }
+            TypeName::Int8 => {
+                let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
+                Type::new_int(self.ctxt, IntegerSize::Int8)
+            }
             TypeName::UInt8 => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::new_uint(self.ctxt, IntegerSize::Int8)
