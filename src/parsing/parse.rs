@@ -187,7 +187,7 @@ impl Parser {
             TokenKind::Star => Some((40, BinaryOp::Multiply)),
             TokenKind::Plus => Some((35, BinaryOp::Add)),
             TokenKind::Minus => Some((35, BinaryOp::Subtract)),
-            TokenKind::Bor => Some((25,BinaryOp::Bor)),
+            TokenKind::Bor => Some((35,BinaryOp::Bor)),
             TokenKind::Lesser => Some((20, BinaryOp::Lesser)),
             TokenKind::Greater => Some((20, BinaryOp::Greater)),
             TokenKind::DoubleEqual => Some((10, BinaryOp::Equals)),
