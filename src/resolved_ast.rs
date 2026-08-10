@@ -211,15 +211,20 @@ pub struct FunctionType {
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IntegerSize {
+    Int8,
+    Int32,
+    Int64,
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TypeName {
-    Int8,
-    Int64,
-    UInt64,
+    Int(IntegerSize),
+    UInt(IntegerSize),
     Bool,
     String,
     Char,
-    UInt8,
     UserDefined(DefId),
     Box,
     Array,

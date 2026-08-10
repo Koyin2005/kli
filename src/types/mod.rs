@@ -171,26 +171,19 @@ pub struct RecordField<'ctxt> {
 #[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
 pub enum IntegerSize {
     Int8,
+    Int32,
     Int64,
 }
 impl IntegerSize {
     pub const fn bit_width(self) -> u8 {
         match self {
             Self::Int8 => 8,
+            Self::Int32 => 32,
             Self::Int64 => 64,
         }
     }
     pub const fn is_byte_sized(self) -> bool {
         matches!(self, IntegerSize::Int8)
-    }
-
-    pub fn name_str(self, signed: bool) -> &'static str {
-        match (self, signed) {
-            (IntegerSize::Int8, true) => "Int8",
-            (IntegerSize::Int8, false) => "UInt8",
-            (IntegerSize::Int64, true) => "Int64",
-            (IntegerSize::Int64, false) => "UInt64",
-        }
     }
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
@@ -204,8 +197,10 @@ impl IntegerKind {
     pub fn name_str(self) -> &'static str {
         match self {
             IntegerKind::Signed(IntegerSize::Int8) => "Int8",
+            IntegerKind::Signed(IntegerSize::Int32) => "Int32",
             IntegerKind::Signed(IntegerSize::Int64) => "Int64",
             IntegerKind::Unsigned(IntegerSize::Int8) => "UInt8",
+            IntegerKind::Unsigned(IntegerSize::Int32) => "UInt32",
             IntegerKind::Unsigned(IntegerSize::Int64) => "UInt64",
         }
     }
@@ -213,6 +208,8 @@ impl IntegerKind {
         match self {
             Self::Signed(IntegerSize::Int8) => i8::MIN as i128,
             Self::Unsigned(IntegerSize::Int8) => u8::MIN as i128,
+            Self::Signed(IntegerSize::Int32) => i32::MIN as i128,
+            Self::Unsigned(IntegerSize::Int32) => u32::MIN as i128,
             Self::Signed(IntegerSize::Int64) => i64::MIN as i128,
             Self::Unsigned(IntegerSize::Int64) => u64::MIN as i128,
         }
@@ -222,10 +219,12 @@ impl IntegerKind {
             Self::Signed(size) => match size {
                 IntegerSize::Int64 => i64::MAX as i128,
                 IntegerSize::Int8 => i8::MAX as i128,
+                IntegerSize::Int32 => i32::MAX as i128,
             },
             Self::Unsigned(size) => match size {
                 IntegerSize::Int8 => u8::MAX as i128,
                 IntegerSize::Int64 => u64::MAX as i128,
+                IntegerSize::Int32 => u32::MAX as i128,
             },
         }
     }

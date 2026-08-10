@@ -131,8 +131,8 @@ impl Symbol {
     pub const SHIFT_LEFT: Self = Self::expect_symbol("shift_left");
     pub const SHIFT_RIGHT: Self = Self::expect_symbol("shift_right");
     pub const BITWISE_OR: Self = Self::expect_symbol("bitwise_or");
-    pub const INT_TYPE_NAME: Self = Self::expect_symbol("Int");
-    pub const UINT_TYPE_NAME: Self = Self::expect_symbol("UInt");
+    pub const INT_FIRST_UPPER: Self = Self::expect_symbol("Int");
+    pub const UINT_FIRST_UPPER: Self = Self::expect_symbol("UInt");
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }

@@ -31,8 +31,6 @@ pub(super) struct ModuleInfo {
 }
 #[derive(Clone, Copy, Debug)]
 enum TypeAlias {
-    Int8,
-    UInt8,
     Box,
     ArrayList,
     Never,
@@ -40,19 +38,25 @@ enum TypeAlias {
     Uninit,
     Int64,
     UInt64,
+    Int8,
+    UInt8,
+    Int32,
+    UInt32,
 }
 impl TypeAlias {
     fn into_type_name(self) -> res::TypeName {
         match self {
             TypeAlias::Box => res::TypeName::Box,
-            TypeAlias::Int8 => res::TypeName::Int8,
-            TypeAlias::UInt8 => res::TypeName::UInt8,
+            TypeAlias::Int8 => res::TypeName::Int(res::IntegerSize::Int8),
+            TypeAlias::Int32 => res::TypeName::Int(res::IntegerSize::Int32),
+            TypeAlias::Int64 => res::TypeName::Int(res::IntegerSize::Int64),
+            TypeAlias::UInt8 => res::TypeName::UInt(res::IntegerSize::Int8),
+            TypeAlias::UInt32 => res::TypeName::UInt(res::IntegerSize::Int32),
+            TypeAlias::UInt64 => res::TypeName::UInt(res::IntegerSize::Int64),
             TypeAlias::ArrayList => res::TypeName::Array,
             TypeAlias::Never => res::TypeName::Never,
             TypeAlias::RawArray => res::TypeName::RawArray,
             TypeAlias::Uninit => res::TypeName::Uninit,
-            TypeAlias::Int64 => res::TypeName::Int64,
-            TypeAlias::UInt64 => res::TypeName::UInt64,
         }
     }
 }
@@ -123,9 +127,11 @@ impl<'info> Resolve<'info> {
     fn new(config: Config, results: &'info DeclareResults) -> Self {
         let env = Scope::from_iter([
             (Symbol::intern("UInt8"), Res::TypeAlias(TypeAlias::UInt8)),
+            (Symbol::intern("UInt32"), Res::TypeAlias(TypeAlias::UInt32)),
+            (Symbol::intern("UInt64"), Res::TypeAlias(TypeAlias::UInt64)),
             (Symbol::intern("Int8"), Res::TypeAlias(TypeAlias::Int8)),
-            (Symbol::INT_TYPE_NAME, Res::TypeAlias(TypeAlias::Int64)),
-            (Symbol::UINT_TYPE_NAME, Res::TypeAlias(TypeAlias::UInt64)),
+            (Symbol::intern("Int32"), Res::TypeAlias(TypeAlias::Int32)),
+            (Symbol::intern("Int64"), Res::TypeAlias(TypeAlias::Int64)),
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),
             (

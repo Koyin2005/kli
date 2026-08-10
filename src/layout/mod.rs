@@ -227,7 +227,6 @@ impl Layout {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Scalar {
     Bool,
-    Uint32,
     Pointer { non_null: bool },
     Int { signed: bool, size: IntegerSize },
 }
@@ -244,9 +243,9 @@ impl Scalar {
         match self {
             Scalar::Bool => Size::BYTE,
             Scalar::Pointer { non_null: _ } => POINTER_SIZE,
-            Scalar::Uint32 => Size::BYTE.mul(4),
             Scalar::Int { size, .. } => match size {
                 IntegerSize::Int64 => Size::BYTE.mul(8),
+                IntegerSize::Int32 => Size::BYTE.mul(4),
                 IntegerSize::Int8 => Size::BYTE,
             },
         }
@@ -254,9 +253,9 @@ impl Scalar {
     pub const fn align(self) -> Align {
         match self {
             Self::Bool => Align::BYTE,
-            Self::Uint32 => Align::FOUR_BYTE,
             Self::Int { size, .. } => match size {
                 IntegerSize::Int8 => Align::BYTE,
+                IntegerSize::Int32 => Align::FOUR_BYTE,
                 IntegerSize::Int64 => INT_ALIGN,
             },
             Self::Pointer { non_null: _ } => POINTER_ALIGN,
@@ -411,11 +410,7 @@ pub fn calculate_layout<'ctxt>(
             alignment: Align::BYTE,
             kind: LayoutKind::Scalar(Scalar::Bool),
         },
-        TypeKind::Char => Layout {
-            size: Size::BYTE.mul(4),
-            alignment: Align::FOUR_BYTE,
-            kind: LayoutKind::Scalar(Scalar::Uint32),
-        },
+        TypeKind::Char => Layout::from_scalar(Scalar::integer(false, IntegerSize::Int32)),
         TypeKind::Never => Layout::zst().uninhabited(),
         TypeKind::Param(_, _) => return Err(LayoutError::TooGeneric),
         TypeKind::Function(_) | TypeKind::Box(_) => Layout::pointer(true),

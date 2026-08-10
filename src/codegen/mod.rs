@@ -39,13 +39,13 @@ fn scalar_to_cranelift_type(scalar: layout::Scalar) -> codegen::ir::Type {
     match scalar {
         layout::Scalar::Bool => codegen::ir::types::I8,
         layout::Scalar::Int { signed: _, size } => integer_size_to_cranelift_type(size),
-        layout::Scalar::Uint32 => codegen::ir::types::I32,
         layout::Scalar::Pointer { non_null: _ } => PTR_IR_TYPE,
     }
 }
 fn integer_size_to_cranelift_type(integer: IntegerSize) -> codegen::ir::Type {
     match integer {
         IntegerSize::Int64 => codegen::ir::types::I64,
+        IntegerSize::Int32 => codegen::ir::types::I32,
         IntegerSize::Int8 => codegen::ir::types::I8,
     }
 }
@@ -1714,22 +1714,22 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     let value = match *cast {
                         mir::IntegerCast::SignExtend(to_size) => {
                             let from_size = operand_value.ty.as_integer().unwrap().size();
-                            match (from_size, to_size) {
-                                (from_size, to_size) if from_size == to_size => value,
-                                (IntegerSize::Int8 | IntegerSize::Int64, _) => self
-                                    .builder
+                            if from_size == to_size {
+                                value
+                            } else {
+                                self.builder
                                     .ins()
-                                    .sextend(integer_size_to_cranelift_type(to_size), value),
+                                    .sextend(integer_size_to_cranelift_type(to_size), value)
                             }
                         }
                         mir::IntegerCast::ZeroExtend(to_size) => {
                             let from_size = operand_value.ty.as_integer().unwrap().size();
-                            match (from_size, to_size) {
-                                (from_size, to_size) if from_size == to_size => value,
-                                (IntegerSize::Int8 | IntegerSize::Int64, _) => self
-                                    .builder
+                            if from_size == to_size {
+                                value
+                            } else {
+                                self.builder
                                     .ins()
-                                    .uextend(integer_size_to_cranelift_type(to_size), value),
+                                    .uextend(integer_size_to_cranelift_type(to_size), value)
                             }
                         }
                         mir::IntegerCast::ZeroExtendUInt8ToChar => {

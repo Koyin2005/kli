@@ -303,9 +303,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
 
                         let from = self.assert_with_some(
                             from_ty,
-                            |from| {
-                                from.as_integer().map(IntegerKind::size)
-                            },
+                            |from| from.as_integer().map(IntegerKind::size),
                             || "Should be an integer",
                             loc,
                         );
@@ -328,9 +326,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
 
                         let from = self.assert_with_some(
                             from_ty,
-                            |from| {
-                                from.as_integer().map(IntegerKind::size)
-                            },
+                            |from| from.as_integer().map(IntegerKind::size),
                             || "Should be an integer",
                             loc,
                         );
