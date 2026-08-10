@@ -13,8 +13,6 @@ fun shift_left(x : Int64, y : Int64) -> Int64 = builtins.shift_left(x,y)
 
 fun shift_right(x : Int64, y : Int64) -> Int64 = builtins.shift_right(x,y)
 
-fun bitwise_or(x : Int64, y : Int64) -> Int64 = builtins.bitwise_or(x,y)
-
 
 fun checked_add(x : Int64, y : Int64) -> Option[Int64] = do 
     case builtins.overflowing_add(x,y) of 

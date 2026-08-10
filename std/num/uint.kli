@@ -14,8 +14,6 @@ fun shift_left(x : UInt64, y : UInt64) -> UInt64 = builtins.shift_left(x,y)
 
 fun shift_right(x : UInt64, y : UInt64) -> UInt64 = builtins.shift_right(x,y)
 
-fun bitwise_or(x : UInt64, y : UInt64) -> UInt64 = builtins.bitwise_or(x,y)
-
 fun checked_add(x : UInt64, y : UInt64) -> Option[UInt64] = do 
     case builtins.overflowing_add(x,y) of 
     | (_,false) -> Option.None
