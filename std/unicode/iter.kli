@@ -20,10 +20,7 @@ fun char_indices(s : string) -> CharIterIndices =
 fun next(iter : CharIter) -> Option[char] = do
     case next_index(iter.indices) of
     | .None -> Option.None
-    | .Some((_,next)) -> 
-        do
-            Option.Some(next)
-        end
+    | .Some((_,next)) -> Option.Some(next)
     end
 
 end
