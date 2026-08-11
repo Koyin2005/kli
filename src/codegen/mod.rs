@@ -497,12 +497,14 @@ enum CodegenPlaceBase {
 enum CodegenPlace<'ctxt> {
     Ssa(Type<'ctxt>, frontend::Variable),
     MemPlace(MemPlace<'ctxt>),
+    ZeroSized(Type<'ctxt>)
 }
 impl<'ctxt> CodegenPlace<'ctxt> {
     fn type_of(&self) -> Type<'ctxt> {
         match self {
             CodegenPlace::MemPlace(place) => place.ty,
             &CodegenPlace::Ssa(ty, ..) => ty,
+            &CodegenPlace::ZeroSized(ty) => ty
         }
     }
 }
@@ -663,9 +665,12 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         match dst_place {
             CodegenPlace::MemPlace(place) => self.store_immediate_mem(place, value),
             CodegenPlace::Ssa(.., var) => self.store_var_imm(var, value),
+            CodegenPlace::ZeroSized(_) => panic!("Cannot store an immediate in zero sized place")
         }
     }
 
+    /// Panics: 
+    ///  If `dst_place` is an immediate or zero sized  
     fn store_immediate_pair(
         &mut self,
         dst_place: CodegenPlace,
@@ -677,9 +682,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             CodegenPlace::MemPlace(place) => {
                 self.store_immediate_pair_mem(place, first, second, offset)
             }
-            CodegenPlace::Ssa(..) => {
-                unreachable!()
-            }
+            CodegenPlace::Ssa(..) => panic!("Cannot store 2 immediates in single place"),
+            CodegenPlace::ZeroSized(_) => panic!("Cannot store an immediate in zero sized place")
         }
     }
     fn store_immediate_mem(&mut self, dst_place: MemPlace, value: ir::Value) {
@@ -714,6 +718,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     }
     fn copy(&mut self, place: CodegenPlace<'ctxt>, dst_place: CodegenPlace<'ctxt>) {
         match (place, dst_place) {
+            (CodegenPlace::ZeroSized(_),_) | (_,CodegenPlace::ZeroSized(_)) => (),
             (CodegenPlace::MemPlace(place), CodegenPlace::MemPlace(dst_place)) => {
                 self.memcopy(place, dst_place)
             }
@@ -726,6 +731,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 self.store_immediate_mem(dst_place, value);
             }
             (CodegenPlace::MemPlace(src_value), CodegenPlace::Ssa(ty, dst_var)) => {
+
                 let ty = integer_size_to_cranelift_type(
                     ty.as_simple_scalar().unwrap().as_integer().size(),
                 );
@@ -753,12 +759,16 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             MemFlagsData::new(),
         );
     }
+    /// Stores a scalar value in a place
+    /// Panics:
+    ///  If the place is zero sized
     fn store_scalar(&mut self, place: CodegenPlace<'ctxt>, value: ScalarValue) {
         match place {
             CodegenPlace::MemPlace(place) => self.store_scalar_mem(place, value),
             CodegenPlace::Ssa(.., var) => {
                 self.store_var_imm(var, value.first_value());
-            }
+            },
+            CodegenPlace::ZeroSized(_) => panic!("Cannot store a scalar in zero sized value")
         }
     }
     fn store_scalar_mem(&mut self, place: MemPlace<'ctxt>, value: ScalarValue) {
@@ -798,6 +808,10 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 return;
             }
             CodegenPlace::Ssa(_, variable) => variable,
+            CodegenPlace::ZeroSized(_) => {
+                assert!(matches!(value.kind,OperandValueKind::ZeroSized),"Cannot write to zero sized place");
+                return;
+            }
         };
         let value = value.expect_immediate(self);
         self.store_var_imm(first_var, value);
@@ -810,6 +824,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         match &place {
             CodegenPlace::MemPlace(place) => self.load_place_mem(place),
             CodegenPlace::Ssa(.., var) => Some(ScalarValue::Single(self.builder.use_var(*var))),
+            CodegenPlace::ZeroSized(_) => None,
         }
     }
     fn load_place_mem(&mut self, place: &MemPlace<'ctxt>) -> Option<ScalarValue> {
@@ -1668,6 +1683,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                                 CodegenPlace::Ssa(.., var) => {
                                     self.store_var_imm(var, discr);
                                 }
+                                CodegenPlace::ZeroSized(_) => (),
                             }
                         }
                         layout::TagEncoding::Uninhabited => (),
@@ -1862,7 +1878,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                                     .as_integer()
                                     .is_some_and(|kind| kind.size().is_byte_sized()),
                             )
-                        }
+                        },
+                        CodegenPlace::ZeroSized(_) => return,
                     },
                     Err(_) => {
                         return;
