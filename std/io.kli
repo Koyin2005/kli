@@ -2,6 +2,9 @@ import std.num.int
 import std.num.uint
 import int.neg
 
+fun print_char(value : char) -> () = 
+    builtins.print_string(std.chars.to_string(value))
+
 fun print_string(value : string) -> () = builtins.print_string(value)
 
 fun print_uint(value : UInt64) -> () = do
