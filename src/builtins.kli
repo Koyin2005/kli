@@ -2,7 +2,7 @@
 fun box_alloc[T](value : T) -> Box[T];
 
 # Safety:
-# The current representation of `x` must be representable as `U`
+# The current representation of `x` must be a valid value of `U`
 @builtin
 @unsafe
 fun transmute[T,U](x : T) -> U;
@@ -60,7 +60,7 @@ fun int_max_value[T]() -> T;
 fun uninit_zeroed[T]() -> uninit[T];
 
 # Safety: 
-# `value` must represent a valid, fully initialised value of type `T`
+# `value` must represent a valid value of type `T`
 @unsafe
 @builtin
 fun uninit_assume_init[T](value : uninit[T]) -> T;
