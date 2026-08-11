@@ -26,21 +26,6 @@ fun clone(s : string) -> string = do
     unsafe builtins.transmute(bs) end
 end
 
-
-fun utf8_len(c : char) -> UInt64 = 
-    case c < '\u00FF' of
-    | true -> 1
-    | _ -> 
-        case c < '\u07FF' of 
-        | true -> 2
-        | _ -> 
-            case c < '\uFFFF' of 
-            | true -> 3
-            | _ -> 4
-            end
-        end
-    end
-
 fun char_to_uint32(c : char) -> UInt32 = 
     builtins.bitcast(c)
 
