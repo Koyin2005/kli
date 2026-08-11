@@ -1,4 +1,4 @@
-import std.(dynarray,strings)
+import std.(dynarray,strings,panicking)
 import dynarray.DynArray
 
 @opaque
@@ -12,6 +12,88 @@ fun new() -> StringBuf = StringBuf { buf = dynarray.new()}
 # Pushes a single string to the StringBuf
 fun push_string(this : StringBuf, s : string) -> () = 
     dynarray.append_array(this.buf,unsafe strings.as_bytes(s) end)
+
+fun reserve(this : StringBuf, byte_count : UInt64) -> () = 
+    dynarray.reserve(this.buf, byte_count)
+
+
+fun push_char(this : StringBuf, c : char) -> () = do
+    let len = strings.utf8_len(c);
+    reserve(this,len);
+    let code : UInt32 = builtins.bitcast(c);
+    case len of 
+    | 1 -> dynarray.push(this.buf,builtins.truncate(code))
+    | 2 -> 
+        do
+            let first_byte : UInt8 = 
+                builtins.truncate(
+                    (builtins.shift_right(code,6) band 0b11100)
+                    bor (builtins.shift_right(code,6) band 0b11)
+                ) bor 0b11000000;
+
+            let second_byte : UInt8 =
+                builtins.truncate( 
+                    (code band 0b111111) 
+                ) bor 0b10000000;
+            dynarray.push(this.buf,first_byte);
+            dynarray.push(this.buf,second_byte);
+        end
+    | 3 -> 
+        do
+            let first_byte : UInt8 = builtins.truncate(
+                builtins.shift_right(code,12)
+            ) bor 0b11100000;
+            let second_byte : UInt8 = (
+                builtins.truncate(
+                    builtins.shift_right(code,6)
+                ) band 0b111100
+            ) bor 0b10000000;
+            let third_byte : UInt8 = (
+                builtins.truncate(code) band 0b111111
+            ) bor 0b10000000;
+            dynarray.push(this.buf,first_byte);
+            dynarray.push(this.buf,second_byte);
+            dynarray.push(this.buf,third_byte)
+        end
+    | 4 -> 
+        do
+            let first_byte : UInt8 = builtins.truncate(
+                builtins.shift_right(code,18)
+            ) bor 0b11110000;
+
+            let second_byte : UInt8 = (
+                builtins.truncate(
+                    builtins.shift_right(code,12)
+                ) band 0b110000
+            ) 
+            bor (
+                builtins.truncate(
+                    builtins.shift_right(code,12)
+                ) band 0b1111
+            ) 
+            bor 0b10000000;
+            let third_byte : UInt8 = (
+                builtins.truncate(
+                    builtins.shift_right(code,6)
+                ) band 0b111100
+            ) bor (
+                builtins.truncate(
+                    builtins.shift_right(code,6)
+                ) band 0b11
+            ) 
+            bor 0b10000000;
+            let fourth_byte : UInt8 = (
+                builtins.truncate(code)
+                band 0b111111
+            ) bor 0b10000000;
+            dynarray.push(this.buf,first_byte);
+            dynarray.push(this.buf,second_byte);
+            dynarray.push(this.buf,third_byte); 
+            dynarray.push(this.buf,fourth_byte);
+        end
+    | _ -> panicking.unreachable()
+    end
+end
 
 # Clones the current string in the StringBuf
 fun into_string(this : StringBuf) -> string = 

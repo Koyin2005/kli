@@ -350,10 +350,10 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
 
                         let to = to.size();
                         self.assert(
-                            from.bit_width() <= to.bit_width(),
+                            from.bit_width() >= to.bit_width(),
                             || {
                                 format!(
-                                    "Cannot extend {} into {}",
+                                    "Cannot truncate {} into {}",
                                     from_ty,
                                     IntegerKind::Signed(to)
                                 )
