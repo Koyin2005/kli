@@ -760,6 +760,9 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let Ok(dst_place) = self.eval_place(place) else {
             return;
         };
+        if let OperandValueKind::ZeroSized = value.kind {
+            return;
+        }
         let first_var = match dst_place {
             CodegenPlace::MemPlace(place) => {
                 self.store_operand_with_mem_place(place, value);
@@ -974,14 +977,17 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             mir::ConstValue::Named(id, ref args) => {
                 let kind = InstanceKind::Function(id);
                 let function = Instance {
-                    args: args.clone(),
+                    args: self.monomorphize(args.clone()),
                     kind,
                 };
                 let func_id = self
                     .functions
                     .functions
                     .get(&function)
-                    .unwrap_or_else(|| panic!("not found {:?}", function))
+                    .unwrap_or_else(|| panic!("not found {}{}", 
+                        self.ctxt.display_path_for(function.body_src().def_id()),
+                        function.args
+                    ))
                     .id;
                 let function = self.module.declare_func_in_func(func_id, self.builder.func);
                 OperandValueKind::Value(ScalarValue::Single(

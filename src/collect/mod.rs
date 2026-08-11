@@ -326,7 +326,7 @@ impl<'ctxt> CtxtRef<'ctxt> {
                             self.visit_type(field.type_of(args, self.0));
                         }
                     }
-                    TypeKind::Array(_) | TypeKind::Box(_) => (),
+                    TypeKind::Array(_) | TypeKind::Box(_) | TypeKind::Function(..) => (),
                     _ => self.super_visit_type(ty),
                 }
             }
