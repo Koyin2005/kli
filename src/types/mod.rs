@@ -101,9 +101,9 @@ pub struct FunctionSig<'ctxt> {
     pub return_type: Type<'ctxt>,
 }
 impl<'ctxt> FunctionSig<'ctxt> {
-    pub const fn new(params: Vec<Type<'ctxt>>, return_type: Type<'ctxt>) -> Self {
+    pub fn new(params: impl IntoIterator<Item = Type<'ctxt>>, return_type: Type<'ctxt>) -> Self {
         Self {
-            params,
+            params: params.into_iter().collect(),
             return_type,
         }
     }

@@ -207,24 +207,19 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             .collect::<Vec<_>>();
         let root = self.root();
         let sig = FunctionSig::new(
-            lambda
-                .param_tys
-                .iter()
-                .enumerate()
-                .map(|(i, param)| {
-                    let param = param.as_ref().map(|param| root.lower_type(param));
-                    let param_ty = expected_sig
-                        .as_ref()
-                        .and_then(|sig| sig.params.get(i))
-                        .cloned();
-                    let loc = lambda.params[i].loc;
-                    match (param, param_ty) {
-                        (None, None) => root.fresh_ty(loc),
-                        (Some(ty), None) | (None, Some(ty)) => ty,
-                        (Some(ty), Some(expected)) => root.unify(expected, ty, loc),
-                    }
-                })
-                .collect(),
+            lambda.param_tys.iter().enumerate().map(|(i, param)| {
+                let param = param.as_ref().map(|param| root.lower_type(param));
+                let param_ty = expected_sig
+                    .as_ref()
+                    .and_then(|sig| sig.params.get(i))
+                    .cloned();
+                let loc = lambda.params[i].loc;
+                match (param, param_ty) {
+                    (None, None) => root.fresh_ty(loc),
+                    (Some(ty), None) | (None, Some(ty)) => ty,
+                    (Some(ty), Some(expected)) => root.unify(expected, ty, loc),
+                }
+            }),
             if let Some(ty) = expected_sig.as_ref().map(|sig| sig.return_type) {
                 ty
             } else {

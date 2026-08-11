@@ -7,58 +7,6 @@ fun print_char(value : char) -> () =
 
 fun print_string(value : string) -> () = builtins.print_string(value)
 
-fun print_uint(value : UInt64) -> () = do
-    case value of 
-    | 0 -> 
-        do 
-            builtins.print_string("0");
-            return ();
-        end 
-    | _ -> ()
-    end;
-    
-    let mut value = value;
-    let digits = uint.log(value,10);
-    let mut arr = arrays.repeat(digits,"");
-
-    let mut i = 0u;
-    while value > 0u do
-        let rest = value / 10u;
-        let digit = value - rest * 10u;
-        value = rest;
-        (arr).[i] = (case digit of
-        | 0 -> "0"
-        | 1 -> "1"
-        | 2 -> "2"
-        | 3 -> "3"
-        | 4 -> "4"
-        | 5 -> "5"
-        | 6 -> "6"
-        | 7 -> "7"
-        | 8 -> "8"
-        | _ -> "9"
-        end);
-        i = i + 1u;
-    end;
-    std.arrays.reverse(arr);
-    for i in 0u..digits do
-        builtins.print_string((arr).[i]);
-    end
-
-end
-
-
-fun print_int(value : Int64) -> () = do
-    
-    print_uint(int.strict_cast_uint(case value < 0 of
-    | true -> do 
-        builtins.print_string("-");
-        neg(value)
-    end
-    | false -> value
-    end));
-end
-
 # Prints the string and then prints a newline 
 fun print_newline(value : string) -> () = do
     builtins.print_string(value);

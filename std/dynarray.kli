@@ -3,6 +3,7 @@ import std.optional.(Option,expect_value)
 import std.boxed
 import std.num.(uint,int)
 import std.panicking
+import std.fmt as fmt_
 
 @opaque
 type DynArrayInner[T] = {
@@ -25,9 +26,10 @@ end
 
 fun from_array[T](arr : array[T]) -> DynArray[T] = do
     let len = builtins.array_len(arr);
-    let dyn_arr = with_capacity(len);
+    let dyn_arr : DynArray[T] = with_capacity(len);
+    let buf = dyn_arr.inner^.buf;
     unsafe 
-        arrays.copy_unchecked(dyn_arr.inner^.buf,builtins.transmute(arr),0,0,len);
+        arrays.copy_unchecked(buf,builtins.transmute(arr),0,0,len);
     end;
     dyn_arr.inner^.len = len;
     dyn_arr
@@ -203,4 +205,24 @@ fun drain_to_array[T](this : DynArray[T]) -> array[T] = do
     this.inner^.buf = [];
     this.inner^.len = 0;
     arr
+end
+
+
+fun fmt[T,S,C](this : DynArray[T], format_elem : fmt_.Format[T,S,C], writer: fmt_.Writer[S]) -> () = do
+    fmt_.write_string(writer,"[");
+    for i in 0u..len(this) do 
+        case i > 0 of
+        | true -> fmt_.write_string(writer,",")
+        | false -> ()
+        end;
+        fmt_.write_format(writer,format_elem,dynarray.get(this,i));
+    end;
+    fmt_.write_string(writer,"]");
+end
+
+fun make_fmt[T,S,C](f : fmt_.Format[T,S,C]) -> fmt_.Format[DynArray[T],S,fmt_.Format[T,S,C]] = do
+    fmt_.Format {
+        ctxt = f,
+        fmt = fmt
+    }
 end

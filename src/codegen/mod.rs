@@ -76,12 +76,24 @@ impl PassMode {
 }
 #[track_caller]
 fn call_abi<'ctxt>(ctxt: CtxtRef<'ctxt>, function_sig: &FunctionSig<'ctxt>) -> CallAbi {
-    let params = function_sig
-        .params
-        .iter()
-        .copied()
-        .map(|param| PassMode::new(backend_repr(&ctxt.layout_of(param).unwrap())))
-        .collect();
+    #[track_caller]
+    fn expect_pass_mode<'ctxt>(ctxt: CtxtRef<'ctxt>, param: Type<'ctxt>) -> PassMode {
+        PassMode::new(backend_repr(&match ctxt.layout_of(param) {
+            Ok(l) => l,
+            Err(err) => {
+                panic!("encountered layout err {:?} for {}", err, param)
+            }
+        }))
+    }
+
+    let params = {
+        let mut params = Vec::new();
+        for param in function_sig.params.iter().copied() {
+            params.push(expect_pass_mode(ctxt, param));
+        }
+
+        params
+    };
     let ret = PassMode::new(backend_repr(
         &ctxt.layout_of(function_sig.return_type).unwrap(),
     ));
@@ -215,8 +227,9 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                 )
             };
             let function = &mir_ctxt.bodies[&instance.body_src()];
+
             let sig = Scheme::new(FunctionSig::new(
-                function.param_types().collect(),
+                function.param_types(),
                 function.return_type,
             ))
             .bind(self.ctxt, &instance.args);
@@ -475,6 +488,12 @@ enum ScalarType {
 }
 
 #[derive(Debug, Clone)]
+enum CodegenPlaceBase {
+    Ssa(frontend::Variable),
+    Pointer(ir::Value),
+}
+
+#[derive(Debug, Clone)]
 enum CodegenPlace<'ctxt> {
     Ssa(Type<'ctxt>, frontend::Variable),
     MemPlace(MemPlace<'ctxt>),
@@ -698,11 +717,24 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             (CodegenPlace::MemPlace(place), CodegenPlace::MemPlace(dst_place)) => {
                 self.memcopy(place, dst_place)
             }
-            (ref place, dst_place) => {
-                let Some(value) = self.load_place(place) else {
-                    return;
-                };
-                self.store_scalar(dst_place, value);
+            (CodegenPlace::Ssa(_, var), CodegenPlace::Ssa(_, dest_var)) => {
+                let value = self.builder.use_var(var);
+                self.store_var_imm(dest_var, value);
+            }
+            (CodegenPlace::Ssa(_, variable), CodegenPlace::MemPlace(dst_place)) => {
+                let value = self.builder.use_var(variable);
+                self.store_immediate_mem(dst_place, value);
+            }
+            (CodegenPlace::MemPlace(src_value), CodegenPlace::Ssa(ty, dst_var)) => {
+                let ty = integer_size_to_cranelift_type(
+                    ty.as_simple_scalar().unwrap().as_integer().size(),
+                );
+                let ptr = src_value.ptr(self);
+                let value = self
+                    .builder
+                    .ins()
+                    .load(ty, MemFlagsData::new(), ptr, Offset32::new(0));
+                self.store_var_imm(dst_var, value);
             }
         }
     }
@@ -760,9 +792,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let Ok(dst_place) = self.eval_place(place) else {
             return;
         };
-        if let OperandValueKind::ZeroSized = value.kind {
-            return;
-        }
         let first_var = match dst_place {
             CodegenPlace::MemPlace(place) => {
                 self.store_operand_with_mem_place(place, value);
@@ -842,6 +871,36 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             .ins()
             .load(ir::types::I64, MemFlagsData::new(), ptr, offset)
     }
+    fn eval_scalar_with_projections(
+        &mut self,
+        ty: &mut Type<'ctxt>,
+        projections: &mut &[mir::PlaceProjection],
+        variable: frontend::Variable,
+    ) -> Result<CodegenPlaceBase, Type<'ctxt>> {
+        if !projections.is_empty() {
+            for &projection in (*projections).iter() {
+                *projections = &projections[1..];
+                *ty = projection.apply_projection_to_type(*ty, self.ctxt);
+                match projection {
+                    mir::PlaceProjection::ConstantIndex(_) | mir::PlaceProjection::Index(_) => {
+                        unreachable!("shouldn't be scalar then")
+                    }
+                    mir::PlaceProjection::CaseDowncast(..) | mir::PlaceProjection::Field(_) => (),
+                    mir::PlaceProjection::Deref => {
+                        let value = self
+                            .load_place(&CodegenPlace::Ssa(*ty, variable))
+                            .unwrap()
+                            .first_value();
+                        return Ok(CodegenPlaceBase::Pointer(value));
+                    }
+                }
+            }
+            if let BackendRepr::ZeroSized = backend_repr(&self.layout_for(*ty)) {
+                return Err(*ty);
+            }
+        }
+        return Ok(CodegenPlaceBase::Ssa(variable));
+    }
     fn eval_place(&mut self, place: &mir::Place) -> Result<CodegenPlace<'ctxt>, Type<'ctxt>> {
         let (mut place_value, projections) = {
             let (ty, ptr, projections) = match place.base {
@@ -857,42 +916,46 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                                 .stack_addr(PTR_IR_TYPE, addr, Offset32::new(0))
                         }
 
-                        LocalKind::ZeroSized => return Err(ty),
-                        LocalKind::Scalar(var) => 'a: {
-                            if !projections.is_empty() {
-                                for projection in place.projections.iter() {
-                                    projections = &projections[1..];
+                        LocalKind::ZeroSized => {
+                            return Err(if !projections.is_empty() {
+                                for projection in projections {
                                     ty = projection.apply_projection_to_type(ty, self.ctxt);
-                                    match projection {
-                                        mir::PlaceProjection::ConstantIndex(_)
-                                        | mir::PlaceProjection::Index(_) => {
-                                            unreachable!("shouldn't be scalar then")
-                                        }
-                                        mir::PlaceProjection::CaseDowncast(..)
-                                        | mir::PlaceProjection::Field(_) => (),
-                                        mir::PlaceProjection::Deref => {
-                                            let value = self
-                                                .load_place(&CodegenPlace::Ssa(ty, var))
-                                                .unwrap()
-                                                .first_value();
-                                            break 'a value;
-                                        }
-                                    }
                                 }
-                                if let BackendRepr::ZeroSized = backend_repr(&self.layout_for(ty)) {
-                                    return Err(ty);
+                                ty
+                            } else {
+                                ty
+                            });
+                        }
+                        LocalKind::Scalar(var) => {
+                            match self.eval_scalar_with_projections(
+                                &mut ty,
+                                &mut projections,
+                                var,
+                            )? {
+                                CodegenPlaceBase::Pointer(ptr) => ptr,
+                                CodegenPlaceBase::Ssa(var) => {
+                                    return Ok(CodegenPlace::Ssa(ty, var));
                                 }
                             }
-                            return Ok(CodegenPlace::Ssa(ty, var));
                         }
                     };
                     (ty, ptr, projections)
                 }
                 PlaceBase::ReturnPlace => {
-                    let ty = self.return_ty;
+                    let mut projections = &place.projections[..];
+                    let mut ty = self.return_ty;
                     let ptr = match self.local_info.return_slot() {
                         ReturnSlot::Scalar(variable) => {
-                            return Ok(CodegenPlace::Ssa(ty, variable));
+                            match self.eval_scalar_with_projections(
+                                &mut ty,
+                                &mut projections,
+                                variable,
+                            )? {
+                                CodegenPlaceBase::Pointer(ptr) => ptr,
+                                CodegenPlaceBase::Ssa(var) => {
+                                    return Ok(CodegenPlace::Ssa(ty, var));
+                                }
+                            }
                         }
                         ReturnSlot::Arg => self.builder.block_params(self.block_map.entry())[0],
                         ReturnSlot::Local(return_slot) => self.builder.ins().stack_addr(
@@ -902,7 +965,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         ),
                         ReturnSlot::Void => return Err(ty),
                     };
-                    (ty, ptr, &place.projections[..])
+                    (ty, ptr, projections)
                 }
             };
             let layout = self.layout_for(ty);
@@ -984,10 +1047,13 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     .functions
                     .functions
                     .get(&function)
-                    .unwrap_or_else(|| panic!("not found {}{}", 
-                        self.ctxt.display_path_for(function.body_src().def_id()),
-                        function.args
-                    ))
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "not found {}{}",
+                            self.ctxt.display_path_for(function.body_src().def_id()),
+                            function.args
+                        )
+                    })
                     .id;
                 let function = self.module.declare_func_in_func(func_id, self.builder.func);
                 OperandValueKind::Value(ScalarValue::Single(

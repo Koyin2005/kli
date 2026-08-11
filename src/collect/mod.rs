@@ -574,7 +574,7 @@ impl<'ctxt> CtxtRef<'ctxt> {
         };
         let lower = Lower::new(self, id, None);
         Scheme::new(FunctionSig::new(
-            lower.lower_types(&mut function.param_tys.iter()).collect(),
+            lower.lower_types(&mut function.param_tys.iter()),
             lower.lower_type(&function.return_type),
         ))
     }

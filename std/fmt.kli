@@ -16,7 +16,6 @@ type Writer[S] = {
 # `T` is the type we're formatting
 # `S` is we're formatting into e.g Stdout or a StringBuf
 # `C` is the context needed for formatting
-@opaque
 type Format[T,S,C] = {
     ctxt : C,
     fmt : fun(T, C, Writer[S]) -> ()
@@ -53,12 +52,11 @@ fun fmt_uint[S](value : UInt64, _ : (), writer : Writer[S]) -> () = do
     | 0 -> return write_string(writer,"0")
     | _ -> ()
     end;
-    
     let mut value = value;
     let digits = uint.log(value,10);
-    let mut arr = arrays.repeat(digits,"");
+    let mut arr = arrays.repeat(digits + 1,"");
 
-    let mut i = 0u;
+    let mut i = digits;
     while value > 0u do
         let rest = value / 10u;
         let digit = value - rest * 10u;
@@ -75,11 +73,10 @@ fun fmt_uint[S](value : UInt64, _ : (), writer : Writer[S]) -> () = do
         | 8 -> "8"
         | _ -> "9"
         end);
-        i = i + 1u;
+        i = i - 1u;
     end;
-    std.arrays.reverse(arr);
     for i in 0u..digits do
-        write_string(writer,(arr).[i]);
+        write_string(writer,(arr).[i + 1]);
     end
 end
 
@@ -109,14 +106,13 @@ fun make_int_fmt[S]() -> Format[Int64,S,()] = do
 end
 
 fun fmt_array[T,S,C](value : array[T], format_elem : Format[T,S,C], writer: Writer[S]) -> () = do
-    let { ctxt = ctxt, fmt = format_elem} = format_elem;
     write_string(writer,"[");
     for i in 0u..std.arrays.len(value) do 
         case i > 0 of
         | true -> write_string(writer,",")
         | false -> ()
         end;
-        format_elem(value.[i],ctxt,writer);
+        write_format(writer,format_elem,value.[i]);
     end;
     write_string(writer,"]");
 end
@@ -128,12 +124,41 @@ fun make_array_fmt[T,S,C](f : Format[T,S,C]) -> Format[array[T],S,Format[T,S,C]]
     }
 end
 
+fun fmt_pair[T,U,S,C1,C2](value : (T,U), format_pair : (Format[T,S,C1],Format[U,S,C2]), writer : Writer[S]) -> () = do
+    write_string(writer,"(");
+    let (first,second) = value;
+    let (format_first,format_second) = format_pair;
+    write_format(writer,format_first,first);
+    write_string(writer,",");
+    write_format(writer,format_second,second);
+    write_string(writer,")")
+end
+
+fun make_pair_fmt[T,U,S,C1,C2](first : Format[T,S,C1], second : Format[U,S,C2]) -> Format[(T,U),S,(Format[T,S,C1],Format[U,S,C2])] = 
+    Format {
+        ctxt = (first,second),
+        fmt = fmt_pair
+    }
+
+fun make_unit_fmt[S]() -> Format[(),S,()] = 
+    Format {
+        ctxt = (),
+        fmt = fun(_,_,w : Writer[S]) -> write_string(w,"()")
+    }
+
 fun to_string[T,C](f : Format[T,StringBuf,C], value : T) -> string = do
     let writer = string_buf_write();
     write_format(writer,f,value);
     string_buf.into_string(writer.output)
 end
+
 fun print[T,C](f : Format[T,Stdout,C], value : T) -> () = do
     let writer = io_write();
     write_format(writer,f,value);
+end
+
+fun println[T,C](f : Format[T,Stdout,C], value : T) -> () = do
+    let writer = io_write();
+    write_format(writer,f,value);
+    write_string(writer,"\n")
 end

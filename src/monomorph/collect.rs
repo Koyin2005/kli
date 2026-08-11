@@ -61,11 +61,7 @@ impl<'ctxt> InstanceCollector<'ctxt> {
                 fn visit_constant(&mut self, _: Location, constant: &Constant<'ctxt>) {
                     let new_instance = match constant.value {
                         ConstValue::Named(id, ref args) => Some(Instance {
-                            args: args
-                                .iter()
-                                .cloned()
-                                .map(|arg| Scheme::new(arg).bind(self.ctxt(), self.args))
-                                .collect(),
+                            args: Scheme::new(args.clone()).bind(self.ctxt(), self.args),
                             kind: InstanceKind::Function(id),
                         }),
                         _ => None,

@@ -55,7 +55,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
     ) -> Constant<'ctxt> {
         let ty = Type::function_type(ctxt, lambda.param_tys.clone(), lambda.return_type);
         let generics = ctxt.generics(lambda.id);
-        let args = if generics.is_empty() {
+        let args = if !generics.is_empty() {
             generics.instantiate_identity(ctxt)
         } else {
             GenericArgs::new()
