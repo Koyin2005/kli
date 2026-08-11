@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     index_vec::IndexVec,
-    mir::{self, BasicBlockId, Successors, basic_blocks::BasicBlocks, passes::preorderder},
+    mir::{self, BasicBlockId, Successors, basic_blocks::BasicBlocks, passes::preorder},
 };
 
 #[derive(Clone, Debug)]
@@ -90,7 +90,7 @@ fn link(
     ancestors[node] = Some(parent);
 }
 pub fn dominators(bbs: &BasicBlocks) -> DominatorTree {
-    let dfs = preorderder(bbs.blocks());
+    let dfs = preorder(bbs.blocks());
     let dfs_num = dfs
         .iter()
         .enumerate()
@@ -146,10 +146,10 @@ pub struct Postorder<'a> {
     visit_stack: Vec<(BasicBlockId, Successors<'a>)>,
     visited: HashSet<BasicBlockId>,
     nodes: Vec<BasicBlockId>,
-    bbs: &'a IndexVec<BasicBlockId, mir::BasicBlock>,
+    bbs: &'a IndexVec<BasicBlockId, mir::BasicBlock<'a>>,
 }
-impl Postorder<'_> {
-    fn new(bbs: &'_ BasicBlocks) -> Postorder<'_> {
+impl<'ctxt> Postorder<'ctxt> {
+    fn new(bbs: &'ctxt BasicBlocks) -> Postorder<'ctxt> {
         let mut this = Postorder {
             visit_stack: Vec::new(),
             visited: HashSet::new(),
@@ -187,12 +187,12 @@ impl Iterator for Postorder<'_> {
     }
 }
 
-pub fn postorder(bbs: &'_ BasicBlocks) -> Postorder<'_> {
+pub fn postorder<'a>(bbs: &'a BasicBlocks) -> Postorder<'a> {
     Postorder::new(bbs)
 }
 
 pub fn reachable(blocks: &BasicBlocks) -> HashSet<BasicBlockId> {
-    preorderder(blocks.blocks())
+    preorder(blocks.blocks())
         .into_iter()
         .map(|(_, node)| node)
         .collect()

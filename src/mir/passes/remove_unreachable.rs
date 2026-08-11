@@ -4,7 +4,7 @@ use crate::{
 };
 
 pub struct RemoveUnreachable;
-impl MirPass for RemoveUnreachable {
+impl MirPass<'_> for RemoveUnreachable {
     fn name(&self) -> &'static str {
         "remove-unreachable"
     }

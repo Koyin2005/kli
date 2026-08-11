@@ -1,13 +1,13 @@
 use crate::{
     mir::{
-        Place, StmtKind, TerminatorKind,
+        Place, TerminatorKind,
         build::{Builder, expr::BuiltinResult},
     },
     typed_ast::{Expr, ExprKind},
 };
 
-impl Builder<'_> {
-    pub(super) fn expr_stmt(&mut self, expr: &Expr) {
+impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
+    pub(super) fn expr_stmt(&'_ mut self, expr: &'_ Expr<'ctxt>) {
         match &expr.kind {
             ExprKind::Err => (),
             ExprKind::Assign(place, value) => {
@@ -32,10 +32,6 @@ impl Builder<'_> {
             ExprKind::Unsafe(expr) => {
                 self.expr_stmt(expr);
             }
-            ExprKind::Print(value) => {
-                let stmt = StmtKind::Print(value.as_ref().map(|expr| self.operand(expr)));
-                self.push_stmt(expr.loc, stmt);
-            }
             ExprKind::For {
                 pattern,
                 iterator,
@@ -45,6 +41,9 @@ impl Builder<'_> {
                 self.for_loop(pattern, iterator, iterator_type, body);
             }
             ExprKind::While(condition, body) => {
+                let loop_start = self.new_block();
+                let loop_body_start = self.new_block();
+                let loop_end = self.new_block();
                 // while cond body
                 // L1
                 //  if cond goto L2 else goto L3
@@ -52,25 +51,23 @@ impl Builder<'_> {
                 //  body
                 //  goto L1
                 // L3
-                let loop_start = self.goto_to_new_block(condition.loc);
-                let condition = self.operand(condition);
+                self.finish_block_with_goto(condition.loc, loop_start);
+                self.switch_to_block(loop_start);
 
-                let body_start_block = self.switch_to_new_block();
+                let loop_condition = self.operand(condition);
+                self.finish_block_with_if(body.loc, loop_condition, loop_body_start, loop_end);
+
+                self.switch_to_block(loop_body_start);
                 self.expr_stmt(body);
                 self.finish_block_with_goto(expr.loc, loop_start);
 
-                let end_block = self.new_block();
-                self.switch_to_block(loop_start);
-                self.finish_block_with_if(expr.loc, condition, body_start_block, end_block);
-
-                self.switch_to_block(end_block);
+                self.switch_to_block(loop_end);
             }
-            ExprKind::BuiltinCall(builtin, _, args) => {
-                match self.builtin_call(expr.loc, &expr.ty, *builtin, args) {
+            ExprKind::BuiltinCall(_, builtin, _, args) => {
+                match self.builtin_call(expr.loc, expr.ty, *builtin, args) {
                     BuiltinResult::Rvalue(value) => {
-                        self.assign_to_temp(expr.loc, expr.ty.clone(), value);
+                        self.assign_to_temp(expr.loc, expr.ty, value);
                     }
-                    BuiltinResult::Unit => (),
                 }
             }
             ExprKind::NeverToAny(value) => {
@@ -79,12 +76,10 @@ impl Builder<'_> {
                 self.switch_to_new_block();
             }
             //Evaluate
-            ExprKind::Record(..)
-            | ExprKind::String(_)
+            ExprKind::String(_)
             | ExprKind::Unit
             | ExprKind::Bool(_)
             | ExprKind::Int(_)
-            | ExprKind::Borrow { .. }
             | ExprKind::Load(_)
             | ExprKind::Case(..)
             | ExprKind::Call(..)
@@ -93,10 +88,11 @@ impl Builder<'_> {
             | ExprKind::Lambda(..)
             | ExprKind::Const(..)
             | ExprKind::VariantInit(..)
-            | ExprKind::AddressOf(..)
             | ExprKind::NamedRecord(..)
             | ExprKind::Logic(..)
-            | ExprKind::Tuple(..) => {
+            | ExprKind::Tuple(..)
+            | ExprKind::Array(..)
+            | ExprKind::Char(_) => {
                 self.expr_into_temp(expr);
             }
         }

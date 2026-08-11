@@ -1,0 +1,13 @@
+fun panic_message(msg : string) -> never = do
+    std.io.print_newline(msg);
+    panic
+end
+
+fun todo(msg : string) -> never = do
+    std.io.print_string("todo : ");
+    panic_message(msg)
+end
+
+fun unreachable() -> never = do
+    panic_message("unreachable")
+end

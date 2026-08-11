@@ -4,8 +4,8 @@ use crate::{
     typed_ast::{Pattern, PatternKind},
 };
 
-pub fn pattern_to_pat(ctxt: CtxtRef<'_>, pattern: &Pattern) -> Pat {
-    let ty = pattern.ty.clone();
+pub fn pattern_to_pat<'ctxt>(ctxt: CtxtRef<'ctxt>, pattern: &Pattern<'ctxt>) -> Pat<'ctxt> {
+    let ty = pattern.ty;
 
     match &pattern.kind {
         PatternKind::Int(value) => Pat {
@@ -17,11 +17,6 @@ pub fn pattern_to_pat(ctxt: CtxtRef<'_>, pattern: &Pattern) -> Pat {
             ty,
             constructor: Constructor::Record,
             fields: Vec::new(),
-        },
-        PatternKind::Ref(inner) => Pat {
-            ty,
-            constructor: Constructor::Ref,
-            fields: vec![pattern_to_pat(ctxt, inner).with_index(0)],
         },
         PatternKind::Record(fields) => Pat {
             ty,

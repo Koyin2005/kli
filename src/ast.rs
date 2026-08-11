@@ -62,6 +62,8 @@ pub enum BinaryOp {
     Greater,
     And,
     Or,
+    Bor,
+    Band,
 }
 impl Display for BinaryOp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -75,13 +77,10 @@ impl Display for BinaryOp {
             BinaryOp::Greater => f.write_str(">"),
             BinaryOp::And => f.write_str("and"),
             BinaryOp::Or => f.write_str("or"),
+            BinaryOp::Bor => f.write_str("bor"),
+            BinaryOp::Band => f.write_str("band"),
         }
     }
-}
-#[derive(Debug)]
-pub enum Place {
-    Ident(Ident),
-    Deref(Box<Expr>, SrcLoc),
 }
 #[derive(Debug)]
 pub struct Pattern {
@@ -106,8 +105,7 @@ pub enum NumberKind {
 #[derive(Debug)]
 pub enum PatternKind {
     Bool(bool),
-    Binding(Option<Mutable>, Mutable, Ident),
-    Ref(Box<Pattern>),
+    Binding(Mutable, Ident),
     Case(Ident, Option<Box<Pattern>>),
     Int(IntLit),
     Record(Vec<PatternField>),
@@ -213,12 +211,6 @@ pub struct RecordExpr {
     pub fields: Vec<FieldInit>,
 }
 #[derive(Debug)]
-pub struct BorrowExpr {
-    pub mutable: Mutable,
-    pub expr: Expr,
-    pub region: Region,
-}
-#[derive(Debug)]
 pub struct InstancePath {
     pub path: Path,
     pub generic_args: Option<GenericArgs>,
@@ -226,32 +218,31 @@ pub struct InstancePath {
 #[derive(Debug)]
 pub enum ExprKind {
     Unit,
+    Char(char),
+    Deref(Box<Expr>),
     Unsafe(Box<Expr>),
     Annotate(Box<Expr>, Box<Type>),
     String(String),
-    Print(Option<Box<Expr>>),
     Panic,
     Call(Box<Expr>, Vec<Expr>),
-    Borrow(Box<BorrowExpr>),
     Case(Box<Expr>, Vec<CaseArm>),
     While(Box<Expr>, Box<Expr>),
-    For(Box<Pattern>, Box<Expr>, Box<Expr>),
+    For(Box<Pattern>, Box<Expr>, Option<Box<Expr>>, Box<Expr>),
     Assign(Box<Expr>, Box<Expr>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
     Path(InstancePath),
     Lambda(Box<Lambda>),
-    Block(BlockBody, Option<Ident>),
-    Deref(Box<Expr>),
+    Block(BlockBody),
     Field(Box<Expr>, Ident),
     Bool(bool),
     Number(IntLit),
     Record(RecordExpr),
     Tuple(Vec<Expr>),
     NamedRecord(InstancePath, Vec<FieldInit>),
-    AddressOf(Box<Expr>),
     MethodCall(Box<Expr>, Ident, Vec<Expr>),
     Array(Vec<Expr>),
     Return(Box<Expr>),
+    Index(Box<Expr>, Box<Expr>),
 }
 #[derive(Debug, Clone, Copy)]
 pub struct GenericParam {
@@ -260,7 +251,6 @@ pub struct GenericParam {
 }
 #[derive(Debug, Clone, Copy)]
 pub enum GenericParamKind {
-    Region,
     Type,
 }
 #[derive(Debug, Clone)]
@@ -268,15 +258,8 @@ pub struct Generics {
     pub loc: SrcLoc,
     pub params: Vec<GenericParam>,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
-pub enum IsResource {
-    Resource,
-    Data,
-}
 #[derive(Debug)]
 pub struct FunctionType {
-    pub resource: IsResource,
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
 }
@@ -292,16 +275,12 @@ pub struct RecordType {
 }
 #[derive(Debug)]
 pub enum TypeKind {
-    Int,
-    Uint,
     Bool,
     String,
     Char,
     Record(RecordType),
     Named(InstancePath),
     Function(FunctionType),
-    Imm(Region, Box<Type>),
-    Mut(Region, Box<Type>),
     Tuple(Vec<Type>),
 }
 #[derive(Debug)]
@@ -318,7 +297,6 @@ pub struct Param {
 pub struct Lambda {
     pub id: NodeId,
     pub params: Vec<(Ident, Option<Type>)>,
-    pub resource: IsResource,
     pub body: Box<Expr>,
 }
 #[derive(Debug)]
@@ -348,11 +326,6 @@ pub struct Function {
     pub params: Vec<Param>,
     pub return_type: Type,
     pub body: Option<Expr>,
-}
-#[derive(Debug, Clone)]
-pub enum Region {
-    Static(SrcLoc),
-    Named(Ident),
 }
 #[derive(Debug)]
 pub struct CaseType {
@@ -407,6 +380,7 @@ pub struct Method {
 #[derive(Debug)]
 pub struct TypeImpl {
     pub id: NodeId,
+    pub loc: SrcLoc,
     pub methods: Vec<Method>,
 }
 #[derive(Debug)]

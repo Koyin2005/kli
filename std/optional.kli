@@ -1,0 +1,40 @@
+import std.io.print_newline
+@copy
+type Option[T] = 
+| None
+| Some(T)
+
+fun none[T]() -> Option[T] = Option.None
+
+fun value_or[T](o: Option[T], default : T) -> T = 
+    case o of 
+    | .Some(x) -> x
+    | .None -> default
+    end
+
+fun expect_value[T](o : Option[T]) -> T = 
+    case o of
+    | .Some(x) -> x
+    | .None -> 
+        do
+            std.panicking.panic_message("expected Some value but got None")
+        end
+    end
+
+fun map[T,U](o : Option[T], f : fun(T) -> U) -> Option[U] = 
+    case o of 
+    | .Some(x) -> Option.Some(f(x))
+    | .None -> Option.None
+    end
+
+fun flatten[T](o : Option[Option[T]]) -> Option[T] = 
+    case o of
+    | .Some(x) -> x 
+    | .None -> Option.None
+    end 
+
+fun flat_map[T,U](o : Option[T], f : fun(T) -> Option[U]) -> Option[U] = 
+    case o of 
+    | .Some(x) -> f(x)
+    | .None -> Option.None
+    end

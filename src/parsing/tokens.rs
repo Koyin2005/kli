@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Display, Write};
 
 use crate::src_loc::SrcLoc;
 
@@ -24,6 +24,7 @@ pub enum TokenKind {
     Minus,
     Slash,
     End,
+    DotDot,
     Star,
     Caret,
     Of,
@@ -42,11 +43,8 @@ pub enum TokenKind {
     Colon,
     Fun,
     Char,
-    Print,
     Borrow,
     Ident(String),
-    Int,
-    Uint,
     Bool,
     String,
     StringLiteral(String),
@@ -65,7 +63,6 @@ pub enum TokenKind {
     True,
     False,
     Error,
-    Region,
     While,
     At,
     Type,
@@ -76,11 +73,19 @@ pub enum TokenKind {
     And,
     Return,
     Unsafe,
+    CharLiteral(char),
+    Bor,
+    Band,
 }
 
 impl Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let txt = match self {
+            Self::CharLiteral(c) => {
+                f.write_str("\'")?;
+                f.write_char(*c)?;
+                return f.write_str("\'");
+            }
             Self::At => "@",
             Self::Semi => ";",
             Self::LeftBrace => "{",
@@ -103,6 +108,7 @@ impl Display for TokenKind {
             Self::DoubleEqual => "==",
             Self::Lesser => "<",
             Self::Greater => ">",
+            Self::DotDot => "..",
             Self::StringLiteral(literal) => {
                 f.write_str("\"")?;
                 f.write_str(literal)?;
@@ -120,16 +126,15 @@ impl Display for TokenKind {
             Self::Colon => ":",
             Self::Slash => "/",
             Self::Char => "char",
-            Self::Print => "print",
             Self::Fun => "fun",
             Self::Borrow => "borrow",
             Self::In => "in",
-            Self::Int => "int",
-            Self::Uint => "uint",
             Self::String => "string",
             Self::Imm => "imm",
             Self::Ref => "ref",
             Self::Impl => "impl",
+            Self::Bor => "bor",
+            Self::Band => "band",
             Self::Number(number, sign) => {
                 return write!(
                     f,
@@ -147,7 +152,6 @@ impl Display for TokenKind {
             Self::End => "end",
             Self::Ident(name) => name,
             Self::Error => "{error}",
-            Self::Region => "region",
             Self::Import => "import",
             Self::Type => "type",
             Self::Eof => "EOF",

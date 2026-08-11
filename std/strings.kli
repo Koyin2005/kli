@@ -1,0 +1,33 @@
+import std.(
+    dynarray,
+    optional.Option,
+    boxed,
+    panicking,
+    num,
+    unicode.iter.(CharIter,CharIterIndices)
+    )
+@opaque
+@lang_item("string")
+type String = {}
+
+@unsafe
+fun as_bytes(this : string) -> array[UInt8] = builtins.transmute(this)
+
+
+fun empty() -> string = ""
+
+fun clone(s : string) -> string = do
+    let bytes = unsafe as_bytes(s) end;
+    let byte_len = builtins.array_len(bytes);
+    let mut bs = builtins.raw_array_alloc[UInt8](byte_len);
+    for i in 0u..byte_len do
+        (bs).[i] = builtins.uninit_new(bytes.[i]);
+    end;
+    unsafe builtins.transmute(bs) end
+end
+
+fun char_to_uint32(c : char) -> UInt32 = 
+    builtins.bitcast(c)
+
+fun uint8_to_char(value : UInt8) -> char = 
+    builtins.widen(value)

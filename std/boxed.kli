@@ -1,0 +1,7 @@
+import std.refs
+
+fun alloc[T](value : T) -> Box[T] = builtins.box_alloc(value)
+
+fun get[T](this : Box[T]) -> T = this^
+
+fun set[T](this : Box[T], value : T) -> () = this^ = value

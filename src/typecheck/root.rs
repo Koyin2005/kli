@@ -13,42 +13,39 @@ use crate::{
     src_loc::SrcLoc,
     typecheck::{infer::TypeInfer, subst::TypeSubst},
     typed_ast::{self, Function, IteratorType, LetBinding},
-    types::{self, FieldName, FunctionSig, GenericArgs, Region, Type, lower::Lower},
+    types::{self, FieldName, FunctionSig, GenericArgs, Type, TypeKind, lower::Lower},
 };
 pub struct RootCtxt<'ctxt> {
     id: DefId,
-    infer: RefCell<TypeInfer>,
+    infer: RefCell<TypeInfer<'ctxt>>,
     ctxt: CtxtRef<'ctxt>,
-    variables: RefCell<HashMap<VarId, VarInfo>>,
-    functions: RefCell<Vec<(DefId, Function)>>,
+    variables: RefCell<HashMap<VarId, VarInfo<'ctxt>>>,
+    functions: RefCell<Vec<(DefId, Function<'ctxt>)>>,
 }
 impl<'ctxt> RootCtxt<'ctxt> {
     pub fn new(id: DefId, ctxt: CtxtRef<'ctxt>) -> Self {
         Self {
             id,
-            infer: Default::default(),
+            infer: RefCell::new(TypeInfer::new(ctxt)),
             ctxt,
             functions: Default::default(),
             variables: Default::default(),
         }
     }
-    pub fn ctxt(&self) -> CtxtRef<'_> {
+    pub fn ctxt(&self) -> CtxtRef<'ctxt> {
         self.ctxt
     }
 
-    pub(super) fn declare_var(&self, var_id: VarId, ty: Type, name: Symbol) {
+    pub(super) fn declare_var(&self, var_id: VarId, ty: Type<'ctxt>, name: Symbol) {
         self.variables
             .borrow_mut()
             .insert(var_id, VarInfo { name, ty });
     }
 
-    fn lower(&self) -> Lower<'_> {
+    fn lower(&self) -> Lower<'_, 'ctxt> {
         Lower::new(self.ctxt, self.id, Some(&self.infer))
     }
-    pub(super) fn lower_region(&self, region: &res::Region) -> Region {
-        self.lower().lower_region(region)
-    }
-    pub(super) fn lower_type(&self, ty: &res::Type) -> Type {
+    pub(super) fn lower_type(&self, ty: &res::Type) -> Type<'ctxt> {
         self.lower().lower_type(ty)
     }
     pub(super) fn lower_type_name(
@@ -56,7 +53,7 @@ impl<'ctxt> RootCtxt<'ctxt> {
         loc: SrcLoc,
         ty: res::TypeName,
         args: &res::GenericArgs,
-    ) -> Type {
+    ) -> Type<'ctxt> {
         self.lower().lower_type_name(loc, ty, args)
     }
     pub(super) fn lower_generic_args_for(
@@ -64,17 +61,17 @@ impl<'ctxt> RootCtxt<'ctxt> {
         id: DefId,
         loc: SrcLoc,
         args: &res::GenericArgs,
-    ) -> GenericArgs {
+    ) -> GenericArgs<'ctxt> {
         self.lower().lower_generic_args(id, loc, args)
     }
-    pub(super) fn simplify_type(&self, ty: Type) -> Type {
+    pub(super) fn simplify_type(&self, ty: Type<'ctxt>) -> Type<'ctxt> {
         self.infer.borrow().simplify_type(ty)
     }
-    pub(super) fn try_unify(&self, ty1: Type, ty2: Type) -> Option<Type> {
+    pub(super) fn try_unify(&self, ty1: Type<'ctxt>, ty2: Type<'ctxt>) -> Option<Type<'ctxt>> {
         self.infer.borrow_mut().unify_ty(ty1, ty2)
     }
-    pub(super) fn unify(&self, ty1: Type, ty2: Type, loc: SrcLoc) -> Type {
-        if let Some(ty) = self.try_unify(ty1.clone(), ty2.clone()) {
+    pub(super) fn unify(&self, ty1: Type<'ctxt>, ty2: Type<'ctxt>, loc: SrcLoc) -> Type<'ctxt> {
+        if let Some(ty) = self.try_unify(ty1, ty2) {
             ty
         } else {
             let ty1 = self.simplify_type(ty1);
@@ -82,33 +79,23 @@ impl<'ctxt> RootCtxt<'ctxt> {
             self.ctxt
                 .diag()
                 .add_diagnostic(format!("Expected '{}' but got '{}'", ty1, ty2), loc);
-            Type::Unknown
-        }
-    }
-    pub(super) fn unify_region(&self, region1: Region, region2: Region, loc: SrcLoc) -> Region {
-        if let Some(region) = self.infer.borrow_mut().unify_region(region1, region2) {
-            region
-        } else {
-            let region1 = self.infer.borrow().simplify_region(region1);
-            let region2 = self.infer.borrow().simplify_region(region2);
-            self.ctxt
-                .diag()
-                .add_diagnostic(format!("Expected '{}' but got '{}'", region1, region2), loc);
-            Region::Unknown
+            Type::new_unknown(self.ctxt)
         }
     }
     pub(super) fn resolve_method(
         &self,
         loc: SrcLoc,
-        ty: &Type,
+        ty: Type<'ctxt>,
         method: Ident,
-    ) -> Result<(DefId, GenericArgs), TypeError> {
-        let (name_info, _) = match ty {
-            Type::Named(id, name, args) => (Some((*id, *name, args.clone())), false),
-            Type::Imm(_, ty) | Type::Mut(_, ty) => (
-                ty.as_named()
-                    .map(|(id, name, args)| (id, name, args.to_vec())),
-                true,
+    ) -> Result<(DefId, GenericArgs<'ctxt>), TypeError> {
+        let (name_info, _) = match ty.kind() {
+            TypeKind::Named(id, name, args) => (Some((*id, *name, args.clone())), false),
+            &TypeKind::Array(ty) => (
+                self.ctxt
+                    .lang_items()
+                    .get(LangItem::Array)
+                    .map(|id| (id, Symbol::ARRAY, GenericArgs::from_type(ty))),
+                false,
             ),
             _ => (None, false),
         };
@@ -140,59 +127,53 @@ impl<'ctxt> RootCtxt<'ctxt> {
     pub(super) fn check_int_lit(
         &self,
         loc: SrcLoc,
-        hint: Option<&Type>,
+        hint: Option<Type<'ctxt>>,
         lit: res::IntegerLiteral,
-    ) -> (Type, u64) {
+    ) -> (Type<'ctxt>, u64) {
         let integer_ty = match lit.kind {
             res::IntegerLiteralKind::Implicit => {
-                if let Some(&Type::UINT) = hint {
-                    types::IntegerKind::Unsigned
+                if let Some(kind) = hint.and_then(|hint| hint.as_integer()) {
+                    Type::new_integer(self.ctxt(), kind)
                 } else {
-                    types::IntegerKind::Signed
+                    Type::new_integer_var(self.ctxt(), self.infer.borrow_mut().fresh_ty(loc))
                 }
             }
-            res::IntegerLiteralKind::Signed => types::IntegerKind::Signed,
-            res::IntegerLiteralKind::Unsigned => types::IntegerKind::Unsigned,
+            res::IntegerLiteralKind::Signed => {
+                Type::new_int(self.ctxt(), types::IntegerSize::Int64)
+            }
+            res::IntegerLiteralKind::Unsigned => {
+                Type::new_uint(self.ctxt(), types::IntegerSize::Int64)
+            }
         };
-        let ty = Type::Int(integer_ty);
         let value = lit.value;
-        if let types::IntegerKind::Signed = integer_ty
-            && value > i64::MAX as u64
+        if let TypeKind::Int(int) = integer_ty.kind()
+            && (value as i128) > int.max_value_scalar()
         {
             self.ctxt.diag().add_diagnostic(
-                format!("Integer literal '{value}' too large for '{}'", ty),
+                format!("Integer literal '{value}' too large for '{}'", integer_ty),
                 loc,
             );
         }
-        (ty, value)
+        (integer_ty, value)
     }
-    pub(super) fn iterator_element(&self, ty: Type) -> Result<(IteratorType, Type), Type> {
-        fn by_ref_iter(
-            this: &RootCtxt<'_>,
-            region: Region,
-            mutable: crate::ast::Mutable,
-            pointee: Type,
-        ) -> Result<(IteratorType, Type), Type> {
-            let pointee = this.simplify_type(pointee);
-            Err(Type::reference(pointee, mutable, region))
-        }
-        match ty {
-            Type::Imm(region, pointee) => {
-                by_ref_iter(self, region, crate::ast::Mutable::Immutable, *pointee)
+    pub(super) fn iterator_element(
+        &self,
+        ty: Type<'ctxt>,
+    ) -> Result<(IteratorType, Type<'ctxt>), Type<'ctxt>> {
+        match ty.kind() {
+            &TypeKind::Infer(_) => {
+                let ty = self.simplify_type(ty);
+                match ty.kind() {
+                    TypeKind::Infer(_) => Err(ty),
+                    _ => self.iterator_element(ty),
+                }
             }
-            Type::Mut(region, pointee) => {
-                by_ref_iter(self, region, crate::ast::Mutable::Mutable, *pointee)
-            }
-            Type::Infer(var) => match self.simplify_type(Type::Infer(var)) {
-                Type::Infer(_) => Err(ty),
-                ty => self.iterator_element(ty),
-            },
             _ => Err(ty),
         }
     }
 
-    pub(super) fn fresh_ty(&self, loc: SrcLoc) -> Type {
-        Type::Infer(self.infer.borrow_mut().fresh_ty(loc))
+    pub(super) fn fresh_ty(&self, loc: SrcLoc) -> Type<'ctxt> {
+        Type::infer_var(self.ctxt, self.infer.borrow_mut().fresh_ty(loc))
     }
     pub(super) fn check_missing_fields(
         &self,
@@ -218,7 +199,7 @@ impl<'ctxt> RootCtxt<'ctxt> {
         }
         if had_missing { Err(TypeError) } else { Ok(()) }
     }
-    pub fn expect_ty_error(&self, kind: &str, ty: &Type, loc: SrcLoc) {
+    pub fn expect_ty_error(&self, kind: &str, ty: Type<'ctxt>, loc: SrcLoc) {
         self.ctxt
             .diag()
             .add_diagnostic(format!("Expected {kind} type but got '{}'", ty), loc);
@@ -229,48 +210,45 @@ impl<'ctxt> RootCtxt<'ctxt> {
             .add_diagnostic("type annotations needed", loc);
     }
 
-    pub(super) fn var_type(&self, var: VarId) -> Type {
-        self.variables.borrow()[&var].ty.clone()
+    pub(super) fn var_type(&self, var: VarId) -> Type<'ctxt> {
+        self.variables.borrow()[&var].ty
     }
     pub(super) fn var_name(&self, var: VarId) -> Symbol {
         self.variables.borrow()[&var].name
     }
-
-    pub(super) fn non_deref_error(&self, ty: &Type, loc: SrcLoc) -> Type {
-        self.ctxt
-            .diag()
-            .add_diagnostic(format!("Cannot deref '{}'", ty), loc);
-        Type::Unknown
-    }
 }
-pub enum Coercion {
-    Equal(Type),
-    NeverToAny(Type),
+pub enum Coercion<'ctxt> {
+    Equal(Type<'ctxt>),
+    NeverToAny(Type<'ctxt>),
 }
-pub enum CoercionKind {
-    NeverToAny(Type),
+pub enum CoercionKind<'ctxt> {
+    NeverToAny(Type<'ctxt>),
 }
 pub struct VisibilityError;
-pub struct FunctionCtxt<'ctxt> {
+pub struct FunctionCtxt<'root, 'ctxt> {
     pub(super) id: DefId,
-    root: &'ctxt RootCtxt<'ctxt>,
-    pub(super) return_type: Type,
+    root: &'root RootCtxt<'ctxt>,
+    pub(super) return_type: Type<'ctxt>,
 }
-impl<'ctxt> FunctionCtxt<'ctxt> {
-    pub fn new(root: &'ctxt RootCtxt<'ctxt>, id: DefId, ty: Type) -> Self {
+impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
+    pub fn new(root: &'root RootCtxt<'ctxt>, id: DefId, ty: Type<'ctxt>) -> Self {
         Self {
             id,
             root,
             return_type: ty,
         }
     }
-    pub fn root(&self) -> &RootCtxt<'_> {
+    pub fn root(&'_ self) -> &'root RootCtxt<'ctxt> {
         self.root
     }
-    pub fn ctxt(&self) -> CtxtRef<'_> {
+    pub fn ctxt(&self) -> CtxtRef<'ctxt> {
         self.root.ctxt
     }
-    pub fn apply_coercion(&self, coercion: Coercion, expr: typed_ast::Expr) -> typed_ast::Expr {
+    pub fn apply_coercion(
+        &self,
+        coercion: Coercion<'ctxt>,
+        expr: typed_ast::Expr<'ctxt>,
+    ) -> typed_ast::Expr<'ctxt> {
         match coercion {
             Coercion::Equal(_) => expr,
             Coercion::NeverToAny(ty) => typed_ast::Expr {
@@ -280,14 +258,15 @@ impl<'ctxt> FunctionCtxt<'ctxt> {
             },
         }
     }
-    pub fn merge_ty(&self, tys: impl Iterator<Item = Type>) -> Option<Type> {
+    pub fn merge_ty(&self, tys: impl Iterator<Item = Type<'ctxt>>) -> Option<Type<'ctxt>> {
         tys.into_iter().fold(None, |acc, ty| {
             if let Some(combined_ty) = acc {
-                match self.root.try_unify(combined_ty.clone(), ty.clone()) {
+                match self.root.try_unify(combined_ty, ty) {
                     Some(ty) => Some(ty),
-                    None => match (combined_ty, ty) {
-                        (Type::Never, ty) | (ty, Type::Never) => Some(ty),
-                        (combined_ty, _) => Some(combined_ty),
+                    None => match (combined_ty.kind(), ty.kind()) {
+                        (TypeKind::Never, _) => Some(ty),
+                        (_, TypeKind::Never) => Some(combined_ty),
+                        (_, _) => Some(combined_ty),
                     },
                 }
             } else {
@@ -298,18 +277,13 @@ impl<'ctxt> FunctionCtxt<'ctxt> {
     pub fn unify_or_coerce(
         &self,
         loc: SrcLoc,
-        expected: Type,
-        ty: Type,
-    ) -> Result<Coercion, TypeError> {
-        match self
-            .root
-            .infer
-            .borrow_mut()
-            .unify_ty(expected.clone(), ty.clone())
-        {
+        expected: Type<'ctxt>,
+        ty: Type<'ctxt>,
+    ) -> Result<Coercion<'ctxt>, TypeError> {
+        match self.root.infer.borrow_mut().unify_ty(expected, ty) {
             Some(ty) => Ok(Coercion::Equal(ty)),
-            None => match (expected, ty) {
-                (ty, Type::Never) => Ok(Coercion::NeverToAny(ty)),
+            None => match (expected.kind(), ty.kind()) {
+                (_, TypeKind::Never) => Ok(Coercion::NeverToAny(expected)),
                 (expected, ty) => {
                     self.ctxt()
                         .diag()
@@ -319,10 +293,10 @@ impl<'ctxt> FunctionCtxt<'ctxt> {
             },
         }
     }
-    pub(super) fn check_binding(&self, binding: &res::LetBinding) -> LetBinding {
+    pub(super) fn check_binding(&self, binding: &res::LetBinding) -> LetBinding<'ctxt> {
         let ty = binding.ty.as_ref().map(|ty| self.root().lower_type(ty));
-        let value = self.check_expr_coerces_to(&binding.value, ty.clone());
-        let pattern = self.check_pattern(&binding.pattern, value.ty.clone(), None);
+        let value = self.check_expr_coerces_to(&binding.value, ty);
+        let pattern = self.check_pattern(&binding.pattern, value.ty);
         LetBinding { pattern, value }
     }
     pub(super) fn check_field_visibility(
@@ -346,9 +320,9 @@ impl<'ctxt> FunctionCtxt<'ctxt> {
 }
 pub struct TypeError;
 #[derive(Debug)]
-struct VarInfo {
+struct VarInfo<'ctxt> {
     name: Symbol,
-    ty: Type,
+    ty: Type<'ctxt>,
 }
 pub struct TypeCheck<'ctxt> {
     ctxt: CtxtRef<'ctxt>,
@@ -358,7 +332,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
     pub fn new(ctxt: CtxtRef<'ctxt>) -> Self {
         Self { ctxt }
     }
-    pub(super) fn ctxt(&self) -> CtxtRef<'_> {
+    pub(super) fn ctxt(&self) -> CtxtRef<'ctxt> {
         self.ctxt
     }
     fn validate_main(&self) {
@@ -385,9 +359,9 @@ impl<'ctxt> TypeCheck<'ctxt> {
         }
     }
     pub(super) fn check_function(
-        func_ctxt: &mut FunctionCtxt,
-        extra_params: Vec<(Ident, Type)>,
-        sig: FunctionSig,
+        func_ctxt: &mut FunctionCtxt<'_, 'ctxt>,
+        extra_params: Vec<(Ident, Type<'ctxt>)>,
+        sig: FunctionSig<'ctxt>,
         params: &[res::Param],
         body: Option<&res::Expr>,
     ) {
@@ -399,9 +373,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
             .iter()
             .zip(param_tys)
             .map(|(param, ty)| {
-                func_ctxt
-                    .root()
-                    .declare_var(param.var.1, ty.clone(), param.var.0);
+                func_ctxt.root().declare_var(param.var.1, ty, param.var.0);
                 typed_ast::Param {
                     name: param.var.ident(param.loc),
                     var: Some(param.var.1),
@@ -410,7 +382,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
             })
             .collect::<Vec<_>>();
         let body = if let Some(body) = body {
-            let body = func_ctxt.check_expr_coerces_to(body, Some(return_type.clone()));
+            let body = func_ctxt.check_expr_coerces_to(body, Some(return_type));
             Some(body)
         } else {
             None
@@ -455,14 +427,14 @@ impl<'ctxt> TypeCheck<'ctxt> {
     }
     fn check_function_item(
         &self,
-        functions: &mut BTreeMap<DefId, Function>,
+        functions: &mut BTreeMap<DefId, Function<'ctxt>>,
         id: DefId,
         function: &res::Function,
     ) {
         let root_ctxt = RootCtxt::new(id, self.ctxt);
         let sig = self.ctxt().signature_of(id).skip();
         Self::check_function(
-            &mut FunctionCtxt::new(&root_ctxt, id, sig.return_type.clone()),
+            &mut FunctionCtxt::new(&root_ctxt, id, sig.return_type),
             Vec::new(),
             sig,
             &function.params,
@@ -477,45 +449,56 @@ impl<'ctxt> TypeCheck<'ctxt> {
                         .add_diagnostic("type annotations needed", line);
                 }
             } else {
-                TypeSubst::new(&mut root_ctxt.infer.borrow_mut()).subst_function(&mut function);
+                TypeSubst::new(self.ctxt, &mut root_ctxt.infer.borrow_mut())
+                    .subst_function(&mut function);
             }
             functions.insert(id, function);
         }
     }
     fn check_annotations(&self) {
-        for item in self.ctxt.all_items() {
-            for annotation in item.annotations.iter() {
+        for (id, node) in self.ctxt.all_nodes_with_id() {
+            for annotation in self.ctxt.annotations(id) {
                 let valid = match annotation.kind {
-                    res::AnnotationKind::Copy => matches!(item.kind, res::ItemKind::TypeDef(_)),
-                    res::AnnotationKind::Unsafe => matches!(item.kind, res::ItemKind::Function(_)),
+                    res::AnnotationKind::Builtin => node.function_item().is_some_and(|_| {
+                        let builtins = self.ctxt.builtins_module();
+                        self.ctxt.ancestors(id).any(|parent| parent == builtins)
+                    }),
+                    res::AnnotationKind::Copy => node.is_type_def(),
+                    res::AnnotationKind::Unsafe => node.is_function(),
                     res::AnnotationKind::LangItem(lang_item) => {
                         self.ctxt.std_lib_module().is_none_or(|std_lib| {
-                            self.ctxt.ancestors(item.id).any(|parent| parent == std_lib)
+                            self.ctxt.ancestors(id).any(|parent| parent == std_lib)
                         }) && match lang_item {
-                            LangItem::ArrayList
+                            LangItem::Array
                             | LangItem::String
                             | LangItem::Box
                             | LangItem::Slice
-                            | LangItem::StringSlice => {
-                                matches!(item.kind, res::ItemKind::TypeDef(_))
-                            }
-                            LangItem::ArrayListFromRaw | LangItem::StringFromSlice => {
-                                matches!(item.kind, res::ItemKind::Function(_))
-                            }
+                            | LangItem::StringSlice => node.is_type_def(),
+                            LangItem::StringFromSlice => node.is_function(),
                         }
                     }
-                    res::AnnotationKind::Opaque => matches!(item.kind, res::ItemKind::TypeDef(_)),
+                    res::AnnotationKind::Opaque => node.is_type_def(),
                 };
                 if !valid {
                     self.ctxt.diag().add_diagnostic(
                         format!("Cannot use '{}'", annotation.kind_str()),
-                        item.loc,
+                        node.loc(),
                     );
                 }
             }
+
+            if let Some(function) = node.function()
+                && function.body.is_none()
+                && self.ctxt.builtin_for(id).is_none()
+            {
+                self.ctxt.diag().add_diagnostic(
+                    format!("'{}' must have a body", function.name.symbol),
+                    function.name.loc,
+                );
+            }
         }
     }
-    pub fn check(self) -> Result<typed_ast::Program, TypeError> {
+    pub fn check(self) -> Result<typed_ast::Program<'ctxt>, TypeError> {
         self.validate_main();
         self.validate_types_non_recursive();
         self.check_annotations();

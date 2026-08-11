@@ -21,13 +21,13 @@ impl<'ctxt> PatternCheck<'ctxt> {
             id,
         }
     }
-    pub fn check(mut self, body: &Expr) -> bool {
+    pub fn check(mut self, body: &Expr<'ctxt>) -> bool {
         self.visit_expr(body);
         self.diag.report_all()
     }
 }
-impl Visitor for PatternCheck<'_> {
-    fn visit_expr(&mut self, expr: &crate::typed_ast::Expr) {
+impl<'ctxt> Visitor<'ctxt> for PatternCheck<'ctxt> {
+    fn visit_expr(&mut self, expr: &crate::typed_ast::Expr<'ctxt>) {
         match &expr.kind {
             ExprKind::Case(matchee, arms) => {
                 self.visit_expr(matchee);
@@ -36,7 +36,7 @@ impl Visitor for PatternCheck<'_> {
                     self.ctxt,
                     &mut self.diag,
                     matchee.loc,
-                    &matchee.ty,
+                    matchee.ty,
                     &arms.iter().map(|arm| &arm.pattern).collect::<Vec<_>>(),
                 );
                 for arm in arms {
@@ -46,27 +46,27 @@ impl Visitor for PatternCheck<'_> {
             _ => walk_expr(self, expr),
         }
     }
-    fn visit_pattern(&mut self, pattern: &crate::typed_ast::Pattern) {
+    fn visit_pattern(&mut self, pattern: &crate::typed_ast::Pattern<'ctxt>) {
         check_patterns(
             self.id,
             self.ctxt,
             &mut self.diag,
             pattern.loc,
-            &pattern.ty,
+            pattern.ty,
             &[pattern],
         );
     }
 }
 
-fn check_patterns(
+fn check_patterns<'ctxt>(
     id: DefId,
-    ctxt: CtxtRef<'_>,
+    ctxt: CtxtRef<'ctxt>,
     diag: &mut DiagnosticReporter,
     loc: SrcLoc,
-    ty: &Type,
-    patterns: &[&Pattern],
+    ty: Type<'ctxt>,
+    patterns: &[&Pattern<'ctxt>],
 ) {
-    let tys = [ty.clone()];
+    let tys = [ty];
     let missing = missing_patterns(
         id,
         ctxt,

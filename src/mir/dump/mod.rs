@@ -4,11 +4,10 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, CastKind,
-        ConstValue, CopyNonOverlapping, DropInPlace, LocalKind, Operand, Place, PlaceProjection,
-        Rvalue, StmtKind, TerminatorKind,
+        ConstValue, LocalKind, Operand, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
     },
     typed_ast::FieldId,
-    types::{self, display_generic_args},
+    types,
 };
 
 pub struct MirDump<'ctxt> {
@@ -52,12 +51,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     write!(self.output, "fun {}", self.ctxt.display(f))?;
                 }
             }
-            BodySource::Lambda(lambda) => {
-                write!(self.output, "lambda {}", self.ctxt.display(lambda))?;
-            }
-            BodySource::ClosureShim(lambda) => {
-                write!(self.output, "lambda_shim {}", self.ctxt.display(lambda))?;
-            }
         }
         writeln!(self.output, "() -> {}", body.return_type)?;
         for (local, info) in body.locals.iter_enumerated() {
@@ -66,7 +59,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 LocalKind::Param(var) => write!(
                     self.output,
                     " param {}",
-                    if let Some(var) = *var {
+                    if let Some(var) = var {
                         var.0
                     } else {
                         Symbol::EMPTY_STRING
@@ -94,9 +87,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 PlaceProjection::ConstantIndex(index) => {
                     let _ = write!(&mut output, ".[{}]", index);
                 }
-                PlaceProjection::Deref => {
-                    output.push('^');
-                }
                 PlaceProjection::Index(index) => {
                     let _ = write!(&mut output, ".[_{}]", index.0);
                 }
@@ -104,17 +94,39 @@ impl<'ctxt> MirDump<'ctxt> {
                     let current = std::mem::take(&mut output);
                     let _ = write!(&mut output, "({} as {})", current, name);
                 }
+                PlaceProjection::Deref => {
+                    _ = write!(&mut output, "^");
+                }
             };
         }
         write!(self.output, "{}", output)
     }
     fn write_rvalue(&mut self, rvalue: &Rvalue) -> std::io::Result<()> {
         match rvalue {
-            Rvalue::DanglingPtr(ty) => {
-                write!(self.output, "dangling_ptr[{}]", ty)?;
+            Rvalue::ReadLine => {
+                write!(self.output, "read_line")?;
+            }
+            Rvalue::UninitZeroed(ty) => {
+                write!(self.output, "uninit[{}]", ty)?;
             }
             Rvalue::Use(operand) => {
                 self.write_operand(operand)?;
+            }
+            Rvalue::AllocateRawArray { ty, count } => {
+                write!(self.output, "raw_array_alloc[{ty}]")?;
+                write!(self.output, "(")?;
+                self.write_operand(count)?;
+                write!(self.output, ")")?;
+            }
+            Rvalue::AllocateArray(_, elements) => {
+                write!(self.output, "[")?;
+                self.write_with_coma_sep(elements, |this, element| this.write_operand(element))?;
+                write!(self.output, "]")?;
+            }
+            Rvalue::AllocateBox(ty, operand) => {
+                write!(self.output, "Box[{}](", ty)?;
+                self.write_operand(operand)?;
+                write!(self.output, ")")?;
             }
             Rvalue::Binary(op, operands) => {
                 let (left, right) = &**operands;
@@ -124,62 +136,38 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(right)?;
                 write!(self.output, ")")?;
             }
-            Rvalue::Allocate { ty, count } => {
-                write!(self.output, "allocate[{ty}](")?;
-                self.write_operand(count)?;
-                write!(self.output, ")")?;
-            }
             Rvalue::Len(place) => {
-                write!(self.output, "len(")?;
+                write!(self.output, "Len(")?;
                 self.write_place(place)?;
                 write!(self.output, ")")?;
             }
             Rvalue::Discriminant(place) => {
-                write!(self.output, "discriminant(")?;
+                write!(self.output, "Discriminant(")?;
                 self.write_place(place)?;
                 write!(self.output, ")")?;
             }
             Rvalue::Aggregate(kind, fields) => {
                 match kind {
-                    AggregateKind::Array(..)
-                    | AggregateKind::Record { .. }
-                    | AggregateKind::Tuple => (),
-                    AggregateKind::Closure(params, return_type) => {
-                        write!(self.output, "Closure((")?;
-                        self.write_with_coma_sep(params, |this, param| {
-                            write!(this.output, "{}", param)
-                        })?;
-                        write!(self.output, ") -> {return_type})")?;
-                    }
+                    AggregateKind::Record { .. } | AggregateKind::Tuple => (),
                     AggregateKind::Variant(id, index, args) => {
                         let name = self.ctxt.type_def(*id).case(*index).name;
-                        write!(self.output, "{}{}", name, display_generic_args(args))?;
+                        write!(self.output, "{}{}", name, args)?;
                     }
                     AggregateKind::NamedRecord(id, args) => {
                         let name = self.ctxt.type_def(*id).name;
-                        write!(self.output, "{}{}", name, display_generic_args(args))?;
+                        write!(self.output, "{}{}", name, args)?;
                     }
                 };
                 let (open_bracket, close_bracket) = match kind {
-                    AggregateKind::Array(_, _) => ('[', ']'),
                     AggregateKind::Variant(..) | AggregateKind::Tuple => ('(', ')'),
                     _ => ('{', '}'),
                 };
                 let ctxt = self.ctxt;
                 let write_field_name = move |this: &mut MirDump<'_>, i: FieldId| match kind {
-                    AggregateKind::Tuple | AggregateKind::Array(..) => Ok(()),
+                    AggregateKind::Tuple => Ok(()),
                     AggregateKind::Record { field_names } => {
                         write!(this.output, "{} = ", field_names[i])
                     }
-                    AggregateKind::Closure(..) => write!(
-                        this.output,
-                        "{} = ",
-                        match i {
-                            i if i == FieldId::FIRST_FIELD => "env",
-                            i if i == FieldId::new(1) => "code",
-                            _ => unreachable!("Should only have 2 fields"),
-                        }
-                    ),
                     AggregateKind::Variant(_, _, _) => write!(this.output, "{} = ", i.into_usize()),
                     AggregateKind::NamedRecord(id, ..) => {
                         write!(this.output, "{} = ", ctxt.type_def(*id).fields()[i].name)
@@ -198,52 +186,47 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_with_coma_sep(args, |this, arg| this.write_operand(arg))?;
                 write!(self.output, ")")?;
             }
-            Rvalue::Ref(mutable, region, place) => {
-                write!(self.output, "ref {} [{}]", mutable, region)?;
-                self.write_place(place)?;
-            }
-            Rvalue::Cast(cast, pointer) => {
+            Rvalue::Cast(cast, pointer, to) => {
                 write!(self.output, "cast(")?;
                 match cast {
-                    CastKind::Transmute(to) => {
+                    CastKind::Transmute => {
                         write!(self.output, "Transmute({})", to)?;
                     }
-                    CastKind::PointerCast(cast) => match cast {
-                        super::PointerCast::RawToRaw(to) => {
-                            write!(self.output, "RawToRaw({})", to)?
-                        }
-                    },
+                    CastKind::IntegerCast(kind) => {
+                        write!(self.output, "IntegerCast({:?})", kind)?;
+                    }
                 }
                 write!(self.output, ")(")?;
                 self.write_operand(pointer)?;
                 write!(self.output, ")")?;
             }
-            Rvalue::RawPtrTo(place) => {
-                write!(self.output, "raw_ptr_to(")?;
+            Rvalue::AddrOf(place) => {
+                write!(self.output, "addr_of(")?;
                 self.write_place(place)?;
                 write!(self.output, ")")?;
             }
         }
         Ok(())
     }
-    fn write_constant(&mut self, ty: &types::Type, value: &ConstValue) -> std::io::Result<()> {
-        if let ConstValue::Named(id, args) | ConstValue::ClosureShim(id, args) = value {
-            return write!(
-                self.output,
-                "{}{}",
-                self.ctxt.display_path_for(*id),
-                display_generic_args(args)
-            );
+    fn write_constant(&mut self, ty: &types::TypeKind, value: &ConstValue) -> std::io::Result<()> {
+        if let ConstValue::Named(id, args) = value {
+            return write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args);
         } else if let ConstValue::String(string) = value {
             return write!(self.output, "\"{string}\"");
         } else if let ConstValue::ZeroSized = value {
             return write!(self.output, "{ty}");
         }
         match ty {
-            types::Type::Infer(_) | types::Type::Param(..) | types::Type::Unknown => {
+            types::TypeKind::String => unreachable!(),
+
+            types::TypeKind::Infer(_)
+            | types::TypeKind::Param(..)
+            | types::TypeKind::Unknown
+            | types::TypeKind::IntVar(_)
+            | types::TypeKind::Uninit(_) => {
                 write!(self.output, "unknown of '{}'", ty)
             }
-            types::Type::Char => {
+            types::TypeKind::Char => {
                 let &ConstValue::Scalar(value) = value else {
                     unreachable!("can only be a scalar for char")
                 };
@@ -252,44 +235,29 @@ impl<'ctxt> MirDump<'ctxt> {
                 };
                 write!(self.output, "'{char}'")
             }
-            types::Type::Int(_) | types::Type::Byte => value
+            types::TypeKind::Int(_) => value
                 .as_scalar()
                 .map(|value| write!(self.output, "{}", value))
                 .unwrap_or_else(|| write!(self.output, "unknown of '{}'", ty)),
-            types::Type::Bool => value
+            types::TypeKind::Bool => value
                 .as_scalar()
                 .and_then(|value| bool::try_from(value).ok())
                 .map_or(Ok(()), |value| write!(self.output, "{}", value)),
-            types::Type::Never => unreachable!("already did zero sized types"),
-            types::Type::Imm(..) | types::Type::Mut(..) | types::Type::RawPointer(_) => {
-                write!(self.output, "unknown of '{}'", ty)
-            }
-            types::Type::Function(_) => match value {
+            types::TypeKind::Never => unreachable!("already did zero sized types"),
+            types::TypeKind::Function(_) => match value {
                 ConstValue::Named(id, args) => {
-                    write!(
-                        self.output,
-                        "{}{}",
-                        self.ctxt.display_path_for(*id),
-                        display_generic_args(args)
-                    )
-                }
-                ConstValue::ClosureShim(id, args) => {
-                    write!(
-                        self.output,
-                        "closure_shim {}{}",
-                        self.ctxt.display(*id),
-                        display_generic_args(args)
-                    )
+                    write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args)
                 }
                 _ => unreachable!("only values of function type"),
             },
-            types::Type::Record(_) | types::Type::Tuple(_) => {
+            types::TypeKind::Tuple(_) => {
                 let ConstValue::Record(field_consts) = value else {
                     unreachable!("should be a record")
                 };
                 let (fields, (open_bracket, closing_bracket)) = match ty {
-                    types::Type::Tuple(_) => (&IndexVec::new(), ('(', ')')),
-                    types::Type::Record(fields) => (fields, ('{', '}')),
+                    types::TypeKind::Tuple(_) => {
+                        (&IndexVec::<FieldId, types::RecordField>::new(), ('(', ')'))
+                    }
                     _ => unreachable!(),
                 };
                 write!(self.output, "{}", open_bracket)?;
@@ -305,11 +273,11 @@ impl<'ctxt> MirDump<'ctxt> {
                 )?;
                 write!(self.output, "{}", closing_bracket)
             }
-            types::Type::Array(..) => unimplemented!(),
-            types::Type::Named(def_id, name, args) => match self.ctxt.type_def(*def_id).kind {
+            types::TypeKind::Array(_) | types::TypeKind::Box(_) => unimplemented!(),
+            types::TypeKind::Named(def_id, name, args) => match self.ctxt.type_def(*def_id).kind {
                 TypeDefKind::Record(fields) => match value {
                     ConstValue::Record(values) => {
-                        write!(self.output, "{name}{}{{", display_generic_args(args))?;
+                        write!(self.output, "{name}{}{{", args)?;
                         self.write_with_coma_sep(
                             values.iter().zip(fields),
                             |this, (value, field)| {
@@ -324,7 +292,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 TypeDefKind::Variant(cases) => match value {
                     ConstValue::Variant(case, inner) => {
                         let name = cases[*case].name;
-                        write!(self.output, "{name}{}", display_generic_args(args))?;
+                        write!(self.output, "{name}{}", args)?;
                         if let Some(inner) = inner {
                             write!(self.output, "(")?;
                             self.write_constant(&inner.ty, &inner.value)?;
@@ -358,31 +326,8 @@ impl<'ctxt> MirDump<'ctxt> {
             match &stmt.kind {
                 StmtKind::Print(value) => {
                     write!(self.output, "print(")?;
-                    if let Some(value) = value {
-                        self.write_operand(value)?;
-                    }
-                    writeln!(self.output, ")")?;
-                }
-                StmtKind::Deallocate(value) => {
-                    write!(self.output, "deallocate(")?;
                     self.write_operand(value)?;
-                    writeln!(self.output, ")")?;
-                }
-                StmtKind::DropInPlace(drop) => {
-                    let DropInPlace { pointer_to_place } = drop.as_ref();
-                    write!(self.output, "drop_in_place(")?;
-                    self.write_operand(pointer_to_place)?;
-                    writeln!(self.output, ")")?;
-                }
-                StmtKind::CopyNonOverlapping(copy) => {
-                    let CopyNonOverlapping { dst, src, count } = copy.as_ref();
 
-                    write!(self.output, "copy_non_overlapping(")?;
-                    self.write_operand(dst)?;
-                    write!(self.output, ",")?;
-                    self.write_operand(src)?;
-                    write!(self.output, ",")?;
-                    self.write_operand(count)?;
                     writeln!(self.output, ")")?;
                 }
                 StmtKind::Noop => writeln!(self.output, "noop")?,
@@ -415,10 +360,15 @@ impl<'ctxt> MirDump<'ctxt> {
                 TerminatorKind::Goto(block) => write!(self.output, "goto bb{}", block.0)?,
                 TerminatorKind::Panic => write!(self.output, "panic")?,
                 TerminatorKind::Assert(operand, kind, block) => {
-                    write!(self.output, "assert(!")?;
+                    write!(
+                        self.output,
+                        "assert({}",
+                        if kind.negate() { "!" } else { "" }
+                    )?;
                     self.write_operand(operand)?;
                     write!(self.output, ", ")?;
                     match kind {
+                        AssertKind::InBounds => write!(self.output, "\"index out of bounds\"")?,
                         AssertKind::Overflow(op) => {
                             write!(self.output, "\"Overflow in computing {op:?}\"")?
                         }

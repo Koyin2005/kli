@@ -1,30 +1,49 @@
-use std::{
-    fmt::{Debug, Display},
-    ops::ControlFlow,
-};
+use std::fmt::{Debug, Display};
 
 use crate::{
     Symbol,
-    ast::{IsResource, Mutable},
     collect::{CtxtRef, TypeDefKind},
     def_ids::DefId,
     define_id,
-    index_vec::IndexVec,
-    lang_items::LangItem,
-    resolved_ast::LocalRegionId,
-    typed_ast::{Capture, FieldId},
+    typed_ast::FieldId,
 };
 define_id!(CaseId);
 pub mod lower;
-#[derive(Clone, Debug)]
-pub enum PointerType {
-    Box,
-    Reference(Region, Mutable),
-    Raw,
+pub mod visit;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SimpleScalar {
+    Int(IntegerKind),
+    Bool,
+    Char,
+}
+impl SimpleScalar {
+    pub fn as_integer(self) -> IntegerKind {
+        match self {
+            SimpleScalar::Int(integer_kind) => integer_kind,
+            SimpleScalar::Bool => IntegerKind::UINT8,
+            SimpleScalar::Char => IntegerKind::UINT32,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TagType {
+    UInt8,
+    Uint64,
+    Never,
+}
+impl TagType {
+    pub fn into_type<'ctxt>(self, ctxt: CtxtRef<'ctxt>) -> Type<'ctxt> {
+        match self {
+            Self::Never => Type::new_never(ctxt),
+            Self::UInt8 => Type::new_uint(ctxt, IntegerSize::Int8),
+            Self::Uint64 => Type::new_uint(ctxt, IntegerSize::Int64),
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GenericKind {
-    Region,
     Type,
 }
 #[derive(Clone, Copy, Debug)]
@@ -32,31 +51,32 @@ pub struct GenericParam {
     pub name: Symbol,
     pub kind: GenericKind,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum GenericArg {
-    Region(Region),
-    Type(Type),
-}
-impl GenericArg {
-    pub fn expect_ty(&self) -> &Type {
-        let GenericArg::Type(ty) = self else {
-            unreachable!("expected a type")
-        };
-        ty
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+pub struct GenericArg<'ctxt>(pub Type<'ctxt>);
+impl<'ctxt> GenericArg<'ctxt> {
+    pub const fn from_type(ty: Type<'ctxt>) -> Self {
+        Self(ty)
+    }
+    pub fn expect_ty(self) -> Type<'ctxt> {
+        self.0
     }
 }
-impl TypeMappable for GenericArg {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
+impl<'ctxt> TypeMappable<'ctxt> for GenericArg<'ctxt> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         match self {
-            Self::Region(region) => Ok(GenericArg::Region(region.apply_map(m)?)),
-            Self::Type(ty) => Ok(GenericArg::Type(ty.apply_map(m)?)),
+            Self(ty) => Ok(GenericArg::from_type(ty.apply_map(m)?)),
         }
     }
 }
-pub fn display_generic_args<'a>(args: &'a [GenericArg]) -> DisplayGenericArgs<'a> {
+impl std::fmt::Display for GenericArgs<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", display_generic_args(self))
+    }
+}
+fn display_generic_args<'a>(args: &'a [GenericArg]) -> DisplayGenericArgs<'a> {
     DisplayGenericArgs(args)
 }
-pub struct DisplayGenericArgs<'a>(&'a [GenericArg]);
+pub struct DisplayGenericArgs<'a>(&'a [GenericArg<'a>]);
 impl Display for DisplayGenericArgs<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.0.is_empty() {
@@ -68,10 +88,7 @@ impl Display for DisplayGenericArgs<'_> {
                 if !first {
                     write!(f, ",")?;
                 }
-                match arg {
-                    GenericArg::Region(region) => write!(f, "{}", region),
-                    GenericArg::Type(ty) => write!(f, "{}", ty),
-                }?;
+                write!(f, "{}", arg.0)?;
                 first = false;
             }
             write!(f, "]")
@@ -79,70 +96,19 @@ impl Display for DisplayGenericArgs<'_> {
     }
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
-pub struct FunctionSig {
-    pub params: Vec<Type>,
-    pub return_type: Type,
+pub struct FunctionSig<'ctxt> {
+    pub params: Vec<Type<'ctxt>>,
+    pub return_type: Type<'ctxt>,
 }
-impl FunctionSig {
-    pub fn new(params: Vec<Type>, return_type: Type) -> Self {
+impl<'ctxt> FunctionSig<'ctxt> {
+    pub fn new(params: impl IntoIterator<Item = Type<'ctxt>>, return_type: Type<'ctxt>) -> Self {
         Self {
-            params,
+            params: params.into_iter().collect(),
             return_type,
         }
     }
-    pub fn into_function_type(self) -> FunctionType {
-        FunctionType {
-            resource: IsResource::Data,
-            params: self.params,
-            return_type: Box::new(self.return_type),
-        }
-    }
-}
-#[derive(PartialEq, Eq, Clone, Debug, Hash)]
-pub struct FunctionType {
-    pub resource: IsResource,
-    pub params: Vec<Type>,
-    pub return_type: Box<Type>,
-}
-impl FunctionType {
-    pub fn new_data(params: Vec<Type>, return_type: Type) -> Self {
-        Self {
-            resource: IsResource::Data,
-            params,
-            return_type: Box::new(return_type),
-        }
-    }
-    pub fn new_resource(params: Vec<Type>, return_type: Type) -> Self {
-        Self {
-            resource: IsResource::Resource,
-            params,
-            return_type: Box::new(return_type),
-        }
-    }
-}
-#[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
-pub enum Region {
-    Unknown,
-    Static,
-    Param(Symbol, usize),
-    Local(Symbol, LocalRegionId),
-    Infer(usize),
-}
-impl Region {
-    pub const fn no_op_visit<T>(self) -> ControlFlow<T> {
-        ControlFlow::Continue(())
-    }
-}
-impl Display for Region {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Region::Unknown => f.pad("{unknown}"),
-            Region::Static => f.pad("static"),
-            Region::Infer(_) => f.pad("_"),
-            Region::Param(name, _) | Region::Local(name, _) => {
-                write!(f, "{}", name)
-            }
-        }
+    pub fn into_type(self, ctxt: CtxtRef<'ctxt>) -> Type<'ctxt> {
+        TypeKind::Function(self).intern(ctxt)
     }
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
@@ -161,43 +127,338 @@ impl Display for FieldName {
         }
     }
 }
-pub type GenericArgs = Vec<GenericArg>;
-pub type GenericArgsRef<'a> = &'a [GenericArg];
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
+pub struct GenericArgs<'ctxt>(Vec<GenericArg<'ctxt>>);
+impl<'ctxt> GenericArgs<'ctxt> {
+    pub const fn new() -> Self {
+        Self(Vec::new())
+    }
+    pub const fn from_vec(v: Vec<GenericArg<'ctxt>>) -> Self {
+        Self(v)
+    }
+    pub fn from_single(arg: GenericArg<'ctxt>) -> Self {
+        Self(vec![arg])
+    }
+    pub fn from_type(arg: Type<'ctxt>) -> Self {
+        Self(vec![GenericArg::from_type(arg)])
+    }
+    pub fn combine(mut self, rest: Self) -> Self {
+        self.0.extend(rest);
+        self
+    }
+}
+impl<'ctxt, const N: usize> TryFrom<GenericArgs<'ctxt>> for [GenericArg<'ctxt>; N] {
+    type Error = GenericArgs<'ctxt>;
+    fn try_from(value: GenericArgs<'ctxt>) -> Result<Self, Self::Error> {
+        value.0.try_into().map_err(GenericArgs::from_vec)
+    }
+}
+impl<'ctxt> std::ops::Deref for GenericArgs<'ctxt> {
+    type Target = [GenericArg<'ctxt>];
+    fn deref(&self) -> GenericArgsRef<'_, 'ctxt> {
+        &self.0
+    }
+}
+impl<'ctxt> std::ops::DerefMut for GenericArgs<'ctxt> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+impl<'ctxt> IntoIterator for GenericArgs<'ctxt> {
+    type IntoIter = std::vec::IntoIter<GenericArg<'ctxt>>;
+    type Item = GenericArg<'ctxt>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+impl<'ctxt> FromIterator<GenericArg<'ctxt>> for GenericArgs<'ctxt> {
+    fn from_iter<T: IntoIterator<Item = GenericArg<'ctxt>>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+pub type GenericArgsRef<'a, 'b> = &'a [GenericArg<'b>];
 
-#[derive(PartialEq, Eq, Clone, Debug, Hash)]
-pub struct RecordField {
+#[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
+pub struct RecordField<'ctxt> {
     pub name: FieldName,
-    pub ty: Type,
+    pub ty: Type<'ctxt>,
+}
+
+#[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
+pub enum IntegerSize {
+    Int8,
+    Int32,
+    Int64,
+}
+impl IntegerSize {
+    pub const fn bit_width(self) -> u8 {
+        match self {
+            Self::Int8 => 8,
+            Self::Int32 => 32,
+            Self::Int64 => 64,
+        }
+    }
+    pub const fn is_byte_sized(self) -> bool {
+        matches!(self, IntegerSize::Int8)
+    }
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
 pub enum IntegerKind {
-    Signed,
-    Unsigned,
+    Signed(IntegerSize),
+    Unsigned(IntegerSize),
 }
+impl IntegerKind {
+    pub const UINT8: Self = IntegerKind::Unsigned(IntegerSize::Int8);
+    pub const UINT32: Self = IntegerKind::Unsigned(IntegerSize::Int32);
 
+    pub fn name_str(self) -> &'static str {
+        match self {
+            IntegerKind::Signed(IntegerSize::Int8) => "Int8",
+            IntegerKind::Signed(IntegerSize::Int32) => "Int32",
+            IntegerKind::Signed(IntegerSize::Int64) => "Int64",
+            IntegerKind::Unsigned(IntegerSize::Int8) => "UInt8",
+            IntegerKind::Unsigned(IntegerSize::Int32) => "UInt32",
+            IntegerKind::Unsigned(IntegerSize::Int64) => "UInt64",
+        }
+    }
+    pub const fn min_value_scalar(self) -> i128 {
+        match self {
+            Self::Signed(IntegerSize::Int8) => i8::MIN as i128,
+            Self::Unsigned(IntegerSize::Int8) => u8::MIN as i128,
+            Self::Signed(IntegerSize::Int32) => i32::MIN as i128,
+            Self::Unsigned(IntegerSize::Int32) => u32::MIN as i128,
+            Self::Signed(IntegerSize::Int64) => i64::MIN as i128,
+            Self::Unsigned(IntegerSize::Int64) => u64::MIN as i128,
+        }
+    }
+    pub const fn max_value_scalar(self) -> i128 {
+        match self {
+            Self::Signed(size) => match size {
+                IntegerSize::Int64 => i64::MAX as i128,
+                IntegerSize::Int8 => i8::MAX as i128,
+                IntegerSize::Int32 => i32::MAX as i128,
+            },
+            Self::Unsigned(size) => match size {
+                IntegerSize::Int8 => u8::MAX as i128,
+                IntegerSize::Int64 => u64::MAX as i128,
+                IntegerSize::Int32 => u32::MAX as i128,
+            },
+        }
+    }
+    pub const fn size(self) -> IntegerSize {
+        let (Self::Signed(size) | Self::Unsigned(size)) = self;
+        size
+    }
+    pub const fn is_signed(self) -> bool {
+        matches!(self, Self::Signed(_))
+    }
+    pub const fn signed_and_size(self) -> (bool, IntegerSize) {
+        match self {
+            Self::Signed(size) => (true, size),
+            Self::Unsigned(size) => (false, size),
+        }
+    }
+}
+impl Display for IntegerKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.pad(self.name_str())
+    }
+}
+#[derive(PartialEq, Eq, Clone, Copy, Hash)]
+pub struct Type<'ctxt>(&'ctxt TypeKind<'ctxt>);
+impl<'ctxt> Type<'ctxt> {
+    pub const UNKNOWN: Self = Self(&TypeKind::Unknown);
+    pub const BYTE: Self = Self(&TypeKind::Unknown);
+    pub fn new_uninit(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
+        TypeKind::Uninit(ty).intern(ctxt)
+    }
+    pub fn as_uninit(self) -> Option<Self> {
+        let &TypeKind::Uninit(ty) = self.0 else {
+            return None;
+        };
+        Some(ty)
+    }
+    pub fn new_integer(ctxt: CtxtRef<'ctxt>, kind: IntegerKind) -> Self {
+        TypeKind::Int(kind).intern(ctxt)
+    }
+    pub fn new_integer_var(ctxt: CtxtRef<'ctxt>, var: usize) -> Self {
+        TypeKind::IntVar(var).intern(ctxt)
+    }
+    pub fn new_int(ctxt: CtxtRef<'ctxt>, size: IntegerSize) -> Self {
+        Self::new_integer(ctxt, IntegerKind::Signed(size))
+    }
+    pub fn new_bool(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::Bool.intern(ctxt)
+    }
+    pub fn new_uint(ctxt: CtxtRef<'ctxt>, size: IntegerSize) -> Self {
+        Self::new_integer(ctxt, IntegerKind::Unsigned(size))
+    }
+    pub fn new_char(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::Char.intern(ctxt)
+    }
+    pub fn new_never(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::Never.intern(ctxt)
+    }
+    pub fn new_unknown(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::Unknown.intern(ctxt)
+    }
+    pub fn new_unit(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::UNIT.intern(ctxt)
+    }
+    pub fn is_bool(self) -> bool {
+        matches!(self.0, TypeKind::Bool)
+    }
+    pub fn is_char(self) -> bool {
+        matches!(self.0, TypeKind::Char)
+    }
+
+    pub fn new(kind: &'ctxt TypeKind) -> Self {
+        Self(kind)
+    }
+    pub const fn kind(&self) -> &'_ TypeKind<'ctxt> {
+        self.0
+    }
+    pub fn named(
+        ctxt: CtxtRef<'ctxt>,
+        id: DefId,
+        name: Symbol,
+        args: impl IntoIterator<Item = GenericArg<'ctxt>>,
+    ) -> Self {
+        TypeKind::Named(id, name, args.into_iter().collect()).intern(ctxt)
+    }
+    pub fn param(ctxt: CtxtRef<'ctxt>, name: Symbol, index: usize) -> Self {
+        TypeKind::Param(name, index).intern(ctxt)
+    }
+    pub fn infer_var(ctxt: CtxtRef<'ctxt>, var: usize) -> Self {
+        TypeKind::Infer(var).intern(ctxt)
+    }
+    pub fn function_type(ctxt: CtxtRef<'ctxt>, params: Vec<Self>, return_type: Self) -> Self {
+        FunctionSig::new(params, return_type).into_type(ctxt)
+    }
+    pub fn new_box(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
+        TypeKind::Box(ty).intern(ctxt)
+    }
+    pub fn as_box(self) -> Option<Self> {
+        let &TypeKind::Box(ty) = self.kind() else {
+            return None;
+        };
+        Some(ty)
+    }
+    pub fn new_raw_array(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
+        Self::new_array(ctxt, Self::new_uninit(ctxt, ty))
+    }
+    pub fn as_raw_array(self) -> Option<Self> {
+        self.as_array()?.as_uninit()
+    }
+    pub fn new_array(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
+        TypeKind::Array(ty).intern(ctxt)
+    }
+    pub fn new_string(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::String.intern(ctxt)
+    }
+
+    pub fn as_array(self) -> Option<Type<'ctxt>> {
+        let TypeKind::Array(element) = self.0 else {
+            return None;
+        };
+        Some(*element)
+    }
+    pub fn tuple_from_iter(
+        ctxt: CtxtRef<'ctxt>,
+        field_tys: impl IntoIterator<Item = Self>,
+    ) -> Self {
+        TypeKind::Tuple(field_tys.into_iter().collect()).intern(ctxt)
+    }
+    pub fn pair(ctxt: CtxtRef<'ctxt>, first: Self, second: Self) -> Self {
+        Self::tuple_from_iter(ctxt, [first, second])
+    }
+    pub fn as_tuple(self) -> Option<&'ctxt Vec<Self>> {
+        let TypeKind::Tuple(fields) = self.0 else {
+            return None;
+        };
+        Some(fields)
+    }
+    pub fn into_box(self) -> Result<Self, Self> {
+        let &TypeKind::Box(ty) = self.kind() else {
+            return Err(self);
+        };
+        Ok(ty)
+    }
+    pub const fn as_integer(self) -> Option<IntegerKind> {
+        let &TypeKind::Int(kind) = self.0 else {
+            return None;
+        };
+        Some(kind)
+    }
+    pub const fn is_integer(self) -> bool {
+        matches!(self.0, TypeKind::Int(_))
+    }
+    pub fn is_uint(self, size: IntegerSize) -> bool {
+        self.is_integer_kind(IntegerKind::Unsigned(size))
+    }
+    pub fn is_signed_int(self) -> bool {
+        self.as_integer().is_some_and(|num| num.is_signed())
+    }
+    pub fn is_integer_kind(self, kind: IntegerKind) -> bool {
+        let &TypeKind::Int(int_kind) = self.0 else {
+            return false;
+        };
+        int_kind == kind
+    }
+    pub const fn as_simple_scalar(self) -> Option<SimpleScalar> {
+        match *self.kind() {
+            TypeKind::Int(int) => Some(SimpleScalar::Int(int)),
+            TypeKind::Bool => Some(SimpleScalar::Bool),
+            TypeKind::Char => Some(SimpleScalar::Char),
+            _ => None,
+        }
+    }
+    pub fn as_function(self) -> Option<&'ctxt FunctionSig<'ctxt>> {
+        let TypeKind::Function(function) = self.0 else {
+            return None;
+        };
+        Some(function)
+    }
+}
+impl<'ctxt> std::ops::Deref for Type<'ctxt> {
+    type Target = TypeKind<'ctxt>;
+    fn deref(&self) -> &Self::Target {
+        self.kind()
+    }
+}
+impl std::fmt::Debug for Type<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+impl std::fmt::Display for Type<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
-pub enum Type {
+pub enum TypeKind<'ctxt> {
     Infer(usize),
     Unknown,
     Int(IntegerKind),
+    IntVar(usize),
     Bool,
     Char,
-    Byte,
     Never,
     Param(Symbol, usize),
-    Imm(Region, Box<Type>),
-    Mut(Region, Box<Type>),
-    Function(FunctionType),
-    Tuple(Vec<Type>),
-    Record(IndexVec<FieldId, RecordField>),
-    RawPointer(Box<Type>),
-    Array(Box<Type>, u64),
-    Named(DefId, Symbol, GenericArgs),
+    Function(FunctionSig<'ctxt>),
+    Tuple(Vec<Type<'ctxt>>),
+    Array(Type<'ctxt>),
+    Named(DefId, Symbol, GenericArgs<'ctxt>),
+    String,
+    Box(Type<'ctxt>),
+    Uninit(Type<'ctxt>),
 }
-impl Type {
+impl<'ctxt> TypeKind<'ctxt> {
     pub const UNIT: Self = Self::Tuple(Vec::new());
-    pub const UINT: Self = Self::Int(IntegerKind::Unsigned);
-    pub const INT: Self = Self::Int(IntegerKind::Signed);
+    pub fn intern(self, ctxt: CtxtRef<'ctxt>) -> Type<'ctxt> {
+        ctxt.intern_ty(self)
+    }
     pub const fn is_unit(&self) -> bool {
         match self {
             Self::Tuple(fields) => fields.is_empty(),
@@ -210,84 +471,34 @@ impl Type {
     pub fn is_integer(&self) -> bool {
         matches!(self, Self::Int(_))
     }
+    pub fn is_integer_kind(&self, kind: IntegerKind) -> bool {
+        matches!(self, Self::Int(int_kind) if kind == *int_kind)
+    }
 
     pub const fn is_builtin_scalar(&self) -> bool {
-        matches!(
-            self,
-            Self::Int(_) | Self::Bool | Self::Byte | Self::Char | Self::RawPointer(_)
-        )
+        matches!(self, Self::Int(_) | Self::Bool | Self::Char)
     }
-    pub fn string(ctxt: CtxtRef<'_>) -> Self {
-        let id = ctxt.lang_items().expect(LangItem::String);
-        let name = ctxt.expect_ident(id).symbol;
-        Type::Named(id, name, GenericArgs::new())
+    pub fn array(element: Type<'ctxt>) -> Self {
+        Self::Array(element)
     }
-    pub fn static_string_slice(ctxt: CtxtRef<'_>) -> Self {
-        let id = ctxt.lang_items().expect(LangItem::StringSlice);
-        let name = ctxt.expect_ident(id).symbol;
-        Type::Named(
-            id,
-            name,
-            GenericArgs::from_iter(std::iter::once(GenericArg::Region(Region::Static))),
-        )
+    pub fn string(_: CtxtRef<'_>) -> Self {
+        TypeKind::String
     }
-    pub fn as_named(&self) -> Option<(DefId, Symbol, GenericArgsRef<'_>)> {
+    pub fn as_named(&self) -> Option<(DefId, Symbol, GenericArgsRef<'_, 'ctxt>)> {
         let Self::Named(id, name, args) = self else {
             return None;
         };
         Some((*id, *name, args))
     }
-    pub fn closure_env(fields: impl Iterator<Item = Capture>) -> Self {
-        Self::record_named_fields(fields.map(|capture| (capture.var.0, capture.ty)))
-    }
-    pub fn record_named_fields(fields: impl Iterator<Item = (Symbol, Self)>) -> Self {
-        Self::Record(
-            fields
-                .map(|(name, ty)| RecordField {
-                    name: FieldName::Named(name),
-                    ty,
-                })
-                .collect(),
-        )
-    }
-    pub fn new_function(params: Vec<Self>, return_ty: Self) -> Self {
-        Self::Function(FunctionType {
-            resource: IsResource::Data,
-            params,
-            return_type: Box::new(return_ty),
-        })
-    }
-    pub fn field_info(&self, field_id: FieldId, ctxt: CtxtRef<'_>) -> Option<(Type, FieldName)> {
+    pub fn field_info(
+        &self,
+        field_id: FieldId,
+        ctxt: CtxtRef<'ctxt>,
+    ) -> Option<(Type<'ctxt>, FieldName)> {
         match self {
-            Self::Record(fields) => fields
-                .get(field_id)
-                .map(|field| (field.ty.clone(), field.name)),
             Self::Tuple(fields) => fields
                 .get(field_id.into_usize())
-                .map(|ty| (ty.clone(), FieldName::Index(field_id))),
-            Self::Function(FunctionType {
-                resource: IsResource::Resource,
-                params,
-                return_type,
-            }) => match field_id {
-                id if id == FieldId::FIRST_FIELD => Some((
-                    Type::pointer(Type::Byte),
-                    FieldName::Named(Symbol::intern("env")),
-                )),
-                id if id == FieldId::new(1) => Some((
-                    Type::function_type(
-                        IsResource::Data,
-                        {
-                            let mut params = params.clone();
-                            params.insert(0, Self::pointer(Type::Byte));
-                            params
-                        },
-                        (**return_type).clone(),
-                    ),
-                    FieldName::Named(Symbol::intern("code")),
-                )),
-                _ => None,
-            },
+                .map(|ty| (*ty, FieldName::Index(field_id))),
             &Self::Named(id, _, ref args) => ctxt
                 .type_def(id)
                 .fields()
@@ -297,171 +508,27 @@ impl Type {
             _ => None,
         }
     }
-    pub fn function_type(resource: IsResource, params: Vec<Self>, return_type: Self) -> Self {
-        Self::Function(FunctionType {
-            resource,
-            params,
-            return_type: Box::new(return_type),
-        })
-    }
-    pub fn as_pointer(&self) -> Option<&Type> {
-        let Type::RawPointer(ty) = self else {
-            return None;
-        };
-        Some(ty)
-    }
-    pub fn pointer(ty: Self) -> Self {
-        Self::RawPointer(Box::new(ty))
-    }
-    pub fn pair(first: Type, second: Type) -> Self {
-        Self::tuple([first, second])
-    }
-    pub fn tuple(field_tys: impl IntoIterator<Item = Self>) -> Self {
-        Self::Tuple(field_tys.into_iter().collect())
-    }
-    pub fn is_reference(&self) -> bool {
-        matches!(self, Self::Imm(..) | Self::Mut(..))
-    }
-    pub fn reference(self, mutable: Mutable, region: Region) -> Self {
-        match mutable {
-            Mutable::Immutable => Self::Imm(region, Box::new(self)),
-            Mutable::Mutable => Self::Mut(region, Box::new(self)),
-        }
-    }
-    pub fn into_pointer_type(self, ctxt: CtxtRef<'_>) -> Result<(PointerType, Self), Self> {
-        match self {
-            Self::RawPointer(ty) => Ok((PointerType::Raw, *ty)),
-            Self::Named(..) => Ok((PointerType::Box, self.into_box(ctxt)?)),
-            Self::Imm(region, ty) => Ok((PointerType::Reference(region, Mutable::Immutable), *ty)),
-            Self::Mut(region, ty) => Ok((PointerType::Reference(region, Mutable::Mutable), *ty)),
-            _ => Err(self),
-        }
-    }
-    pub fn into_box(self, ctxt: CtxtRef<'_>) -> Result<Self, Self> {
-        if self.as_box(ctxt).is_none() {
-            return Err(self);
-        }
-        let Self::Named(_, _, args) = self else {
-            return Err(self);
-        };
-        let [arg] = args.try_into().unwrap();
-        let GenericArg::Type(ty) = arg else {
-            unreachable!()
-        };
-        Ok(ty)
-    }
-    pub fn as_box(&self, ctxt: CtxtRef<'_>) -> Option<&Type> {
-        use crate::lang_items::LangItem;
-        let &Self::Named(id, _, ref args) = self else {
-            return None;
-        };
-        let box_id = ctxt.lang_items().get(LangItem::Box)?;
-        if id != box_id {
-            return None;
-        }
-        let arg = args.first()?;
-        let GenericArg::Type(ty) = arg else {
-            return None;
-        };
-        Some(ty)
-    }
-    pub fn pointer_kind(&self, ctxt: CtxtRef<'_>) -> Option<PointerType> {
-        match self {
-            Self::RawPointer(_) => Some(PointerType::Raw),
-            Self::Named(..) if self.as_box(ctxt).is_some() => Some(PointerType::Box),
-            &Self::Imm(region, _) => Some(PointerType::Reference(region, Mutable::Immutable)),
-            &Self::Mut(region, _) => Some(PointerType::Reference(region, Mutable::Mutable)),
-            _ => None,
-        }
-    }
-    pub fn pointer_type(pointer: PointerType, pointee: Self, ctxt: CtxtRef<'_>) -> Self {
-        match pointer {
-            PointerType::Box => {
-                let id = ctxt.lang_items().expect(LangItem::Box);
-                let name = ctxt.expect_ident(id).symbol;
-                Self::Named(id, name, vec![GenericArg::Type(pointee)])
-            }
-            PointerType::Reference(region, mutable) => pointee.reference(mutable, region),
-            PointerType::Raw => Self::pointer(pointee),
-        }
-    }
-    pub fn as_reference_type(&self) -> Result<(Mutable, Region, &Self), &Self> {
-        let (region, mutable, ty) = match self {
-            Self::Imm(region, ty) => (*region, Mutable::Immutable, ty),
-            Self::Mut(region, ty) => (*region, Mutable::Mutable, ty),
-            _ => return Err(self),
-        };
-        Ok((mutable, region, ty))
-    }
-    pub fn erase_regions(self) -> Self {
-        struct EraseRegions;
-        impl TypeMap for EraseRegions {
-            type Error = std::convert::Infallible;
-            fn map_region(&mut self, _: Region) -> Result<Region, Self::Error> {
-                Ok(Region::Static)
-            }
-        }
-        let Ok(ty) = EraseRegions.map_type(self);
-        ty
-    }
     pub fn is_resource(&self, ctxt: CtxtRef<'_>) -> bool {
-        match self {
-            Type::Bool
-            | Type::Unknown
-            | Type::Int(_)
-            | Type::Imm(..)
-            | Type::Char
-            | Type::Byte
-            | Type::RawPointer(_)
-            | Type::Function(FunctionType {
-                resource: IsResource::Data,
-                ..
-            })
-            | Type::Never => false,
-            Type::Array(ty, _) => ty.is_resource(ctxt),
-            Type::Mut(..)
-            | Type::Function(FunctionType {
-                resource: IsResource::Resource,
-                ..
-            })
-            | Type::Param(..) => true,
-            Type::Record(fields) => fields.iter().any(|field| field.ty.is_resource(ctxt)),
-            Type::Tuple(fields) => fields.iter().any(|field| field.is_resource(ctxt)),
-            Type::Infer(_) => unreachable!("Cannot 'infer' its a resource"),
-            &Type::Named(id, _, ref args) => {
-                let is_copy = ctxt
-                    .annotations(id)
-                    .iter()
-                    .any(|annotation| annotation.kind == crate::resolved_ast::AnnotationKind::Copy);
-                if !is_copy || ctxt.is_type_recursive(id) {
-                    return true;
-                }
-                ctxt.type_def(id)
-                    .all_fields()
-                    .any(|field| field.type_of(args, ctxt).is_resource(ctxt))
-            }
-        }
+        _ = ctxt;
+        false
     }
-    pub const fn no_op_visit<T>(&self) -> ControlFlow<T> {
-        ControlFlow::Continue(())
-    }
-    pub fn is_uninhabited(&self, ctxt: CtxtRef<'_>) -> bool {
+    pub fn is_uninhabited(&self, ctxt: CtxtRef<'ctxt>) -> bool {
         match self {
-            Type::Infer(_)
-            | Type::Unknown
-            | Type::Int(_)
-            | Type::Bool
-            | Type::Char
-            | Type::Byte
-            | Type::Param(..)
-            | Type::Function(..) => false,
-            Type::Never => true,
-            Type::Imm(_, ty) | Type::Mut(_, ty) => ty.is_uninhabited(ctxt),
-            Type::Record(fields) => fields.iter().any(|field| field.ty.is_uninhabited(ctxt)),
-            Type::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
-            Type::RawPointer(_) => false,
-            Type::Array(ty, _) => ty.is_uninhabited(ctxt),
-            Type::Named(def_id, _, generic_args) => {
+            Self::Infer(_)
+            | Self::Unknown
+            | Self::Int(_)
+            | Self::Bool
+            | Self::Char
+            | Self::Param(..)
+            | Self::Function(..)
+            | Self::String
+            | Self::Array(_)
+            | Self::Uninit(_)
+            | Self::IntVar(_) => false,
+            Self::Never => true,
+            Self::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
+            Self::Box(ty) => ty.is_uninhabited(ctxt),
+            Self::Named(def_id, _, generic_args) => {
                 if ctxt.is_type_recursive(*def_id) {
                     false
                 } else {
@@ -479,81 +546,17 @@ impl Type {
             }
         }
     }
-    pub fn visit<T>(
-        &self,
-        visit_ty: &mut impl FnMut(&Self) -> ControlFlow<T>,
-        visit_region: &mut impl FnMut(Region) -> ControlFlow<T>,
-    ) -> ControlFlow<T> {
-        visit_ty(self)?;
-        match self {
-            Type::Int(_)
-            | Type::Infer(_)
-            | Type::Unknown
-            | Type::Bool
-            | Type::Char
-            | Type::Byte
-            | Type::Param(..)
-            | Type::Never => ControlFlow::Continue(()),
-            Type::RawPointer(ty) | Type::Array(ty, _) => ty.visit(visit_ty, visit_region),
-            &(Type::Imm(region, ref ty) | Type::Mut(region, ref ty)) => {
-                visit_region(region)?;
-                ty.visit(visit_ty, visit_region)
-            }
-            Type::Function(function_type) => {
-                for param in function_type.params.iter() {
-                    param.visit(visit_ty, visit_region)?;
-                }
-                function_type.return_type.visit(visit_ty, visit_region)
-            }
-            Type::Record(fields) => {
-                for field in fields {
-                    visit_ty(&field.ty)?;
-                }
-                ControlFlow::Continue(())
-            }
-            Type::Tuple(fields) => {
-                for field in fields {
-                    visit_ty(field)?;
-                }
-                ControlFlow::Continue(())
-            }
-            Type::Named(.., generic_args) => {
-                for arg in generic_args {
-                    match arg {
-                        &GenericArg::Region(region) => visit_region(region)?,
-                        GenericArg::Type(ty) => ty.visit(visit_ty, visit_region)?,
-                    }
-                }
-                ControlFlow::Continue(())
-            }
-        }
-    }
 }
 
-impl Display for Type {
+impl Display for TypeKind<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::Array(ty, count) => {
-                write!(f, "fixed_array[{},{}]", ty, count)
+            Self::Box(ty) => {
+                write!(f, "Box[{ty}]")
             }
-            Type::Byte => f.pad("byte"),
-            Type::RawPointer(ty) => {
-                write!(f, "ptr[{}]", ty)
-            }
-            Type::Never => f.pad("never"),
-            Type::Record(fields) => {
-                f.pad("{")?;
-                let mut first = true;
-                for field in fields {
-                    if !first {
-                        f.pad(", ")?;
-                    }
-                    write!(f, "{}: {}", field.name, field.ty)?;
-                    first = false;
-                }
-                f.pad("}")
-            }
-            Type::Tuple(fields) => {
+            Self::String => f.pad("string"),
+            TypeKind::Never => f.pad("never"),
+            TypeKind::Tuple(fields) => {
                 f.pad("(")?;
                 let mut first = true;
                 for field in fields {
@@ -568,23 +571,14 @@ impl Display for Type {
                 }
                 f.pad(")")
             }
-            Type::Char => f.pad("char"),
-            Type::Bool => f.pad("bool"),
-            Type::Int(kind) => match kind {
-                IntegerKind::Signed => f.pad("int"),
-                IntegerKind::Unsigned => f.pad("uint"),
-            },
-            Type::Unknown => f.pad("{unknown}"),
-            Type::Infer(_) => f.pad("_"),
-            &Type::Param(name, _) => write!(f, "{}", name),
-            Type::Imm(region, ty) => {
-                write!(f, "imm [{}] {}", region, ty)
-            }
-            Type::Mut(region, ty) => {
-                write!(f, "mut [{}] {}", region, ty)
-            }
-            Type::Function(FunctionType {
-                resource,
+            TypeKind::Char => f.pad("char"),
+            TypeKind::Bool => f.pad("bool"),
+            TypeKind::Int(kind) => write!(f, "{}", kind),
+            TypeKind::Unknown => f.pad("{unknown}"),
+            TypeKind::Infer(_) => f.pad("_"),
+            TypeKind::IntVar(_) => f.pad("{integer}"),
+            &TypeKind::Param(name, _) => write!(f, "{}", name),
+            TypeKind::Function(FunctionSig {
                 params,
                 return_type,
             }) => {
@@ -597,157 +591,129 @@ impl Display for Type {
                     write!(f, "{}", param)?;
                     first = false;
                 }
-                f.pad(match *resource {
-                    IsResource::Data => ") -> ",
-                    IsResource::Resource => ") => ",
-                })?;
-                write!(f, "{}", return_type)
+                write!(f, ") -> {}", return_type)
             }
-            Type::Named(_, name, args) => {
+            TypeKind::Named(_, name, args) => {
                 write!(f, "{}{}", name, display_generic_args(args))
             }
+            TypeKind::Array(ty) => write!(f, "array[{}]", ty),
+            TypeKind::Uninit(ty) => write!(f, "uninit[{}]", ty),
         }
     }
 }
-pub trait TypeMap {
+pub trait TypeMap<'ctxt> {
     type Error;
-    fn super_map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
-        match ty {
-            Type::Bool
-            | Type::Char
-            | Type::Int(_)
-            | Type::Unknown
-            | Type::Byte
-            | Type::Infer(_)
-            | Type::Param(..)
-            | Type::Never => Ok(ty),
-            Type::Array(ty, count) => Ok(Type::Array(Box::new(self.map_type(*ty)?), count)),
-            Type::RawPointer(ty) => Ok(Type::RawPointer(Box::new(self.map_type(*ty)?))),
-            Type::Imm(region, ty) => Ok(Type::Imm(
-                self.map_region(region)?,
-                Box::new(self.map_type(*ty)?),
-            )),
-            Type::Mut(region, ty) => Ok(Type::Mut(
-                self.map_region(region)?,
-                Box::new(self.map_type(*ty)?),
-            )),
-            Type::Function(function_type) => {
-                Ok(Type::Function(self.map_function_type(function_type)?))
-            }
-            Type::Tuple(fields) => Ok(Type::Tuple(
+    fn ctxt(&self) -> CtxtRef<'ctxt>;
+    fn super_map_type(&mut self, ty: Type<'ctxt>) -> Result<Type<'ctxt>, Self::Error> {
+        match ty.kind() {
+            TypeKind::String
+            | TypeKind::Bool
+            | TypeKind::Char
+            | TypeKind::Int(_)
+            | TypeKind::Unknown
+            | TypeKind::Infer(_)
+            | TypeKind::Param(..)
+            | TypeKind::IntVar(_)
+            | TypeKind::Never => Ok(ty),
+            TypeKind::Function(function_type) => Ok(self
+                .map_function_type(function_type.clone())?
+                .into_type(self.ctxt())),
+            TypeKind::Tuple(fields) => Ok(Type::tuple_from_iter(self.ctxt(), {
+                let fields: Vec<_> = fields
+                    .iter()
+                    .map(|&field| self.map_type(field))
+                    .collect::<Result<_, _>>()?;
                 fields
-                    .into_iter()
-                    .map(|field| self.map_type(field))
-                    .collect::<Result<_, _>>()?,
-            )),
-            Type::Record(fields) => Ok(Type::Record(
-                fields
-                    .into_iter()
-                    .map(|field| self.map_field(field))
-                    .collect::<Result<_, _>>()?,
-            )),
-            Type::Named(id, name, args) => Ok(Type::Named(
+            })),
+            &TypeKind::Named(id, name, ref args) => Ok(Type::named(
+                self.ctxt(),
                 id,
                 name,
-                args.into_iter()
-                    .map(|arg| {
-                        Ok(match arg {
-                            GenericArg::Region(region) => {
-                                GenericArg::Region(self.map_region(region)?)
-                            }
-                            GenericArg::Type(ty) => GenericArg::Type(self.map_type(ty)?),
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
+                args.iter()
+                    .map(|&arg| arg.apply_map(self))
+                    .collect::<Result<GenericArgs, _>>()?,
             )),
+            TypeKind::Array(ty) => Ok(Type::new_array(self.ctxt(), self.map_type(*ty)?)),
+            TypeKind::Box(ty) => Ok(Type::new_box(self.ctxt(), self.map_type(*ty)?)),
+            TypeKind::Uninit(ty) => Ok(Type::new_uninit(self.ctxt(), self.map_type(*ty)?)),
         }
     }
     fn super_map_function_type(
         &mut self,
-        mut function_type: FunctionType,
-    ) -> Result<FunctionType, Self::Error> {
+        mut function_type: FunctionSig<'ctxt>,
+    ) -> Result<FunctionSig<'ctxt>, Self::Error> {
         function_type.params = function_type
             .params
             .into_iter()
             .map(|param| self.map_type(param))
             .collect::<Result<_, _>>()?;
-        *function_type.return_type = self.map_type(*function_type.return_type)?;
+        function_type.return_type = self.map_type(function_type.return_type)?;
         Ok(function_type)
     }
-    fn super_map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
-        Ok(region)
-    }
-    fn super_map_field(&mut self, field: RecordField) -> Result<RecordField, Self::Error> {
+    fn super_map_field(
+        &mut self,
+        field: RecordField<'ctxt>,
+    ) -> Result<RecordField<'ctxt>, Self::Error> {
         let mut field = field;
         let ty = self.map_type(field.ty)?;
         field.ty = ty;
         Ok(field)
     }
-    fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
+    fn map_type(&mut self, ty: Type<'ctxt>) -> Result<Type<'ctxt>, Self::Error> {
         self.super_map_type(ty)
     }
-    fn map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
-        self.super_map_region(region)
-    }
-    fn map_field(&mut self, field: RecordField) -> Result<RecordField, Self::Error> {
+    fn map_field(&mut self, field: RecordField<'ctxt>) -> Result<RecordField<'ctxt>, Self::Error> {
         self.super_map_field(field)
     }
     fn map_function_type(
         &mut self,
-        function_type: FunctionType,
-    ) -> Result<FunctionType, Self::Error> {
+        function_type: FunctionSig<'ctxt>,
+    ) -> Result<FunctionSig<'ctxt>, Self::Error> {
         self.super_map_function_type(function_type)
     }
 }
 
-pub trait TypeMappable {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error>
+pub trait TypeMappable<'ctxt> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error>
     where
         Self: Sized;
 }
 
-impl TypeMappable for Type {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
+impl<'ctxt> TypeMappable<'ctxt> for Type<'ctxt> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         m.map_type(self)
     }
 }
-impl TypeMappable for Region {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
-        m.map_region(self)
-    }
-}
 
-impl TypeMappable for FunctionType {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
+impl<'ctxt> TypeMappable<'ctxt> for FunctionSig<'ctxt> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         m.map_function_type(self)
     }
 }
-impl TypeMappable for RecordField {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
+impl<'ctxt> TypeMappable<'ctxt> for RecordField<'ctxt> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         m.map_field(self)
     }
 }
-impl TypeMappable for FunctionSig {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error>
-    where
-        Self: Sized,
-    {
-        Ok(Self {
-            params: self
-                .params
-                .into_iter()
-                .map(|param| m.map_type(param))
-                .collect::<Result<_, _>>()?,
-            return_type: m.map_type(self.return_type)?,
-        })
-    }
-}
-impl<T: TypeMappable> TypeMappable for Box<T> {
-    fn apply_map<M: TypeMap + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
+impl<'ctxt, T: TypeMappable<'ctxt>> TypeMappable<'ctxt> for Box<T> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error> {
         Ok(Box::new((*self).apply_map(m)?))
     }
 }
 
+impl<'ctxt> TypeMappable<'ctxt> for GenericArgs<'ctxt> {
+    fn apply_map<M: TypeMap<'ctxt> + ?Sized>(self, m: &mut M) -> Result<Self, M::Error>
+    where
+        Self: Sized,
+    {
+        Ok(GenericArgs(
+            self.0
+                .into_iter()
+                .map(|arg| arg.apply_map(m))
+                .collect::<Result<Vec<_>, _>>()?,
+        ))
+    }
+}
 pub const LIST_PTR_FIELD: FieldId = FieldId::new(0);
 pub const LIST_CAPICITY_FIELD: FieldId = FieldId::new(1);
 pub const LIST_LEN_FIELD: FieldId = FieldId::new(2);

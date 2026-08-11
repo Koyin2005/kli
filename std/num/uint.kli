@@ -1,0 +1,81 @@
+import std.optional.Option
+import std.panicking.panic_message
+import std.num.int
+
+fun wrapping_add(x : UInt64, y : UInt64) -> UInt64 = builtins.wrapping_add(x,y)
+
+fun overflowing_add(x : UInt64, y : UInt64) -> (UInt64,bool) = builtins.overflowing_add(x,y)
+
+fun wrapping_sub(x : UInt64, y : UInt64) -> UInt64 = builtins.wrapping_sub(x,y)
+
+fun overflowing_sub(x : UInt64, y : UInt64) -> (UInt64,bool) = builtins.overflowing_sub(x,y)
+
+fun shift_left(x : UInt64, y : UInt64) -> UInt64 = builtins.shift_left(x,y)
+
+fun shift_right(x : UInt64, y : UInt64) -> UInt64 = builtins.shift_right(x,y)
+
+fun checked_add(x : UInt64, y : UInt64) -> Option[UInt64] = do 
+    case builtins.overflowing_add(x,y) of 
+    | (_,false) -> Option.None
+    | (res,true) -> Option.Some(res)
+    end
+end
+
+# Computes the remainder of dividing `value` by `div`
+# Panics if div is 0
+fun rem(value : UInt64, div : UInt64) -> UInt64 = do
+    let multiple = value / div;
+    value - multiple * div
+end
+
+
+# Performs a bitcast between UInt64 and int
+fun bitcast_int(x : UInt64) -> Int64 = 
+    builtins.bitcast(x)
+
+# If x is negative panics otherwise performs a bitcast
+fun strict_cast_int(x : UInt64) -> Int64 = 
+    case x > int.bitcast_uint(int.max_value()) of
+    | true -> panic_message("UInt64 value too large for signed Int")
+    | false -> bitcast_int(x)
+    end
+
+
+fun max_value() -> UInt64 = builtins.int_max_value()
+
+fun min(x : UInt64, y : UInt64) -> UInt64 = case x < y of | true -> x | false -> y end
+
+fun max(x : UInt64, y : UInt64) -> UInt64 = case x > y of | true -> x | false -> y end
+
+
+fun is_zero(x : UInt64) -> bool = 
+    x == 0
+
+fun is_positive(x : UInt64) -> bool = 
+    x > 0
+
+fun contains_exclusive(x : UInt64, start : UInt64 , end_ : UInt64) -> bool = x > start and x < end_
+
+fun as_bool(x : UInt64) -> Option[bool] = 
+    case x of 
+    | 0 -> Option.Some(false)
+    | 1 -> Option.Some(true)
+    | _ -> Option.None
+    end
+
+fun extend_uint8(x : UInt8) -> UInt64 = builtins.widen(x)
+
+fun log(value : UInt64, power : UInt64) -> UInt64 = 
+    case value of 
+    | 0 -> panic_message("cannot take log of 0")
+    | n -> 
+        do
+            let mut pow : UInt64 = 0u;
+            while value > 0u do 
+                value = 
+                    value / power;
+                pow = pow + 1u;
+            end;
+            pow
+        end
+    end

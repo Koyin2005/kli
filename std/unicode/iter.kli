@@ -1,0 +1,132 @@
+import std.(optional.Option,strings)
+
+@opaque
+type CharIter =  {    
+    indices : CharIterIndices
+}
+
+
+fun chars(s : string) -> CharIter = CharIter {
+    indices = char_indices(s)
+}
+
+fun char_indices(s : string) -> CharIterIndices = 
+    CharIterIndices {
+        string_bytes = unsafe strings.as_bytes(s) end,
+        index = boxed.alloc(0)
+    }
+
+
+fun next(iter : CharIter) -> Option[char] = do
+    case next_index(iter.indices) of
+    | .None -> Option.None
+    | .Some((_,next)) -> Option.Some(next)
+    end
+
+end
+
+
+@opaque
+type CharIterIndices =  {    
+    string_bytes : array[UInt8],
+    index : Box[UInt64]
+}
+
+
+fun next_index(iter : CharIterIndices) -> Option[(UInt64,char)] = do
+    let current = iter.index^;
+    case unsafe next_char_unchecked(current,iter.string_bytes) end of
+    | .None -> Option.None
+    | .Some((next_index,next)) -> 
+        do
+            iter.index^ = next_index;
+            Option.Some((current,next))
+        end
+    end
+
+end
+
+@unsafe
+fun next_char_unchecked(current_index : UInt64, bytes : array[UInt8]) -> Option[(UInt64,char)] = do
+    let len =  builtins.array_len(bytes);
+    let first_byte : UInt32 = case current_index < len of 
+    | false -> return Option.None
+    | true -> builtins.widen(bytes.[current_index])
+    end;
+    current_index = current_index + 1;
+    # Its an ascii char?
+    let second_byte : UInt32 = case first_byte < 128 of 
+    | true -> return Option.Some(
+            (current_index,unsafe builtins.transmute(first_byte) end)
+        )
+    | false -> builtins.widen(bytes.[current_index])
+    end;
+    current_index = current_index + 1;
+
+    # Its 2 bytes char?
+    let third_byte : UInt32 = case first_byte < 224 of 
+    | false -> builtins.widen(bytes.[current_index])
+    | true -> 
+        do
+            let first_part  = 
+                builtins.shift_left(
+                    (first_byte band 0b11100),
+                    8
+                );
+
+            let second_part = 
+                builtins.shift_left(
+                    (first_byte band 0b11),
+                    6
+                ) bor (second_byte band 0b111111);
+
+            let code = first_part bor second_part;
+            return Option.Some(
+                (current_index, unsafe builtins.transmute(code) end)
+            )
+        end
+    end;
+    current_index = current_index + 1;
+    # 3 byte time?
+    let fourth_byte : UInt32 = case first_byte < 239 of 
+    | true -> 
+        do  
+            let first_part = 
+                builtins.shift_left(first_byte band 0b1111,12)
+                bor 
+                builtins.shift_left(
+                    second_byte  band 0b111100,
+                    6
+                );
+            
+            let second_part = builtins.shift_left(
+                    second_byte band 0b11,
+                    6
+                ) bor (third_byte band 0b111111);
+            
+            let code = first_part bor second_part;
+            return Option.Some(
+                (current_index,unsafe builtins.transmute(code) end)
+            )
+        end
+    | false -> builtins.widen(bytes.[current_index])
+    end;
+    current_index = current_index + 1;
+    
+    
+    let first_part = 
+        builtins.shift_left(first_byte band 0b111,18)
+        bor builtins.shift_left(second_byte band 0b110000,12);
+
+    let second_part =
+        builtins.shift_left(second_byte band 0b1111,12)
+        bor builtins.shift_left(third_byte band 0b111100,6);
+
+    let third_part = 
+        builtins.shift_left(third_byte band 0b11,6)
+        bor (fourth_byte band 0b111111);
+
+    let code = first_part bor second_part bor third_part;
+
+    Option.Some((current_index,unsafe builtins.transmute(code) end))
+end

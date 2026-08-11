@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::{BorrowExpr, GenericArgs, ModuleId, NodeId, Path, StmtKind};
-use crate::builtins::{Builtin, Builtins};
-use crate::collect::{GlobalContext, build_global_context};
+use crate::ast::{GenericArgs, ModuleId, NodeId, Path, StmtKind};
+use crate::collect::{Arenas, GlobalContext, build_global_context};
 use crate::config::Config;
 use crate::def_ids::DefId;
 use crate::diagnostics::DiagnosticReporter;
@@ -11,7 +10,7 @@ use crate::ident::Ident;
 use crate::index_vec::IndexVec;
 use crate::lang_items::LangItem;
 use crate::resolve::decl::DeclareResults;
-use crate::resolved_ast::{GenericKind, LocalRegionId, VarId, VariantDef};
+use crate::resolved_ast::{GenericKind, VarId, VariantDef};
 use crate::src_loc::SrcLoc;
 use crate::{Symbol, ast, resolved_ast as res};
 
@@ -32,22 +31,32 @@ pub(super) struct ModuleInfo {
 }
 #[derive(Clone, Copy, Debug)]
 enum TypeAlias {
-    Ptr,
-    Byte,
     Box,
     ArrayList,
     Never,
-    Pair,
+    RawArray,
+    Uninit,
+    Int64,
+    UInt64,
+    Int8,
+    UInt8,
+    Int32,
+    UInt32,
 }
 impl TypeAlias {
     fn into_type_name(self) -> res::TypeName {
         match self {
-            TypeAlias::Ptr => res::TypeName::Ptr,
             TypeAlias::Box => res::TypeName::Box,
-            TypeAlias::Byte => res::TypeName::Byte,
-            TypeAlias::ArrayList => res::TypeName::ArrayList,
+            TypeAlias::Int8 => res::TypeName::Int(res::IntegerSize::Int8),
+            TypeAlias::Int32 => res::TypeName::Int(res::IntegerSize::Int32),
+            TypeAlias::Int64 => res::TypeName::Int(res::IntegerSize::Int64),
+            TypeAlias::UInt8 => res::TypeName::UInt(res::IntegerSize::Int8),
+            TypeAlias::UInt32 => res::TypeName::UInt(res::IntegerSize::Int32),
+            TypeAlias::UInt64 => res::TypeName::UInt(res::IntegerSize::Int64),
+            TypeAlias::ArrayList => res::TypeName::Array,
             TypeAlias::Never => res::TypeName::Never,
-            TypeAlias::Pair => res::TypeName::Pair,
+            TypeAlias::RawArray => res::TypeName::RawArray,
+            TypeAlias::Uninit => res::TypeName::Uninit,
         }
     }
 }
@@ -67,7 +76,6 @@ impl From<Def> for Res {
 
 #[derive(Clone, Copy, Debug)]
 enum Res {
-    LocalRegion(LocalRegionId),
     Param(usize),
     Var(VarId),
     Def(Def),
@@ -103,29 +111,11 @@ enum TypeDefInfoKind {
         _fields: Vec<FieldInfo>,
     },
 }
-fn make_block_expr(
-    loc: SrcLoc,
-    region: Option<LocalRegionId>,
-    stmts: impl IntoIterator<Item = res::Stmt>,
-    expr: res::Expr,
-) -> res::Expr {
-    res::Expr {
-        loc,
-        kind: res::ExprKind::Block(
-            Box::new(res::BlockBody {
-                stmts: stmts.into_iter().collect(),
-                expr: Box::new(expr),
-            }),
-            region,
-        ),
-    }
-}
 pub struct Resolve<'info> {
     config: Config,
     env: Scope,
     prev_envs: Vec<Scope>,
     vars: usize,
-    regions: usize,
     generics: usize,
     generic_kinds: HashMap<Symbol, GenericKind>,
     current_module: Option<ModuleId>,
@@ -136,22 +126,29 @@ pub struct Resolve<'info> {
 impl<'info> Resolve<'info> {
     fn new(config: Config, results: &'info DeclareResults) -> Self {
         let env = Scope::from_iter([
-            (Symbol::intern("ptr"), Res::TypeAlias(TypeAlias::Ptr)),
-            (Symbol::intern("byte"), Res::TypeAlias(TypeAlias::Byte)),
+            (Symbol::intern("UInt8"), Res::TypeAlias(TypeAlias::UInt8)),
+            (Symbol::intern("UInt32"), Res::TypeAlias(TypeAlias::UInt32)),
+            (Symbol::intern("UInt64"), Res::TypeAlias(TypeAlias::UInt64)),
+            (Symbol::intern("Int8"), Res::TypeAlias(TypeAlias::Int8)),
+            (Symbol::intern("Int32"), Res::TypeAlias(TypeAlias::Int32)),
+            (Symbol::intern("Int64"), Res::TypeAlias(TypeAlias::Int64)),
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),
-            (Symbol::intern("Pair"), Res::TypeAlias(TypeAlias::Pair)),
             (
-                Symbol::intern("ArrayList"),
+                Symbol::intern("raw_array"),
+                Res::TypeAlias(TypeAlias::RawArray),
+            ),
+            (
+                Symbol::intern("array"),
                 Res::TypeAlias(TypeAlias::ArrayList),
             ),
+            (Symbol::intern("uninit"), Res::TypeAlias(TypeAlias::Uninit)),
         ]);
         Self {
             config,
             prev_envs: Vec::new(),
             env,
             vars: 0,
-            regions: 0,
             generics: 0,
             diag: DiagnosticReporter::new(),
             generic_kinds: HashMap::new(),
@@ -180,10 +177,6 @@ impl<'info> Resolve<'info> {
         self.diag
             .add_diagnostic(format!("'{}' not in scope", path), loc);
     }
-    fn not_in_scope_error(&mut self, name: Symbol, loc: SrcLoc) {
-        self.diag
-            .add_diagnostic(format!("'{}' not in scope", name), loc);
-    }
     fn cannot_use_as_error(&mut self, name: Symbol, expected: &str, loc: SrcLoc) {
         self.diag
             .add_diagnostic(format!("Cannot use '{}' as {}", name, expected), loc);
@@ -197,44 +190,6 @@ impl<'info> Resolve<'info> {
     }
     fn add_item(&mut self, id: DefId, item: res::Item) {
         self.add_node(id, res::Node::Item(Box::new(item)));
-    }
-    fn is_region_param(&self, name: Ident) -> bool {
-        self.generic_kinds
-            .get(&name.symbol)
-            .is_some_and(|kind| *kind == res::GenericKind::Region)
-    }
-    fn resolve_region_param(&mut self, name: Ident, index: usize) -> res::RegionKind {
-        if self.generic_kinds[&name.symbol] != res::GenericKind::Region {
-            self.diag.add_diagnostic(
-                format!("Generic kind mismatch for '{}'", name.symbol),
-                name.loc,
-            );
-        }
-        res::RegionKind::Param(name.symbol, index)
-    }
-    fn resolve_region(&mut self, region: ast::Region) -> res::Region {
-        match region {
-            ast::Region::Named(name) => res::Region {
-                loc: name.loc,
-                kind: match self.resolve_name(name.symbol) {
-                    None => {
-                        self.not_in_scope_error(name.symbol, name.loc);
-                        res::RegionKind::Unknown
-                    }
-                    Some(Res::LocalRegion(region)) => res::RegionKind::Local(name.symbol, region),
-                    Some(Res::Param(index)) => self.resolve_region_param(name, index),
-                    Some(Res::Unknown) => res::RegionKind::Unknown,
-                    Some(Res::TypeAlias(_) | Res::Def(_) | Res::Var(_) | Res::VariantCase(..)) => {
-                        self.cannot_use_as_error(name.symbol, "region", name.loc);
-                        res::RegionKind::Unknown
-                    }
-                },
-            },
-            ast::Region::Static(loc) => res::Region {
-                loc,
-                kind: res::RegionKind::Static,
-            },
-        }
     }
     fn error_on_generic_args(
         &mut self,
@@ -260,30 +215,7 @@ impl<'info> Resolve<'info> {
             args: args
                 .args
                 .into_iter()
-                .map(|arg| match arg.ty.kind {
-                    ast::TypeKind::Named(ast::InstancePath {
-                        ref path,
-                        generic_args: None,
-                    }) if let Ok(Res::LocalRegion(local)) = self.resolve_path(path) => {
-                        res::GenericArg::Region(res::Region {
-                            loc: arg.ty.loc,
-                            kind: res::RegionKind::Local(path.last().symbol, local),
-                        })
-                    }
-                    ast::TypeKind::Named(ast::InstancePath {
-                        ref path,
-                        generic_args: None,
-                    }) if let Ok(Res::Param(index)) = self.resolve_path(path)
-                        && let name = path.last()
-                        && self.is_region_param(name) =>
-                    {
-                        res::GenericArg::Region(res::Region {
-                            loc: arg.ty.loc,
-                            kind: res::RegionKind::Param(name.symbol, index),
-                        })
-                    }
-                    _ => res::GenericArg::Type(self.resolve_type(arg.ty)),
-                })
+                .map(|arg| res::GenericArg::Type(self.resolve_type(arg.ty)))
                 .collect(),
         }
     }
@@ -306,7 +238,6 @@ impl<'info> Resolve<'info> {
                     (
                         param.name.symbol,
                         match param.kind {
-                            ast::GenericParamKind::Region => res::GenericKind::Region,
                             ast::GenericParamKind::Type => res::GenericKind::Type,
                         },
                     )
@@ -316,7 +247,6 @@ impl<'info> Resolve<'info> {
                 .params
                 .into_iter()
                 .map(|param| match param.kind {
-                    ast::GenericParamKind::Region => res::GenericKind::Region,
                     ast::GenericParamKind::Type => res::GenericKind::Type,
                 })
                 .collect();
@@ -355,7 +285,7 @@ impl<'info> Resolve<'info> {
                 self.cannot_use_as_error(name.symbol, "type", name.loc);
                 None
             }
-            Ok(Res::Def(Def::Function(_) | Def::Module(_)) | Res::LocalRegion(_) | Res::Var(_)) => {
+            Ok(Res::Def(Def::Function(_) | Def::Module(_)) | Res::Var(_)) => {
                 self.cannot_use_as_error(name.symbol, "type", name.loc);
                 None
             }
@@ -368,12 +298,6 @@ impl<'info> Resolve<'info> {
             }
             ast::TypeKind::Bool => {
                 res::TypeKind::Named(res::TypeName::Bool, Box::new(res::GenericArgs::NONE))
-            }
-            ast::TypeKind::Int => {
-                res::TypeKind::Named(res::TypeName::Int, Box::new(res::GenericArgs::NONE))
-            }
-            ast::TypeKind::Uint => {
-                res::TypeKind::Named(res::TypeName::Uint, Box::new(res::GenericArgs::NONE))
             }
             ast::TypeKind::String => {
                 res::TypeKind::Named(res::TypeName::String, Box::new(res::GenericArgs::NONE))
@@ -397,22 +321,12 @@ impl<'info> Resolve<'info> {
                     .collect(),
             ),
             ast::TypeKind::Function(ast::FunctionType {
-                resource,
                 params,
                 return_type,
             }) => res::TypeKind::Function(Box::new(res::FunctionType {
-                is_resource: resource,
                 params: params.into_iter().map(|ty| self.resolve_type(ty)).collect(),
                 return_type: Box::new(self.resolve_type(*return_type)),
             })),
-            ast::TypeKind::Imm(region, ty) => res::TypeKind::Imm(
-                Box::new(self.resolve_region(region)),
-                Box::new(self.resolve_type(*ty)),
-            ),
-            ast::TypeKind::Mut(region, ty) => res::TypeKind::Mut(
-                Box::new(self.resolve_region(region)),
-                Box::new(self.resolve_type(*ty)),
-            ),
             ast::TypeKind::Named(path) => match self.resolve_type_path(&path.path, ty.loc) {
                 None => {
                     self.resolve_generic_args(path.generic_args);
@@ -425,16 +339,6 @@ impl<'info> Resolve<'info> {
             },
         };
         res::Type { loc: ty.loc, kind }
-    }
-    fn fresh_region(&mut self) -> LocalRegionId {
-        let region_id = LocalRegionId::new(self.vars);
-        self.regions += 1;
-        region_id
-    }
-    fn declare_region(&mut self, region: Symbol) -> LocalRegionId {
-        let region_id = self.fresh_region();
-        self.env.insert(region, Res::LocalRegion(region_id));
-        region_id
     }
     fn fresh_var(&mut self) -> VarId {
         let var_id = VarId::new(self.vars);
@@ -505,9 +409,9 @@ impl<'info> Resolve<'info> {
             ),
             ast::PatternKind::Int(lit) => res::PatternKind::Int(self.resolve_int_lit(loc, lit)),
             ast::PatternKind::Bool(value) => res::PatternKind::Bool(value),
-            ast::PatternKind::Binding(borrow, mutable, name) => {
+            ast::PatternKind::Binding(mutable, name) => {
                 let var = self.declare_var(name.symbol);
-                res::PatternKind::Binding(borrow, mutable, name, var)
+                res::PatternKind::Binding(mutable, name, var)
             }
             ast::PatternKind::Record(fields) => {
                 let fields = fields
@@ -518,9 +422,6 @@ impl<'info> Resolve<'info> {
                     })
                     .collect();
                 res::PatternKind::Record(fields)
-            }
-            ast::PatternKind::Ref(pattern) => {
-                res::PatternKind::Ref(Box::new(self.resolve_pattern(*pattern)))
             }
             ast::PatternKind::Case(name, inner) => res::PatternKind::Case(
                 name,
@@ -606,10 +507,9 @@ impl<'info> Resolve<'info> {
                     vec![segment],
                 ));
             }
-            Res::Def(Def::Function(_))
-            | Res::Param(_)
-            | Res::LocalRegion(_)
-            | Res::VariantCase(..) => return Err(NameResolutionError::InvalidPathStart),
+            Res::Def(Def::Function(_)) | Res::Param(_) | Res::VariantCase(..) => {
+                return Err(NameResolutionError::InvalidPathStart);
+            }
         })
     }
     fn resolve_path(&mut self, path: &Path) -> Result<Res, NameResolutionError> {
@@ -699,10 +599,7 @@ impl<'info> Resolve<'info> {
                     res::FunctionDefId(self.def_id_for(function)),
                     Box::new(self.resolve_generic_args(args)),
                 ),
-                Res::Param(_)
-                | Res::LocalRegion(_)
-                | Res::Def(Def::Module(_) | Def::Type(_))
-                | Res::TypeAlias(_) => {
+                Res::Param(_) | Res::Def(Def::Module(_) | Def::Type(_)) | Res::TypeAlias(_) => {
                     self.resolve_generic_args(args);
                     self.diag
                         .add_diagnostic(format!("Can't use '{}' as a value", path), loc);
@@ -718,23 +615,24 @@ impl<'info> Resolve<'info> {
     fn resolve_expr(&mut self, expr: ast::Expr) -> res::Expr {
         let loc = expr.loc;
         let kind = match expr.kind {
+            ast::ExprKind::Char(char) => res::ExprKind::Char(char),
             ast::ExprKind::Unsafe(expr) => {
                 let expr = self.resolve_expr(*expr);
                 res::ExprKind::Unsafe(Box::new(expr))
             }
-            ast::ExprKind::Block(block, region) => self.in_scope(|this| {
-                let region = region.map(|region| this.declare_region(region.symbol));
-                res::ExprKind::Block(
-                    Box::new(res::BlockBody {
-                        stmts: block
-                            .stmts
-                            .into_iter()
-                            .map(|stmt| this.resolve_stmt(stmt))
-                            .collect(),
-                        expr: Box::new(this.resolve_expr(*block.expr)),
-                    }),
-                    region,
-                )
+            ast::ExprKind::Deref(value) => {
+                let expr = self.resolve_expr(*value);
+                res::ExprKind::Deref(Box::new(expr))
+            }
+            ast::ExprKind::Block(block) => self.in_scope(|this| {
+                res::ExprKind::Block(Box::new(res::BlockBody {
+                    stmts: block
+                        .stmts
+                        .into_iter()
+                        .map(|stmt| this.resolve_stmt(stmt))
+                        .collect(),
+                    expr: Box::new(this.resolve_expr(*block.expr)),
+                }))
             }),
             ast::ExprKind::Tuple(fields) => res::ExprKind::Tuple(
                 fields
@@ -747,18 +645,12 @@ impl<'info> Resolve<'info> {
                 let body = self.resolve_expr(*body);
                 res::ExprKind::While(Box::new(condition), Box::new(body))
             }
-            ast::ExprKind::AddressOf(expr) => {
-                res::ExprKind::AddressOf(Box::new(self.resolve_expr(*expr)))
-            }
             ast::ExprKind::Unit => res::ExprKind::Unit,
             ast::ExprKind::String(value) => res::ExprKind::String(value.into()),
             ast::ExprKind::Number(lit) => res::ExprKind::Int(self.resolve_int_lit(loc, lit)),
             ast::ExprKind::Bool(value) => res::ExprKind::Bool(value),
             ast::ExprKind::Return(value) => {
                 res::ExprKind::Return(Box::new(self.resolve_expr(*value)))
-            }
-            ast::ExprKind::Print(arg) => {
-                res::ExprKind::Print(arg.map(|arg| Box::new(self.resolve_expr(*arg))))
             }
             ast::ExprKind::Annotate(expr, ty) => res::ExprKind::Annotate(
                 Box::new(self.resolve_expr(*expr)),
@@ -767,14 +659,15 @@ impl<'info> Resolve<'info> {
             ast::ExprKind::Field(expr, field) => {
                 res::ExprKind::Field(Box::new(self.resolve_expr(*expr)), field)
             }
+            ast::ExprKind::Index(expr, index) => res::ExprKind::Index(
+                Box::new(self.resolve_expr(*expr)),
+                Box::new(self.resolve_expr(*index)),
+            ),
             ast::ExprKind::Panic => res::ExprKind::Panic,
             ast::ExprKind::Call(callee, args) => res::ExprKind::Call(
                 Box::new(self.resolve_expr(*callee)),
                 args.into_iter().map(|arg| self.resolve_expr(arg)).collect(),
             ),
-            ast::ExprKind::Deref(value) => {
-                res::ExprKind::Deref(Box::new(self.resolve_expr(*value)))
-            }
             ast::ExprKind::Binary(op, left, right) => res::ExprKind::Binary(
                 op,
                 Box::new(self.resolve_expr(*left)),
@@ -814,7 +707,6 @@ impl<'info> Resolve<'info> {
                     loc,
                     params: params.into_boxed_slice(),
                     param_tys: param_tys.into_boxed_slice(),
-                    resource: lambda.resource,
                     body: this.resolve_expr(*lambda.body),
                 });
                 this.add_node(id, res::Node::Lambda(Rc::clone(&lambda)));
@@ -824,20 +716,6 @@ impl<'info> Resolve<'info> {
                 let place = self.resolve_expr(*place);
                 let value = self.resolve_expr(*value);
                 res::ExprKind::Assign(Box::new(place), Box::new(value))
-            }
-            ast::ExprKind::Borrow(borrow_expr) => {
-                let BorrowExpr {
-                    mutable,
-                    expr,
-                    region,
-                } = *borrow_expr;
-                let place = self.resolve_expr(expr);
-                let region = self.resolve_region(region);
-                res::ExprKind::Borrow(Box::new(res::BorrowExpr {
-                    mutable,
-                    place,
-                    region,
-                }))
             }
             ast::ExprKind::Case(matched, arms) => {
                 let matched = self.resolve_expr(*matched);
@@ -873,15 +751,201 @@ impl<'info> Resolve<'info> {
                     fields.into_boxed_slice(),
                 )
             }
-            ast::ExprKind::For(pattern, iterator, body) => {
-                let iterator = self.resolve_expr(*iterator);
+            ast::ExprKind::For(pattern, start, end, body) => {
+                /*
+                   for i in start..end body
+
+                   do
+                       let iter_var = start;
+                       while iter_var < end do
+                           let i = iter_var;
+                           body;
+                           iter_var = iter_var +& 1;
+                       end
+                   end
+
+                   for i in option_expr body
+
+                   do
+                       let iter_var = true;
+                       while iter_var do
+                           case option_expr do
+                           | .Some(i) -> body
+                           | .None -> iter_var = false
+                           end
+                       end
+                   end
+                */
+                let start = self.resolve_expr(*start);
+                let end = end.map(|end| self.resolve_expr(*end));
                 self.in_scope(|this| {
+                    let iter_var = this.declare_var(Symbol::ITER);
+                    let var_ident = Ident {
+                        symbol: Symbol::ITER,
+                        loc: start.loc,
+                    };
+                    let iter_var_value = |loc| res::Expr {
+                        loc,
+                        kind: res::ExprKind::Var(res::Var(var_ident.symbol, iter_var)),
+                    };
+
+                    let (start_value, iter_value) = if end.is_some() {
+                        (start, None)
+                    } else {
+                        (
+                            res::Expr {
+                                loc: start.loc,
+                                kind: res::ExprKind::Bool(true),
+                            },
+                            Some(start),
+                        )
+                    };
+                    let setup_stmts = vec![res::Stmt {
+                        loc: start_value.loc,
+                        kind: res::StmtKind::Let(Box::new(res::LetBinding {
+                            pattern: res::Pattern {
+                                loc: start_value.loc,
+                                kind: res::PatternKind::Binding(
+                                    ast::Mutable::Mutable,
+                                    var_ident,
+                                    iter_var,
+                                ),
+                            },
+                            ty: None,
+                            value: start_value,
+                        })),
+                    }]
+                    .into_boxed_slice();
+
+                    let range_iter = end.is_some();
+                    let condition = if let Some(end) = end {
+                        res::Expr {
+                            loc: var_ident.loc,
+                            kind: res::ExprKind::Binary(
+                                ast::BinaryOp::Lesser,
+                                Box::new(iter_var_value(var_ident.loc)),
+                                Box::new(end),
+                            ),
+                        }
+                    } else {
+                        iter_var_value(var_ident.loc)
+                    };
+                    let body_loc;
                     let pattern = this.resolve_pattern(*pattern);
-                    let body = this.resolve_expr(*body);
-                    res::ExprKind::For(Box::new(res::ForExpr {
-                        pattern,
-                        iterator,
-                        body,
+
+                    let body = if range_iter {
+                        let pat_loc = pattern.loc;
+                        let inner_body_stmts = vec![
+                            //Assign to pattern
+                            res::Stmt {
+                                loc: var_ident.loc,
+                                kind: res::StmtKind::Let(Box::new(res::LetBinding {
+                                    pattern,
+                                    ty: None,
+                                    value: iter_var_value(pat_loc),
+                                })),
+                            },
+                            //Actual loop body
+                            {
+                                let body = this.resolve_expr(*body);
+                                body_loc = body.loc;
+                                res::Stmt {
+                                    loc: body.loc,
+                                    kind: res::StmtKind::Expr(body),
+                                }
+                            },
+                        ]
+                        .into_boxed_slice();
+
+                        let wrapping_add_function = res::Expr {
+                            loc: body_loc,
+                            kind: this.resolve_path_as_expr(
+                                body_loc,
+                                Path::new(vec![
+                                    Ident::new(Symbol::BUILTINS, body_loc),
+                                    Ident::new(Symbol::WRAPPING_ADD, body_loc),
+                                ]),
+                                None,
+                            ),
+                        };
+
+                        let increment = res::Expr {
+                            loc: body_loc,
+                            kind: res::ExprKind::Assign(
+                                Box::new(iter_var_value(body_loc)),
+                                Box::new(res::Expr {
+                                    loc: body_loc,
+                                    kind: res::ExprKind::Call(
+                                        Box::new(wrapping_add_function),
+                                        vec![
+                                            iter_var_value(body_loc),
+                                            res::Expr {
+                                                loc: body_loc,
+                                                kind: res::ExprKind::Int(res::IntegerLiteral {
+                                                    value: 1,
+                                                    kind: res::IntegerLiteralKind::Implicit,
+                                                }),
+                                            },
+                                        ]
+                                        .into_boxed_slice(),
+                                    ),
+                                }),
+                            ),
+                        };
+                        res::Expr {
+                            loc: body_loc,
+                            kind: res::ExprKind::Block(Box::new(res::BlockBody {
+                                stmts: inner_body_stmts,
+                                expr: Box::new(increment),
+                            })),
+                        }
+                    } else {
+                        body_loc = body.loc;
+                        res::Expr {
+                            loc: body_loc,
+                            kind: res::ExprKind::Case(
+                                Box::new(iter_value.unwrap()),
+                                vec![
+                                    res::CaseArm {
+                                        pattern: res::Pattern {
+                                            loc: body_loc,
+                                            kind: res::PatternKind::Case(
+                                                Ident::new(Symbol::intern("Some"), body_loc),
+                                                Some(Box::new(pattern)),
+                                            ),
+                                        },
+                                        body: this.resolve_expr(*body),
+                                    },
+                                    res::CaseArm {
+                                        pattern: res::Pattern {
+                                            loc: body_loc,
+                                            kind: res::PatternKind::Case(
+                                                Ident::new(Symbol::intern("None"), body_loc),
+                                                None,
+                                            ),
+                                        },
+                                        body: res::Expr {
+                                            loc,
+                                            kind: res::ExprKind::Assign(
+                                                Box::new(iter_var_value(body_loc)),
+                                                Box::new(res::Expr {
+                                                    loc,
+                                                    kind: res::ExprKind::Bool(false),
+                                                }),
+                                            ),
+                                        },
+                                    },
+                                ]
+                                .into_boxed_slice(),
+                            ),
+                        }
+                    };
+                    res::ExprKind::Block(Box::new(res::BlockBody {
+                        stmts: setup_stmts,
+                        expr: Box::new(res::Expr {
+                            kind: res::ExprKind::While(Box::new(condition), Box::new(body)),
+                            loc,
+                        }),
                     }))
                 })
             }
@@ -890,113 +954,12 @@ impl<'info> Resolve<'info> {
                 method,
                 args.into_iter().map(|arg| self.resolve_expr(arg)).collect(),
             ),
-            ast::ExprKind::Array(fields) => {
-                /*
-                   [a_1,a_2,...,a_n]
-                   do
-                       let mut l = std.arrays.new();
-                       do in r
-                       do in r std.arrays.push(mut[r] l, a_1) end;
-                       do in r std.arrays.push(mut[r] l, a_2) end;
-                       ..
-                       do in r std.arrays.push(mut[r] l, a_n) end;
-                       end
-                   end
-                */
-                let array_list_path = Path::new(vec![
-                    Ident::new(Symbol::STD, loc),
-                    Ident::new(Symbol::intern("arrays"), loc),
-                    Ident::new(Symbol::intern("ArrayList"), loc),
-                ]);
-                let with_capacity_path = array_list_path
-                    .clone()
-                    .with_extra_segment(Ident::new(Symbol::intern("with_capacity"), loc));
-                let with_cap_expr = self.resolve_path_as_expr(loc, with_capacity_path, None);
-                let push_expr = |this: &mut Resolve<'_>| {
-                    let push_path = array_list_path
-                        .clone()
-                        .with_extra_segment(Ident::new(Symbol::intern("push"), loc));
-                    this.resolve_path_as_expr(loc, push_path, None)
-                };
-
-                let local_name = Ident::new(Symbol::intern("list"), loc);
-                let local_var = self.fresh_var();
-                let var_expr = move || res::Expr {
-                    loc,
-                    kind: res::ExprKind::Var(res::Var(local_name.symbol, local_var)),
-                };
-                fn make_call(
-                    loc: SrcLoc,
-                    callee: res::Expr,
-                    args: impl IntoIterator<Item = res::Expr>,
-                ) -> res::Expr {
-                    res::Expr {
-                        loc,
-                        kind: res::ExprKind::Call(Box::new(callee), args.into_iter().collect()),
-                    }
-                }
-                let let_stmt = res::Stmt {
-                    loc,
-                    kind: res::StmtKind::Let(Box::new(res::LetBinding {
-                        pattern: res::Pattern {
-                            loc,
-                            kind: res::PatternKind::Binding(
-                                None,
-                                ast::Mutable::Mutable,
-                                local_name,
-                                local_var,
-                            ),
-                        },
-                        ty: None,
-                        value: make_call(
-                            loc,
-                            res::Expr {
-                                loc,
-                                kind: with_cap_expr,
-                            },
-                            [res::Expr {
-                                loc,
-                                kind: res::ExprKind::Int(res::IntegerLiteral {
-                                    value: fields.len() as u64,
-                                    kind: res::IntegerLiteralKind::Implicit,
-                                }),
-                            }],
-                        ),
-                    })),
-                };
-                let stmts = std::iter::once(let_stmt).chain(fields.into_iter().enumerate().map(
-                    |(i, field)| {
-                        let region_name = Symbol::intern(&format!("r{}", i + 1));
-                        let region = self.fresh_region();
-                        let borrowed_var = res::Expr {
-                            loc,
-                            kind: res::ExprKind::Borrow(Box::new(res::BorrowExpr {
-                                mutable: ast::Mutable::Mutable,
-                                place: var_expr(),
-                                region: res::Region {
-                                    loc,
-                                    kind: res::RegionKind::Local(region_name, region),
-                                },
-                            })),
-                        };
-                        let push_call = make_call(
-                            loc,
-                            res::Expr {
-                                loc,
-                                kind: push_expr(self),
-                            },
-                            [borrowed_var, self.resolve_expr(field)],
-                        );
-                        let block_expr = make_block_expr(loc, Some(region), [], push_call);
-                        res::Stmt {
-                            loc,
-                            kind: res::StmtKind::Expr(block_expr),
-                        }
-                    },
-                ));
-
-                return make_block_expr(loc, None, stmts, var_expr());
-            }
+            ast::ExprKind::Array(fields) => res::ExprKind::Array(
+                fields
+                    .into_iter()
+                    .map(|field| self.resolve_expr(field))
+                    .collect(),
+            ),
         };
         res::Expr { loc, kind }
     }
@@ -1122,6 +1085,7 @@ impl<'info> Resolve<'info> {
             self.add_node(
                 def_id,
                 res::Node::Impl(Box::new(res::TypeImpl {
+                    span: impl_.loc,
                     ty: self.def_id_for(type_id),
                     methods,
                 })),
@@ -1227,6 +1191,15 @@ impl<'info> Resolve<'info> {
                                 );
                             }
                             res::AnnotationKind::Opaque
+                        }
+                        Symbol::BUILTIN => {
+                            if !annotation.fields.is_empty() {
+                                self.diag.add_diagnostic(
+                                    format!("too many fields for '{}'", annotation.name.symbol),
+                                    annotation.loc,
+                                );
+                            }
+                            res::AnnotationKind::Builtin
                         }
                         _ => {
                             self.diag.add_diagnostic(
@@ -1341,10 +1314,11 @@ impl<'info> Resolve<'info> {
             this.add_item(item.id, item);
         })
     }
-    pub fn resolve(
+    pub fn resolve<'a>(
+        arena: &'a Arenas<'a>,
         config: Config,
         modules: Vec<ast::Module>,
-    ) -> Result<GlobalContext, ResolveErrored> {
+    ) -> Result<GlobalContext<'a>, ResolveErrored> {
         //First pass : Declare everything
         let diag = DiagnosticReporter::new();
         let decl_info = decl::Declare::new(&diag).declare(&modules);
@@ -1359,23 +1333,8 @@ impl<'info> Resolve<'info> {
                 .map(|(id, node)| node.unwrap_or_else(|| panic!("missing node for '{:?}'", id)))
                 .collect()
         };
-
-        let mut builtins = Builtins::default();
-        if let Some(builtin_module) = decl_info.builtin_module {
-            for (name, &def) in &decl_info.modules[&builtin_module].items {
-                let Some(builtin) = Builtin::find(*name) else {
-                    continue;
-                };
-                let Def::Function(id) = def else {
-                    continue;
-                };
-                let id = this.def_id_for(id);
-                builtins.insert(builtin, id);
-            }
-        }
-
         let resolved_diag = this.diag;
-        let context = build_global_context(this.config, nodes, builtins, decl_info.parents);
+        let context = build_global_context(this.config, nodes, decl_info.parents, arena);
         if !diag.report_all() & !resolved_diag.report_all() {
             Ok(context)
         } else {

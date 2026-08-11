@@ -2,3 +2,5 @@
 /tests
 /grammar.bnf
 /builtins.kli
+/foo.o
+/output.exe

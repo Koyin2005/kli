@@ -18,71 +18,75 @@ impl Ident {
     }
 }
 pub type SymbolContent = String;
-#[derive(Clone, Copy)]
-enum NamedSymbol {
-    Empty,
-    Main,
-    Std,
-    Builtins,
-    NumberZero,
-    Copy,
-    Unsafe,
-    LangItem,
-    Box,
-    Opaque,
-}
-impl NamedSymbol {
-    pub const fn content(self) -> &'static str {
-        match self {
-            Self::Empty => "",
-            Self::Main => "main",
-            Self::Std => "std",
-            Self::Builtins => "builtins",
-            Self::NumberZero => "0",
-            Self::Copy => "copy",
-            Self::Unsafe => "unsafe",
-            Self::LangItem => "lang_item",
-            Self::Box => "box",
-            Self::Opaque => "opaque",
-        }
-    }
-}
-const fn byte_eq(b1: &[u8], b2: &[u8]) -> bool {
-    if b1.len() != b2.len() {
-        return false;
-    }
-    let mut i = 0;
-    while i < b1.len() {
-        if b1[i] != b2[i] {
-            return false;
-        }
-        i += 1;
-    }
-    true
-}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol(SymbolId);
 impl Symbol {
-    const NAMED_SYMBOLS: [NamedSymbol; 10] = [
-        NamedSymbol::Empty,
-        NamedSymbol::Main,
-        NamedSymbol::Std,
-        NamedSymbol::Builtins,
-        NamedSymbol::NumberZero,
-        NamedSymbol::Copy,
-        NamedSymbol::Unsafe,
-        NamedSymbol::LangItem,
-        NamedSymbol::Box,
-        NamedSymbol::Opaque,
+    const NAMED_SYMBOLS: &[&str] = &[
+        "",
+        "box",
+        // type names
+        "Int",
+        "UInt",
+        "main",
+        "std",
+        "builtins",
+        "0",
+        "copy",
+        "unsafe",
+        "lang_item",
+        "opaque",
+        "builtin",
+        "array",
+        "iter",
+        // builtins
+        "box_alloc",
+        "transmute",
+        "array_len",
+        "array_addr",
+        "wrapping_add",
+        "overflowing_add",
+        "wrapping_sub",
+        "overflowing_sub",
+        "widen",
+        "truncate",
+        "bitcast",
+        "raw_array_alloc",
+        "array_set_unchecked",
+        "array_get_unchecked",
+        "print_string",
+        "int_max_value",
+        "uninit_zeroed",
+        "uninit_assume_init",
+        "uninit_new",
+        "read_line",
+        "bitwise_or",
+        "shift_left",
+        "shift_right",
     ];
-    const fn expect_symbol(name: NamedSymbol) -> Symbol {
-        let content = name.content();
+    const _NO_REPEATS: () = {
         let mut i = 0;
         while i < Self::NAMED_SYMBOLS.len() {
-            if byte_eq(
-                Self::NAMED_SYMBOLS[i].content().as_bytes(),
-                content.as_bytes(),
-            ) {
+            let mut j = 0;
+            while j < Self::NAMED_SYMBOLS.len() {
+                if i != j {
+                    assert!(
+                        !Self::NAMED_SYMBOLS[i].eq_ignore_ascii_case(Self::NAMED_SYMBOLS[j]),
+                        "repeat"
+                    );
+                }
+                j += 1;
+            }
+            i += 1;
+        }
+    };
+
+    pub fn index(self) -> usize {
+        self.0.into_usize()
+    }
+    const fn expect_symbol(name: &str) -> Symbol {
+        let mut i = 0;
+        while i < Self::NAMED_SYMBOLS.len() {
+            if Self::NAMED_SYMBOLS[i].eq_ignore_ascii_case(name) {
                 return if i > u32::MAX as usize {
                     panic!("too many symbols")
                 } else {
@@ -93,18 +97,52 @@ impl Symbol {
         }
         panic!("not found")
     }
-    pub const EMPTY_STRING: Self = Self::expect_symbol(NamedSymbol::Empty);
-    pub const MAIN: Self = Self::expect_symbol(NamedSymbol::Main);
-    pub const STD: Self = Self::expect_symbol(NamedSymbol::Std);
-    pub const BUILTINS: Self = Self::expect_symbol(NamedSymbol::Builtins);
-    pub const ZERO: Self = Self::expect_symbol(NamedSymbol::NumberZero);
-    pub const COPY: Self = Self::expect_symbol(NamedSymbol::Copy);
-    pub const UNSAFE: Self = Self::expect_symbol(NamedSymbol::Unsafe);
-    pub const LANG_ITEM: Self = Self::expect_symbol(NamedSymbol::LangItem);
-    pub const BOX: Self = Self::expect_symbol(NamedSymbol::Box);
-    pub const OPAQUE: Self = Self::expect_symbol(NamedSymbol::Opaque);
+    pub const EMPTY_STRING: Self = Self::expect_symbol("");
+    pub const MAIN: Self = Self::expect_symbol("main");
+    pub const STD: Self = Self::expect_symbol("std");
+    pub const BUILTINS: Self = Self::expect_symbol("builtins");
+    pub const ZERO: Self = Self::expect_symbol("0");
+    pub const COPY: Self = Self::expect_symbol("copy");
+    pub const UNSAFE: Self = Self::expect_symbol("unsafe");
+    pub const LANG_ITEM: Self = Self::expect_symbol("lang_item");
+    pub const BOX: Self = Self::expect_symbol("box");
+    pub const OPAQUE: Self = Self::expect_symbol("opaque");
+    pub const BUILTIN: Self = Self::expect_symbol("builtin");
+    pub const ARRAY: Self = Self::expect_symbol("array");
+    pub const ITER: Self = Self::expect_symbol("iter");
+    pub const TRANSMUTE: Self = Self::expect_symbol("transmute");
+    pub const ARRAY_LEN: Self = Self::expect_symbol("array_len");
+    pub const BOX_ALLOC: Self = Self::expect_symbol("box_alloc");
+    pub const ARRAY_ADDR: Self = Self::expect_symbol("array_addr");
+    pub const WRAPPING_ADD: Self = Self::expect_symbol("wrapping_add");
+    pub const OVERFLOWING_ADD: Self = Self::expect_symbol("overflowing_add");
+    pub const WRAPPING_SUB: Self = Self::expect_symbol("wrapping_sub");
+    pub const OVERFLOWING_SUB: Self = Self::expect_symbol("overflowing_sub");
+    pub const WIDEN: Self = Self::expect_symbol("widen");
+    pub const TRUNCATE: Self = Self::expect_symbol("truncate");
+    pub const BITCAST: Self = Self::expect_symbol("bitcast");
+    pub const RAW_ARRAY_ALLOC: Self = Self::expect_symbol("raw_array_alloc");
+    pub const ARRAY_SET_UNCHECKED: Self = Self::expect_symbol("array_set_unchecked");
+    pub const ARRAY_GET_UNCHECKED: Self = Self::expect_symbol("array_get_unchecked");
+    pub const PRINT_STRING: Self = Self::expect_symbol("print_string");
+    pub const INT_MAX_VALUE: Self = Self::expect_symbol("int_max_value");
+    pub const UNINIT_ZEROED: Self = Self::expect_symbol("uninit_zeroed");
+    pub const UNINIT_ASSUME_INIT: Self = Self::expect_symbol("uninit_assume_init");
+    pub const UNINIT_NEW: Self = Self::expect_symbol("uninit_new");
+    pub const READ_LINE: Self = Self::expect_symbol("read_line");
+    pub const SHIFT_LEFT: Self = Self::expect_symbol("shift_left");
+    pub const SHIFT_RIGHT: Self = Self::expect_symbol("shift_right");
+    pub const BITWISE_OR: Self = Self::expect_symbol("bitwise_or");
+    pub const INT_FIRST_UPPER: Self = Self::expect_symbol("Int");
+    pub const UINT_FIRST_UPPER: Self = Self::expect_symbol("UInt");
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
+    }
+    pub fn with_str<T>(&self, f: impl FnOnce(&str) -> T) -> T {
+        let lock = INTERNER.lock().unwrap();
+        let value = f(lock.resolve(*self));
+        drop(lock);
+        value
     }
 }
 type SymbolId = hidden::SymbolId;
@@ -158,8 +196,8 @@ struct SymbolInterner(SymbolInternerInner);
 impl SymbolInterner {
     pub fn new() -> Self {
         let mut intern = Self::default();
-        for symbol in Symbol::NAMED_SYMBOLS {
-            intern.intern(symbol.content());
+        for &symbol in Symbol::NAMED_SYMBOLS {
+            intern.intern(symbol);
         }
         intern
     }

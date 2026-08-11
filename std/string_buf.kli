@@ -1,0 +1,45 @@
+import std.(dynarray,strings,panicking,chars)
+import dynarray.DynArray
+
+@opaque
+type StringBuf = {
+    buf : DynArray[UInt8]
+}
+
+# Creates an empty StringBuf
+fun new() -> StringBuf = StringBuf { buf = dynarray.new()}
+
+# Pushes a single string to the StringBuf
+fun push_string(this : StringBuf, s : string) -> () = 
+    dynarray.append_array(this.buf,unsafe strings.as_bytes(s) end)
+
+fun reserve(this : StringBuf, byte_count : UInt64) -> () = 
+    dynarray.reserve(this.buf, byte_count)
+
+
+fun push_char(this : StringBuf, c : char) -> () = do
+    let len = chars.utf8_len(c);
+    reserve(this,len);
+    let _ = chars.for_each_byte(c,
+        this.buf,
+        fun(buf : DynArray[UInt8],b) -> do
+            dynarray.push(buf,b);
+            buf 
+        end
+    );
+end
+
+# Clones the current string in the StringBuf
+fun into_string(this : StringBuf) -> string = 
+    unsafe builtins.transmute(dynarray.into_array(this.buf)) end
+
+
+# Clears the StringBuf and leaves it empty
+fun clear(this : StringBuf) -> () = do
+    dynarray.clear(this.buf)
+end
+
+# Returns the current string, and clears the StringBuf
+fun drain_into_string(this : StringBuf) -> string = do
+    unsafe builtins.transmute(dynarray.drain_to_array(this.buf)) end
+end
