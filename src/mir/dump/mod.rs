@@ -205,13 +205,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_place(place)?;
                 write!(self.output, ")")?;
             }
-            Rvalue::Repeat { ty, value, count } => {
-                write!(self.output, "repeat[{ty}](")?;
-                self.write_operand(value)?;
-                write!(self.output, ",")?;
-                self.write_operand(count)?;
-                write!(self.output, ")")?;
-            }
         }
         Ok(())
     }

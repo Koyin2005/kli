@@ -122,22 +122,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     loc,
                 );
             }
-            super::Rvalue::Repeat { ty, value, count } => {
-                let operand_ty = value.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-
-                self.assert(
-                    operand_ty == *ty,
-                    || format!("array elements should have same type '{}'", ty),
-                    loc,
-                );
-
-                let count_ty = count.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                self.assert(
-                    count_ty.is_integer_kind(IntegerKind::Unsigned(IntegerSize::Int64)),
-                    || format!("count should be a uint not '{}'", count_ty),
-                    loc,
-                );
-            }
             super::Rvalue::AllocateArray(element, fields) => {
                 for field in fields {
                     let field_ty =

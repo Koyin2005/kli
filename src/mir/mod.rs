@@ -270,11 +270,6 @@ pub enum Rvalue<'ctxt> {
     ReadLine,
     UninitZeroed(Type<'ctxt>),
     Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Operand<'ctxt>>),
-    Repeat {
-        ty: Type<'ctxt>,
-        value: Operand<'ctxt>,
-        count: Operand<'ctxt>,
-    },
     AllocateRawArray {
         ty: Type<'ctxt>,
         count: Operand<'ctxt>,
@@ -300,20 +295,10 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::Len(_)
             | Self::Discriminant(_)
             | Self::UninitZeroed(_) => true,
-            Self::Repeat {
-                ty: _,
-                value: _,
-                count:
-                    Operand::Constant(Constant {
-                        value: ConstValue::Scalar(value),
-                        ..
-                    }),
-            } => *value == 0,
 
             Self::AllocateArray(..)
             | Self::AllocateBox(..)
             | Self::Call(..)
-            | Self::Repeat { .. }
             | Self::AllocateRawArray { .. }
             | Self::ReadLine => false,
         }
@@ -353,7 +338,7 @@ impl<'ctxt> Rvalue<'ctxt> {
                 BinaryOp::Equals => Type::new_bool(ctxt),
                 BinaryOp::Lesser | BinaryOp::Greater => Type::new_bool(ctxt),
             },
-            Rvalue::AllocateArray(element, _) | Rvalue::Repeat { ty: element, .. } => {
+            Rvalue::AllocateArray(element, _) => {
                 Type::new_array(ctxt, *element)
             }
             Rvalue::AllocateRawArray { ty, .. } => Type::new_raw_array(ctxt, *ty),
