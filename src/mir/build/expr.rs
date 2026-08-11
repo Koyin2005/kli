@@ -406,11 +406,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let ty = ty.as_raw_array().unwrap();
                 BuiltinResult::Rvalue(Rvalue::AllocateRawArray { ty, count })
             }
-            Builtin::ArrayRepeat => {
-                let [value, count] = operands.try_into().unwrap();
-                let ty = ty.as_array().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Repeat { ty, value, count })
-            }
             Builtin::BoxAlloc => {
                 let [operand] = operands.try_into().unwrap();
                 let Some(ty) = ty.as_box() else {

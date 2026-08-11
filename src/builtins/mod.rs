@@ -24,7 +24,6 @@ pub enum Builtin {
     RawArrayAlloc,
 
     // Arrays
-    ArrayRepeat,
     ArraySetUnchecked,
     ArrayGetUnchecked,
     Len,
@@ -59,7 +58,6 @@ impl Builtin {
             Builtin::ArrayAddr => "array_addr",
             Builtin::Len => "array_len",
             Builtin::BoxAlloc => "box_alloc",
-            Builtin::ArrayRepeat => "array_repeat",
             Builtin::RawArrayAlloc => "raw_array_alloc",
             Builtin::ArrayGetUnchecked => "array_get_unchecked",
             Builtin::ArraySetUnchecked => "array_set_unchecked",
@@ -90,7 +88,6 @@ impl Builtin {
             Symbol::TRUNCATE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Truncate)),
             Symbol::BITCAST => Some(Builtin::Bitcast),
             Symbol::INT_MAX_VALUE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue)),
-            Symbol::ARRAY_REPEAT => Some(Builtin::ArrayRepeat),
             Symbol::RAW_ARRAY_ALLOC => Some(Builtin::RawArrayAlloc),
             Symbol::ARRAY_SET_UNCHECKED => Some(Builtin::ArraySetUnchecked),
             Symbol::ARRAY_GET_UNCHECKED => Some(Builtin::ArrayGetUnchecked),

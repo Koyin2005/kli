@@ -35,9 +35,6 @@ fun truncate[T,U](x : T) -> U;
 fun bitcast[T,U](x : T) -> U;
 
 @builtin
-fun array_repeat[T](value : T, count : UInt64) -> array[T];
-
-@builtin
 fun raw_array_alloc[T](size : UInt64) -> array[uninit[T]];
 
 # Safety:
