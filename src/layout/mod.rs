@@ -275,7 +275,7 @@ pub enum LayoutKind {
         cases: IndexVec<CaseId, Layout>,
     },
     Scalar(Scalar),
-    Uninit,
+    Uninit(Box<Layout>),
 }
 
 #[derive(Clone)]
@@ -395,7 +395,7 @@ pub fn calculate_layout<'ctxt>(
             Layout {
                 size: layout.size,
                 alignment: layout.alignment,
-                kind: LayoutKind::Uninit,
+                kind: LayoutKind::Uninit(Box::new(layout)),
             }
         }
         TypeKind::Infer(_) | TypeKind::Unknown | TypeKind::IntVar(_) => {

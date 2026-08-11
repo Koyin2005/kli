@@ -42,6 +42,8 @@ pub fn backend_repr(layout: &layout::Layout) -> BackendRepr {
             BackendRepr::Memory
         }
         layout::LayoutKind::Scalar(scalar) => BackendRepr::Scalar(scalar),
-        layout::LayoutKind::Uninit => BackendRepr::Memory,
+        layout::LayoutKind::Uninit(ref inner) =>{
+            backend_repr(inner)
+        },
     }
 }
