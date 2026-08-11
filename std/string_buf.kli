@@ -41,7 +41,5 @@ end
 
 # Returns the current string, and clears the StringBuf
 fun drain_into_string(this : StringBuf) -> string = do
-    let s = into_string(this);
-    clear(this);
-    s
+    unsafe builtins.transmute(dynarray.drain_to_array(this.buf)) end
 end

@@ -183,8 +183,24 @@ fun into_array[T](arr : DynArray[T]) -> array[T] = do
     end
 end
 
+fun shrink_to_fit[T](this : DynArray[T]) -> () = do
+    let len = this.inner^.len;
+    case capacity(this) == len of
+    | true -> return ()
+    | false -> ()
+    end;
+    let old_buf = this.inner^.buf;
+    let new_buf = builtins.raw_array_alloc[T](len);
+    unsafe 
+        arrays.copy_unchecked(new_buf,old_buf,0,0,len)
+    end;
+    this.inner^.buf = new_buf;
+end
+
 fun drain_to_array[T](this : DynArray[T]) -> array[T] = do
-    let arr = into_array(this);
-    clear(this);
+    shrink_to_fit(this);
+    let arr : array[T] = unsafe builtins.transmute(this.inner^.buf) end;
+    this.inner^.buf = [];
+    this.inner^.len = 0;
     arr
 end
