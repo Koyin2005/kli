@@ -4,13 +4,13 @@ use crate::{
     mir::{BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind, build::Builder},
     src_loc::SrcLoc,
     typed_ast::{CaseArm, Expr, FieldId, Pattern, PatternKind},
-    types::{CaseId, Type},
+    types::{CaseId, IntegerSize, Type},
 };
 
-struct MatchInfo<'a> {
+struct MatchInfo<'a, 'ctxt> {
     dest: &'a Place,
     pattern_place: &'a Place,
-    arms: &'a [CaseArm],
+    arms: &'a [CaseArm<'ctxt>],
 }
 enum Test {
     VariantSwitch,
@@ -42,7 +42,7 @@ struct MatchTest {
     place: Place,
     case: TestCase,
 }
-impl Builder<'_> {
+impl<'ctxt> Builder<'_, 'ctxt> {
     fn build_tree(&mut self, tests: TestMatrix) -> MatchBranch {
         let Some(head_row) = tests.first() else {
             return MatchBranch::Unreachable;
@@ -159,7 +159,6 @@ impl Builder<'_> {
                     TestCase::False
                 },
             }],
-            PatternKind::Ref(pattern) => self.match_tests(place.with_deref(), pattern),
             PatternKind::Binding(..) | PatternKind::Err | PatternKind::Unit => Vec::new(),
             PatternKind::Record(pattern_fields) => pattern_fields
                 .iter()
@@ -173,7 +172,7 @@ impl Builder<'_> {
         &mut self,
         loc: SrcLoc,
         tree: MatchBranch,
-        info: &'_ MatchInfo,
+        info: &'_ MatchInfo<'_, 'ctxt>,
         end_blocks: &mut Vec<(SrcLoc, BasicBlockId)>,
     ) {
         let start_block = self.current_block;
@@ -202,13 +201,19 @@ impl Builder<'_> {
                 );
             }
             MatchBranch::VariantSwitch(place, arms, otherwise_branch) => {
+                let (id, _, _) = place
+                    .type_of(self.ctxt, &self.body.locals, self.body.return_type)
+                    .as_named()
+                    .unwrap();
+                let type_def = self.ctxt.type_def(id);
                 let targets = arms
                     .into_iter()
                     .map(|(value, arm)| {
+                        let (_, value) = type_def.case_value(value);
                         let block = self.switch_to_new_block();
                         self.lower_tree(loc, arm, info, end_blocks);
                         SwitchTarget {
-                            value: value.into_usize().try_into().unwrap(),
+                            value: value.into(),
                             target: block,
                         }
                     })
@@ -217,8 +222,11 @@ impl Builder<'_> {
                 self.lower_tree(loc, *otherwise_branch, info, end_blocks);
 
                 self.switch_to_block(start_block);
-                let disrciminant =
-                    self.assign_to_temp(loc, Type::UINT, Rvalue::Discriminant(place));
+                let disrciminant = self.assign_to_temp(
+                    loc,
+                    Type::new_uint(self.ctxt, IntegerSize::Int64),
+                    Rvalue::Discriminant(place),
+                );
                 self.finish_block_with_switch_targets(
                     loc,
                     Operand::Load(Place::local(disrciminant)),
@@ -231,10 +239,12 @@ impl Builder<'_> {
                 true_tree,
                 false_tree,
             } => {
-                let true_block = self.switch_to_new_block();
+                let true_block = self.new_block();
+                let false_block = self.new_block();
+                self.switch_to_block(true_block);
                 self.lower_tree(loc, *true_tree, info, end_blocks);
 
-                let false_block = self.switch_to_new_block();
+                self.switch_to_block(false_block);
                 self.lower_tree(loc, *false_tree, info, end_blocks);
 
                 self.switch_to_block(start_block);
@@ -250,7 +260,7 @@ impl Builder<'_> {
             }
         }
     }
-    pub(super) fn build_match(&mut self, dest: Place, expr: &Expr, arms: &[CaseArm]) {
+    pub(super) fn build_match(&mut self, dest: Place, expr: &Expr<'ctxt>, arms: &[CaseArm<'ctxt>]) {
         let place = self.place(expr);
         let tests = arms
             .iter()

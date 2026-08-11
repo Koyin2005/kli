@@ -1,0 +1,18 @@
+import std.num.int
+import std.num.uint
+import int.neg
+
+fun print_char(value : char) -> () = 
+    builtins.print_string(std.chars.to_string(value))
+
+fun print_string(value : string) -> () = builtins.print_string(value)
+
+# Prints the string and then prints a newline 
+fun print_newline(value : string) -> () = do
+    builtins.print_string(value);
+    builtins.print_string("\n");
+end
+
+
+
+fun read_line() -> string = builtins.read_line()

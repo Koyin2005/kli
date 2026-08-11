@@ -1,40 +1,26 @@
 use crate::{
-    index_vec::IndexVec,
+    CtxtRef,
     src_loc::SrcLoc,
-    types::{
-        FunctionType, GenericArg, GenericArgs, IntegerKind, RecordField, Region, Type, TypeMap,
-    },
+    types::{GenericArg, GenericArgs, IntegerKind, Type, TypeKind, TypeMap},
 };
 #[derive(Debug)]
-pub struct TypeVarInfo {
-    ty: Option<Type>,
+pub struct TypeVarInfo<'ctxt> {
+    ty: Option<Type<'ctxt>>,
     loc: SrcLoc,
 }
-#[derive(Debug)]
-pub struct RegionVarInfo {
-    region: Option<Region>,
-    loc: SrcLoc,
+pub struct TypeInfer<'ctxt> {
+    type_vars: Vec<TypeVarInfo<'ctxt>>,
+    ctxt: CtxtRef<'ctxt>,
 }
-#[derive(Default)]
-pub struct TypeInfer {
-    type_vars: Vec<TypeVarInfo>,
-    region_vars: Vec<RegionVarInfo>,
-}
-impl TypeInfer {
-    pub fn new() -> Self {
+impl<'ctxt> TypeInfer<'ctxt> {
+    pub fn new(ctxt: CtxtRef<'ctxt>) -> Self {
         Self {
+            ctxt,
             type_vars: Vec::new(),
-            region_vars: Vec::new(),
         }
     }
     pub fn clear(&mut self) {
         self.type_vars.clear();
-        self.region_vars.clear();
-    }
-    pub fn fresh_region(&mut self, loc: SrcLoc) -> usize {
-        let next_var = self.region_vars.len();
-        self.region_vars.push(RegionVarInfo { region: None, loc });
-        next_var
     }
     pub fn fresh_ty(&mut self, loc: SrcLoc) -> usize {
         let next_var = self.type_vars.len();
@@ -45,219 +31,156 @@ impl TypeInfer {
         self.type_vars
             .iter()
             .filter_map(|var| var.ty.is_none().then_some(var.loc))
-            .chain(
-                self.region_vars
-                    .iter()
-                    .filter_map(|var| var.region.is_none().then_some(var.loc)),
-            )
             .collect()
     }
-    pub fn simplify_region(&self, region: Region) -> Region {
-        let Ok(region) = Simplify(self).map_region(region);
-        region
-    }
-    pub fn simplify_type(&self, ty: Type) -> Type {
+    pub fn simplify_type(&self, ty: Type<'ctxt>) -> Type<'ctxt> {
         let Ok(ty) = Simplify(self).map_type(ty);
         ty
     }
-    pub fn unify_region(&mut self, region1: Region, region2: Region) -> Option<Region> {
-        match (region1, region2) {
-            (r @ Region::Unknown, Region::Unknown) | (r @ Region::Static, Region::Static) => {
-                Some(r)
-            }
-            (Region::Local(name1, index1), Region::Local(name2, index2)) if index1 == index2 => {
-                assert_eq!(name1, name2);
-                Some(Region::Local(name1, index1))
-            }
-            (Region::Param(name1, index1), Region::Param(name2, index2)) if index1 == index2 => {
-                assert_eq!(name1, name2);
-                Some(Region::Param(name1, index1))
-            }
-            (Region::Infer(var), Region::Infer(other)) if var == other => Some(Region::Infer(var)),
-            (Region::Infer(var), r) | (r, Region::Infer(var)) => match &mut self.region_vars[var] {
-                RegionVarInfo {
-                    region: Some(entry),
-                    ..
-                } => {
-                    let entry = *entry;
-                    let r = self.unify_region(entry, r);
-                    self.region_vars[var].region.clone_from(&r);
-                    r
-                }
-                RegionVarInfo { region: entry, .. } => Some(*entry.insert(r)),
-            },
-            _ => None,
-        }
-    }
     pub fn unify_generic_args(
         &mut self,
-        args1: GenericArgs,
-        args2: GenericArgs,
-    ) -> Option<GenericArgs> {
+        args1: GenericArgs<'ctxt>,
+        args2: GenericArgs<'ctxt>,
+    ) -> Option<GenericArgs<'ctxt>> {
         if args1.len() != args2.len() {
             return None;
         }
         args1
             .into_iter()
             .zip(args2)
-            .map(|(arg1, arg2)| {
-                Some(match (arg1, arg2) {
-                    (GenericArg::Type(ty1), GenericArg::Type(ty2)) => {
-                        GenericArg::Type(self.unify_ty(ty1, ty2)?)
-                    }
-                    (GenericArg::Region(r1), GenericArg::Region(r2)) => {
-                        GenericArg::Region(self.unify_region(r1, r2)?)
-                    }
-                    (GenericArg::Type(_) | GenericArg::Region(_), _) => return None,
-                })
-            })
+            .map(|(arg1, arg2)| Some(GenericArg(self.unify_ty(arg1.0, arg2.0)?)))
             .collect::<Option<GenericArgs>>()
     }
-    pub fn unify_ty(&mut self, ty1: Type, ty2: Type) -> Option<Type> {
-        match (ty1, ty2) {
-            (ty @ Type::Int(IntegerKind::Signed), Type::Int(IntegerKind::Signed))
-            | (ty @ Type::Int(IntegerKind::Unsigned), Type::Int(IntegerKind::Unsigned))
-            | (ty @ Type::Bool, Type::Bool)
-            | (ty @ Type::Unknown, Type::Unknown)
-            | (ty @ Type::Char, Type::Char)
-            | (ty @ Type::Byte, Type::Byte)
-            | (ty @ Type::Never, Type::Never) => Some(ty),
-            (Type::Param(name1, index1), Type::Param(name2, index2)) if index1 == index2 => {
+    fn unify_var_ty(&mut self, var: usize, ty: Type<'ctxt>) -> Option<Type<'ctxt>> {
+        match &mut self.type_vars[var] {
+            TypeVarInfo {
+                ty: Some(entry), ..
+            } => {
+                let entry = *entry;
+                let ty = self.unify_ty(entry, ty);
+                self.type_vars[var].ty.clone_from(&ty);
+                ty
+            }
+            TypeVarInfo { ty: entry, .. } => {
+                *entry = Some(ty);
+                Some(ty)
+            }
+        }
+    }
+    pub fn unify_ty(&mut self, ty1: Type<'ctxt>, ty2: Type<'ctxt>) -> Option<Type<'ctxt>> {
+        match (ty1.kind(), ty2.kind()) {
+            (TypeKind::Bool, TypeKind::Bool)
+            | (TypeKind::Unknown, TypeKind::Unknown)
+            | (TypeKind::Char, TypeKind::Char)
+            | (TypeKind::Never, TypeKind::Never)
+            | (TypeKind::String, TypeKind::String) => Some(ty1),
+            (&TypeKind::Param(name1, index1), &TypeKind::Param(name2, index2))
+                if index1 == index2 =>
+            {
                 assert_eq!(name1, name2);
-                Some(Type::Param(name1, index1))
+                Some(Type::param(self.ctxt, name1, index1))
             }
-            (Type::Array(ty1, count1), Type::Array(ty2, count2)) if count1 == count2 => self
-                .unify_ty(*ty1, *ty2)
-                .map(|ty| Type::Array(Box::new(ty), count1)),
-            (Type::RawPointer(ty1), Type::RawPointer(ty2)) => self
-                .unify_ty(*ty1, *ty2)
-                .map(|ty| Type::RawPointer(Box::new(ty))),
-            (Type::Record(fields1), Type::Record(fields2)) if fields1.len() == fields2.len() => {
-                fields1
-                    .into_iter()
+            (&TypeKind::Array(ty1), &TypeKind::Array(ty2)) => self
+                .unify_ty(ty1, ty2)
+                .map(|ty| Type::new_array(self.ctxt, ty)),
+            (&TypeKind::Uninit(ty1), &TypeKind::Uninit(ty2)) => self
+                .unify_ty(ty1, ty2)
+                .map(|ty| Type::new_uninit(self.ctxt, ty)),
+            (&TypeKind::Box(ty1), &TypeKind::Box(ty2)) => self
+                .unify_ty(ty1, ty2)
+                .map(|ty| Type::new_box(self.ctxt, ty)),
+
+            (TypeKind::Tuple(fields1), TypeKind::Tuple(fields2))
+                if fields1.len() == fields2.len() =>
+            {
+                let field_tys = fields1
+                    .iter()
                     .zip(fields2)
-                    .map(|(field1, field2)| {
-                        if field1.name == field2.name {
-                            let ty = self.unify_ty(field1.ty, field2.ty)?;
-                            Some(RecordField {
-                                name: field1.name,
-                                ty,
-                            })
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Option<IndexVec<_, _>>>()
-                    .map(Type::Record)
+                    .map(|(&field1, &field2)| self.unify_ty(field1, field2))
+                    .collect::<Option<Vec<_>>>()?;
+
+                Some(Type::tuple_from_iter(self.ctxt, field_tys))
             }
-            (Type::Tuple(fields1), Type::Tuple(fields2)) if fields1.len() == fields2.len() => {
-                fields1
-                    .into_iter()
-                    .zip(fields2)
-                    .map(|(field1, field2)| self.unify_ty(field1, field2))
-                    .collect::<Option<_>>()
-                    .map(Type::Tuple)
-            }
-            (Type::Imm(region1, ty1), Type::Imm(region2, ty2)) => self
-                .unify_ty(*ty1, *ty2)
-                .and_then(|ty| {
-                    self.unify_region(region1, region2)
-                        .map(|region| (ty, region))
-                })
-                .map(|(ty, region)| Type::Imm(region, Box::new(ty))),
-            (Type::Mut(region1, ty1), Type::Mut(region2, ty2)) => self
-                .unify_ty(*ty1, *ty2)
-                .and_then(|ty| {
-                    self.unify_region(region1, region2)
-                        .map(|region| (ty, region))
-                })
-                .map(|(ty, region)| Type::Mut(region, Box::new(ty))),
-            (Type::Function(function1), Type::Function(function2))
-                if function1.params.len() == function2.params.len()
-                    && function1.resource == function2.resource =>
+            (TypeKind::Function(function1), TypeKind::Function(function2))
+                if function1.params.len() == function2.params.len() =>
             {
                 let params = function1
                     .params
-                    .into_iter()
-                    .zip(function2.params)
+                    .iter()
+                    .copied()
+                    .zip(function2.params.iter().copied())
                     .map(|(ty1, ty2)| self.unify_ty(ty1, ty2))
                     .collect::<Option<Vec<_>>>()?;
-                let return_ty = self.unify_ty(*function1.return_type, *function2.return_type)?;
-                Some(Type::Function(FunctionType {
-                    resource: function1.resource,
-                    params,
-                    return_type: Box::new(return_ty),
-                }))
+                let return_ty = self.unify_ty(function1.return_type, function2.return_type)?;
+                Some(Type::function_type(self.ctxt, params, return_ty))
             }
-            (Type::Named(id1, name, args1), Type::Named(id2, _, args2)) if id1 == id2 => {
-                let args = self.unify_generic_args(args1, args2)?;
-                Some(Type::Named(id1, name, args))
+            (&TypeKind::Named(id1, name, ref args1), &TypeKind::Named(id2, _, ref args2))
+                if id1 == id2 =>
+            {
+                let args = self.unify_generic_args(args1.clone(), args2.clone())?;
+                Some(Type::named(self.ctxt, id1, name, args))
             }
-            (Type::Infer(var1), Type::Infer(var2)) if var1 == var2 => Some(Type::Infer(var1)),
-            (Type::Infer(var), ty) | (ty, Type::Infer(var)) => match &mut self.type_vars[var] {
-                TypeVarInfo {
-                    ty: Some(entry), ..
-                } => {
-                    let entry = entry.clone();
-                    let ty = self.unify_ty(entry, ty);
-                    self.type_vars[var].ty.clone_from(&ty);
-                    ty
+
+            (&TypeKind::Int(int_kind_1), &TypeKind::Int(int_kind_2)) => {
+                match (int_kind_1, int_kind_2) {
+                    (IntegerKind::Signed(size1), IntegerKind::Signed(size2))
+                    | (IntegerKind::Unsigned(size1), IntegerKind::Unsigned(size2))
+                        if size1 == size2 =>
+                    {
+                        Some(ty1)
+                    }
+
+                    (IntegerKind::Signed(_) | IntegerKind::Unsigned(_), _) => None,
                 }
-                TypeVarInfo { ty: entry, .. } => {
-                    *entry = Some(ty.clone());
-                    Some(ty)
-                }
-            },
+            }
+            (TypeKind::IntVar(var1), TypeKind::IntVar(var2)) if var1 == var2 => Some(ty1),
+            (&TypeKind::IntVar(var), &TypeKind::Int(int))
+            | (&TypeKind::Int(int), &TypeKind::IntVar(var)) => {
+                self.unify_var_ty(var, Type::new_integer(self.ctxt, int))
+            }
+            (&TypeKind::Infer(var1), &TypeKind::Infer(var2)) if var1 == var2 => {
+                Some(Type::infer_var(self.ctxt, var1))
+            }
+            (&TypeKind::Infer(var), _) => self.unify_var_ty(var, ty2),
+            (_, &TypeKind::Infer(var)) => self.unify_var_ty(var, ty1),
             //This will fail to compile if new variants are not matched
             (
-                Type::Int(IntegerKind::Signed | IntegerKind::Unsigned)
-                | Type::Bool
-                | Type::Unknown
-                | Type::Char
-                | Type::Param(..)
-                | Type::Array(..)
-                | Type::Function(..)
-                | Type::Byte
-                | Type::Imm(..)
-                | Type::Mut(..)
-                | Type::Record(..)
-                | Type::RawPointer(_)
-                | Type::Named(..)
-                | Type::Never
-                | Type::Tuple(_),
+                TypeKind::Int(IntegerKind::Signed(_) | IntegerKind::Unsigned(_))
+                | TypeKind::Bool
+                | TypeKind::Unknown
+                | TypeKind::Char
+                | TypeKind::Param(..)
+                | TypeKind::Function(..)
+                | TypeKind::Named(..)
+                | TypeKind::Never
+                | TypeKind::Tuple(_)
+                | TypeKind::Array(_)
+                | TypeKind::String
+                | TypeKind::Box(_)
+                | TypeKind::Uninit(_)
+                | TypeKind::IntVar(_),
                 _,
             ) => None,
         }
     }
 }
 
-struct Simplify<'a>(&'a TypeInfer);
-impl TypeMap for Simplify<'_> {
+struct Simplify<'a, 'ctxt>(&'a TypeInfer<'ctxt>);
+impl<'ctxt> TypeMap<'ctxt> for Simplify<'_, 'ctxt> {
     type Error = std::convert::Infallible;
-    fn map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
-        let Region::Infer(var) = region else {
-            return self.super_map_region(region);
-        };
-        if let RegionVarInfo {
-            region: Some(region),
-            loc: _,
-        } = self.0.region_vars[var]
-        {
-            self.map_region(region)
-        } else {
-            Ok(region)
-        }
+    fn ctxt(&self) -> CtxtRef<'ctxt> {
+        self.0.ctxt
     }
-    fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
-        let Type::Infer(var) = ty else {
+    fn map_type(&mut self, ty: Type<'ctxt>) -> Result<Type<'ctxt>, Self::Error> {
+        let (&TypeKind::Infer(var) | &TypeKind::IntVar(var)) = ty.kind() else {
             return self.super_map_type(ty);
         };
-        if let TypeVarInfo {
+        if let &TypeVarInfo {
             ty: Some(ty),
             loc: _,
         } = &self.0.type_vars[var]
         {
-            self.map_type(ty.clone())
+            self.map_type(ty)
         } else {
             Ok(ty)
         }

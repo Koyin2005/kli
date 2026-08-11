@@ -1,3 +1,4 @@
+mod coercion;
 mod expr;
 pub mod infer;
 mod pattern;

@@ -1,9 +1,12 @@
-use crate::types::{GenericArg, GenericArgsRef, Region, Type, TypeMap, TypeMappable};
-#[derive(Clone, Eq, PartialEq)]
+use crate::{
+    CtxtRef,
+    types::{GenericArg, GenericArgsRef, Type, TypeKind, TypeMap, TypeMappable},
+};
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Scheme<T> {
     value: T,
 }
-impl<T: TypeMappable> Scheme<T> {
+impl<'ctxt, T: TypeMappable<'ctxt>> Scheme<T> {
     pub fn new(value: T) -> Self {
         Self { value }
     }
@@ -12,30 +15,24 @@ impl<T: TypeMappable> Scheme<T> {
             value: f(self.value),
         }
     }
-    pub fn bind(self, args: GenericArgsRef<'_>) -> T {
-        struct Binder<'a>(GenericArgsRef<'a>);
-        impl TypeMap for Binder<'_> {
+    pub fn bind(self, ctxt: CtxtRef<'ctxt>, args: GenericArgsRef<'_, 'ctxt>) -> T {
+        struct Binder<'ctxt, 'b>(CtxtRef<'ctxt>, GenericArgsRef<'b, 'ctxt>);
+        impl<'ctxt> TypeMap<'ctxt> for Binder<'ctxt, '_> {
             type Error = std::convert::Infallible;
-            fn map_type(&mut self, ty: Type) -> Result<Type, Self::Error> {
-                let Type::Param(_, index) = ty else {
+            fn ctxt(&self) -> crate::CtxtRef<'ctxt> {
+                self.0
+            }
+            fn map_type(&mut self, ty: Type<'ctxt>) -> Result<Type<'ctxt>, Self::Error> {
+                let &TypeKind::Param(_, index) = ty.kind() else {
                     return self.super_map_type(ty);
                 };
-                let Some(GenericArg::Type(ty)) = self.0.get(index).cloned() else {
-                    return Ok(Type::Unknown);
+                let Some(GenericArg(ty)) = self.1.get(index).cloned() else {
+                    return Ok(Type::UNKNOWN);
                 };
                 Ok(ty)
             }
-            fn map_region(&mut self, region: Region) -> Result<Region, Self::Error> {
-                let Region::Param(_, index) = region else {
-                    return self.super_map_region(region);
-                };
-                let Some(GenericArg::Region(region)) = self.0.get(index).cloned() else {
-                    return Ok(Region::Unknown);
-                };
-                Ok(region)
-            }
         }
-        let Ok(value) = self.value.apply_map(&mut Binder(args));
+        let Ok(value) = self.value.apply_map(&mut Binder(ctxt, args));
         value
     }
     pub fn skip(self) -> T {

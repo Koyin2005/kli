@@ -1,10 +1,10 @@
 use crate::resolved_ast::{
-    BlockBody, Expr, ExprKind, GenericArg, GenericArgs, LocalRegionId, Param, Pattern, Region,
-    Stmt, StmtKind, Type, TypeKind, Var,
+    BlockBody, Expr, ExprKind, GenericArg, GenericArgs, Param, Pattern, Stmt, StmtKind, Type,
+    TypeKind, Var,
 };
 
 pub trait Visitor {
-    fn super_visit_block(&mut self, block_body: &BlockBody, _: Option<LocalRegionId>) {
+    fn super_visit_block(&mut self, block_body: &BlockBody) {
         for stmt in &block_body.stmts {
             self.visit_stmt(stmt);
         }
@@ -18,7 +18,6 @@ pub trait Visitor {
             &crate::resolved_ast::PatternKind::Binding(.., name, var) => {
                 self.visit_var_def(Var(name.symbol, var))
             }
-            crate::resolved_ast::PatternKind::Ref(pattern) => self.visit_pattern(pattern),
             crate::resolved_ast::PatternKind::Case(_, pattern) => {
                 if let Some(pattern) = pattern {
                     self.visit_pattern(pattern)
@@ -39,11 +38,6 @@ pub trait Visitor {
     fn super_visit_type(&mut self, ty: &Type) {
         match &ty.kind {
             TypeKind::Unknown => (),
-            TypeKind::Ptr(ty) => self.visit_type(ty),
-            TypeKind::Imm(region, ty) | TypeKind::Mut(region, ty) => {
-                self.visit_region(**region);
-                self.visit_type(ty);
-            }
             TypeKind::Function(function_type) => {
                 for param in function_type.params.iter() {
                     self.visit_type(param);
@@ -77,14 +71,15 @@ pub trait Visitor {
     }
     fn super_visit_expr(&mut self, expr: &Expr) {
         match &expr.kind {
-            ExprKind::Block(block_body, id) => self.visit_block(block_body, *id),
+            ExprKind::Block(block_body) => self.visit_block(block_body),
             ExprKind::Unit
             | ExprKind::Err
             | ExprKind::Int(_)
             | ExprKind::Bool(_)
             | ExprKind::String(_)
             | ExprKind::Var(..)
-            | ExprKind::Panic => (),
+            | ExprKind::Panic
+            | ExprKind::Char(_) => (),
             ExprKind::Lambda(lambda) => {
                 self.visit_body(
                     lambda.param_tys.iter().flatten(),
@@ -99,18 +94,16 @@ pub trait Visitor {
             ExprKind::Function(_, args) | ExprKind::TypeRelativePath(_, _, args) => {
                 self.visit_generic_args(args);
             }
-            ExprKind::Binary(_, expr1, expr2) | ExprKind::While(expr1, expr2) => {
+            ExprKind::Binary(_, expr1, expr2)
+            | ExprKind::While(expr1, expr2)
+            | ExprKind::Index(expr1, expr2) => {
                 self.visit_expr(expr1);
                 self.visit_expr(expr2);
             }
-            ExprKind::Borrow(borrow_expr) => {
-                self.visit_expr(&borrow_expr.place);
-            }
-
-            ExprKind::Deref(expr)
-            | ExprKind::Unsafe(expr)
+            ExprKind::Unsafe(expr)
             | ExprKind::Field(expr, _)
-            | ExprKind::Return(expr) => self.visit_expr(expr),
+            | ExprKind::Return(expr)
+            | ExprKind::Deref(expr) => self.visit_expr(expr),
             ExprKind::Assign(place, expr) => {
                 self.visit_expr(place);
                 self.visit_expr(expr);
@@ -125,11 +118,6 @@ pub trait Visitor {
                 for arm in case_arms {
                     self.visit_pattern(&arm.pattern);
                     self.visit_expr(&arm.body);
-                }
-            }
-            ExprKind::Print(expr) => {
-                if let Some(expr) = expr {
-                    self.visit_expr(expr);
                 }
             }
             ExprKind::Call(callee, args) | ExprKind::MethodCall(callee, _, args) => {
@@ -149,13 +137,12 @@ pub trait Visitor {
                     self.visit_expr(&field.value);
                 }
             }
-            ExprKind::Tuple(fields) => {
+            ExprKind::Tuple(fields) | ExprKind::Array(fields) => {
                 for field in fields {
                     self.visit_expr(field);
                 }
             }
             ExprKind::VariantCase(_, generic_args) => self.visit_generic_args(generic_args),
-            ExprKind::AddressOf(place) => self.visit_expr(place),
         }
     }
     fn visit_pattern(&mut self, pattern: &Pattern) {
@@ -165,14 +152,12 @@ pub trait Visitor {
     fn visit_generic_args(&mut self, args: &GenericArgs) {
         for arg in args.args.iter() {
             match arg {
-                GenericArg::Region(region) => self.visit_region(*region),
                 GenericArg::Type(ty) => self.visit_type(ty),
             }
         }
     }
-    fn visit_region(&mut self, _: Region) {}
-    fn visit_block(&mut self, block_body: &BlockBody, region: Option<LocalRegionId>) {
-        self.super_visit_block(block_body, region);
+    fn visit_block(&mut self, block_body: &BlockBody) {
+        self.super_visit_block(block_body);
     }
     fn visit_type(&mut self, ty: &Type) {
         self.super_visit_type(ty);

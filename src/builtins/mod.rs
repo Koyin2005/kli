@@ -1,100 +1,102 @@
-use std::collections::HashMap;
+use crate::Symbol;
 
-use crate::{Symbol, def_ids::DefId};
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum IntegerBuiltin {
+    IntMaxValue,
+    ShiftLeft,
+    ShiftRight,
+    WrappingAdd,
+    OverflowingAdd,
+    WrappingSub,
+    OverflowingSub,
+    Truncate,
+    Widen,
+}
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Builtin {
-    Allocate,
-    Deallocate,
-    PtrRead,
-    PtrWrite,
+    // Reinterpretation
     Transmute,
-    Memcopy,
-    Offset,
-    DropInPlace,
-    InvalidPtr,
-    WrappingAdd,
-    OverflowingAdd,
+    Bitcast,
+
+    // Allocation
+    BoxAlloc,
+    RawArrayAlloc,
+
+    // Arrays
+    ArraySetUnchecked,
+    ArrayGetUnchecked,
+    Len,
+    ArrayAddr,
+
+    // IO
+    PrintString,
+    ReadLine,
+
+    // Integers
+    IntegerBuiltin(IntegerBuiltin),
+
+    // Memory
+    UninitZeroed,
+    UninitAssumeInit,
+    UninitNew,
 }
 impl Builtin {
-    const _NO_REPEATS: () = {
-        let mut i = 0;
-        while i < Self::ALL_BUILTINS.len() {
-            let mut j = 0;
-            while j < Self::ALL_BUILTINS.len() {
-                if i == j {
-                    continue;
-                }
-                if Self::ALL_BUILTINS[i]
-                    .name()
-                    .eq_ignore_ascii_case(Self::ALL_BUILTINS[j].name())
-                {
-                    panic!("repeated const")
-                }
-                j += 1;
-            }
-            i += 1;
-        }
-    };
-    pub const COUNT: usize = 11;
-    pub const ALL_BUILTINS: [Self; Self::COUNT] = [
-        Builtin::Allocate,
-        Builtin::Deallocate,
-        Builtin::PtrRead,
-        Builtin::PtrWrite,
-        Builtin::Transmute,
-        Builtin::Memcopy,
-        Builtin::Offset,
-        Builtin::DropInPlace,
-        Builtin::InvalidPtr,
-        Builtin::WrappingAdd,
-        Builtin::OverflowingAdd,
-    ];
     pub const fn name(self) -> &'static str {
         match self {
-            Builtin::Allocate => "allocate",
-            Builtin::Deallocate => "deallocate",
-            Builtin::PtrRead => "ptr_read",
-            Builtin::PtrWrite => "ptr_write",
             Builtin::Transmute => "transmute",
-            Builtin::Memcopy => "memcopy",
-            Builtin::Offset => "offset",
-            Builtin::DropInPlace => "drop_in_place",
-            Builtin::InvalidPtr => "invalid_ptr",
-            Builtin::WrappingAdd => "wrapping_add",
-            Builtin::OverflowingAdd => "overflowing_add",
+            Builtin::Bitcast => "bitcast",
+            Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd) => "wrapping_add",
+            Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingAdd) => "overflowing_add",
+            Builtin::IntegerBuiltin(IntegerBuiltin::Widen) => "widen",
+            Builtin::IntegerBuiltin(IntegerBuiltin::Truncate) => "trunc",
+            Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub) => "overflowing_sub",
+            Builtin::IntegerBuiltin(IntegerBuiltin::WrappingSub) => "wrapping_sub",
+            Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue) => "int_max_value",
+            Builtin::IntegerBuiltin(IntegerBuiltin::ShiftLeft) => "shift_left",
+            Builtin::IntegerBuiltin(IntegerBuiltin::ShiftRight) => "shift_right",
+            Builtin::ArrayAddr => "array_addr",
+            Builtin::Len => "array_len",
+            Builtin::BoxAlloc => "box_alloc",
+            Builtin::RawArrayAlloc => "raw_array_alloc",
+            Builtin::ArrayGetUnchecked => "array_get_unchecked",
+            Builtin::ArraySetUnchecked => "array_set_unchecked",
+            Builtin::PrintString => "print_string",
+            Builtin::UninitAssumeInit => "uninit_assume_init",
+            Builtin::UninitZeroed => "uninit_zeroed",
+            Builtin::UninitNew => "uninit_new",
+            Builtin::ReadLine => "read_line",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
-        Self::ALL_BUILTINS
-            .into_iter()
-            .find(|builtin| Symbol::intern(builtin.name()) == name)
-    }
-    const fn index_of(self) -> usize {
-        let mut i = 0;
-        let builtins = Self::ALL_BUILTINS;
-        let name = self.name();
-        while i < builtins.len() {
-            if name.eq_ignore_ascii_case(builtins[i].name()) {
-                return i;
+        match name {
+            Symbol::BOX_ALLOC => Some(Builtin::BoxAlloc),
+            Symbol::TRANSMUTE => Some(Builtin::Transmute),
+            Symbol::ARRAY_LEN => Some(Builtin::Len),
+            Symbol::ARRAY_ADDR => Some(Builtin::ArrayAddr),
+            Symbol::WRAPPING_ADD => Some(Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd)),
+            Symbol::OVERFLOWING_ADD => {
+                Some(Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingAdd))
             }
-            i += 1;
+            Symbol::SHIFT_LEFT => Some(Builtin::IntegerBuiltin(IntegerBuiltin::ShiftLeft)),
+            Symbol::SHIFT_RIGHT => Some(Builtin::IntegerBuiltin(IntegerBuiltin::ShiftRight)),
+            Symbol::WRAPPING_SUB => Some(Builtin::IntegerBuiltin(IntegerBuiltin::WrappingSub)),
+            Symbol::OVERFLOWING_SUB => {
+                Some(Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub))
+            }
+            Symbol::WIDEN => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Widen)),
+            Symbol::TRUNCATE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Truncate)),
+            Symbol::BITCAST => Some(Builtin::Bitcast),
+            Symbol::INT_MAX_VALUE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue)),
+            Symbol::RAW_ARRAY_ALLOC => Some(Builtin::RawArrayAlloc),
+            Symbol::ARRAY_SET_UNCHECKED => Some(Builtin::ArraySetUnchecked),
+            Symbol::ARRAY_GET_UNCHECKED => Some(Builtin::ArrayGetUnchecked),
+            Symbol::PRINT_STRING => Some(Builtin::PrintString),
+            Symbol::UNINIT_ZEROED => Some(Builtin::UninitZeroed),
+            Symbol::UNINIT_ASSUME_INIT => Some(Builtin::UninitAssumeInit),
+            Symbol::UNINIT_NEW => Some(Builtin::UninitNew),
+            Symbol::READ_LINE => Some(Builtin::ReadLine),
+            _ => None,
         }
-        panic!("missing builtin")
-    }
-}
-#[derive(Default, Clone)]
-pub struct Builtins([Option<DefId>; Builtin::COUNT], HashMap<DefId, Builtin>);
-impl Builtins {
-    pub fn insert(&mut self, builtin: Builtin, id: DefId) {
-        let _ = self.0[builtin.index_of()].insert(id);
-        self.1.insert(id, builtin);
-    }
-    pub fn expect_id(&self, builtin: Builtin) -> DefId {
-        self.0[builtin.index_of()]
-            .unwrap_or_else(|| panic!("expected builtin '{}' to be defined", builtin.name()))
-    }
-    pub fn builtin_for(&self, id: DefId) -> Option<Builtin> {
-        self.1.get(&id).copied()
     }
 }

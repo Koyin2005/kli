@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub struct RemoveUnusedLocals;
-impl MirPass for RemoveUnusedLocals {
+impl MirPass<'_> for RemoveUnusedLocals {
     fn name(&self) -> &'static str {
         "remove-unused-locals"
     }
@@ -52,7 +52,7 @@ impl MirPass for RemoveUnusedLocals {
 struct LocalFinder {
     locals: HashSet<Local>,
 }
-impl Visit for LocalFinder {
+impl Visit<'_> for LocalFinder {
     fn visit_local(&mut self, _: PlaceCtxt, _: crate::mir::Location, local: Local) {
         self.locals.insert(local);
     }

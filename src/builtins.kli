@@ -1,27 +1,78 @@
-fun allocate[T](count : uint) -> ptr[T];
+@builtin
+fun box_alloc[T](value : T) -> Box[T];
 
-@unsafe
-fun deallocate[T](p : ptr[T]) -> (); 
-
+# Safety:
+# The current representation of `x` must be a valid value of `U`
+@builtin
 @unsafe
 fun transmute[T,U](x : T) -> U;
 
-@unsafe
-fun ptr_read[T](p : ptr[T]) -> T;
+@builtin
+fun array_len[T](a : array[T]) -> UInt64;
 
-@unsafe
-fun ptr_write[T](p : ptr[T], value : T) -> ();
+@builtin
+fun array_addr[T](a : array[T]) -> UInt64;
 
-@unsafe
-fun memcopy[T](dst : ptr[T], src : ptr[T], count : uint) -> ();
-
-fun offset[T](p : ptr[T], offset: int) -> ptr[T];
-
-@unsafe
-fun drop_in_place[T](p : ptr[T]) -> ();
-
-fun invalid_ptr[T]() ->  ptr[T];
-
+@builtin
 fun wrapping_add[T](x : T, y : T) -> T;
 
-fun overflowing_add[T](x : T, y : T) -> Pair[bool, T];
+@builtin
+fun overflowing_add[T](x : T, y : T) -> (T, bool);
+
+@builtin
+fun wrapping_sub[T](x : T, y : T) -> T;
+
+@builtin
+fun overflowing_sub[T](x : T, y : T) -> (T, bool);
+
+@builtin
+fun widen[T,U](x : T) -> U;
+
+@builtin
+fun truncate[T,U](x : T) -> U;
+
+@builtin
+fun bitcast[T,U](x : T) -> U;
+
+@builtin
+fun raw_array_alloc[T](size : UInt64) -> array[uninit[T]];
+
+# Safety:
+# `index` must be in bounds for `a`
+@unsafe
+@builtin
+fun array_set_unchecked[T](a : array[T], index : UInt64, value : T) -> ();
+
+
+# Safety:
+# `index` must be in bounds for `a`
+@unsafe
+@builtin
+fun array_get_unchecked[T](a : array[T], index : UInt64) -> T;
+
+@builtin
+fun print_string(s : string) -> ();
+
+@builtin
+fun int_max_value[T]() -> T;
+
+@builtin
+fun uninit_zeroed[T]() -> uninit[T];
+
+# Safety: 
+# `value` must represent a valid value of type `T`
+@unsafe
+@builtin
+fun uninit_assume_init[T](value : uninit[T]) -> T;
+
+@builtin
+fun uninit_new[T](value : T) -> uninit[T];
+
+@builtin
+fun read_line() -> string;
+
+@builtin
+fun shift_left[T](x : T, y : T) -> T;
+
+@builtin
+fun shift_right[T](x : T, y : T) -> T;

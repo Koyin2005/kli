@@ -25,17 +25,12 @@ impl DeclareInBody<'_, '_> {
             | ast::ExprKind::Bool(_)
             | ast::ExprKind::Number(..)
             | ast::ExprKind::Panic
-            | ast::ExprKind::Path(..) => (),
+            | ast::ExprKind::Path(..)
+            | ast::ExprKind::Char(_) => (),
             ast::ExprKind::Annotate(expr, _)
             | ast::ExprKind::Unsafe(expr)
-            | ast::ExprKind::Deref(expr)
-            | ast::ExprKind::AddressOf(expr)
-            | ast::ExprKind::Field(expr, _) => self.declare_in_exprs(expr),
-            ast::ExprKind::Print(expr) => {
-                if let Some(expr) = expr {
-                    self.declare_in_exprs(expr);
-                }
-            }
+            | ast::ExprKind::Field(expr, _)
+            | ast::ExprKind::Deref(expr) => self.declare_in_exprs(expr),
             ast::ExprKind::Call(callee, args) | ast::ExprKind::MethodCall(callee, _, args) => {
                 self.declare_in_exprs(callee);
                 for arg in args {
@@ -47,7 +42,6 @@ impl DeclareInBody<'_, '_> {
                     self.declare_in_exprs(field)
                 }
             }
-            ast::ExprKind::Borrow(borrow_expr) => self.declare_in_exprs(&borrow_expr.expr),
             ast::ExprKind::Case(expr, case_arms) => {
                 self.declare_in_exprs(expr);
                 for arm in case_arms.iter() {
@@ -57,15 +51,23 @@ impl DeclareInBody<'_, '_> {
             ast::ExprKind::Assign(expr1, expr2)
             | ast::ExprKind::While(expr1, expr2)
             | ast::ExprKind::Binary(_, expr1, expr2)
-            | ast::ExprKind::For(_, expr1, expr2) => {
+            | ast::ExprKind::Index(expr1, expr2) => {
                 self.declare_in_exprs(expr1);
                 self.declare_in_exprs(expr2);
+            }
+            ast::ExprKind::For(_, expr1, expr2, expr3) => {
+                self.declare_in_exprs(expr1);
+                if let Some(expr2) = expr2 {
+                    self.declare_in_exprs(expr2);
+                }
+
+                self.declare_in_exprs(expr3);
             }
             ast::ExprKind::Lambda(lambda) => {
                 self.declare.declare_def_id_for(self.module, lambda.id);
                 self.declare_in_exprs(&lambda.body);
             }
-            ast::ExprKind::Block(block_body, _) => {
+            ast::ExprKind::Block(block_body) => {
                 for stmt in block_body.stmts.iter() {
                     match &stmt.kind {
                         ast::StmtKind::Expr(expr) => self.declare_in_exprs(expr),

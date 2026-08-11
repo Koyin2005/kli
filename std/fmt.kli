@@ -1,0 +1,164 @@
+import std.num.int
+import std.num.uint
+import std.(io,string_buf)
+import string_buf.StringBuf
+import int.neg
+
+
+type Writer[S] = {
+    output : S,
+    write_string : fun(S,string) -> (),
+    write_char : fun(S,char) -> (),
+}
+
+
+
+# `T` is the type we're formatting
+# `S` is we're formatting into e.g Stdout or a StringBuf
+# `C` is the context needed for formatting
+type Format[T,S,C] = {
+    ctxt : C,
+    fmt : fun(T, C, Writer[S]) -> ()
+}
+
+
+fun write_char[S](f : Writer[S], value : char) -> () = f.write_char(f.output,value)
+
+fun write_string[S](f : Writer[S], value : string) -> () = f.write_string(f.output,value)
+
+fun string_buf_write() -> Writer[StringBuf] = 
+    Writer {
+        output = string_buf.new(),
+        write_char = string_buf.push_char,
+        write_string = string_buf.push_string,
+    }
+
+type Stdout = {}
+
+fun io_write() -> Writer[Stdout] = 
+    Writer {
+        output = Stdout{},
+        write_char = fun(_,value) -> io.print_char(value),
+        write_string = fun(_,value) -> io.print_string(value)
+    }
+
+
+fun write_format[T,S,C](writer : Writer[S],f : Format[T,S,C], value : T) -> () = do
+    f.fmt(value,f.ctxt,writer)
+end
+
+fun fmt_uint[S](value : UInt64, _ : (), writer : Writer[S]) -> () = do
+    case value of 
+    | 0 -> return write_string(writer,"0")
+    | _ -> ()
+    end;
+    let mut value = value;
+    let digits = uint.log(value,10);
+    let mut arr = arrays.repeat(digits + 1,"");
+
+    let mut i = digits;
+    while value > 0u do
+        let rest = value / 10u;
+        let digit = value - rest * 10u;
+        value = rest;
+        (arr).[i] = (case digit of
+        | 0 -> "0"
+        | 1 -> "1"
+        | 2 -> "2"
+        | 3 -> "3"
+        | 4 -> "4"
+        | 5 -> "5"
+        | 6 -> "6"
+        | 7 -> "7"
+        | 8 -> "8"
+        | _ -> "9"
+        end);
+        i = i - 1u;
+    end;
+    for i in 0u..digits do
+        write_string(writer,(arr).[i + 1]);
+    end
+end
+
+fun make_uint_fmt[S]() -> Format[UInt64, S,()]  = do
+    Format {
+        ctxt = (),
+        fmt = fmt_uint[S]
+    }
+end
+
+fun fmt_int[S](value : Int64, _ : (), writer : Writer[S]) -> () = do
+    
+    fmt_uint(int.strict_cast_uint(case value < 0 of
+    | true -> do 
+        write_char(writer,'-');
+        neg(value)
+    end
+    | false -> value
+    end),(),writer);
+end
+
+fun make_int_fmt[S]() -> Format[Int64,S,()] = do
+    Format {
+        ctxt = (),
+        fmt = fmt_int[S]
+    }
+end
+
+fun fmt_array[T,S,C](value : array[T], format_elem : Format[T,S,C], writer: Writer[S]) -> () = do
+    write_string(writer,"[");
+    for i in 0u..std.arrays.len(value) do 
+        case i > 0 of
+        | true -> write_string(writer,",")
+        | false -> ()
+        end;
+        write_format(writer,format_elem,value.[i]);
+    end;
+    write_string(writer,"]");
+end
+
+fun make_array_fmt[T,S,C](f : Format[T,S,C]) -> Format[array[T],S,Format[T,S,C]] = do
+    Format {
+        ctxt = f,
+        fmt = fmt_array[T,S,C]
+    }
+end
+
+fun fmt_pair[T,U,S,C1,C2](value : (T,U), format_pair : (Format[T,S,C1],Format[U,S,C2]), writer : Writer[S]) -> () = do
+    write_string(writer,"(");
+    let (first,second) = value;
+    let (format_first,format_second) = format_pair;
+    write_format(writer,format_first,first);
+    write_string(writer,",");
+    write_format(writer,format_second,second);
+    write_string(writer,")")
+end
+
+fun make_pair_fmt[T,U,S,C1,C2](first : Format[T,S,C1], second : Format[U,S,C2]) -> Format[(T,U),S,(Format[T,S,C1],Format[U,S,C2])] = 
+    Format {
+        ctxt = (first,second),
+        fmt = fmt_pair
+    }
+
+fun make_unit_fmt[S]() -> Format[(),S,()] = 
+    Format {
+        ctxt = (),
+        fmt = fun(_,_,w : Writer[S]) -> write_string(w,"()")
+    }
+
+fun to_string[T,C](f : Format[T,StringBuf,C], value : T) -> string = do
+    let writer = string_buf_write();
+    write_format(writer,f,value);
+    string_buf.into_string(writer.output)
+end
+
+fun print[T,C](f : Format[T,Stdout,C], value : T) -> () = do
+    let writer = io_write();
+    write_format(writer,f,value);
+end
+
+fun println[T,C](f : Format[T,Stdout,C], value : T) -> () = do
+    let writer = io_write();
+    write_format(writer,f,value);
+    write_string(writer,"\n")
+end

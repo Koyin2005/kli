@@ -3,29 +3,29 @@ use std::collections::HashSet;
 use crate::{
     collect::CtxtRef,
     def_ids::DefId,
-    patterns::ctors::{Constructor, constructors_of_ty, fields_of},
-    types::Type,
+    patterns::ctors::{Constructor, ConstructorSet, constructors_of_ty, fields_of},
+    types::{Type, TypeKind},
 };
 #[derive(Clone)]
-pub struct PatWithIndex {
-    pub pat: Pat,
+pub struct PatWithIndex<'ctxt> {
+    pub pat: Pat<'ctxt>,
     pub index: usize,
 }
 #[derive(Clone)]
-pub struct Pat {
-    pub ty: Type,
+pub struct Pat<'ctxt> {
+    pub ty: Type<'ctxt>,
     pub constructor: Constructor,
-    pub fields: Vec<PatWithIndex>,
+    pub fields: Vec<PatWithIndex<'ctxt>>,
 }
-impl Pat {
-    pub fn wildcard(ty: Type) -> Self {
+impl<'ctxt> Pat<'ctxt> {
+    pub fn wildcard(ty: Type<'ctxt>) -> Self {
         Self {
             ty,
             constructor: Constructor::Wildcard,
             fields: Vec::new(),
         }
     }
-    pub fn with_index(self, index: usize) -> PatWithIndex {
+    pub fn with_index(self, index: usize) -> PatWithIndex<'ctxt> {
         PatWithIndex { pat: self, index }
     }
     pub fn format(&self, ctxt: CtxtRef<'_>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -41,10 +41,6 @@ impl Pat {
             Constructor::Int(value) => {
                 write!(f, "{}", value)
             }
-            Constructor::Ref => {
-                f.write_str("ref ")?;
-                self.fields[0].pat.format(ctxt, f)
-            }
             Constructor::Case(name) => {
                 if let Some(field) = self.fields.first() {
                     write!(f, "{}(", name)?;
@@ -58,9 +54,8 @@ impl Pat {
             Constructor::NonExhaustive => f.write_str("_"),
             Constructor::Record => {
                 use crate::typed_ast::FieldId;
-                let (fields, brackets): (&mut dyn Fn(FieldId) -> _, _) = match &self.ty {
-                    Type::Record(fields) => (&mut |i| Some(fields[i].name), ("{", "}")),
-                    &Type::Named(id, ..) => (
+                let (fields, brackets): (&mut dyn Fn(FieldId) -> _, _) = match self.ty.kind() {
+                    &TypeKind::Named(id, ..) => (
                         &mut move |i| {
                             Some(crate::types::FieldName::Named(
                                 ctxt.type_def(id).fields()[i].name,
@@ -68,7 +63,7 @@ impl Pat {
                         },
                         ("{", "}"),
                     ),
-                    Type::Tuple(fields) => (
+                    TypeKind::Tuple(fields) => (
                         &mut |_| None,
                         ("(", if fields.len() == 1 { ",)" } else { ")" }),
                     ),
@@ -94,12 +89,12 @@ impl Pat {
     }
 }
 
-pub fn missing_patterns(
+pub fn missing_patterns<'ctxt>(
     from_id: DefId,
-    ctxt: CtxtRef<'_>,
-    ty: &[Type; 1],
-    patterns: &mut dyn Iterator<Item = Pat>,
-) -> Vec<Pat> {
+    ctxt: CtxtRef<'ctxt>,
+    ty: &[Type<'ctxt>; 1],
+    patterns: &mut dyn Iterator<Item = Pat<'ctxt>>,
+) -> Vec<Pat<'ctxt>> {
     let missing =
         missing_patterns_inner(from_id, ctxt, ty, patterns.map(|pat| vec![pat]).collect());
     missing
@@ -108,7 +103,11 @@ pub fn missing_patterns(
         .collect()
 }
 
-fn specialize(constructor: Constructor, fields: &[Type], matrix: Vec<Vec<Pat>>) -> Vec<Vec<Pat>> {
+fn specialize<'ctxt>(
+    constructor: Constructor,
+    fields: &[Type<'ctxt>],
+    matrix: Vec<Vec<Pat<'ctxt>>>,
+) -> Vec<Vec<Pat<'ctxt>>> {
     matrix
         .into_iter()
         .filter_map(|mut row| {
@@ -143,27 +142,15 @@ fn specialize(constructor: Constructor, fields: &[Type], matrix: Vec<Vec<Pat>>) 
         .collect()
 }
 fn split_constructors(
-    ty: &Type,
-    all_constructors: Vec<Constructor>,
+    constructors: ConstructorSet,
     seen_constructors: HashSet<Constructor>,
 ) -> (Vec<Constructor>, Vec<Constructor>) {
     let mut seen = Vec::new();
     let mut missing = Vec::new();
-    let had_non_exhaustive = all_constructors.contains(&Constructor::NonExhaustive);
-    if had_non_exhaustive {
-        missing.push(Constructor::NonExhaustive);
-    }
-    match ty {
-        Type::Infer(_) | Type::Unknown => (),
-        Type::Never => (),
-        Type::Int(_)
-        | Type::Char
-        | Type::Byte
-        | Type::Param(..)
-        | Type::Function(..)
-        | Type::Array(..)
-        | Type::RawPointer(_) => {}
-        Type::Bool => {
+    match constructors {
+        ConstructorSet::Never => {}
+        ConstructorSet::NonExhaustive => missing.push(Constructor::NonExhaustive),
+        ConstructorSet::Bool => {
             let is_true = seen_constructors.contains(&Constructor::Bool(true));
             let is_false = seen_constructors.contains(&Constructor::Bool(false));
             if is_true {
@@ -177,53 +164,33 @@ fn split_constructors(
                 missing.push(Constructor::Bool(false));
             }
         }
-        Type::Imm(..) | Type::Mut(..) => {
-            if seen_constructors.contains(&Constructor::Ref) {
-                seen.push(Constructor::Ref);
-            } else {
-                missing.push(Constructor::Ref);
-            }
-        }
-        Type::Record(_) | Type::Tuple(_) => {
+        ConstructorSet::Record => {
             if seen_constructors.contains(&Constructor::Record) {
                 seen.push(Constructor::Record);
             } else {
                 missing.push(Constructor::Record);
             }
         }
-        Type::Named(..) => {
-            if !had_non_exhaustive {
-                for ctor in all_constructors {
-                    match ctor {
-                        Constructor::Record => {
-                            if seen_constructors.contains(&Constructor::Record) {
-                                seen.push(Constructor::Record)
-                            } else {
-                                missing.push(Constructor::Record);
-                            }
-                        }
-                        Constructor::Case(_) => {
-                            if seen_constructors.contains(&ctor) {
-                                seen.push(ctor)
-                            } else {
-                                missing.push(ctor);
-                            }
-                        }
-                        _ => continue,
-                    }
+        ConstructorSet::Cases(cases) => {
+            for case in cases {
+                let ctor = Constructor::Case(case);
+                if seen_constructors.contains(&ctor) {
+                    seen.push(ctor)
+                } else {
+                    missing.push(ctor);
                 }
             }
         }
     }
     (seen, missing)
 }
-fn missing_patterns_inner(
+fn missing_patterns_inner<'ctxt>(
     from_id: DefId,
-    ctxt: CtxtRef<'_>,
-    tys: &'_ [Type],
-    matrix: Vec<Vec<Pat>>,
-) -> Vec<Vec<Pat>> {
-    let Some(head) = tys.first() else {
+    ctxt: CtxtRef<'ctxt>,
+    tys: &'_ [Type<'ctxt>],
+    matrix: Vec<Vec<Pat<'ctxt>>>,
+) -> Vec<Vec<Pat<'ctxt>>> {
+    let Some(&head) = tys.first() else {
         return if matrix.is_empty() {
             vec![Vec::new()]
         } else {
@@ -232,7 +199,6 @@ fn missing_patterns_inner(
     };
     let all_constructors = constructors_of_ty(from_id, ctxt, head);
     let (mut constructors, missing_ctors) = split_constructors(
-        head,
         all_constructors,
         matrix
             .iter()
@@ -259,7 +225,7 @@ fn missing_patterns_inner(
             if c == Constructor::Missing {
                 all_missing.extend(missing_ctors.iter().copied().map(|ctor| {
                     std::iter::once(Pat {
-                        ty: head.clone(),
+                        ty: head,
                         constructor: ctor,
                         fields: fields_of(head, ctor, ctxt)
                             .into_iter()
@@ -273,7 +239,7 @@ fn missing_patterns_inner(
                 }));
             } else {
                 let head_pat = Pat {
-                    ty: head.clone(),
+                    ty: head,
                     constructor: c,
                     fields: row
                         .by_ref()

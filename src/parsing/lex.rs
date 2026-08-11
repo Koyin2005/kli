@@ -1,4 +1,4 @@
-use std::{iter::Peekable, num::IntErrorKind, str::Chars};
+use std::{iter::Peekable, num::IntErrorKind, str::CharIndices};
 
 use crate::{
     diagnostics::DiagnosticReporter,
@@ -8,7 +8,7 @@ use crate::{
 };
 
 pub struct Lexer<'src> {
-    chars: Peekable<Chars<'src>>,
+    chars: Peekable<CharIndices<'src>>,
     src: &'src str,
     file: Symbol,
     line: u32,
@@ -24,48 +24,50 @@ impl<'s> Lexer<'s> {
             index: 0,
             start_index: 0,
             src,
-            chars: src.chars().peekable(),
+            chars: src.char_indices().peekable(),
             line: 1,
             start_line: 1,
             diag: DiagnosticReporter::new(),
         }
     }
     fn peek_char(&mut self) -> Option<char> {
-        self.chars.peek().copied()
+        self.chars.peek().copied().map(|(_, c)| c)
     }
     fn next_char(&mut self) -> Option<char> {
-        self.chars.next().inspect(|x| {
-            self.index += 1;
-            if *x == '\n' {
+        self.chars.next().map(|(index, c)| {
+            self.index = (index + c.len_utf8()) as u32;
+            if c == '\n' {
                 self.line = self.line.checked_add(1).expect("file too big");
             }
+            c
         })
     }
     fn match_char(&mut self, c: char) -> Option<char> {
-        if self.chars.peek().is_some_and(|p| *p == c) {
+        if self.peek_char().is_some_and(|p| p == c) {
             self.next_char()
         } else {
             None
         }
     }
     fn match_char_with(&mut self, f: impl FnOnce(char) -> bool) -> Option<char> {
-        if let Some(&c) = self.chars.peek()
-            && f(c)
-        {
+        if self.peek_char().is_some_and(f) {
             self.next_char()
         } else {
             None
         }
     }
+    fn match_char_mapped<T>(&mut self, f: impl FnOnce(char) -> Option<T>) -> Option<T> {
+        let value = self.peek_char().and_then(f)?;
+        self.next_char();
+        Some(value)
+    }
     fn skip_whitespace(&mut self) {
-        while let Some(&c) = self.chars.peek() {
+        while let Some(c) = self.peek_char() {
             if c.is_whitespace() {
                 self.next_char();
             } else if c == '#' {
                 self.next_char();
-                while self.chars.peek().is_some_and(|c| *c != '\n') {
-                    self.next_char();
-                }
+                while self.match_char_with(|c| c != '\n').is_some() {}
             } else {
                 break;
             }
@@ -123,6 +125,25 @@ impl<'s> Lexer<'s> {
         while let Some(c) = self.match_char_with(|c| char::is_digit(c, 10)) {
             src.push(c);
         }
+        if let "0" = src.as_str()
+            && let Some(radix) = self
+                .match_char('x')
+                .map(|_| 16)
+                .or_else(|| self.match_char('b').map(|_| 2))
+        {
+            src.pop();
+            let mut num = 0u32;
+            while let Some(d) = self.match_char_mapped(|c| char::to_digit(c, radix)) {
+                num = if let Some(num) = num.checked_mul(radix).and_then(|num| num.checked_add(d)) {
+                    num
+                } else {
+                    let loc = self.current_loc();
+                    self.diag.add_diagnostic("Integer too large", loc);
+                    return None;
+                }
+            }
+            src = num.to_string();
+        }
         let sign = match self.peek_char() {
             Some('u') => Some(NumberKind::Unsigned),
             Some('i') => Some(NumberKind::Signed),
@@ -131,6 +152,7 @@ impl<'s> Lexer<'s> {
         if sign.is_some() {
             self.next_char();
         }
+
         match src.parse::<u64>() {
             Ok(n) => Some(self.new_token(TokenKind::Number(n, sign))),
             Err(e) => match e.kind() {
@@ -149,13 +171,33 @@ impl<'s> Lexer<'s> {
     fn string_token(&mut self) -> Option<Token> {
         self.next_char();
         let mut src = String::new();
+        let mut prev_char = None;
         while let Some(c) = self.peek_char()
             && c != '"'
         {
-            src.push(c);
+            if let Some('\\') = prev_char {
+                src.pop();
+                src.push(match c {
+                    '\\' => '\\',
+                    'n' => '\n',
+                    't' => '\t',
+                    _ => {
+                        self.diag.add_diagnostic(
+                            format!("invalid escape character '{}'", c),
+                            self.current_loc(),
+                        );
+                        self.next_char();
+                        prev_char = Some(c);
+                        continue;
+                    }
+                });
+            } else {
+                src.push(c);
+            }
             self.next_char();
-        }
 
+            prev_char = Some(c);
+        }
         if self.match_char('"').is_some() {
             Some(Token {
                 loc: self.current_loc(),
@@ -166,6 +208,73 @@ impl<'s> Lexer<'s> {
             self.diag
                 .add_diagnostic("Expected '\"' at end of string", loc);
             None
+        }
+    }
+    fn char_escape(&mut self) -> Option<char> {
+        let first_byte = self.match_char_mapped(|c| c.to_digit(16))?;
+
+        let Some(second_byte) = self.match_char_mapped(|c| c.to_digit(16)) else {
+            return char::from_u32(first_byte);
+        };
+        let Some(third_byte) = self.match_char_mapped(|c| c.to_digit(16)) else {
+            return char::from_u32((first_byte << 3) + second_byte);
+        };
+        let Some(fourth_byte) = self.match_char_mapped(|c| c.to_digit(16)) else {
+            return char::from_u32((first_byte << 6) + (second_byte << 3) + third_byte);
+        };
+        let Some(fifth_byte) = self.match_char_mapped(|c| c.to_digit(16)) else {
+            return char::from_u32(
+                (first_byte << 9) + (second_byte << 6) + (third_byte << 3) + fourth_byte,
+            );
+        };
+        let Some(sixth_byte) = self.match_char_mapped(|c| c.to_digit(16)) else {
+            return char::from_u32(
+                (first_byte << 12)
+                    + (second_byte << 9)
+                    + (third_byte << 6)
+                    + (fourth_byte << 3)
+                    + fifth_byte,
+            );
+        };
+        char::encode_utf8('a', &mut []);
+        char::from_u32(
+            (first_byte << 15)
+                + (second_byte << 12)
+                + (third_byte << 9)
+                + (fourth_byte << 6)
+                + (fifth_byte << 3)
+                + sixth_byte,
+        )
+    }
+    fn char_literal(&mut self) -> Option<Token> {
+        self.next_char()?;
+        let c = if self.match_char('\\').is_some() {
+            let c = match self.next_char()? {
+                'n' => '\n',
+                't' => '\t',
+                'r' => '\r',
+                '\\' => '\\',
+                '\'' => '\'',
+                'u' if let Some(c) = self.char_escape() => c,
+                _ => {
+                    self.diag
+                        .add_diagnostic(format!("Invalid character escape"), self.current_loc());
+                    return None;
+                }
+            };
+            c
+        } else {
+            self.next_char()?
+        };
+        if self.match_char('\'').is_some() {
+            Some(Token {
+                loc: self.current_loc(),
+                kind: TokenKind::CharLiteral(c),
+            })
+        } else {
+            self.diag
+                .add_diagnostic(format!("Expected ' at end of char",), self.current_loc());
+            return None;
         }
     }
     fn current_token_src(&self) -> &str {
@@ -185,14 +294,11 @@ impl<'s> Lexer<'s> {
                 "in" => TokenKind::In,
                 "for" => TokenKind::For,
                 "panic" => TokenKind::Panic,
-                "int" => TokenKind::Int,
-                "uint" => TokenKind::Uint,
                 "unsafe" => TokenKind::Unsafe,
                 "string" => TokenKind::String,
                 "bool" => TokenKind::Bool,
                 "let" => TokenKind::Let,
                 "case" => TokenKind::Case,
-                "print" => TokenKind::Print,
                 "static" => TokenKind::Static,
                 "ref" => TokenKind::Ref,
                 "impl" => TokenKind::Impl,
@@ -202,7 +308,6 @@ impl<'s> Lexer<'s> {
                 "end" => TokenKind::End,
                 "of" => TokenKind::Of,
                 "do" => TokenKind::Do,
-                "region" => TokenKind::Region,
                 "type" => TokenKind::Type,
                 "while" => TokenKind::While,
                 "with" => TokenKind::With,
@@ -211,6 +316,8 @@ impl<'s> Lexer<'s> {
                 "and" => TokenKind::And,
                 "return" => TokenKind::Return,
                 "or" => TokenKind::Or,
+                "bor" => TokenKind::Bor,
+                "band" => TokenKind::Band,
                 _ => TokenKind::Ident(self.current_token_src().to_string()),
             },
         })
@@ -218,12 +325,12 @@ impl<'s> Lexer<'s> {
     fn next_token(&mut self) -> Option<Token> {
         self.skip_whitespace();
         let line = self.line;
-        let &c = self.chars.peek()?;
+        let c = self.peek_char()?;
         self.start_line = line;
         self.start_index = self.index;
         match c {
             '@' => Some(self.next_token_from_char(TokenKind::At)),
-            '.' => Some(self.next_token_from_char(TokenKind::Dot)),
+            '.' => Some(self.next_token_from_char_or_chars('.', TokenKind::Dot, TokenKind::DotDot)),
             '=' => Some(self.next_token_from_char_or_char_match(
                 TokenKind::Equal,
                 [('>', TokenKind::ThickArrow), ('=', TokenKind::DoubleEqual)],
@@ -238,6 +345,7 @@ impl<'s> Lexer<'s> {
             '-' => {
                 Some(self.next_token_from_char_or_chars('>', TokenKind::Minus, TokenKind::Arrow))
             }
+            '\'' => self.char_literal(),
             '/' => Some(self.next_token_from_char(TokenKind::Slash)),
             '*' => Some(self.next_token_from_char(TokenKind::Star)),
             ',' => Some(self.next_token_from_char(TokenKind::Coma)),

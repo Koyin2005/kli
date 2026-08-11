@@ -2,7 +2,8 @@ use crate::{
     Symbol,
     collect::{CtxtRef, TypeDefKind},
     def_ids::DefId,
-    types::Type,
+    index_vec::IndexVec,
+    types::{CaseId, Type, TypeKind},
 };
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Constructor {
@@ -10,32 +11,41 @@ pub enum Constructor {
     Int(i128),
     Wildcard,
     Record,
-    Ref,
     Case(Symbol),
     NonExhaustive,
     Missing,
 }
 
-pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Constructor> {
-    match ty {
-        Type::Bool => vec![Constructor::Bool(true), Constructor::Bool(false)],
-        Type::Imm(..) | Type::Mut(..) => vec![Constructor::Ref],
-        Type::Never => Vec::new(),
-        Type::Char
-        | Type::Unknown
-        | Type::Param(..)
-        | Type::Int(_)
-        | Type::Function(..)
-        | Type::RawPointer(..)
-        | Type::Byte
-        | Type::Array(..) => vec![Constructor::NonExhaustive],
-        Type::Record(_) | Type::Tuple(_) => {
-            vec![Constructor::Record]
-        }
-        Type::Infer(_) => unreachable!("Cannot have infer here"),
-        Type::Named(id, _, args) => {
+pub enum ConstructorSet {
+    Bool,
+    Never,
+    NonExhaustive,
+    Record,
+    Cases(IndexVec<CaseId, Symbol>),
+}
+pub fn constructors_of_ty<'ctxt>(
+    from: DefId,
+    ctxt: CtxtRef<'ctxt>,
+    ty: Type<'ctxt>,
+) -> ConstructorSet {
+    match ty.kind() {
+        TypeKind::Bool => ConstructorSet::Bool,
+        TypeKind::Never => ConstructorSet::Never,
+        TypeKind::Char
+        | TypeKind::Unknown
+        | TypeKind::Param(..)
+        | TypeKind::Int(_)
+        | TypeKind::Function(..)
+        | TypeKind::Array(_)
+        | TypeKind::String
+        | TypeKind::Box(_)
+        | TypeKind::Uninit(_)
+        | TypeKind::IntVar(_) => ConstructorSet::NonExhaustive,
+        TypeKind::Tuple(_) => ConstructorSet::Record,
+        TypeKind::Infer(_) => unreachable!("Cannot have infer here"),
+        TypeKind::Named(id, _, args) => {
             if !ctxt.same_module(*id, from) && ctxt.is_opaque(*id) {
-                return vec![Constructor::NonExhaustive];
+                return ConstructorSet::NonExhaustive;
             }
             match ctxt.type_def(*id).kind {
                 TypeDefKind::Record(ref fields) => {
@@ -43,57 +53,55 @@ pub fn constructors_of_ty(from: DefId, ctxt: CtxtRef<'_>, ty: &Type) -> Vec<Cons
                         .iter()
                         .any(|field| field.type_of(args, ctxt).is_uninhabited(ctxt))
                     {
-                        return vec![];
+                        return ConstructorSet::Never;
                     }
-                    vec![Constructor::Record]
+                    ConstructorSet::Record
                 }
-                TypeDefKind::Variant(ref cases) => cases
-                    .iter()
-                    .filter_map(|case| {
-                        if let Some(field) = case.field
-                            && field.type_of(args, ctxt).is_uninhabited(ctxt)
-                        {
-                            None
-                        } else {
-                            Some(case.name)
-                        }
-                    })
-                    .map(Constructor::Case)
-                    .collect(),
+                TypeDefKind::Variant(ref cases) => ConstructorSet::Cases(
+                    cases
+                        .iter()
+                        .filter_map(|case| {
+                            if let Some(field) = case.field
+                                && field.type_of(args, ctxt).is_uninhabited(ctxt)
+                            {
+                                None
+                            } else {
+                                Some(case.name)
+                            }
+                        })
+                        .collect(),
+                ),
             }
         }
     }
 }
 
-pub fn fields_of(ty: &Type, constructor: Constructor, ctxt: CtxtRef<'_>) -> Vec<Type> {
+pub fn fields_of<'ctxt>(
+    ty: Type<'ctxt>,
+    constructor: Constructor,
+    ctxt: CtxtRef<'ctxt>,
+) -> Vec<Type<'ctxt>> {
     match constructor {
         Constructor::Int(_)
         | Constructor::Bool(_)
         | Constructor::NonExhaustive
         | Constructor::Wildcard
         | Constructor::Missing => Vec::new(),
-        Constructor::Ref => {
-            let (Type::Imm(_, ty) | Type::Mut(_, ty)) = ty else {
-                unreachable!("Should be a view")
-            };
-            vec![(**ty).clone()]
-        }
-        Constructor::Record => match ty {
-            Type::Record(fields) => fields.iter().map(|field| field.ty.clone()).collect(),
-            Type::Named(id, _, args) => ctxt
-                .type_def(*id)
+        Constructor::Record => match ty.kind() {
+            &TypeKind::Named(id, _, ref args) => ctxt
+                .type_def(id)
                 .fields()
                 .iter()
                 .map(|&field_def| field_def.type_of(args, ctxt))
                 .collect(),
-            Type::Tuple(fields) => fields.to_vec(),
+            TypeKind::Tuple(fields) => fields.to_vec(),
             _ => unreachable!("should be a record type"),
         },
         Constructor::Case(name) => {
-            let Type::Named(ty_id, .., args) = ty else {
+            let Some((ty_id, .., args)) = ty.as_named() else {
                 unreachable!("should be named")
             };
-            match ctxt.type_def(*ty_id).kind {
+            match ctxt.type_def(ty_id).kind {
                 TypeDefKind::Record(fields) => fields
                     .iter()
                     .map(|&field| field.type_of(args, ctxt))

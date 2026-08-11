@@ -3,14 +3,21 @@ use crate::{
     builtins::Builtin,
     def_ids::DefId,
     resolved_ast::AnnotationKind,
-    typed_ast::{ExprKind, Function, PlaceKind},
-    typed_ast_visitor::{Visitor, walk_expr, walk_place},
+    typed_ast::{ExprKind, Function},
+    typed_ast_visitor::{Visitor, walk_expr},
     types::Type,
 };
 
-pub fn transmutable(ctxt: CtxtRef<'_>, from: &Type, to: &Type) -> bool {
+pub fn transmutable<'ctxt>(ctxt: CtxtRef<'ctxt>, from: Type<'ctxt>, to: Type<'ctxt>) -> bool {
     match (from, to) {
         (from, to) if from == to => true,
+        (from, to)
+            if let (Ok(inner), Err(ty)) | (Err(ty), Ok(inner)) =
+                (from.as_uninit().ok_or(from), to.as_uninit().ok_or(to))
+                && inner == ty =>
+        {
+            true
+        }
         _ => match (ctxt.layout_of(from), ctxt.layout_of(to)) {
             (Ok(from_layout), Ok(to_layout)) => from_layout.size == to_layout.size,
             _ => false,
@@ -33,7 +40,7 @@ impl<'ctxt> SafetyCheck<'ctxt> {
     pub fn check(
         ctxt: CtxtRef<'ctxt>,
         id: DefId,
-        function: &Function,
+        function: &Function<'ctxt>,
     ) -> Result<(), SafetyCheckError> {
         if is_unsafe(ctxt, id) {
             return Ok(());
@@ -52,37 +59,19 @@ impl<'ctxt> SafetyCheck<'ctxt> {
         }
     }
 }
-impl Visitor for SafetyCheck<'_> {
-    fn visit_place(&mut self, place: &crate::typed_ast::Place) {
-        if self.in_unsafe_block {
-            return;
-        }
-        if let PlaceKind::Deref(ref value) = place.kind
-            && value.ty.as_pointer().is_some()
-        {
-            self.ctxt
-                .diag()
-                .add_diagnostic("deref of raw pointer outside unsafe context", place.loc)
-        }
-        walk_place(self, place);
-    }
-    fn visit_expr(&mut self, expr: &crate::typed_ast::Expr) {
+impl<'ctxt> Visitor<'ctxt> for SafetyCheck<'ctxt> {
+    fn visit_expr(&mut self, expr: &crate::typed_ast::Expr<'ctxt>) {
         let function = match expr.kind {
             ExprKind::Unsafe(ref expr) => {
-                let was_in_unsafe_block = self.in_unsafe_block;
-                self.in_unsafe_block = true;
+                let was_in_unsafe_block = std::mem::replace(&mut self.in_unsafe_block, true);
                 self.visit_expr(expr);
                 self.in_unsafe_block = was_in_unsafe_block;
                 return;
             }
-            ExprKind::BuiltinCall(builtin, ref args, _) => {
+            ExprKind::BuiltinCall(id, builtin, ref args, _) => {
                 if let Builtin::Transmute = builtin
-                    && let Some(
-                        [
-                            crate::types::GenericArg::Type(ty1),
-                            crate::types::GenericArg::Type(ty2),
-                        ],
-                    ) = &args.as_array()
+                    && let Some(&[crate::types::GenericArg(ty1), crate::types::GenericArg(ty2)]) =
+                        args.as_array()
                     && !transmutable(self.ctxt, ty1, ty2)
                 {
                     self.ctxt.diag().add_diagnostic(
@@ -90,12 +79,11 @@ impl Visitor for SafetyCheck<'_> {
                         expr.loc,
                     );
                 }
-                let id = self.ctxt.builtins().expect_id(builtin);
-                if is_unsafe(self.ctxt, id) {
-                    id
-                } else {
-                    return walk_expr(self, expr);
+                walk_expr(self, expr);
+                if !is_unsafe(self.ctxt, id) {
+                    return;
                 }
+                id
             }
             ExprKind::Function(id, _) if is_unsafe(self.ctxt, id) => id,
             _ => return walk_expr(self, expr),

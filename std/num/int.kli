@@ -1,0 +1,79 @@
+import std.optional.Option
+import std.panicking.panic_message
+
+fun wrapping_add(x : Int64, y : Int64) -> Int64 = builtins.wrapping_add(x,y)
+
+fun overflowing_add(x : Int64, y : Int64) -> (Int64,bool) = builtins.overflowing_add(x,y)
+
+fun wrapping_sub(x : Int64, y : Int64) -> Int64 = builtins.wrapping_sub(x,y)
+
+fun overflowing_sub(x : Int64, y : Int64) -> (Int64,bool) = builtins.overflowing_sub(x,y)
+
+fun shift_left(x : Int64, y : Int64) -> Int64 = builtins.shift_left(x,y)
+
+fun shift_right(x : Int64, y : Int64) -> Int64 = builtins.shift_right(x,y)
+
+
+fun checked_add(x : Int64, y : Int64) -> Option[Int64] = do 
+    case builtins.overflowing_add(x,y) of 
+    | (_,false) -> Option.None
+    | (res,true) -> Option.Some(res)
+    end
+end
+
+fun neg(value : Int64) -> Int64 = builtins.wrapping_sub(0,value)
+
+# Computes the remainder of dividing `value` by `div`
+# Panics if div is 0
+fun rem(value : Int64, div : Int64) -> Int64 = do
+    let multiple = value / div;
+    value - multiple * div
+end
+
+
+# Performs a bitcast between Int64 and UInt
+fun bitcast_uint(x : Int64) -> UInt64 = 
+    builtins.bitcast(x)
+
+#If x is negative panics otherwise performs a bitcast
+fun strict_cast_uint(x : Int64) -> UInt64 = 
+    case x < 0 of
+    | true -> panic_message("cannot cast negative int to uint")
+    | false -> bitcast_uint(x)
+    end
+
+
+fun max_value() -> Int64 = builtins.int_max_value()
+
+fun min(x : Int64, y : Int64) -> Int64 = case x < y of | true -> x | false -> y end
+
+fun max(x : Int64, y : Int64) -> Int64 = case x > y of | true -> x | false -> y end
+
+
+fun is_zero(x : Int64) -> bool = 
+    x == 0
+
+fun is_negative(x : Int64) -> bool = 
+    x < 0
+
+fun is_positive(x : Int64) -> bool = 
+    x > 0
+
+fun contains_exclusive(x : Int64, start : Int64 , end_ : Int64) -> bool = x > start and x < end_
+
+fun as_bool(x : Int64) -> Option[bool] = 
+    case x of 
+    | 0 -> Option.Some(false)
+    | 1 -> Option.Some(true)
+    | _ -> Option.None
+    end
+
+fun extend_uint8(x : UInt8) -> Int64 = unsafe builtins.widen((builtins.bitcast(x) : Int8)) end
+
+fun extend_int8(x : Int8) -> Int64 = builtins.widen(x)
+
+fun log(this : Int64, power : Int64) -> UInt64 = 
+    case this < 0 or power < 2 of 
+    | true -> panic_message("log requires non-negative value and power > 2")
+    | false -> std.num.uint.log(bitcast_uint(this),bitcast_uint(power))
+    end

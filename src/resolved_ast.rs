@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     Symbol,
-    ast::{BinaryOp, IsResource, Mutable},
+    ast::{BinaryOp, Mutable},
     def_ids::DefId,
     define_id,
     ident::Ident,
@@ -14,7 +14,6 @@ use crate::{
 #[derive(Debug, PartialEq, Eq)]
 pub struct FunctionDefId(pub DefId);
 define_id!(VarId);
-define_id!(LocalRegionId);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Var(pub Symbol, pub VarId);
 impl Var {
@@ -31,16 +30,9 @@ pub struct Signature {
     pub return_type: Type,
 }
 #[derive(Debug)]
-pub struct BorrowExpr {
-    pub mutable: Mutable,
-    pub place: Expr,
-    pub region: Region,
-}
-#[derive(Debug)]
 pub struct Lambda {
     pub id: DefId,
     pub loc: SrcLoc,
-    pub resource: IsResource,
     pub param_tys: Box<[Option<Type>]>,
     pub params: Box<[Param]>,
     pub body: Expr,
@@ -79,13 +71,11 @@ pub struct FieldInit {
 #[derive(Debug)]
 pub enum GenericArg {
     Type(Type),
-    Region(Region),
 }
 impl GenericArg {
     pub fn loc(&self) -> SrcLoc {
         match self {
             Self::Type(ty) => ty.loc,
-            Self::Region(region) => region.loc,
         }
     }
 }
@@ -119,28 +109,26 @@ pub struct ForExpr {
 #[derive(Debug)]
 pub enum ExprKind {
     Unsafe(Box<Expr>),
-    Block(Box<BlockBody>, Option<LocalRegionId>),
+    Deref(Box<Expr>),
+    Block(Box<BlockBody>),
     Unit,
     Err,
     Annotate(Box<Expr>, Box<Type>),
     Int(IntegerLiteral),
     Bool(bool),
     String(Rc<str>),
+    Char(char),
     Var(Var),
     Function(FunctionDefId, Box<GenericArgs>),
     Binary(BinaryOp, Box<Expr>, Box<Expr>),
-    Borrow(Box<BorrowExpr>),
     Panic,
     Lambda(Rc<Lambda>),
-    Deref(Box<Expr>),
     Assign(Box<Expr>, Box<Expr>),
     For(Box<ForExpr>),
     Case(Box<Expr>, Box<[CaseArm]>),
-    Print(Option<Box<Expr>>),
     Call(Box<Expr>, Box<[Expr]>),
     Record(Vec<FieldInit>),
     VariantCase(DefId, Box<GenericArgs>),
-    AddressOf(Box<Expr>),
     Field(Box<Expr>, Ident),
     NamedRecord(TypeName, Box<GenericArgs>, Box<[FieldInit]>),
     While(Box<Expr>, Box<Expr>),
@@ -148,19 +136,8 @@ pub enum ExprKind {
     Return(Box<Expr>),
     MethodCall(Box<Expr>, Ident, Box<[Expr]>),
     TypeRelativePath(TypeName, Ident, Box<GenericArgs>),
-}
-#[derive(Debug, Clone, Copy)]
-pub enum RegionKind {
-    Param(Symbol, usize),
-    Local(Symbol, LocalRegionId),
-    Static,
-    Unknown,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Region {
-    pub loc: SrcLoc,
-    pub kind: RegionKind,
+    Array(Vec<Expr>),
+    Index(Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug)]
@@ -183,9 +160,8 @@ pub enum IntegerLiteralKind {
 pub enum PatternKind {
     Int(IntegerLiteral),
     Bool(bool),
-    Ref(Box<Pattern>),
     Case(Ident, Option<Box<Pattern>>),
-    Binding(Option<Mutable>, Mutable, Ident, VarId),
+    Binding(Mutable, Ident, VarId),
     Record(Box<[PatternField]>),
     Tuple(Box<[Pattern]>),
     Unit,
@@ -207,7 +183,6 @@ pub struct Param {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GenericKind {
-    Region,
     Type,
 }
 #[derive(Debug)]
@@ -233,31 +208,33 @@ pub struct RecordFieldType {
 
 #[derive(Debug)]
 pub struct FunctionType {
-    pub is_resource: IsResource,
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IntegerSize {
+    Int8,
+    Int32,
+    Int64,
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TypeName {
-    Int,
-    Uint,
+    Int(IntegerSize),
+    UInt(IntegerSize),
     Bool,
     String,
     Char,
-    Ptr,
-    Byte,
     UserDefined(DefId),
     Box,
-    ArrayList,
+    Array,
+    RawArray,
     Param(Symbol, usize),
     Never,
-    Pair,
+    Uninit,
 }
 #[derive(Debug)]
 pub enum TypeKind {
-    Ptr(Box<Type>),
-    Imm(Box<Region>, Box<Type>),
-    Mut(Box<Region>, Box<Type>),
     Function(Box<FunctionType>),
     Named(TypeName, Box<GenericArgs>),
     Unknown,
@@ -300,6 +277,7 @@ pub enum TypeDefKind {
 }
 #[derive(Debug)]
 pub struct TypeImpl {
+    pub span: SrcLoc,
     pub ty: DefId,
     pub methods: Vec<DefId>,
 }
@@ -349,6 +327,7 @@ pub enum AnnotationKind {
     Unsafe,
     LangItem(LangItem),
     Opaque,
+    Builtin,
 }
 #[derive(Debug)]
 pub struct Annotation {
@@ -362,6 +341,7 @@ impl Annotation {
             AnnotationKind::LangItem(_) => "lang_item",
             AnnotationKind::Opaque => "opaque",
             AnnotationKind::Unsafe => "unsafe",
+            AnnotationKind::Builtin => "builtin",
         }
     }
 }
@@ -406,6 +386,13 @@ impl Item {
     pub fn expect_function_def(&self) -> &Function {
         self.function_def().expect("should be a function")
     }
+    #[track_caller]
+    pub fn expect_module(&self) -> &Module {
+        let ItemKind::Module(module) = &self.kind else {
+            panic!("expected a module")
+        };
+        module
+    }
 }
 
 #[derive(Debug)]
@@ -427,13 +414,24 @@ pub enum Node {
 impl Node {
     pub fn kind(&self) -> &'static str {
         match self {
-            Node::Method(_) => "method",
-            Node::Item(item) => item.kind_str(),
-            Node::Lambda(_) => "lambda",
-            Node::Field(_) => "field",
-            Node::Case(_) => "case",
-            Node::CaseField(_) => "case field",
+            Self::Method(_) => "method",
+            Self::Item(item) => item.kind_str(),
+            Self::Lambda(_) => "lambda",
+            Self::Field(_) => "field",
+            Self::Case(_) => "case",
+            Self::CaseField(_) => "case field",
             Self::Impl(_) => "impl",
+        }
+    }
+    pub fn loc(&self) -> SrcLoc {
+        match self {
+            Self::Case(case) => case.name.loc,
+            Self::Method(method) => method.function.name.loc,
+            Self::Item(item) => item.loc,
+            Self::Lambda(lambda) => lambda.loc,
+            Self::Field(field_def) => field_def.name.loc,
+            Self::CaseField(case_field) => case_field.ty.loc,
+            Self::Impl(type_impl) => type_impl.span,
         }
     }
     pub fn item(&self) -> Option<&Item> {
@@ -441,6 +439,35 @@ impl Node {
             Self::Item(item) => Some(item),
             _ => None,
         }
+    }
+    pub fn is_type_def(&self) -> bool {
+        match self {
+            Self::Item(item) => matches!(item.kind, ItemKind::TypeDef(_)),
+            _ => false,
+        }
+    }
+    pub fn is_function(&self) -> bool {
+        match self {
+            Self::Item(item) => matches!(item.kind, ItemKind::Function(_)),
+            Self::Method(_) => true,
+            _ => false,
+        }
+    }
+    pub fn function(&self) -> Option<&Function> {
+        match self {
+            Self::Method(method) => Some(&method.function),
+            Self::Item(item) => item.function_def(),
+            _ => None,
+        }
+    }
+    pub fn function_item(&self) -> Option<&Function> {
+        match self {
+            Self::Item(item) => item.function_def(),
+            _ => None,
+        }
+    }
+    pub fn is_method(&self) -> bool {
+        matches!(self, Self::Method(_))
     }
     #[track_caller]
     pub fn expect_item(&self) -> &Item {

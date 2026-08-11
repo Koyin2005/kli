@@ -1,0 +1,99 @@
+import std.(strings,string_buf)
+
+
+fun utf8_len(c : char) -> UInt64 = 
+    case c < '\u00FF' of
+    | true -> 1
+    | _ -> 
+        case c < '\u07FF' of 
+        | true -> 2
+        | _ -> 
+            case c < '\uFFFF' of 
+            | true -> 3
+            | _ -> 4
+            end
+        end
+    end
+
+fun for_each_byte[C](c : char, ctxt: C, f : fun(C,UInt8) -> C) -> C = do
+    let code : UInt32 = builtins.bitcast(c);
+    case utf8_len(c) of 
+    | 1 -> f(ctxt,builtins.truncate(code))
+    | 2 -> 
+        do
+            let first_byte : UInt8 = 
+                builtins.truncate(
+                    (builtins.shift_right(code,6) band 0b11100)
+                    bor (builtins.shift_right(code,6) band 0b11)
+                ) bor 0b11000000;
+
+            let second_byte : UInt8 =
+                builtins.truncate( 
+                    (code band 0b111111) 
+                ) bor 0b10000000;
+            ctxt = f(ctxt,first_byte);
+            f(ctxt,second_byte)
+        end
+    | 3 -> 
+        do
+            let first_byte : UInt8 = builtins.truncate(
+                builtins.shift_right(code,12)
+            ) bor 0b11100000;
+            let second_byte : UInt8 = (
+                builtins.truncate(
+                    builtins.shift_right(code,6)
+                ) band 0b111100
+            ) bor 0b10000000;
+            let third_byte : UInt8 = (
+                builtins.truncate(code) band 0b111111
+            ) bor 0b10000000;
+            ctxt = f(ctxt,first_byte);
+            ctxt = f(ctxt,second_byte);
+            f(ctxt,third_byte)
+        end
+    | 4 -> 
+        do
+            let first_byte : UInt8 = builtins.truncate(
+                builtins.shift_right(code,18)
+            ) bor 0b11110000;
+
+            let second_byte : UInt8 = (
+                builtins.truncate(
+                    builtins.shift_right(code,12)
+                ) band 0b110000
+            ) 
+            bor (
+                builtins.truncate(
+                    builtins.shift_right(code,12)
+                ) band 0b1111
+            ) 
+            bor 0b10000000;
+            let third_byte : UInt8 = (
+                builtins.truncate(
+                    builtins.shift_right(code,6)
+                ) band 0b111100
+            ) bor (
+                builtins.truncate(
+                    builtins.shift_right(code,6)
+                ) band 0b11
+            ) 
+            bor 0b10000000;
+            let fourth_byte : UInt8 = (
+                builtins.truncate(code)
+                band 0b111111
+            ) bor 0b10000000;
+            ctxt = f(ctxt,first_byte);
+            ctxt = f(ctxt,second_byte);
+            ctxt = f(ctxt,third_byte); 
+            f(ctxt,fourth_byte)
+        end
+    | _ -> panicking.unreachable()
+    end
+
+end
+
+fun to_string(c : char) -> string = do
+    let s = string_buf.new();
+    string_buf.push_char(s,c);
+    string_buf.into_string(s)
+end

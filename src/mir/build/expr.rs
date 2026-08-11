@@ -2,107 +2,120 @@ use std::collections::HashMap;
 
 use crate::{
     Symbol,
-    ast::IsResource,
-    builtins::Builtin,
+    builtins::{Builtin, IntegerBuiltin},
     index_vec::IndexVec,
     mir::{
-        self, AggregateKind, ConstValue, Constant, CopyNonOverlapping, DropInPlace, Local, Operand,
-        OverflowOp, Place, PointerCast, Rvalue, build::Builder,
+        self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Rvalue,
+        build::Builder,
     },
     src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
-    types::{FieldName, FunctionType, Type},
+    types::{IntegerKind, IntegerSize, Type},
 };
-pub(super) enum BuiltinResult {
-    Rvalue(Rvalue),
-    Unit,
+pub(super) enum BuiltinResult<'ctxt> {
+    Rvalue(Rvalue<'ctxt>),
 }
-impl From<BuiltinResult> for Rvalue {
-    fn from(value: BuiltinResult) -> Self {
+impl<'ctxt> From<BuiltinResult<'ctxt>> for Rvalue<'ctxt> {
+    fn from(value: BuiltinResult<'ctxt>) -> Self {
         match value {
             BuiltinResult::Rvalue(value) => value,
-            BuiltinResult::Unit => Rvalue::Use(Operand::Constant(Constant::unit())),
         }
     }
 }
-impl Builder<'_> {
-    fn as_constant(&mut self, expr: &Expr) -> Option<Constant> {
+impl<'ctxt> Builder<'_, 'ctxt> {
+    fn as_constant(&mut self, expr: &Expr<'ctxt>) -> Option<Constant<'ctxt>> {
         match expr.kind {
-            ExprKind::Bool(value) => Some(Constant::bool(value)),
+            ExprKind::Bool(value) => Some(Constant::bool(self.ctxt, value)),
             ExprKind::Int(value) => Some(Constant {
-                ty: Box::new(expr.ty.clone()),
+                ty: expr.ty,
                 value: ConstValue::Scalar(value as i128),
             }),
-            ExprKind::Unit => Some(Constant::unit()),
+            ExprKind::Unit => Some(Constant::unit(self.ctxt)),
             ExprKind::String(ref value) => Some(Constant {
-                ty: Box::new(expr.ty.clone()),
+                ty: expr.ty,
                 value: ConstValue::String(Symbol::intern(value)),
             }),
             ExprKind::Function(id, ref generic_args) => {
-                let ty = expr.ty.clone();
+                let ty = expr.ty;
                 Some(Constant {
-                    ty: Box::new(ty),
+                    ty,
                     value: ConstValue::Named(id, generic_args.clone()),
                 })
             }
-            ExprKind::Lambda(ref lambda) if lambda.is_resource == IsResource::Data => {
-                Some(Self::lambda_code_constant(self.ctxt, lambda))
-            }
+            ExprKind::Lambda(ref lambda) => Some(Self::lambda_code_constant(self.ctxt, lambda)),
             ExprKind::Const(id, ref args) => {
-                let ty = expr.ty.clone();
+                let ty = expr.ty;
                 Some(Constant {
-                    ty: Box::new(ty),
+                    ty,
                     value: ConstValue::Named(id, args.clone()),
                 })
             }
             ExprKind::VariantInit(_, case, _, None) => {
-                let ty = expr.ty.clone();
+                let ty = expr.ty;
                 Some(Constant {
-                    ty: Box::new(ty),
+                    ty,
                     value: ConstValue::Variant(case, None),
                 })
             }
+            ExprKind::Char(char) => Some(Constant::char(self.ctxt, char)),
             _ => None,
         }
     }
-    fn as_place(&mut self, expr: &Expr) -> Option<Place> {
+    fn as_place(&mut self, expr: &Expr<'ctxt>) -> Option<Place> {
         if let ExprKind::Load(place) = &expr.kind {
             Some(self.lower_place(place))
         } else {
             None
         }
     }
-    pub(super) fn as_operand(&mut self, expr: &Expr) -> Option<Operand> {
+    pub(super) fn as_operand(&mut self, expr: &Expr<'ctxt>) -> Option<Operand<'ctxt>> {
         if let Some(constant) = self.as_constant(expr) {
             Some(Operand::Constant(constant))
         } else {
             self.as_place(expr).map(Operand::Load)
         }
     }
-    pub(super) fn place(&mut self, expr: &Expr) -> Place {
+    pub(super) fn place(&mut self, expr: &Expr<'ctxt>) -> Place {
         if let Some(place) = self.as_place(expr) {
             place
         } else {
             Place::local(self.expr_into_temp(expr))
         }
     }
-    fn operand_as_place(&mut self, loc: SrcLoc, ty: Type, operand: Operand) -> Place {
-        match operand {
-            Operand::Load(place) => place,
-            Operand::Constant(_) => {
-                Place::local(self.assign_to_temp(loc, ty, Rvalue::Use(operand)))
-            }
-        }
-    }
-    pub(super) fn operand(&mut self, expr: &Expr) -> Operand {
+    pub(super) fn operand(&mut self, expr: &Expr<'ctxt>) -> Operand<'ctxt> {
         if let Some(operand) = self.as_operand(expr) {
             operand
         } else {
             Operand::Load(Place::local(self.expr_into_temp(expr)))
         }
     }
-    pub(super) fn lower_place(&mut self, place: &typed_ast::Place) -> Place {
+    pub(super) fn lower_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Place {
         match &place.kind {
+            typed_ast::PlaceKind::Index(base, index) => {
+                let base = self.place(base);
+                let index = self.expr_into_temp(index);
+                let len = self.assign_to_temp(
+                    place.loc,
+                    Type::new_uint(self.ctxt, IntegerSize::Int64),
+                    Rvalue::Len(base.clone()),
+                );
+                let in_bounds = self.assign_to_temp(
+                    place.loc,
+                    Type::new_bool(self.ctxt),
+                    Self::binary_op_rvalue(
+                        mir::BinaryOp::Lesser,
+                        Operand::Load(Place::local(index)),
+                        Operand::Load(Place::local(len)),
+                    ),
+                );
+                self.finish_assert_to_new_block(
+                    place.loc,
+                    Operand::Load(Place::local(in_bounds)),
+                    mir::AssertKind::InBounds,
+                );
+                base.with_index(index)
+            }
+            typed_ast::PlaceKind::Deref(base) => self.place(base).with_deref(),
             typed_ast::PlaceKind::Var(var) => {
                 let Some(local) = self.body.local_for_var(var.1) else {
                     unreachable!("should have a local for {:?} at {:?}", var, place.loc)
@@ -118,18 +131,17 @@ impl Builder<'_> {
             )),
             typed_ast::PlaceKind::Field(place, field) => self.lower_place(place).with_field(*field),
             typed_ast::PlaceKind::Invalid => unreachable!("cannot lower invalid place"),
-            typed_ast::PlaceKind::Deref(value) => self.place(value).with_deref(),
         }
     }
-    pub(super) fn expr_into_temp(&mut self, expr: &Expr) -> Local {
-        let temp = self.new_temp(expr.ty.clone());
+    pub(super) fn expr_into_temp(&mut self, expr: &Expr<'ctxt>) -> Local {
+        let temp = self.new_temp(expr.ty);
         self.expr_into_dest(Place::local(temp), expr);
         temp
     }
-    fn assign_to_pattern(&mut self, pattern: &Pattern, value: &Expr) {
-        match &pattern.kind {
-            &typed_ast::PatternKind::Binding(None, _, var, ref ty) => {
-                let place = Place::local(self.new_var(var, (**ty).clone()));
+    fn assign_to_pattern(&mut self, pattern: &Pattern<'ctxt>, value: &Expr<'ctxt>) {
+        match pattern.kind {
+            typed_ast::PatternKind::Binding(_, var, ty) => {
+                let place = Place::local(self.new_var(var, ty));
                 self.expr_into_dest(place, value);
             }
             _ => {
@@ -138,23 +150,16 @@ impl Builder<'_> {
             }
         }
     }
-    pub(super) fn assign_place_to_pattern(&mut self, pattern: &Pattern, place: Place) {
-        match &pattern.kind {
-            &typed_ast::PatternKind::Binding(borrowed, _, var, ref ty) => {
-                let var_place = Place::local(self.new_var(var, (**ty).clone()));
-                if let Some((mutable, region)) = borrowed {
-                    self.assign(pattern.loc, var_place, Rvalue::Ref(mutable, region, place));
-                    return;
-                }
+    pub(super) fn assign_place_to_pattern(&mut self, pattern: &Pattern<'ctxt>, place: Place) {
+        match pattern.kind {
+            typed_ast::PatternKind::Binding(_, var, ty) => {
+                let var_place = Place::local(self.new_var(var, ty));
                 self.assign(pattern.loc, var_place, Rvalue::Use(Operand::Load(place)));
-            }
-            typed_ast::PatternKind::Ref(pattern) => {
-                self.assign_place_to_pattern(pattern, place.with_deref());
             }
             typed_ast::PatternKind::Bool(_)
             | typed_ast::PatternKind::Int(_)
             | typed_ast::PatternKind::Unit => (),
-            typed_ast::PatternKind::Record(fields) => {
+            typed_ast::PatternKind::Record(ref fields) => {
                 for field in fields {
                     self.assign_place_to_pattern(
                         &field.pattern,
@@ -163,19 +168,19 @@ impl Builder<'_> {
                 }
             }
             typed_ast::PatternKind::Err => unreachable!(),
-            typed_ast::PatternKind::Case(id, _, index, inner) => {
+            typed_ast::PatternKind::Case(id, _, index, ref inner) => {
                 if let Some(inner) = inner {
                     self.assign_place_to_pattern(
                         inner,
                         place
-                            .with_case_downcast(*index, self.ctxt.expect_ident(*id).symbol)
+                            .with_case_downcast(index, self.ctxt.expect_ident(id).symbol)
                             .with_field(FieldId::new(0)),
                     );
                 }
             }
         }
     }
-    pub fn stmt(&mut self, stmt: &typed_ast::Stmt) {
+    pub fn stmt(&mut self, stmt: &typed_ast::Stmt<'ctxt>) {
         match &stmt.kind {
             typed_ast::StmtKind::Expr(expr) => {
                 self.expr_stmt(expr);
@@ -185,7 +190,7 @@ impl Builder<'_> {
             }
         }
     }
-    pub fn expr_into_dest(&mut self, dest: Place, expr: &Expr) {
+    pub fn expr_into_dest(&mut self, dest: Place, expr: &Expr<'ctxt>) {
         match &expr.kind {
             ExprKind::Err => unreachable!("Cannot have err here"),
             ExprKind::Block(block_body, ..) => {
@@ -225,7 +230,7 @@ impl Builder<'_> {
                 self.assign(
                     const_loc,
                     dest,
-                    Rvalue::Use(Operand::Constant(Constant::bool(value))),
+                    Rvalue::Use(Operand::Constant(Constant::bool(self.ctxt, value))),
                 );
                 self.finish_block_with_goto(const_loc, merge_block);
 
@@ -234,125 +239,202 @@ impl Builder<'_> {
 
                 self.switch_to_block(merge_block);
             }
-            ExprKind::Record(_)
-            | ExprKind::Function(..)
+            ExprKind::Function(..)
             | ExprKind::Bool(_)
             | ExprKind::Int(_)
             | ExprKind::Unit
             | ExprKind::Load(_)
             | ExprKind::Call(..)
             | ExprKind::Binary(..)
-            | ExprKind::Print(_)
             | ExprKind::For { .. }
             | ExprKind::Assign(..)
-            | ExprKind::Borrow { .. }
             | ExprKind::VariantInit(..)
             | ExprKind::String(_)
             | ExprKind::Lambda(_)
             | ExprKind::BuiltinCall(..)
             | ExprKind::Const(..)
-            | ExprKind::AddressOf(..)
             | ExprKind::NamedRecord(..)
             | ExprKind::While(..)
-            | ExprKind::Tuple(..) => {
+            | ExprKind::Tuple(..)
+            | ExprKind::Array(..)
+            | ExprKind::Char(_) => {
                 let rvalue = self.build_rvalue(expr);
                 self.assign(expr.loc, dest, rvalue);
             }
         }
     }
-    fn binary_op_rvalue(op: mir::BinaryOp, left: Operand, right: Operand) -> Rvalue {
+    fn binary_op_rvalue(
+        op: mir::BinaryOp,
+        left: Operand<'ctxt>,
+        right: Operand<'ctxt>,
+    ) -> Rvalue<'ctxt> {
         Rvalue::Binary(op, Box::new((left, right)))
     }
     pub(super) fn builtin_call(
         &mut self,
-        loc: SrcLoc,
-        ty: &Type,
+        _: SrcLoc,
+        ty: Type<'ctxt>,
         builtin: Builtin,
-        args: &[Expr],
-    ) -> BuiltinResult {
+        args: &[Expr<'ctxt>],
+    ) -> BuiltinResult<'ctxt> {
         let operands = args
             .iter()
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
-            Builtin::InvalidPtr => {
-                BuiltinResult::Rvalue(Rvalue::DanglingPtr(ty.as_pointer().unwrap().clone()))
+            Builtin::Bitcast => {
+                let [arg] = operands.try_into().unwrap();
+                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, arg, ty))
             }
-            Builtin::WrappingAdd => {
-                let [left, right] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                    mir::BinaryOp::Wrapping(OverflowOp::Add),
-                    left,
-                    right,
-                ))
+            Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
+                IntegerBuiltin::IntMaxValue => {
+                    let kind = ty.as_integer().unwrap();
+                    let value = kind.max_value_scalar();
+                    BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::integer(
+                        self.ctxt, kind, value,
+                    ))))
+                }
+                IntegerBuiltin::ShiftLeft => {
+                    let [first, second] = operands.try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::ShiftLeft,
+                        first,
+                        second,
+                    ))
+                }
+                IntegerBuiltin::ShiftRight => {
+                    let [first, second] = operands.try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::ShiftRight,
+                        first,
+                        second,
+                    ))
+                }
+                IntegerBuiltin::WrappingAdd => {
+                    let [left, right] = operands.try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::Wrapping(OverflowOp::Add),
+                        left,
+                        right,
+                    ))
+                }
+                IntegerBuiltin::OverflowingAdd => {
+                    let [left, right] = operands.try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::Overflow(OverflowOp::Add),
+                        left,
+                        right,
+                    ))
+                }
+                IntegerBuiltin::WrappingSub => {
+                    let [left, right] = operands.try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::Wrapping(OverflowOp::Subtract),
+                        left,
+                        right,
+                    ))
+                }
+                IntegerBuiltin::OverflowingSub => {
+                    let [left, right] = operands.try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::Overflow(OverflowOp::Subtract),
+                        left,
+                        right,
+                    ))
+                }
+                IntegerBuiltin::Truncate => {
+                    let [arg] = operands.try_into().unwrap();
+                    let kind = ty.as_integer().unwrap();
+                    BuiltinResult::Rvalue(Rvalue::Cast(
+                        mir::CastKind::IntegerCast(mir::IntegerCast::Truncate(kind)),
+                        arg,
+                        ty,
+                    ))
+                }
+                IntegerBuiltin::Widen => {
+                    let [operand] = operands.try_into().unwrap();
+                    let kind = ty.as_simple_scalar().unwrap();
+                    let (signed, size) = kind.as_integer().signed_and_size();
+                    BuiltinResult::Rvalue(Rvalue::Cast(
+                        mir::CastKind::IntegerCast(if signed {
+                            mir::IntegerCast::SignExtend(size)
+                        } else {
+                            mir::IntegerCast::ZeroExtend(size)
+                        }),
+                        operand,
+                        ty,
+                    ))
+                }
+            },
+            Builtin::ReadLine => BuiltinResult::Rvalue(Rvalue::ReadLine),
+            Builtin::UninitNew => {
+                let [operand] = operands.try_into().unwrap();
+                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, operand, ty))
             }
-            Builtin::OverflowingAdd => {
-                let [left, right] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                    mir::BinaryOp::Overflow(OverflowOp::Add),
-                    left,
-                    right,
-                ))
+            Builtin::UninitAssumeInit => {
+                let [operand] = operands.try_into().unwrap();
+                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, operand, ty))
             }
-            Builtin::DropInPlace => {
-                let [pointer] = operands.try_into().unwrap();
-                self.push_stmt(
-                    loc,
-                    mir::StmtKind::DropInPlace(Box::new(DropInPlace {
-                        pointer_to_place: pointer,
-                    })),
-                );
-                BuiltinResult::Unit
+            Builtin::UninitZeroed => {
+                let ty = ty.as_uninit().unwrap();
+                BuiltinResult::Rvalue(Rvalue::UninitZeroed(ty))
             }
-            Builtin::Memcopy => {
-                let [dst, src, count] = operands.try_into().unwrap();
-                self.push_stmt(
-                    loc,
-                    mir::StmtKind::CopyNonOverlapping(Box::new(CopyNonOverlapping {
-                        dst,
-                        src,
-                        count,
-                    })),
-                );
-                BuiltinResult::Unit
+            Builtin::PrintString => {
+                let [arg] = operands.try_into().unwrap();
+                self.push_stmt(args[0].loc, mir::StmtKind::Print(arg));
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
             }
-            Builtin::Offset => {
-                let [first, second] = operands.try_into().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Binary(
-                    mir::BinaryOp::Offset,
-                    Box::new((first, second)),
-                ))
+            Builtin::ArrayGetUnchecked => {
+                let [array, index] = operands.try_into().unwrap();
+                let Operand::Load(place) = array else {
+                    unreachable!()
+                };
+                let index = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Load(place.with_index(index))))
+            }
+            Builtin::ArraySetUnchecked => {
+                let [array, index, value] = operands.try_into().unwrap();
+                let Operand::Load(place) = array else {
+                    unreachable!()
+                };
+                let index = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
+                self.assign(args[0].loc, place.with_index(index), Rvalue::Use(value));
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
+            }
+            Builtin::RawArrayAlloc => {
+                let [count] = operands.try_into().unwrap();
+                let ty = ty.as_raw_array().unwrap();
+                BuiltinResult::Rvalue(Rvalue::AllocateRawArray { ty, count })
+            }
+            Builtin::BoxAlloc => {
+                let [operand] = operands.try_into().unwrap();
+                let Some(ty) = ty.as_box() else {
+                    unreachable!()
+                };
+                BuiltinResult::Rvalue(Rvalue::AllocateBox(ty, operand))
+            }
+            Builtin::Len => {
+                let [operand] = operands.try_into().unwrap();
+                let Operand::Load(place) = operand else {
+                    unreachable!()
+                };
+                BuiltinResult::Rvalue(Rvalue::Len(place))
+            }
+            Builtin::ArrayAddr => {
+                let [operand] = operands.try_into().unwrap();
+                let Operand::Load(place) = operand else {
+                    unreachable!()
+                };
+                BuiltinResult::Rvalue(Rvalue::AddrOf(place))
             }
             Builtin::Transmute => BuiltinResult::Rvalue(Rvalue::Cast(
-                mir::CastKind::Transmute(ty.clone()),
+                mir::CastKind::Transmute,
                 { operands }.swap_remove(0),
+                ty,
             )),
-            Builtin::Allocate => BuiltinResult::Rvalue(Rvalue::Allocate {
-                ty: ty.as_pointer().cloned().expect("should be a pointer"),
-                count: { operands }.swap_remove(0),
-            }),
-            Builtin::Deallocate => {
-                self.push_stmt(loc, mir::StmtKind::Deallocate({ operands }.swap_remove(0)));
-                BuiltinResult::Unit
-            }
-            Builtin::PtrRead => {
-                let [ptr] = { operands }.try_into().unwrap();
-                let deref = self
-                    .operand_as_place(loc, args[0].ty.clone(), ptr)
-                    .with_deref();
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Load(deref)))
-            }
-            Builtin::PtrWrite => {
-                let [ptr, value] = { operands }.try_into().unwrap();
-                let deref = self
-                    .operand_as_place(loc, args[0].ty.clone(), ptr)
-                    .with_deref();
-                self.assign(loc, deref, Rvalue::Use(value));
-                BuiltinResult::Unit
-            }
         }
     }
-    pub fn build_rvalue(&mut self, expr: &Expr) -> Rvalue {
+    pub fn build_rvalue(&mut self, expr: &Expr<'ctxt>) -> Rvalue<'ctxt> {
         match &expr.kind {
             ExprKind::Err => unreachable!("Cannot have err here"),
             ExprKind::Unit
@@ -362,7 +444,9 @@ impl Builder<'_> {
             | ExprKind::Function(..)
             | ExprKind::Const(..)
             | ExprKind::VariantInit(.., None)
-            | ExprKind::String(..) => {
+            | ExprKind::String(..)
+            | ExprKind::Lambda(_)
+            | ExprKind::Char(_) => {
                 let operand = self
                     .as_operand(expr)
                     .unwrap_or_else(|| unreachable!("should be an constant operand '{:?}' ", expr));
@@ -382,22 +466,6 @@ impl Builder<'_> {
                     fields,
                 )
             }
-            ExprKind::Record(fields) => {
-                let mut field_map = fields
-                    .iter()
-                    .map(|field| (field.index, self.operand(&field.value)))
-                    .collect::<HashMap<_, _>>();
-                let fields = (0..fields.len())
-                    .map(FieldId::new)
-                    .map(|field| field_map.remove(&field).unwrap())
-                    .collect::<IndexVec<FieldId, _>>();
-
-                let Type::Record(ref rec_fields) = expr.ty else {
-                    unreachable!("Should be a record")
-                };
-                let field_names = rec_fields.iter().map(|field| field.name).collect();
-                Rvalue::Aggregate(AggregateKind::Record { field_names }, fields)
-            }
             ExprKind::Tuple(fields) => Rvalue::Aggregate(
                 AggregateKind::Tuple,
                 fields.iter().map(|field| self.operand(field)).collect(),
@@ -406,67 +474,65 @@ impl Builder<'_> {
                 AggregateKind::Variant(id, index, args.clone()),
                 [self.operand(value)].into(),
             ),
-            ExprKind::Call(callee, args) => match &callee.ty {
-                Type::Function(function_ty) => {
-                    let FunctionType { resource, .. } = function_ty;
-                    let callee_value = self.operand(callee);
-                    let arg_values = args.iter().map(|arg| self.operand(arg)).collect::<Vec<_>>();
-                    match resource {
-                        IsResource::Data => Rvalue::Call(callee_value, arg_values),
-                        IsResource::Resource => {
-                            let closure_place =
-                                self.operand_as_place(callee.loc, callee.ty.clone(), callee_value);
-                            let env = closure_place.clone().with_field(FieldId::new(0));
-                            let code = closure_place.clone().with_field(FieldId::new(1));
-                            let mut arg_values = arg_values;
-                            arg_values.insert(0, Operand::Load(env));
-                            Rvalue::Call(Operand::Load(code), arg_values)
-                        }
-                    }
-                }
-                _ => unreachable!("Can't call non function at {:?}", expr.loc),
-            },
+            ExprKind::Call(callee, args) => {
+                let _ = callee
+                    .ty
+                    .as_function()
+                    .unwrap_or_else(|| unreachable!("Can't call non function at {:?}", expr.loc));
+
+                let callee_value = self.operand(callee);
+                let arg_values = args.iter().map(|arg| self.operand(arg)).collect::<Vec<_>>();
+                Rvalue::Call(callee_value, arg_values)
+            }
             ExprKind::Binary(binary_op, left, right) => {
                 let (left_operand, right_operand, overflow_op) = match binary_op {
                     BinaryOp::Add => (self.operand(left), self.operand(right), OverflowOp::Add),
                     BinaryOp::Divide => {
                         let left_operand = self.operand(left);
                         let right_operand = self.operand(right);
+                        let kind = left.ty.as_integer().unwrap();
                         //Division can fail in 2 ways
                         //Divide by zero
                         //Divide int min by -1
                         let is_zero = self.assign_equals(
                             expr.loc,
                             right_operand.clone(),
-                            Operand::Constant(Constant::int(0)),
+                            Operand::Constant(Constant::integer(self.ctxt, kind, 0)),
                         );
                         self.finish_assert_to_new_block(
                             expr.loc,
                             Operand::Load(Place::local(is_zero)),
                             mir::AssertKind::DivideByZero,
                         );
-                        let is_left_min = self.assign_equals(
-                            expr.loc,
-                            left_operand.clone(),
-                            Operand::Constant(Constant::int(ConstValue::MIN_INT)),
-                        );
-                        let is_right_neg_1 = self.assign_equals(
-                            expr.loc,
-                            left_operand.clone(),
-                            Operand::Constant(Constant::int(-1)),
-                        );
-                        let overflow = self.assign_binary_result(
-                            expr.loc,
-                            Type::Bool,
-                            mir::BinaryOp::BitwiseAnd,
-                            Operand::Load(Place::local(is_left_min)),
-                            Operand::Load(Place::local(is_right_neg_1)),
-                        );
-                        self.finish_assert_to_new_block(
-                            expr.loc,
-                            Operand::Load(Place::local(overflow)),
-                            mir::AssertKind::DivideOverflow,
-                        );
+
+                        if let IntegerKind::Signed(size) = kind {
+                            let is_left_min = self.assign_equals(
+                                expr.loc,
+                                left_operand.clone(),
+                                Operand::Constant(Constant::integer(
+                                    self.ctxt,
+                                    kind,
+                                    kind.min_value_scalar(),
+                                )),
+                            );
+                            let is_right_neg_1 = self.assign_equals(
+                                expr.loc,
+                                left_operand.clone(),
+                                Operand::Constant(Constant::int(self.ctxt, size, -1)),
+                            );
+                            let overflow = self.assign_binary_result(
+                                expr.loc,
+                                Type::new_bool(self.ctxt),
+                                mir::BinaryOp::BitwiseAnd,
+                                Operand::Load(Place::local(is_left_min)),
+                                Operand::Load(Place::local(is_right_neg_1)),
+                            );
+                            self.finish_assert_to_new_block(
+                                expr.loc,
+                                Operand::Load(Place::local(overflow)),
+                                mir::AssertKind::DivideOverflow,
+                            );
+                        }
                         return Self::binary_op_rvalue(
                             mir::BinaryOp::Divide,
                             left_operand,
@@ -510,24 +576,42 @@ impl Builder<'_> {
                             right_operand,
                         );
                     }
+                    BinaryOp::BitwiseOr => {
+                        let left_operand = self.operand(left);
+                        let right_operand = self.operand(right);
+                        return Self::binary_op_rvalue(
+                            mir::BinaryOp::BitwiseOr,
+                            left_operand,
+                            right_operand,
+                        );
+                    }
+                    BinaryOp::BitwiseAnd => {
+                        let left_operand = self.operand(left);
+                        let right_operand = self.operand(right);
+                        return Self::binary_op_rvalue(
+                            mir::BinaryOp::BitwiseAnd,
+                            left_operand,
+                            right_operand,
+                        );
+                    }
                 };
                 let checked_result = self.assign_to_temp(
                     expr.loc,
-                    Type::pair(Type::Bool, expr.ty.clone()),
+                    Type::pair(self.ctxt, expr.ty, Type::new_bool(self.ctxt)),
                     Rvalue::Binary(
                         mir::BinaryOp::Overflow(overflow_op),
                         Box::new((left_operand, right_operand)),
                     ),
                 );
                 let overflow =
-                    Operand::Load(Place::local(checked_result).with_field(FieldId::new(0)));
+                    Operand::Load(Place::local(checked_result).with_field(FieldId::new(1)));
                 self.finish_assert_to_new_block(
                     expr.loc,
                     overflow,
                     mir::AssertKind::Overflow(overflow_op),
                 );
                 let result =
-                    Operand::Load(Place::local(checked_result).with_field(FieldId::new(1)));
+                    Operand::Load(Place::local(checked_result).with_field(FieldId::new(0)));
                 Rvalue::Use(result)
             }
             ExprKind::Block(..)
@@ -540,97 +624,16 @@ impl Builder<'_> {
                 let temp = self.expr_into_temp(expr);
                 Rvalue::Use(Operand::Load(Place::local(temp)))
             }
-            ExprKind::For { .. }
-            | ExprKind::Print(_)
-            | ExprKind::Assign(..)
-            | ExprKind::While(..) => {
+            ExprKind::For { .. } | ExprKind::Assign(..) | ExprKind::While(..) => {
                 self.expr_stmt(expr);
-                Rvalue::Use(Operand::Constant(Constant::unit()))
+                Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt)))
             }
-            &ExprKind::Borrow {
-                mutable,
-                ref place,
-                region,
-            } => Rvalue::Ref(mutable, region, self.lower_place(place)),
-            ExprKind::AddressOf(place) => Rvalue::RawPtrTo(self.lower_place(place)),
-            ExprKind::Lambda(lambda) => {
-                let is_resource = lambda.is_resource == IsResource::Resource;
-                let function = if !is_resource {
-                    Operand::Constant(Self::lambda_code_constant(self.ctxt, lambda))
-                } else {
-                    Operand::Constant(Self::closure_shim(
-                        self.mir_context,
-                        self.ctxt,
-                        lambda.id,
-                        lambda,
-                    ))
-                };
-                if is_resource {
-                    let env_ty = Type::closure_env(lambda.captures.iter().cloned());
-                    let env = self.assign_to_temp(
-                        expr.loc,
-                        Type::pointer(env_ty.clone()),
-                        Rvalue::Allocate {
-                            ty: env_ty,
-                            count: Operand::Constant(Constant::int(1)),
-                        },
-                    );
-                    self.assign(
-                        expr.loc,
-                        Place::local(env).with_deref(),
-                        Rvalue::Aggregate(
-                            AggregateKind::Record {
-                                field_names: lambda
-                                    .captures
-                                    .iter()
-                                    .map(|capture| capture.var.0)
-                                    .map(FieldName::Named)
-                                    .collect(),
-                            },
-                            lambda
-                                .captures
-                                .iter()
-                                .map(|capture| {
-                                    Operand::Load(Place::local(
-                                        self.body.local_for_var(capture.var.1).map_or_else(
-                                            || {
-                                                Local::new(
-                                                    self.ctxt
-                                                        .captures(lambda.id)
-                                                        .unwrap_or_default()
-                                                        .capture_index(capture.var.1)
-                                                        .unwrap(),
-                                                )
-                                            },
-                                            std::convert::identity,
-                                        ),
-                                    ))
-                                })
-                                .collect(),
-                        ),
-                    );
-
-                    let erased_env = self.assign_to_temp(
-                        expr.loc,
-                        Type::pointer(Type::Byte),
-                        Rvalue::pointer_cast(
-                            PointerCast::RawToRaw(Type::Byte),
-                            Operand::Load(Place::local(env)),
-                        ),
-                    );
-                    let param_tys = lambda.param_tys.clone();
-                    Rvalue::Aggregate(
-                        AggregateKind::Closure(param_tys, lambda.return_type.clone()),
-                        [Operand::Load(Place::local(erased_env)), function]
-                            .into_iter()
-                            .collect(),
-                    )
-                } else {
-                    Rvalue::Use(function)
-                }
+            &ExprKind::BuiltinCall(_, builtin, _, ref args) => {
+                self.builtin_call(expr.loc, expr.ty, builtin, args).into()
             }
-            &ExprKind::BuiltinCall(builtin, _, ref args) => {
-                self.builtin_call(expr.loc, &expr.ty, builtin, args).into()
+            ExprKind::Array(fields) => {
+                let ty = expr.ty.as_array().unwrap();
+                Rvalue::AllocateArray(ty, fields.iter().map(|field| self.operand(field)).collect())
             }
         }
     }

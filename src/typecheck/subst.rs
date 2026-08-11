@@ -1,83 +1,38 @@
 use crate::{
+    CtxtRef,
     typecheck::infer::TypeInfer,
     typed_ast::{Expr, ExprKind, Function, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
-    types::{FunctionType, GenericArg, Region, Type},
+    types::{GenericArgs, Type, TypeKind, visit::VisitMut},
 };
 
-pub struct TypeSubst<'a> {
-    infer: &'a mut TypeInfer,
+impl<'ctxt> VisitMut<'ctxt> for TypeSubst<'_, 'ctxt> {
+    fn ctxt(&self) -> CtxtRef<'ctxt> {
+        self.ctxt
+    }
+    fn visit_type(&mut self, ty: Type<'ctxt>) -> Type<'ctxt> {
+        if let TypeKind::Infer(_) | TypeKind::IntVar(_) = ty.kind() {
+            return self.infer.simplify_type(ty);
+        }
+        self.super_visit_type(ty)
+    }
 }
-impl<'a> TypeSubst<'a> {
-    pub fn new(infer: &'a mut TypeInfer) -> Self {
-        Self { infer }
+pub struct TypeSubst<'a, 'ctxt> {
+    ctxt: CtxtRef<'ctxt>,
+    infer: &'a mut TypeInfer<'ctxt>,
+}
+impl<'a, 'ctxt> TypeSubst<'a, 'ctxt> {
+    pub fn new(ctxt: CtxtRef<'ctxt>, infer: &'a mut TypeInfer<'ctxt>) -> Self {
+        Self { infer, ctxt }
     }
-    pub fn subst_type(&mut self, ty: &mut Type) {
-        match ty {
-            Type::Bool
-            | Type::Int(_)
-            | Type::Unknown
-            | Type::Char
-            | Type::Param(..)
-            | Type::Never
-            | Type::Byte => (),
-            Type::Array(ty, _) | Type::RawPointer(ty) => self.subst_type(ty),
-            Type::Imm(region, ty) | Type::Mut(region, ty) => {
-                self.subst_region(region);
-                self.subst_type(ty);
-            }
-            Type::Function(FunctionType {
-                resource: _,
-                params,
-                return_type,
-            }) => {
-                for param in params {
-                    self.subst_type(param);
-                }
-                self.subst_type(return_type);
-            }
-            Type::Record(fields) => {
-                for field in fields {
-                    self.subst_type(&mut field.ty);
-                }
-            }
-            Type::Tuple(fields) => {
-                for field in fields {
-                    self.subst_type(field);
-                }
-            }
-            Type::Infer(var) => *ty = self.infer.simplify_type(Type::Infer(*var)),
-            Type::Named(_, _, args) => {
-                for arg in args {
-                    self.subst_generic_arg(arg);
-                }
-            }
-        }
+    pub fn subst_type(&mut self, ty: &mut Type<'ctxt>) {
+        *ty = self.visit_type(*ty);
     }
-    pub fn subst_region(&mut self, region: &mut Region) {
-        match region {
-            Region::Static | Region::Unknown | Region::Param(..) | Region::Local(..) => (),
-            Region::Infer(var) => *region = self.infer.simplify_region(Region::Infer(*var)),
-        }
+    pub fn subst_generic_args(&mut self, args: &mut GenericArgs<'ctxt>) {
+        *args = self.visit_generic_args(args.clone());
     }
-    pub fn subst_generic_args(&mut self, args: &mut [GenericArg]) {
-        for arg in args {
-            self.subst_generic_arg(arg);
-        }
-    }
-    pub fn subst_generic_arg(&mut self, arg: &mut GenericArg) {
-        match arg {
-            GenericArg::Region(region) => {
-                self.subst_region(region);
-            }
-            GenericArg::Type(ty) => {
-                self.subst_type(ty);
-            }
-        }
-    }
-    pub fn subst_pattern(&mut self, pattern: &mut Pattern) {
+    pub fn subst_pattern(&mut self, pattern: &mut Pattern<'ctxt>) {
         match &mut pattern.kind {
             PatternKind::Bool(_) | PatternKind::Int(_) | PatternKind::Err | PatternKind::Unit => (),
-            PatternKind::Ref(pattern) => self.subst_pattern(pattern),
             PatternKind::Binding(.., ty) => self.subst_type(ty),
             PatternKind::Case(.., args, _, inner) => {
                 self.subst_generic_args(args);
@@ -93,15 +48,19 @@ impl<'a> TypeSubst<'a> {
         }
         self.subst_type(&mut pattern.ty);
     }
-    pub fn subst_place(&mut self, place: &mut Place) {
+    pub fn subst_place(&mut self, place: &mut Place<'ctxt>) {
         match &mut place.kind {
-            PlaceKind::Deref(expr) => self.subst_expr(expr),
             PlaceKind::Field(place, _) => self.subst_place(place),
             PlaceKind::Var(..) | PlaceKind::Upvar(..) | PlaceKind::Invalid => (),
+            PlaceKind::Deref(expr) => self.subst_expr(expr),
+            PlaceKind::Index(expr1, expr2) => {
+                self.subst_expr(expr1);
+                self.subst_expr(expr2);
+            }
         }
         self.subst_type(&mut place.ty);
     }
-    pub fn subst_stmt(&mut self, stmt: &mut Stmt) {
+    pub fn subst_stmt(&mut self, stmt: &mut Stmt<'ctxt>) {
         match &mut stmt.kind {
             StmtKind::Expr(expr) => self.subst_expr(expr),
             StmtKind::Let(let_binding) => {
@@ -110,49 +69,38 @@ impl<'a> TypeSubst<'a> {
             }
         }
     }
-    pub fn subst_expr(&mut self, expr: &mut Expr) {
+    pub fn subst_expr(&mut self, expr: &mut Expr<'ctxt>) {
         match &mut expr.kind {
             ExprKind::Return(value) | ExprKind::Unsafe(value) => {
                 self.subst_expr(value);
             }
-            ExprKind::Block(block, _) => {
+            ExprKind::Block(block) => {
                 for stmt in &mut block.stmts {
                     self.subst_stmt(stmt);
                 }
                 self.subst_expr(&mut block.expr);
             }
             ExprKind::Const(_, args) => {
-                for arg in args {
-                    self.subst_generic_arg(arg);
-                }
+                self.subst_generic_args(args);
             }
             ExprKind::NeverToAny(expr) => {
                 self.subst_expr(expr);
             }
             ExprKind::Bool(_)
+            | ExprKind::Char(_)
             | ExprKind::Err
             | ExprKind::Unit
             | ExprKind::Int(_)
             | ExprKind::String(_)
             | ExprKind::Panic => (),
-            ExprKind::AddressOf(place) => {
-                self.subst_place(place);
-            }
             ExprKind::Binary(_, first, second)
             | ExprKind::While(first, second)
             | ExprKind::Logic(_, first, second) => {
                 self.subst_expr(first);
                 self.subst_expr(second);
             }
-            ExprKind::Print(expr) => {
-                if let Some(expr) = expr {
-                    self.subst_expr(expr);
-                }
-            }
             ExprKind::VariantInit(.., args, expr) => {
-                for arg in args {
-                    self.subst_generic_arg(arg);
-                }
+                self.subst_generic_args(args);
                 if let Some(expr) = expr {
                     self.subst_expr(expr)
                 }
@@ -171,10 +119,6 @@ impl<'a> TypeSubst<'a> {
                 self.subst_place(place);
                 self.subst_expr(expr);
             }
-            ExprKind::Borrow { place, region, .. } => {
-                self.subst_place(place);
-                self.subst_region(region);
-            }
             ExprKind::Case(matchee, arms) => {
                 self.subst_expr(matchee);
                 for arm in arms {
@@ -183,33 +127,21 @@ impl<'a> TypeSubst<'a> {
                 }
             }
             ExprKind::Function(.., args) => {
-                for arg in args {
-                    self.subst_generic_arg(arg);
-                }
+                self.subst_generic_args(args);
             }
-            ExprKind::BuiltinCall(_, generic_args, args) => {
-                for arg in generic_args {
-                    self.subst_generic_arg(arg);
-                }
+            ExprKind::BuiltinCall(.., generic_args, args) => {
+                self.subst_generic_args(generic_args);
                 for expr in args {
                     self.subst_expr(expr);
                 }
             }
             ExprKind::Lambda(lambda) => {
-                for capture in lambda.captures.iter_mut() {
-                    self.subst_type(&mut capture.ty);
-                }
                 for ty in lambda.param_tys.iter_mut() {
                     self.subst_type(ty);
                 }
                 self.subst_type(&mut lambda.return_type);
             }
-            ExprKind::Record(fields) => {
-                for field in fields {
-                    self.subst_expr(&mut field.value);
-                }
-            }
-            ExprKind::Tuple(fields) => {
+            ExprKind::Tuple(fields) | ExprKind::Array(fields) => {
                 for field in fields {
                     self.subst_expr(field);
                 }
@@ -223,7 +155,7 @@ impl<'a> TypeSubst<'a> {
         }
         self.subst_type(&mut expr.ty);
     }
-    pub fn subst_function(&mut self, function: &mut Function) {
+    pub fn subst_function(&mut self, function: &mut Function<'ctxt>) {
         for param in function.params.iter_mut() {
             self.subst_type(&mut param.ty);
         }

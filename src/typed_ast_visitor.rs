@@ -1,22 +1,22 @@
 use crate::typed_ast::{Expr, ExprKind, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind};
 
-pub trait Visitor {
-    fn visit_expr(&mut self, expr: &Expr) {
+pub trait Visitor<'ctxt> {
+    fn visit_expr(&mut self, expr: &Expr<'ctxt>) {
         walk_expr(self, expr);
     }
-    fn visit_place(&mut self, place: &Place) {
+    fn visit_place(&mut self, place: &Place<'ctxt>) {
         walk_place(self, place);
     }
-    fn visit_pattern(&mut self, pattern: &Pattern) {
+    fn visit_pattern(&mut self, pattern: &Pattern<'ctxt>) {
         walk_pattern(self, pattern);
     }
-    fn visit_stmt(&mut self, stmt: &Stmt) {
+    fn visit_stmt(&mut self, stmt: &Stmt<'ctxt>) {
         walk_stmt(self, stmt);
     }
 }
-pub fn walk_pattern<V>(v: &mut V, pattern: &Pattern)
+pub fn walk_pattern<'ctxt, V>(v: &mut V, pattern: &Pattern<'ctxt>)
 where
-    V: Visitor + ?Sized,
+    V: Visitor<'ctxt> + ?Sized,
 {
     match &pattern.kind {
         PatternKind::Binding(..)
@@ -24,7 +24,6 @@ where
         | PatternKind::Bool(_)
         | PatternKind::Int(..)
         | PatternKind::Unit => (),
-        PatternKind::Ref(pattern) => v.visit_pattern(pattern),
         PatternKind::Case(.., inner) => {
             if let Some(inner) = inner {
                 v.visit_pattern(inner);
@@ -37,19 +36,25 @@ where
         }
     }
 }
-pub fn walk_place<V>(v: &mut V, place: &Place)
+pub fn walk_place<'ctxt, V>(v: &mut V, place: &Place<'ctxt>)
 where
-    V: Visitor + ?Sized,
+    V: Visitor<'ctxt> + ?Sized,
 {
     match &place.kind {
         PlaceKind::Var(_) | PlaceKind::Upvar(..) | PlaceKind::Invalid => (),
-        PlaceKind::Deref(value) => v.visit_expr(value),
+        PlaceKind::Deref(expr) => {
+            v.visit_expr(expr);
+        }
         PlaceKind::Field(place, _) => v.visit_place(place),
+        PlaceKind::Index(expr1, expr2) => {
+            v.visit_expr(expr1);
+            v.visit_expr(expr2);
+        }
     }
 }
-pub fn walk_stmt<V>(v: &mut V, stmt: &Stmt)
+pub fn walk_stmt<'ctxt, V>(v: &mut V, stmt: &Stmt<'ctxt>)
 where
-    V: Visitor + ?Sized,
+    V: Visitor<'ctxt> + ?Sized,
 {
     match &stmt.kind {
         StmtKind::Expr(expr) => {
@@ -61,39 +66,32 @@ where
         }
     }
 }
-pub fn walk_expr<V>(v: &mut V, expr: &Expr)
+pub fn walk_expr<'ctxt, V>(v: &mut V, expr: &Expr<'ctxt>)
 where
-    V: Visitor + ?Sized,
+    V: Visitor<'ctxt> + ?Sized,
 {
     match &expr.kind {
-        ExprKind::Block(body, _) => {
+        ExprKind::Block(body) => {
             for stmt in &body.stmts {
                 v.visit_stmt(stmt);
             }
             v.visit_expr(&body.expr);
         }
-        ExprKind::Record(fields) | ExprKind::NamedRecord(.., fields) => {
+        ExprKind::NamedRecord(.., fields) => {
             for field in fields {
                 v.visit_expr(&field.value);
             }
         }
-        ExprKind::AddressOf(place) => {
-            v.visit_place(place);
-        }
         ExprKind::Err
         | ExprKind::Int(_)
+        | ExprKind::Char(_)
         | ExprKind::Const(..)
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Function(..)
         | ExprKind::Unit
         | ExprKind::Panic => (),
-        ExprKind::Print(value) => {
-            if let Some(value) = value {
-                v.visit_expr(value);
-            }
-        }
-        ExprKind::BuiltinCall(_, _, exprs) | ExprKind::Tuple(exprs) => {
+        ExprKind::BuiltinCall(.., exprs) | ExprKind::Tuple(exprs) | ExprKind::Array(exprs) => {
             for expr in exprs {
                 v.visit_expr(expr);
             }
@@ -121,7 +119,6 @@ where
             v.visit_place(place);
             v.visit_expr(value);
         }
-        ExprKind::Borrow { place, .. } => v.visit_place(place),
         ExprKind::For {
             pattern,
             iterator,
