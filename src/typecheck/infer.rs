@@ -5,7 +5,7 @@ use crate::{
 };
 enum UnifyError {
     OccursCheck,
-    NoMatch
+    NoMatch,
 }
 #[derive(Debug)]
 pub struct TypeVarInfo<'ctxt> {
@@ -86,7 +86,7 @@ impl<'ctxt> TypeInfer<'ctxt> {
             .map(|(arg1, arg2)| Some(GenericArg(self.unify_ty(arg1.0, arg2.0)?)))
             .collect::<Option<GenericArgs>>()
     }
-    fn unify_var_ty(&mut self, var: usize, ty: Type<'ctxt>) -> Result<Type<'ctxt>,UnifyError> {
+    fn unify_var_ty(&mut self, var: usize, ty: Type<'ctxt>) -> Result<Type<'ctxt>, UnifyError> {
         if self.occurs_check(var, ty) {
             return Err(UnifyError::OccursCheck);
         }
@@ -103,7 +103,8 @@ impl<'ctxt> TypeInfer<'ctxt> {
                 *entry = Some(ty);
                 Some(ty)
             }
-        }.ok_or(UnifyError::NoMatch)
+        }
+        .ok_or(UnifyError::NoMatch)
     }
     pub fn unify_ty(&mut self, ty1: Type<'ctxt>, ty2: Type<'ctxt>) -> Option<Type<'ctxt>> {
         match (ty1.kind(), ty2.kind()) {
@@ -174,20 +175,20 @@ impl<'ctxt> TypeInfer<'ctxt> {
             (&TypeKind::IntVar(var), &TypeKind::Int(int))
             | (&TypeKind::Int(int), &TypeKind::IntVar(var)) => {
                 let ty = Type::new_integer(self.ctxt, int);
-                    match self.unify_var_ty(var,ty ){
-                        Ok(ty) => Some(ty),
-                        Err(UnifyError::OccursCheck) => Some(ty),
-                        Err(UnifyError::NoMatch) => None
-                    }
+                match self.unify_var_ty(var, ty) {
+                    Ok(ty) => Some(ty),
+                    Err(UnifyError::OccursCheck) => Some(ty),
+                    Err(UnifyError::NoMatch) => None,
+                }
             }
             (TypeKind::IntVar(var1), TypeKind::IntVar(var2)) => {
                 if var1 == var2 {
                     Some(ty1)
                 } else {
-                    match self.unify_var_ty(*var1, ty2){
+                    match self.unify_var_ty(*var1, ty2) {
                         Ok(ty) => Some(ty),
                         Err(UnifyError::OccursCheck) => Some(ty2),
-                        Err(UnifyError::NoMatch) => None
+                        Err(UnifyError::NoMatch) => None,
                     }
                 }
             }

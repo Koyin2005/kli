@@ -1,6 +1,15 @@
-use crate::typed_ast::{Expr, ExprKind, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind};
+use crate::{
+    src_loc::SrcLoc,
+    typed_ast::{Expr, ExprKind, Pattern, PatternKind, Place, PlaceKind, Stmt, StmtKind},
+    types::Type,
+};
 
 pub trait Visitor<'ctxt> {
+    fn visit_lit(&mut self, loc: SrcLoc, lit: u64, ty: Type<'ctxt>) {
+        _ = loc;
+        _ = lit;
+        _ = ty;
+    }
     fn visit_expr(&mut self, expr: &Expr<'ctxt>) {
         walk_expr(self, expr);
     }
@@ -19,11 +28,12 @@ where
     V: Visitor<'ctxt> + ?Sized,
 {
     match &pattern.kind {
-        PatternKind::Binding(..)
-        | PatternKind::Err
-        | PatternKind::Bool(_)
-        | PatternKind::Int(..)
-        | PatternKind::Unit => (),
+        PatternKind::Int(value) => {
+            v.visit_lit(pattern.loc, *value, pattern.ty);
+        }
+        PatternKind::Binding(..) | PatternKind::Err | PatternKind::Bool(_) | PatternKind::Unit => {
+            ()
+        }
         PatternKind::Case(.., inner) => {
             if let Some(inner) = inner {
                 v.visit_pattern(inner);
@@ -71,6 +81,7 @@ where
     V: Visitor<'ctxt> + ?Sized,
 {
     match &expr.kind {
+        ExprKind::Int(value) => v.visit_lit(expr.loc, *value, expr.ty),
         ExprKind::Block(body) => {
             for stmt in &body.stmts {
                 v.visit_stmt(stmt);
@@ -83,7 +94,6 @@ where
             }
         }
         ExprKind::Err
-        | ExprKind::Int(_)
         | ExprKind::Char(_)
         | ExprKind::Const(..)
         | ExprKind::Bool(_)

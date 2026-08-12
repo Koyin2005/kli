@@ -28,5 +28,6 @@ mod def_ids;
 pub mod files;
 mod lang_items;
 pub mod layout;
+pub mod literal_check;
 mod res_visitor;
 pub mod unsafety;

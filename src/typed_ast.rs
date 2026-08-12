@@ -10,7 +10,6 @@ use crate::{
     src_loc::SrcLoc,
     types::{CaseId, GenericArgs, GenericKind, Type},
 };
-
 #[derive(Debug)]
 pub struct PatternField<'ctxt> {
     pub index: FieldId,
