@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::{Symbol, define_id, ident::Ident, src_loc::SrcLoc};
+use crate::{Symbol, define_id, ident::Ident, parsing::tokens, src_loc::SrcLoc};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Mutable {
@@ -97,10 +97,12 @@ pub struct IntLit {
     pub value: u64,
     pub kind: Option<NumberKind>,
 }
+pub type IntegerSize = tokens::IntegerSize;
+
 #[derive(Debug, Clone, Copy)]
 pub enum NumberKind {
-    Signed,
-    Unsigned,
+    Signed(IntegerSize),
+    Unsigned(IntegerSize),
 }
 #[derive(Debug)]
 pub enum PatternKind {

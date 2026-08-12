@@ -388,11 +388,20 @@ impl<'info> Resolve<'info> {
         _: SrcLoc,
         ast::IntLit { value, kind }: ast::IntLit,
     ) -> res::IntegerLiteral {
+        let convert_size = |size: ast::IntegerSize| match size {
+            ast::IntegerSize::Int32 => res::IntegerSize::Int32,
+            ast::IntegerSize::Int64 => res::IntegerSize::Int64,
+            ast::IntegerSize::Int8 => res::IntegerSize::Int8,
+        };
         res::IntegerLiteral {
             value,
             kind: match kind {
-                Some(ast::NumberKind::Signed) => res::IntegerLiteralKind::Signed,
-                Some(ast::NumberKind::Unsigned) => res::IntegerLiteralKind::Unsigned,
+                Some(ast::NumberKind::Signed(size)) => {
+                    res::IntegerLiteralKind::Signed(convert_size(size))
+                }
+                Some(ast::NumberKind::Unsigned(size)) => {
+                    res::IntegerLiteralKind::Unsigned(convert_size(size))
+                }
                 None => res::IntegerLiteralKind::Implicit,
             },
         }

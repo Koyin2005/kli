@@ -130,6 +130,11 @@ impl<'ctxt> RootCtxt<'ctxt> {
         hint: Option<Type<'ctxt>>,
         lit: res::IntegerLiteral,
     ) -> (Type<'ctxt>, u64) {
+        let convert_size = |size: res::IntegerSize| match size {
+            res::IntegerSize::Int32 => types::IntegerSize::Int32,
+            res::IntegerSize::Int64 => types::IntegerSize::Int64,
+            res::IntegerSize::Int8 => types::IntegerSize::Int8,
+        };
         let integer_ty = match lit.kind {
             res::IntegerLiteralKind::Implicit => {
                 if let Some(kind) = hint.and_then(|hint| hint.as_integer()) {
@@ -138,11 +143,9 @@ impl<'ctxt> RootCtxt<'ctxt> {
                     Type::new_integer_var(self.ctxt(), self.infer.borrow_mut().fresh_ty(loc))
                 }
             }
-            res::IntegerLiteralKind::Signed => {
-                Type::new_int(self.ctxt(), types::IntegerSize::Int64)
-            }
-            res::IntegerLiteralKind::Unsigned => {
-                Type::new_uint(self.ctxt(), types::IntegerSize::Int64)
+            res::IntegerLiteralKind::Signed(size) => Type::new_int(self.ctxt(), convert_size(size)),
+            res::IntegerLiteralKind::Unsigned(size) => {
+                Type::new_uint(self.ctxt(), convert_size(size))
             }
         };
         let value = lit.value;

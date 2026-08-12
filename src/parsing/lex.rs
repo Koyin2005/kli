@@ -3,7 +3,7 @@ use std::{iter::Peekable, num::IntErrorKind, str::CharIndices};
 use crate::{
     diagnostics::DiagnosticReporter,
     ident::Symbol,
-    parsing::tokens::{NumberKind, Token, TokenKind},
+    parsing::tokens::{IntegerSize, NumberKind, Token, TokenKind},
     src_loc::SrcLoc,
 };
 
@@ -120,6 +120,38 @@ impl<'s> Lexer<'s> {
     fn is_ident_char(c: char) -> bool {
         c.is_ascii_alphanumeric() || c == '_'
     }
+    fn parse_size(&mut self) -> Option<IntegerSize> {
+        let size = match self.peek_char() {
+            Some('6') => {
+                self.next_char();
+                if self.match_char('4').is_some() {
+                    Some(IntegerSize::Int64)
+                } else {
+                    None
+                }
+            }
+            Some('3') => {
+                self.next_char();
+                if self.match_char('2').is_some() {
+                    Some(IntegerSize::Int32)
+                } else {
+                    None
+                }
+            }
+            Some('8') => {
+                self.next_char();
+                Some(IntegerSize::Int8)
+            }
+            _ => None,
+        };
+        let Some(size) = size else {
+            let loc = self.current_loc();
+            self.diag
+                .add_diagnostic("Invalid integer ltieral size", loc);
+            return None;
+        };
+        Some(size)
+    }
     fn num_token(&mut self) -> Option<Token> {
         let mut src = String::new();
         while let Some(c) = self.match_char_with(|c| char::is_digit(c, 10)) {
@@ -145,13 +177,31 @@ impl<'s> Lexer<'s> {
             src = num.to_string();
         }
         let sign = match self.peek_char() {
-            Some('u') => Some(NumberKind::Unsigned),
-            Some('i') => Some(NumberKind::Signed),
+            Some('U') => {
+                self.next_char();
+                if !(self.match_char('I').is_some()
+                    && self.match_char('n').is_some()
+                    && self.match_char('t').is_some())
+                {
+                    let loc = self.current_loc();
+                    self.diag.add_diagnostic("Expected UInt", loc);
+                    return None;
+                };
+                let size = self.parse_size()?;
+                Some(NumberKind::Unsigned(size))
+            }
+            Some('I') => {
+                self.next_char();
+                if !(self.match_char('n').is_some() && self.match_char('t').is_some()) {
+                    let loc = self.current_loc();
+                    self.diag.add_diagnostic("Expected Int", loc);
+                    return None;
+                };
+                let size = self.parse_size()?;
+                Some(NumberKind::Signed(size))
+            }
             _ => None,
         };
-        if sign.is_some() {
-            self.next_char();
-        }
 
         match src.parse::<u64>() {
             Ok(n) => Some(self.new_token(TokenKind::Number(n, sign))),

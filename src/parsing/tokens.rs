@@ -8,9 +8,24 @@ pub struct Token {
     pub kind: TokenKind,
 }
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum IntegerSize {
+    Int64,
+    Int32,
+    Int8,
+}
+impl IntegerSize {
+    pub const fn size_str(self) -> &'static str {
+        match self {
+            Self::Int32 => "32",
+            Self::Int64 => "64",
+            Self::Int8 => "8",
+        }
+    }
+}
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum NumberKind {
-    Unsigned,
-    Signed,
+    Unsigned(IntegerSize),
+    Signed(IntegerSize),
 }
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TokenKind {
@@ -136,15 +151,12 @@ impl Display for TokenKind {
             Self::Bor => "bor",
             Self::Band => "band",
             Self::Number(number, sign) => {
-                return write!(
-                    f,
-                    "{number}{}",
-                    match sign {
-                        Some(NumberKind::Signed) => "i",
-                        Some(NumberKind::Unsigned) => "u",
-                        None => "",
-                    }
-                );
+                write!(f, "{number}")?;
+                return match sign {
+                    None => Ok(()),
+                    Some(NumberKind::Signed(size)) => write!(f, "{}", size.size_str()),
+                    Some(NumberKind::Unsigned(size)) => write!(f, "{}", size.size_str()),
+                };
             }
             Self::Mut => "mut",
             Self::Let => "let",

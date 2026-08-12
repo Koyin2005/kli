@@ -152,8 +152,8 @@ pub struct IntegerLiteral {
 }
 #[derive(Debug, Clone, Copy)]
 pub enum IntegerLiteralKind {
-    Signed,
-    Unsigned,
+    Signed(IntegerSize),
+    Unsigned(IntegerSize),
     Implicit,
 }
 #[derive(Debug)]

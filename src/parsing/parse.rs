@@ -174,8 +174,8 @@ impl Parser {
         IntLit {
             value: num,
             kind: kind.map(|kind| match kind {
-                tokens::NumberKind::Signed => NumberKind::Signed,
-                tokens::NumberKind::Unsigned => NumberKind::Unsigned,
+                tokens::NumberKind::Signed(size) => NumberKind::Signed(size),
+                tokens::NumberKind::Unsigned(size) => NumberKind::Unsigned(size),
             }),
         }
     }
