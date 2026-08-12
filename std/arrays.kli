@@ -12,7 +12,7 @@ fun addr_eq[T](this : array[T], other : array[T]) -> bool = builtins.array_addr(
 
 fun repeat[T](count : UInt64, value : T) -> array[T] = do
     let arr = builtins.raw_array_alloc[T](count);
-    for i in 0u..count do
+    for i in 0..count do
         unsafe 
             builtins.array_set_unchecked(
                 arr,
@@ -44,37 +44,37 @@ fun copy_from[T](this : array[T], other : array[T]) -> () =
     | false -> 
         do
             let min_len = std.num.uint.min(builtins.array_len(this),builtins.array_len(other));
-            for i in 0u..min_len do
+            for i in 0..min_len do
                 (this).[i] = (other).[i];
             end
         end
     end
 
 fun reverse[T](this : array[T]) -> () = do
-    let mut i = 0u;
+    let mut i = 0UInt64;
     let len = builtins.array_len(this);
     case len of 
     | 0 -> return ()
     | 1 -> return ()
     | _ -> ()
     end;
-    for i in 0u..(len/2u) do
+    for i in 0..(len/2) do
         let tmp = (this).[i];
-        this.[i] = (this).[(len - i) - 1u];
-        this.[(len - i) - 1u] = tmp;
+        this.[i] = (this).[(len - i) - 1];
+        this.[(len - i) - 1] = tmp;
     end;
 
 end
 
 fun for_each[T](elements : array[T], f : fun(UInt64,T) -> ()) -> () =
-    for i in 0u..len(elements) do 
+    for i in 0..len(elements) do 
         f(i,elements.[i])
     end
     
 
 fun for_each_with_ctxt[C,T](ctxt : C, elements : array[T], f : fun(C, UInt64,T) -> C) -> C = 
     do
-        for i in 0u..len(elements) do 
+        for i in 0..len(elements) do 
             ctxt = f(ctxt,i,elements.[i])
         end;
         ctxt
@@ -112,7 +112,7 @@ end
 #  all indices in the destination range are in bounds for `dst`
 #  all indices in the source range are in bounds for `src` 
 fun copy_unchecked[T](dst : array[T], src : array[T], dst_start : UInt64, src_start : UInt64, count : UInt64) -> () = do
-    for i in 0u..count do
+    for i in 0..count do
         let dst_index = dst_start + i;
         let src_index = src_start + i;
         unsafe

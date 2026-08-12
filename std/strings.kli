@@ -20,7 +20,7 @@ fun clone(s : string) -> string = do
     let bytes = unsafe as_bytes(s) end;
     let byte_len = builtins.array_len(bytes);
     let mut bs = builtins.raw_array_alloc[UInt8](byte_len);
-    for i in 0u..byte_len do
+    for i in 0..byte_len do
         (bs).[i] = builtins.uninit_new(bytes.[i]);
     end;
     unsafe builtins.transmute(bs) end

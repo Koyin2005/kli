@@ -51,7 +51,7 @@ fun ensure_capacity[T](arr : DynArray[T], target_cap : UInt64) -> () = do
     | true -> ()
     | false ->
         do
-            let new_cap = uint.max(target_cap,current_cap * 2u);
+            let new_cap = uint.max(target_cap,current_cap * 2);
             let new_buf = builtins.raw_array_alloc[T](new_cap);
             unsafe 
                 arrays.copy_unchecked(new_buf,old_buf,0,0,len)
@@ -70,8 +70,8 @@ end
 
 fun clear[T](this : DynArray[T]) -> () = do
     let len = this.inner^.len;
-    this.inner^.len = 0u;
-    for i in 0u .. len do
+    this.inner^.len = 0;
+    for i in 0 .. len do
         unsafe 
             arrays.zero_slot_unchecked[T](this.inner^.buf,i)
         end
@@ -111,7 +111,7 @@ fun pop[T](this : DynArray[T]) -> Option[T] = do
     | 0 -> Option.None
     | old_len ->
         do
-            let new_len = builtins.wrapping_sub(old_len,1u);
+            let new_len = builtins.wrapping_sub(old_len,1);
             let value = unsafe builtins.uninit_assume_init(builtins.array_get_unchecked(this.inner^.buf,new_len)) end;
             unsafe arrays.zero_slot_unchecked(this.inner^.buf,new_len) end;
             this.inner^.len = new_len;
@@ -126,7 +126,7 @@ fun insert[T](arr : DynArray[T], index : UInt64, value : T) -> () = do
     | true -> arrays.index_out_bounds()
     | false -> ()
     end;
-    let new_len = old_len + 1u;
+    let new_len = old_len + 1;
     reserve(arr,1);
 
     let elems_to_move = uint.wrapping_sub(old_len,index);
@@ -148,7 +148,7 @@ fun remove[T](arr : DynArray[T], index : UInt64) -> T = do
     unsafe 
         arrays.zero_slot_unchecked((arr.inner^.buf),index);
     end;
-    let new_len = arr.inner^.len - 1u;
+    let new_len = arr.inner^.len - 1;
     let elems_to_move = uint.wrapping_sub(old_len,index);
     unsafe arrays.copy_unchecked(arr.inner^.buf,arr.inner^.buf,index, index + 1, elems_to_move) end;
     arr.inner^.len = new_len;
@@ -164,7 +164,7 @@ fun remove_last[T](arr : DynArray[T]) -> T =
 fun append_array[T](this : DynArray[T], arr : array[T]) -> () = do
     let len = builtins.array_len(arr);
     reserve(this,len);
-    for i in 0u..len do
+    for i in 0..len do
         let value = unsafe builtins.array_get_unchecked(arr,i) end;
         push(this,value);
     end
@@ -210,7 +210,7 @@ end
 
 fun fmt[T,S,C](this : DynArray[T], format_elem : fmt_.Format[T,S,C], writer: fmt_.Writer[S]) -> () = do
     fmt_.write_string(writer,"[");
-    for i in 0u..len(this) do 
+    for i in 0..len(this) do 
         case i > 0 of
         | true -> fmt_.write_string(writer,",")
         | false -> ()

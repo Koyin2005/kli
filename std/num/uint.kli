@@ -70,11 +70,11 @@ fun log(value : UInt64, power : UInt64) -> UInt64 =
     | 0 -> panic_message("cannot take log of 0")
     | n -> 
         do
-            let mut pow : UInt64 = 0u;
-            while value > 0u do 
+            let mut pow : UInt64 = 0;
+            while value > 0 do 
                 value = 
                     value / power;
-                pow = pow + 1u;
+                pow = pow + 1;
             end;
             pow
         end

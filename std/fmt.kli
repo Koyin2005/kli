@@ -57,9 +57,9 @@ fun fmt_uint[S](value : UInt64, _ : (), writer : Writer[S]) -> () = do
     let mut arr = arrays.repeat(digits + 1,"");
 
     let mut i = digits;
-    while value > 0u do
-        let rest = value / 10u;
-        let digit = value - rest * 10u;
+    while value > 0 do
+        let rest = value / 10;
+        let digit = value - rest * 10;
         value = rest;
         (arr).[i] = (case digit of
         | 0 -> "0"
@@ -73,9 +73,9 @@ fun fmt_uint[S](value : UInt64, _ : (), writer : Writer[S]) -> () = do
         | 8 -> "8"
         | _ -> "9"
         end);
-        i = i - 1u;
+        i = i - 1;
     end;
-    for i in 0u..digits do
+    for i in 0..digits do
         write_string(writer,(arr).[i + 1]);
     end
 end
@@ -107,7 +107,7 @@ end
 
 fun fmt_array[T,S,C](value : array[T], format_elem : Format[T,S,C], writer: Writer[S]) -> () = do
     write_string(writer,"[");
-    for i in 0u..std.arrays.len(value) do 
+    for i in 0..std.arrays.len(value) do 
         case i > 0 of
         | true -> write_string(writer,",")
         | false -> ()
