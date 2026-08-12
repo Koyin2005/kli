@@ -51,17 +51,17 @@ fun copy_from[T](this : array[T], other : array[T]) -> () =
     end
 
 fun reverse[T](this : array[T]) -> () = do
-    let mut i = 0UInt64;
     let len = builtins.array_len(this);
     case len of 
     | 0 -> return ()
     | 1 -> return ()
     | _ -> ()
     end;
-    for i in 0..(len/2) do
-        let tmp = (this).[i];
-        this.[i] = (this).[(len - i) - 1];
-        this.[(len - i) - 1] = tmp;
+    for i in 0..len/2 do
+        let back_index = len - i - 1;
+        let tmp = this.[i];
+        this.[i] = this.[back_index];
+        this.[back_index] = tmp;
     end;
 
 end
