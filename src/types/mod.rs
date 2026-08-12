@@ -393,6 +393,12 @@ impl<'ctxt> Type<'ctxt> {
     pub const fn is_integer(self) -> bool {
         matches!(self.0, TypeKind::Int(_))
     }
+    pub const fn is_integer_or_int_var(self) -> bool {
+        matches!(self.0, TypeKind::Int(_) | TypeKind::IntVar(_))
+    }
+    pub const fn is_int_var(self) -> bool {
+        matches!(self.0, TypeKind::IntVar(_))
+    }
     pub fn is_uint(self, size: IntegerSize) -> bool {
         self.is_integer_kind(IntegerKind::Unsigned(size))
     }

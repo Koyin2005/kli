@@ -338,9 +338,7 @@ impl<'ctxt> Rvalue<'ctxt> {
                 BinaryOp::Equals => Type::new_bool(ctxt),
                 BinaryOp::Lesser | BinaryOp::Greater => Type::new_bool(ctxt),
             },
-            Rvalue::AllocateArray(element, _) => {
-                Type::new_array(ctxt, *element)
-            }
+            Rvalue::AllocateArray(element, _) => Type::new_array(ctxt, *element),
             Rvalue::AllocateRawArray { ty, .. } => Type::new_raw_array(ctxt, *ty),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 AggregateKind::Record { field_names: _ } => todo!("remove me"),

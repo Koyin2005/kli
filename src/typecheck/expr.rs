@@ -23,7 +23,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
     ) -> typed_ast::Place<'ctxt> {
         let (ty, kind) = match &place.kind {
             &ExprKind::Var(var) => (
-                self.root().var_type(var.1),
+                self.root().simplify_type(self.root().var_type(var.1)),
                 if self
                     .root()
                     .ctxt()
@@ -490,11 +490,15 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
         let bool_ty = Type::new_bool(self.ctxt());
         let (left_ty, right_ty) = match binary_op {
             BinaryOp::Add | BinaryOp::Divide | BinaryOp::Multiply | BinaryOp::Subtract => {
-                let operand_tys = expected_ty.filter(|ty| ty.is_integer());
+                let operand_tys = expected_ty
+                    .filter(|ty| ty.is_integer_or_int_var())
+                    .map(|ty| self.root().simplify_type(ty));
                 (operand_tys, operand_tys)
             }
             BinaryOp::Bor | BinaryOp::Band => {
-                let operand_tys = expected_ty.filter(|ty| ty.is_integer() || ty.is_bool());
+                let operand_tys = expected_ty
+                    .filter(|ty| ty.is_integer_or_int_var() || ty.is_bool())
+                    .map(|ty| self.root().simplify_type(ty));
                 (operand_tys, operand_tys)
             }
             BinaryOp::Equals | BinaryOp::Lesser | BinaryOp::Greater => (None, None),
@@ -506,16 +510,18 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             BinaryOp::Add | BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Divide => self
                 .root()
                 .try_unify(left.ty, right.ty)
-                .and_then(|result| result.is_integer().then_some(result)),
-            BinaryOp::Equals | BinaryOp::Lesser | BinaryOp::Greater => self
-                .root()
-                .try_unify(left.ty, right.ty)
-                .and_then(|result| result.is_builtin_scalar().then_some(bool_ty)),
+                .and_then(|result| result.is_integer_or_int_var().then_some(result)),
+            BinaryOp::Equals | BinaryOp::Lesser | BinaryOp::Greater => {
+                self.root().try_unify(left.ty, right.ty).and_then(|result| {
+                    (result.is_int_var() || result.is_builtin_scalar()).then_some(bool_ty)
+                })
+            }
             BinaryOp::And | BinaryOp::Or => Some(bool_ty),
-            BinaryOp::Bor | BinaryOp::Band => self
-                .root()
-                .try_unify(left.ty, right.ty)
-                .and_then(|result| (result.is_integer() || result.is_bool()).then_some(result)),
+            BinaryOp::Bor | BinaryOp::Band => {
+                self.root().try_unify(left.ty, right.ty).and_then(|result| {
+                    (result.is_integer_or_int_var() || result.is_bool()).then_some(result)
+                })
+            }
         };
         let result = result_ty.unwrap_or_else(|| {
             self.ctxt().diag().add_diagnostic(

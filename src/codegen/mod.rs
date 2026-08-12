@@ -491,34 +491,30 @@ enum ScalarType {
 enum CodegenPlaceBase<Z = std::convert::Infallible> {
     Ssa(frontend::Variable),
     Pointer(ir::Value),
-    ZeroSized(Z)
+    ZeroSized(Z),
 }
 
-#[derive(Clone, Copy,Debug)]
-enum NoZst {
-    
-}
+#[derive(Clone, Copy, Debug)]
+enum NoZst {}
 
-type NonZstPlace<'ctxt> = CodegenPlace<'ctxt,NoZst>;
+type NonZstPlace<'ctxt> = CodegenPlace<'ctxt, NoZst>;
 #[derive(Debug, Clone)]
-enum CodegenPlace<'ctxt,Z = Type<'ctxt>> {
+enum CodegenPlace<'ctxt, Z = Type<'ctxt>> {
     Ssa(Type<'ctxt>, frontend::Variable),
     MemPlace(MemPlace<'ctxt>),
     ZeroSized(Z),
 }
 
-impl<'ctxt> CodegenPlace<'ctxt,NoZst> {
+impl<'ctxt> CodegenPlace<'ctxt, NoZst> {
     fn type_of(&self) -> Type<'ctxt> {
         match self {
             CodegenPlace::MemPlace(place) => place.ty,
             &CodegenPlace::Ssa(ty, ..) => ty,
-            &CodegenPlace::ZeroSized(ty) => match ty {
-                
-            },
+            &CodegenPlace::ZeroSized(ty) => match ty {},
         }
     }
 }
-impl<'ctxt> CodegenPlace<'ctxt,Type<'ctxt>> {
+impl<'ctxt> CodegenPlace<'ctxt, Type<'ctxt>> {
     fn type_of(&self) -> Type<'ctxt> {
         match self {
             CodegenPlace::MemPlace(place) => place.ty,
@@ -527,8 +523,8 @@ impl<'ctxt> CodegenPlace<'ctxt,Type<'ctxt>> {
         }
     }
 }
-impl<'ctxt,Z> CodegenPlace<'ctxt,Z> {
-    fn as_non_zst_place(self) -> Result<NonZstPlace<'ctxt>,Z> {
+impl<'ctxt, Z> CodegenPlace<'ctxt, Z> {
+    fn as_non_zst_place(self) -> Result<NonZstPlace<'ctxt>, Z> {
         match self {
             Self::MemPlace(mem) => Ok(CodegenPlace::MemPlace(mem)),
             Self::Ssa(ty, var) => Ok(CodegenPlace::Ssa(ty, var)),
@@ -837,7 +833,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let operand = self.eval_operand(operand);
         self.store_value(place, operand);
     }
-    fn load_place<Z>(&mut self, place: &CodegenPlace<'ctxt,Z>) -> Option<ScalarValue> {
+    fn load_place<Z>(&mut self, place: &CodegenPlace<'ctxt, Z>) -> Option<ScalarValue> {
         match &place {
             CodegenPlace::MemPlace(place) => self.load_place_mem(place),
             CodegenPlace::Ssa(.., var) => Some(ScalarValue::Single(self.builder.use_var(*var))),
@@ -959,12 +955,11 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                             });
                         }
                         LocalKind::Scalar(var) => {
-                            match self.eval_scalar_with_projections(
-                                &mut ty,
-                                &mut projections,
-                                var,
-                            ) {
-                                CodegenPlaceBase::ZeroSized(ty) => return CodegenPlace::ZeroSized(ty),
+                            match self.eval_scalar_with_projections(&mut ty, &mut projections, var)
+                            {
+                                CodegenPlaceBase::ZeroSized(ty) => {
+                                    return CodegenPlace::ZeroSized(ty);
+                                }
                                 CodegenPlaceBase::Pointer(ptr) => ptr,
                                 CodegenPlaceBase::Ssa(var) => {
                                     return CodegenPlace::Ssa(ty, var);
@@ -984,7 +979,9 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                                 &mut projections,
                                 variable,
                             ) {
-                                CodegenPlaceBase::ZeroSized(ty) => return CodegenPlace::ZeroSized(ty),
+                                CodegenPlaceBase::ZeroSized(ty) => {
+                                    return CodegenPlace::ZeroSized(ty);
+                                }
                                 CodegenPlaceBase::Pointer(ptr) => ptr,
                                 CodegenPlaceBase::Ssa(var) => {
                                     return CodegenPlace::Ssa(ty, var);
@@ -1177,7 +1174,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         match operand {
             Operand::Constant(constant) => self.build_const(constant),
             Operand::Load(place) => match self.eval_place(place).as_non_zst_place() {
-               Err(ty) => OperandValue {
+                Err(ty) => OperandValue {
                     ty,
                     kind: OperandValueKind::ZeroSized,
                 },
@@ -1304,16 +1301,11 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let call = self.builder.ins().call(func, args);
         self.builder.inst_results(call)[0]
     }
-    fn codegen_direct_call(
-        &mut self,
-        ret_place: CodegenPlace,
-        id: FuncId,
-        args: &[ir::Value],
-    ) {
+    fn codegen_direct_call(&mut self, ret_place: CodegenPlace, id: FuncId, args: &[ir::Value]) {
         let func = self.module.declare_func_in_func(id, self.builder.func);
         let call = self.builder.ins().call(func, args);
         let values = self.builder.inst_results(call).to_vec();
-        if let Some(ret_place) = ret_place.as_non_zst_place().ok(){
+        if let Some(ret_place) = ret_place.as_non_zst_place().ok() {
             self.store_return_value(values, ret_place);
         }
     }
@@ -1384,7 +1376,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     .ins()
                     .call_indirect(sig, callee, &flattened_args);
                 let values = self.builder.inst_results(results).to_vec();
-                if let Some(ret_place) = ret_place.as_non_zst_place().ok(){
+                if let Some(ret_place) = ret_place.as_non_zst_place().ok() {
                     self.store_return_value(values, ret_place);
                 }
             }
@@ -1900,7 +1892,11 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             self.builder.set_cold_block(panic_block);
             self.builder.ins().jump(panic_block, &[]);
             self.builder.switch_to_block(panic_block);
-            self.codegen_direct_call(CodegenPlace::ZeroSized(Type::new_never(self.ctxt)), self.runtime_functions.panic, &[]);
+            self.codegen_direct_call(
+                CodegenPlace::ZeroSized(Type::new_never(self.ctxt)),
+                self.runtime_functions.panic,
+                &[],
+            );
             self.builder.ins().trap(TrapCode::user(1).unwrap());
             self.panic_block.set(Some(panic_block));
         };
