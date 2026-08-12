@@ -6,7 +6,7 @@ fun index_out_bounds() -> never = panic_message("index out of bounds")
 
 fun empty[T]() -> array[T] = []
 
-fun len[T](this : array[T]) -> UInt64= builtins.array_len(this)
+fun len[T](this : array[T]) -> UInt64 = builtins.array_len(this)
 
 fun addr_eq[T](this : array[T], other : array[T]) -> bool = builtins.array_addr(this) == builtins.array_addr(other)
 
@@ -35,7 +35,7 @@ fun get[T](this : array[T], index : UInt64) -> T =
 
 
 fun set[T](this : array[T], index : UInt64, value : T) -> () = 
-    (this).[index] = value
+    this.[index] = value
 
 
 fun copy_from[T](this : array[T], other : array[T]) -> () = 
@@ -45,7 +45,7 @@ fun copy_from[T](this : array[T], other : array[T]) -> () =
         do
             let min_len = std.num.uint.min(builtins.array_len(this),builtins.array_len(other));
             for i in 0..min_len do
-                (this).[i] = (other).[i];
+                this.[i] = other.[i];
             end
         end
     end

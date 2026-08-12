@@ -1,8 +1,12 @@
 use crate::{
     CtxtRef,
     src_loc::SrcLoc,
-    types::{GenericArg, GenericArgs, IntegerKind, Type, TypeKind, TypeMap},
+    types::{GenericArg, GenericArgs, IntegerKind, Type, TypeKind, TypeMap, visit::Visit},
 };
+enum UnifyError {
+    OccursCheck,
+    NoMatch
+}
 #[derive(Debug)]
 pub struct TypeVarInfo<'ctxt> {
     ty: Option<Type<'ctxt>>,
@@ -26,6 +30,37 @@ impl<'ctxt> TypeInfer<'ctxt> {
         let next_var = self.type_vars.len();
         self.type_vars.push(TypeVarInfo { ty: None, loc });
         next_var
+    }
+    fn occurs_check(&self, var: usize, ty: Type<'ctxt>) -> bool {
+        struct VarFinder<'i, 'ctxt> {
+            var: usize,
+            found: bool,
+            infer: &'i TypeInfer<'ctxt>,
+        }
+        impl<'ctxt> Visit<'ctxt> for VarFinder<'_, 'ctxt> {
+            fn visit_type(&mut self, ty: Type<'ctxt>) {
+                if self.found {
+                    return;
+                }
+
+                let (&TypeKind::IntVar(ty_var) | &TypeKind::Infer(ty_var)) = ty.kind() else {
+                    self.super_visit_type(ty);
+                    return;
+                };
+                if self.var == ty_var {
+                    self.found = true;
+                } else if let Some(ty) = self.infer.type_vars[ty_var].ty {
+                    self.visit_type(ty);
+                }
+            }
+        }
+        let mut check = VarFinder {
+            var,
+            found: false,
+            infer: self,
+        };
+        check.visit_type(ty);
+        check.found
     }
     pub fn unsolved_locs(&self) -> Vec<SrcLoc> {
         self.type_vars
@@ -51,7 +86,10 @@ impl<'ctxt> TypeInfer<'ctxt> {
             .map(|(arg1, arg2)| Some(GenericArg(self.unify_ty(arg1.0, arg2.0)?)))
             .collect::<Option<GenericArgs>>()
     }
-    fn unify_var_ty(&mut self, var: usize, ty: Type<'ctxt>) -> Option<Type<'ctxt>> {
+    fn unify_var_ty(&mut self, var: usize, ty: Type<'ctxt>) -> Result<Type<'ctxt>,UnifyError> {
+        if self.occurs_check(var, ty) {
+            return Err(UnifyError::OccursCheck);
+        }
         match &mut self.type_vars[var] {
             TypeVarInfo {
                 ty: Some(entry), ..
@@ -65,7 +103,7 @@ impl<'ctxt> TypeInfer<'ctxt> {
                 *entry = Some(ty);
                 Some(ty)
             }
-        }
+        }.ok_or(UnifyError::NoMatch)
     }
     pub fn unify_ty(&mut self, ty1: Type<'ctxt>, ty2: Type<'ctxt>) -> Option<Type<'ctxt>> {
         match (ty1.kind(), ty2.kind()) {
@@ -133,16 +171,31 @@ impl<'ctxt> TypeInfer<'ctxt> {
                     (IntegerKind::Signed(_) | IntegerKind::Unsigned(_), _) => None,
                 }
             }
-            (TypeKind::IntVar(var1), TypeKind::IntVar(var2)) if var1 == var2 => Some(ty1),
             (&TypeKind::IntVar(var), &TypeKind::Int(int))
             | (&TypeKind::Int(int), &TypeKind::IntVar(var)) => {
-                self.unify_var_ty(var, Type::new_integer(self.ctxt, int))
+                let ty = Type::new_integer(self.ctxt, int);
+                    match self.unify_var_ty(var,ty ){
+                        Ok(ty) => Some(ty),
+                        Err(UnifyError::OccursCheck) => Some(ty),
+                        Err(UnifyError::NoMatch) => None
+                    }
+            }
+            (TypeKind::IntVar(var1), TypeKind::IntVar(var2)) => {
+                if var1 == var2 {
+                    Some(ty1)
+                } else {
+                    match self.unify_var_ty(*var1, ty2){
+                        Ok(ty) => Some(ty),
+                        Err(UnifyError::OccursCheck) => Some(ty2),
+                        Err(UnifyError::NoMatch) => None
+                    }
+                }
             }
             (&TypeKind::Infer(var1), &TypeKind::Infer(var2)) if var1 == var2 => {
                 Some(Type::infer_var(self.ctxt, var1))
             }
-            (&TypeKind::Infer(var), _) => self.unify_var_ty(var, ty2),
-            (_, &TypeKind::Infer(var)) => self.unify_var_ty(var, ty1),
+            (&TypeKind::Infer(var), _) => self.unify_var_ty(var, ty2).ok(),
+            (_, &TypeKind::Infer(var)) => self.unify_var_ty(var, ty1).ok(),
             //This will fail to compile if new variants are not matched
             (
                 TypeKind::Int(IntegerKind::Signed(_) | IntegerKind::Unsigned(_))
