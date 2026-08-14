@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     mir::{BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind, build::Builder},
@@ -6,28 +6,10 @@ use crate::{
     typed_ast::{CaseArm, Expr, FieldId, Pattern, PatternKind},
     types::{CaseId, IntegerSize, Type},
 };
-
-struct MatchInfo<'a, 'ctxt> {
-    dest: &'a Place,
-    pattern_place: &'a Place,
-    arms: &'a [CaseArm<'ctxt>],
-}
 enum Test {
     VariantSwitch,
     IntSwitch,
     If,
-}
-#[derive(Debug, Clone)]
-enum MatchBranch {
-    IntSwitch(Place, Vec<(i128, MatchBranch)>, Box<MatchBranch>),
-    VariantSwitch(Place, Vec<(CaseId, MatchBranch)>, Box<MatchBranch>),
-    If {
-        place: Place,
-        true_tree: Box<MatchBranch>,
-        false_tree: Box<MatchBranch>,
-    },
-    Success(usize),
-    Unreachable,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum TestCase {
@@ -36,19 +18,26 @@ enum TestCase {
     Equals(i128),
     Variant(CaseId),
 }
-type TestMatrix = Vec<(usize, Vec<MatchTest>)>;
+type TestMatrix = Vec<(SrcLoc, Vec<MatchTest>)>;
 #[derive(Debug, Clone)]
 struct MatchTest {
     place: Place,
     case: TestCase,
+    loc: SrcLoc,
 }
 impl<'ctxt> Builder<'_, 'ctxt> {
-    fn build_tree(&mut self, tests: TestMatrix) -> MatchBranch {
-        let Some(head_row) = tests.first() else {
-            return MatchBranch::Unreachable;
+    fn build_tree(
+        &mut self,
+        tests: TestMatrix,
+        end_blocks: &mut Vec<(SrcLoc, BasicBlockId)>,
+    ) -> BasicBlockId {
+        /* No more arms */
+        let Some(&(loc, ref row)) = tests.first() else {
+            return self.current_block;
         };
-        let Some(head_test) = head_row.1.first() else {
-            return MatchBranch::Success(head_row.0);
+        let Some(head_test) = row.first() else {
+            end_blocks.push((loc, self.current_block));
+            return self.current_block;
         };
         let head_test = head_test.clone();
         let test = match head_test.case {
@@ -70,6 +59,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let &MatchTest {
                     place: ref head_place,
                     case,
+                    loc: _,
                 } = head;
                 if head_place != place {
                     others.push(row);
@@ -80,46 +70,99 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
             (branches, others)
         }
-        let (mut tests, rest) = group_tests(&head_test.place, tests);
-        let mut build_tree =
-            |this: &mut Builder, case| tests.remove(case).map(|tests| this.build_tree(tests));
+        let (tests, rest) = group_tests(&head_test.place, tests);
+
+        let start_block = self.current_block;
+
+        let mut otherwise_blocks = Vec::with_capacity(tests.len());
+        let tests = tests
+            .into_iter()
+            .map(|(case, info)| {
+                let start_branch = self.switch_to_new_block();
+                let otherwise_block = self.build_tree(info, end_blocks);
+                otherwise_blocks.push(otherwise_block);
+                (case, start_branch)
+            })
+            .collect::<HashMap<_, _>>();
+
+        let otherwise_start = self.switch_to_new_block();
+        for block in otherwise_blocks {
+            self.switch_to_block(block);
+            self.finish_block_with_goto(head_test.loc, otherwise_start);
+        }
+        self.switch_to_block(start_block);
         match test {
             Test::If => {
-                let otherwise_branch = self.build_tree(rest);
-                let true_branch =
-                    build_tree(self, &TestCase::True).unwrap_or_else(|| otherwise_branch.clone());
-                let false_branch = build_tree(self, &TestCase::False).unwrap_or(otherwise_branch);
-                MatchBranch::If {
-                    place: head_test.place,
-                    true_tree: Box::new(true_branch),
-                    false_tree: Box::new(false_branch),
-                }
+                let true_block = tests
+                    .get(&TestCase::True)
+                    .copied()
+                    .unwrap_or(otherwise_start);
+                let false_block = tests
+                    .get(&TestCase::False)
+                    .copied()
+                    .unwrap_or(otherwise_start);
+                self.finish_block_with_if(
+                    head_test.loc,
+                    Operand::Load(head_test.place),
+                    true_block,
+                    false_block,
+                );
             }
             Test::IntSwitch => {
-                let cases = tests
+                let targets = tests
                     .into_iter()
-                    .map(|(case, row)| {
+                    .filter_map(|(case, block)| {
                         let TestCase::Equals(value) = case else {
-                            unreachable!("should only be ints")
+                            return None;
                         };
-                        (value, self.build_tree(row))
+                        Some(SwitchTarget {
+                            value,
+                            target: block,
+                        })
                     })
-                    .collect::<Vec<_>>();
-                MatchBranch::IntSwitch(head_test.place, cases, Box::new(self.build_tree(rest)))
+                    .collect();
+                self.finish_block_with_switch_targets(
+                    head_test.loc,
+                    Operand::Load(head_test.place),
+                    targets,
+                    otherwise_start,
+                );
             }
             Test::VariantSwitch => {
-                let cases = tests
-                    .into_iter()
-                    .map(|(case, row)| {
-                        let TestCase::Variant(index) = case else {
-                            unreachable!("should only be ints")
+                let (id, _, _) = head_test
+                    .place
+                    .type_of(self.ctxt, &self.body.locals, self.body.return_type)
+                    .as_named()
+                    .unwrap();
+                let type_def = self.ctxt.type_def(id);
+                let targets = tests
+                    .iter()
+                    .filter_map(|(case, block)| {
+                        let TestCase::Variant(id) = *case else {
+                            return None;
                         };
-                        (index, self.build_tree(row))
+                        Some(SwitchTarget {
+                            value: type_def.case_value(id).1 as i128,
+                            target: *block,
+                        })
                     })
-                    .collect::<Vec<_>>();
-                MatchBranch::VariantSwitch(head_test.place, cases, Box::new(self.build_tree(rest)))
+                    .collect();
+                self.switch_to_block(start_block);
+                let disrciminant = self.assign_to_temp(
+                    head_test.loc,
+                    Type::new_uint(self.ctxt, IntegerSize::Int64),
+                    Rvalue::Discriminant(head_test.place),
+                );
+                self.finish_block_with_switch_targets(
+                    head_test.loc,
+                    Operand::Load(Place::local(disrciminant)),
+                    targets,
+                    otherwise_start,
+                );
             }
         }
+        self.switch_to_block(otherwise_start);
+        self.build_tree(rest, end_blocks)
     }
     fn match_tests(&self, place: Place, pattern: &Pattern) -> Vec<MatchTest> {
         match &pattern.kind {
@@ -128,6 +171,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     let mut tests = vec![MatchTest {
                         place: place.clone(),
                         case: TestCase::Variant(*index),
+                        loc: pattern.loc,
                     }];
                     tests.extend(
                         self.match_tests(
@@ -142,6 +186,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     vec![MatchTest {
                         place,
                         case: TestCase::Variant(*index),
+                        loc: pattern.loc,
                     }]
                 }
             }
@@ -149,9 +194,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 vec![MatchTest {
                     place,
                     case: TestCase::Equals(*value as i128),
+                    loc: pattern.loc,
                 }]
             }
             PatternKind::Bool(value) => vec![MatchTest {
+                loc: pattern.loc,
                 place,
                 case: if *value {
                     TestCase::True
@@ -168,120 +215,27 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 .collect(),
         }
     }
-    fn lower_tree(
-        &mut self,
-        loc: SrcLoc,
-        tree: MatchBranch,
-        info: &'_ MatchInfo<'_, 'ctxt>,
-        end_blocks: &mut Vec<(SrcLoc, BasicBlockId)>,
-    ) {
-        let start_block = self.current_block;
-        match tree {
-            MatchBranch::IntSwitch(place, arms, otherwise_branch) => {
-                let targets = arms
-                    .into_iter()
-                    .map(|(value, arm)| {
-                        let block = self.switch_to_new_block();
-                        self.lower_tree(loc, arm, info, end_blocks);
-                        SwitchTarget {
-                            value,
-                            target: block,
-                        }
-                    })
-                    .collect();
-                let otherwise = self.switch_to_new_block();
-                self.lower_tree(loc, *otherwise_branch, info, end_blocks);
 
-                self.switch_to_block(start_block);
-                self.finish_block_with_switch_targets(
-                    loc,
-                    Operand::Load(place),
-                    targets,
-                    otherwise,
-                );
-            }
-            MatchBranch::VariantSwitch(place, arms, otherwise_branch) => {
-                let (id, _, _) = place
-                    .type_of(self.ctxt, &self.body.locals, self.body.return_type)
-                    .as_named()
-                    .unwrap();
-                let type_def = self.ctxt.type_def(id);
-                let targets = arms
-                    .into_iter()
-                    .map(|(value, arm)| {
-                        let (_, value) = type_def.case_value(value);
-                        let block = self.switch_to_new_block();
-                        self.lower_tree(loc, arm, info, end_blocks);
-                        SwitchTarget {
-                            value: value.into(),
-                            target: block,
-                        }
-                    })
-                    .collect();
-                let otherwise = self.switch_to_new_block();
-                self.lower_tree(loc, *otherwise_branch, info, end_blocks);
-
-                self.switch_to_block(start_block);
-                let disrciminant = self.assign_to_temp(
-                    loc,
-                    Type::new_uint(self.ctxt, IntegerSize::Int64),
-                    Rvalue::Discriminant(place),
-                );
-                self.finish_block_with_switch_targets(
-                    loc,
-                    Operand::Load(Place::local(disrciminant)),
-                    targets,
-                    otherwise,
-                );
-            }
-            MatchBranch::If {
-                place,
-                true_tree,
-                false_tree,
-            } => {
-                let true_block = self.new_block();
-                let false_block = self.new_block();
-                self.switch_to_block(true_block);
-                self.lower_tree(loc, *true_tree, info, end_blocks);
-
-                self.switch_to_block(false_block);
-                self.lower_tree(loc, *false_tree, info, end_blocks);
-
-                self.switch_to_block(start_block);
-                self.finish_block_with_if(loc, Operand::Load(place), true_block, false_block);
-            }
-            MatchBranch::Success(i) => {
-                self.assign_place_to_pattern(&info.arms[i].pattern, info.pattern_place.clone());
-                self.expr_into_dest(info.dest.clone(), &info.arms[i].body);
-                end_blocks.push((info.arms[i].body.loc, self.current_block));
-            }
-            MatchBranch::Unreachable => {
-                self.finish_block(loc, TerminatorKind::Unreachable);
-            }
-        }
-    }
     pub(super) fn build_match(&mut self, dest: Place, expr: &Expr<'ctxt>, arms: &[CaseArm<'ctxt>]) {
         let place = self.place(expr);
         let tests = arms
             .iter()
-            .enumerate()
-            .map(|(i, arm)| (i, self.match_tests(place.clone(), &arm.pattern)))
+            .map(|arm| {
+                (
+                    arm.pattern.loc,
+                    self.match_tests(place.clone(), &arm.pattern),
+                )
+            })
             .collect::<Vec<_>>();
-        let tree = self.build_tree(tests);
         let mut end_blocks = Vec::new();
-        self.lower_tree(
-            expr.loc,
-            tree,
-            &MatchInfo {
-                dest: &dest,
-                pattern_place: &place,
-                arms,
-            },
-            &mut end_blocks,
-        );
+        self.build_tree(tests, &mut end_blocks);
+        self.finish_block(expr.loc, TerminatorKind::Unreachable);
+
         let end_block = self.switch_to_new_block();
-        for (loc, block) in end_blocks {
+        for (i, (loc, block)) in end_blocks.into_iter().enumerate() {
             self.switch_to_block(block);
+            self.assign_place_to_pattern(&arms[i].pattern, place.clone());
+            self.expr_into_dest(dest.clone(), &arms[i].body);
             self.finish_block_with_goto(loc, end_block);
         }
         self.switch_to_block(end_block);

@@ -341,9 +341,7 @@ impl<'ctxt> Rvalue<'ctxt> {
                 BinaryOp::Divide => left_and_right.0.type_of(ctxt, locals, return_type),
                 BinaryOp::Equals => Type::new_bool(ctxt),
                 BinaryOp::Lesser | BinaryOp::Greater => Type::new_bool(ctxt),
-                BinaryOp::Offset => {
-                    left_and_right.0.type_of(ctxt, locals, return_type)
-                }
+                BinaryOp::Offset => left_and_right.0.type_of(ctxt, locals, return_type),
             },
             Rvalue::AllocateArray(element, _) => Type::new_array(ctxt, *element),
             Rvalue::AllocateRawArray { ty, .. } => Type::new_raw_array(ctxt, *ty),
@@ -367,12 +365,12 @@ impl<'ctxt> Rvalue<'ctxt> {
         }
     }
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SwitchTarget {
     pub value: i128,
     pub target: BasicBlockId,
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SwitchTargets {
     pub targets: Vec<SwitchTarget>,
     pub otherwise: BasicBlockId,
@@ -427,7 +425,7 @@ impl SwitchTargets {
         }
     }
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum AssertKind {
     InBounds,
     Overflow(OverflowOp),
@@ -475,7 +473,7 @@ impl ExactSizeIterator for Successors<'_> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Terminator<'ctxt> {
     pub src_info: SrcLoc,
     pub kind: TerminatorKind<'ctxt>,
@@ -514,7 +512,7 @@ impl<'ctxt> Terminator<'ctxt> {
         single.into_iter().chain(multiple.into_iter().flatten())
     }
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TerminatorKind<'ctxt> {
     Assert(Operand<'ctxt>, AssertKind, BasicBlockId),
     Switch(Operand<'ctxt>, SwitchTargets),
