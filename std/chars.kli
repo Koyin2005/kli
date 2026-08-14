@@ -4,7 +4,7 @@ import std.(strings,string_buf,optional.Option)
 fun from_u32_unchecked(c : UInt32) -> char = 
     builtins.transmute(c)
 
-fun as_ascii_digit(c : char) -> Option[UInt8] = 
+fun as_ascii_digit_decimal(c : char) -> Option[UInt8] = 
     case c of 
     | '0' -> Option.Some(0)
     | '1' -> Option.Some(1)
