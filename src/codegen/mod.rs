@@ -783,7 +783,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         self.builder
             .call_memmove(self.target_config, dst, src, byte_count);
     }
-    #[track_caller]
     fn memcopy(&mut self, place: MemPlace<'ctxt>, dst_place: MemPlace<'ctxt>) {
         let size = self.layout_for(dst_place.ty).size;
         let src = place.ptr(self);
@@ -800,8 +799,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         );
     }
     /// Stores a scalar value in a place
-    /// Panics:
-    ///  If the place is zero sized
     fn store_scalar(&mut self, place: NonZstPlace<'ctxt>, value: ScalarValue) {
         match place {
             CodegenPlace::MemPlace(place) => self.store_scalar_mem(place, value),
