@@ -283,6 +283,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 .collect::<Vec<_>>()
         };
         match builtin {
+            Builtin::PtrCopy => {
+                let [dst, src, count] = operands().try_into().unwrap();
+                self.push_stmt(loc, mir::StmtKind::Copy { dst, src, count });
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
+            }
             Builtin::Offset => {
                 let [ptr, offset] = operands().try_into().unwrap();
                 BuiltinResult::Rvalue(Self::binary_op_rvalue(mir::BinaryOp::Offset, ptr, offset))
@@ -290,7 +295,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             Builtin::GcAlloc => {
                 let [cap] = operands().try_into().unwrap();
                 let ty = ty.as_raw_ptr().unwrap();
-                BuiltinResult::Rvalue(Rvalue::GcAlloc(ty,cap))
+                BuiltinResult::Rvalue(Rvalue::GcAlloc(ty, cap))
             }
             Builtin::PtrRead => {
                 let [ptr] = args else { unreachable!() };

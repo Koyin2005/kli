@@ -7,31 +7,22 @@ import std.fmt as fmt_
 
 @opaque
 type DynArrayInner[T] = {
-    buf : raw_array[T],
+    ptr : RawPtr[T],
+    cap : UInt64,
     len : UInt64
 }
 @opaque
 type DynArray[T] = {
     inner : Box[DynArrayInner[T]]
 }
-fun new[T]() -> DynArray[T] = do
-    DynArray {
-        inner = boxed.alloc(
-        DynArrayInner {
-            buf = [],
-            len = 0
-        })
-    }
-end
+fun new[T]() -> DynArray[T] = with_capacity(0)
 
 fun from_array[T](arr : array[T]) -> DynArray[T] = do
     let len = builtins.array_len(arr);
     let dyn_arr : DynArray[T] = with_capacity(len);
-    let buf = dyn_arr.inner^.buf;
-    unsafe 
-        arrays.copy_unchecked(buf,builtins.transmute(arr),0,0,len);
+    for i in 0..len do 
+        push(dyn_arr,builtins.array_get_unchecked(arr,i))
     end;
-    dyn_arr.inner^.len = len;
     dyn_arr
 
 end
@@ -39,20 +30,20 @@ end
 fun with_capacity[T](cap : UInt64) -> DynArray[T] = DynArray {
     inner = boxed.alloc(
         DynArrayInner{
-            buf = builtins.raw_array_alloc[T](cap),
+            ptr = builtins.gc_alloc[T](cap),
+            cap = cap,
             len = 0
         })
     }
 
 fun ensure_capacity[T](arr : DynArray[T], target_cap : UInt64) -> () = do
-    let current_cap = builtins.array_len(arr.inner^.buf);
-    let {buf = old_buf, len = len} = arr.inner^;
+    let {ptr = old_buf,cap = current_cap, len = len} = arr.inner^;
     case target_cap < current_cap of 
     | true -> ()
     | false ->
         do
             let new_cap = uint.max(target_cap,current_cap * 2);
-            let new_buf = builtins.raw_array_alloc[T](new_cap);
+            let new_buf = builtins.gc_alloc[T](new_cap);
             unsafe 
                 arrays.copy_unchecked(new_buf,old_buf,0,0,len)
             end;

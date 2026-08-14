@@ -66,7 +66,8 @@ impl Symbol {
         "ptr_read",
         "ptr_write",
         "offset",
-        "gc_alloc"
+        "gc_alloc",
+        "ptr_copy",
     ];
     const _NO_REPEATS: () = {
         let mut i = 0;
@@ -145,6 +146,7 @@ impl Symbol {
     pub const UINT_FIRST_UPPER: Self = Self::expect_symbol("UInt");
     pub const RAW_PTR: Self = Self::expect_symbol("RawPtr");
     pub const GC_ALLOC: Self = Self::expect_symbol("gc_alloc");
+    pub const PTR_COPY: Self = Self::expect_symbol("ptr_copy");
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }

@@ -284,7 +284,7 @@ pub enum Rvalue<'ctxt> {
     Cast(CastKind, Operand<'ctxt>, Type<'ctxt>),
     Len(Place),
     Discriminant(Place),
-    GcAlloc(Type<'ctxt>,Operand<'ctxt>)
+    GcAlloc(Type<'ctxt>, Operand<'ctxt>),
 }
 impl<'ctxt> Rvalue<'ctxt> {
     pub fn can_remove_if_unused(&self) -> bool {
@@ -314,7 +314,7 @@ impl<'ctxt> Rvalue<'ctxt> {
         return_type: Type<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
-            Rvalue::GcAlloc(ty,_) => Type::new_raw_ptr(ctxt, *ty),
+            Rvalue::GcAlloc(ty, _) => Type::new_raw_ptr(ctxt, *ty),
             Rvalue::ReadLine => Type::new_string(ctxt),
             &Rvalue::UninitZeroed(ty) => Type::new_uninit(ctxt, ty),
             &Rvalue::AllocateBox(ty, _) => Type::new_box(ctxt, ty),
@@ -560,6 +560,11 @@ pub enum StmtKind<'ctxt> {
     Noop,
     Assign(Place, Box<Rvalue<'ctxt>>),
     Print(Operand<'ctxt>),
+    Copy {
+        dst: Operand<'ctxt>,
+        src: Operand<'ctxt>,
+        count: Operand<'ctxt>,
+    },
 }
 define_id!(BasicBlockId);
 impl BasicBlockId {

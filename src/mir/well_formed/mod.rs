@@ -96,7 +96,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         self.super_visit_rvalue(loc, rvalue);
         let loc = self.body.src_info(loc);
         match rvalue {
-            super::Rvalue::GcAlloc(_,count) => {
+            super::Rvalue::GcAlloc(_, count) => {
                 let count_ty = count.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 self.assert(
                     count_ty.is_integer_kind(IntegerKind::Unsigned(IntegerSize::Int64)),
@@ -395,6 +395,32 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                             lhs_ty, rhs_ty, lhs, rhs
                         )
                     },
+                    stmt.loc,
+                );
+            }
+            StmtKind::Copy { dst, src, count } => {
+                let lhs_ty = dst.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let rhs_ty = src.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let (lhs_ty, rhs_ty) = self.assert_with_some(
+                    lhs_ty.as_raw_ptr().zip(rhs_ty.as_raw_ptr()),
+                    |tys| tys,
+                    || "Expected pointer types",
+                    stmt.loc,
+                );
+                self.assert(
+                    lhs_ty == rhs_ty,
+                    || {
+                        format!(
+                            "Cannot copy non equal pointee types {} and {} for {:?} {:?}",
+                            lhs_ty, rhs_ty, dst, src
+                        )
+                    },
+                    stmt.loc,
+                );
+                let count_ty = count.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                self.assert(
+                    count_ty.is_integer_kind(IntegerKind::Unsigned(IntegerSize::Int64)),
+                    || format!("count should be a uint not '{}'", count_ty),
                     stmt.loc,
                 );
             }

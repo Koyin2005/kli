@@ -103,10 +103,10 @@ impl<'ctxt> MirDump<'ctxt> {
     }
     fn write_rvalue(&mut self, rvalue: &Rvalue) -> std::io::Result<()> {
         match rvalue {
-            Rvalue::GcAlloc(ty,count) => {
-                write!(self.output,"gc_alloc[{}](",ty)?;
+            Rvalue::GcAlloc(ty, count) => {
+                write!(self.output, "gc_alloc[{}](", ty)?;
                 self.write_operand(count)?;
-                write!(self.output,")")?;
+                write!(self.output, ")")?;
             }
             Rvalue::ReadLine => {
                 write!(self.output, "read_line")?;
@@ -334,6 +334,15 @@ impl<'ctxt> MirDump<'ctxt> {
                     write!(self.output, "print(")?;
                     self.write_operand(value)?;
 
+                    writeln!(self.output, ")")?;
+                }
+                StmtKind::Copy { dst, src, count } => {
+                    write!(self.output, "Copy(")?;
+                    self.write_operand(dst)?;
+                    write!(self.output, ",")?;
+                    self.write_operand(src)?;
+                    write!(self.output, ",")?;
+                    self.write_operand(count)?;
                     writeln!(self.output, ")")?;
                 }
                 StmtKind::Noop => writeln!(self.output, "noop")?,

@@ -764,6 +764,23 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             }
         }
     }
+    fn memmove(
+        &mut self,
+        dst: codegen::ir::Value,
+        src: codegen::ir::Value,
+        ty: Type<'ctxt>,
+        count: ir::Value,
+    ) {
+        let layout = self.layout_for(ty);
+        let size = layout.size;
+        let ty_size = self.build_scalar_const(
+            Type::new_uint(self.ctxt, IntegerSize::Int64),
+            size.in_bytes() as i128,
+        );
+        let byte_count = self.builder.ins().imul(count, ty_size);
+        self.builder
+            .call_memmove(self.target_config, dst, src, byte_count);
+    }
     fn memcopy(&mut self, place: MemPlace<'ctxt>, dst_place: MemPlace<'ctxt>) {
         let size = self.layout_for(dst_place.ty).size;
         let src = place.ptr(self);
@@ -1512,12 +1529,16 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn monomorphize<T: TypeMappable<'ctxt>>(&self, value: T) -> T {
         Scheme::new(value).bind(self.ctxt, self.args)
     }
-    fn codegen_gc_alloc(&mut self, place: &mir::Place, ty: Type<'ctxt>, count : &mir::Operand<'ctxt>){
-        
+    fn codegen_gc_alloc(
+        &mut self,
+        place: &mir::Place,
+        ty: Type<'ctxt>,
+        count: &mir::Operand<'ctxt>,
+    ) {
         let ty = self.monomorphize(ty);
         let count = self.eval_operand(count);
-        let count =  count.expect_immediate(self);
-        let ptr = self.codegen_runtime_size_alloc_call(ty,count);
+        let count = count.expect_immediate(self);
+        let ptr = self.codegen_runtime_size_alloc_call(ty, count);
         let place = self.eval_place(place).as_non_zst_place().unwrap();
         self.store_immediate(place, ptr);
     }
@@ -1631,9 +1652,9 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     }
     fn codegen_rvalue_assign(&mut self, place: &mir::Place, value: &mir::Rvalue<'ctxt>) {
         match value {
-            mir::Rvalue::GcAlloc(ty,count) => {
+            mir::Rvalue::GcAlloc(ty, count) => {
                 self.codegen_gc_alloc(place, *ty, count);
-            } 
+            }
             mir::Rvalue::ReadLine => {
                 let size = 4096;
                 let slot = self.builder.create_sized_stack_slot(ir::StackSlotData::new(
@@ -1954,6 +1975,13 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             }
             mir::StmtKind::Print(operand) => {
                 self.codegen_print_stmt(operand);
+            }
+            mir::StmtKind::Copy { dst, src, count } => {
+                let dst_operand = self.eval_operand(dst);
+                let dst = dst_operand.expect_immediate(self);
+                let src = self.eval_operand(src).expect_immediate(self);
+                let count = self.eval_operand(count).expect_immediate(self);
+                self.memmove(dst, src, dst_operand.ty, count);
             }
         }
     }

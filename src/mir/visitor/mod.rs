@@ -27,6 +27,11 @@ pub trait Visit<'ctxt> {
             StmtKind::Print(operand) => {
                 self.visit_operand(loc, operand);
             }
+            StmtKind::Copy { dst, src, count } => {
+                self.visit_operand(loc, dst);
+                self.visit_operand(loc, src);
+                self.visit_operand(loc, count);
+            }
         }
     }
     fn super_visit_constant(&mut self, _loc: Location, _constant: &Constant<'ctxt>) {}
@@ -61,7 +66,7 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue<'ctxt>) {
         match rvalue {
-            Rvalue::GcAlloc(_,operand) => {
+            Rvalue::GcAlloc(_, operand) => {
                 self.visit_operand(loc, operand);
             }
             Rvalue::UninitZeroed(_) | Rvalue::ReadLine => (),
@@ -166,6 +171,11 @@ pub trait MutVisit<'ctxt> {
     fn super_visit_stmt(&mut self, loc: Location, stmt: &mut Stmt<'ctxt>) {
         match &mut stmt.kind {
             StmtKind::Noop => (),
+            StmtKind::Copy { dst, src, count } => {
+                self.visit_operand(loc, dst);
+                self.visit_operand(loc, src);
+                self.visit_operand(loc, count);
+            }
             StmtKind::Assign(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
             }
@@ -206,7 +216,7 @@ pub trait MutVisit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &mut Rvalue<'ctxt>) {
         match rvalue {
-            Rvalue::GcAlloc(_,operand) => {
+            Rvalue::GcAlloc(_, operand) => {
                 self.visit_operand(loc, operand);
             }
             Rvalue::UninitZeroed(_) | Rvalue::ReadLine => (),
