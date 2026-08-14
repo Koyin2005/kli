@@ -27,6 +27,7 @@ impl Symbol {
         // type names
         "Int",
         "UInt",
+        "RawPtr",
         "main",
         "std",
         "builtins",
@@ -135,6 +136,7 @@ impl Symbol {
     pub const BITWISE_OR: Self = Self::expect_symbol("bitwise_or");
     pub const INT_FIRST_UPPER: Self = Self::expect_symbol("Int");
     pub const UINT_FIRST_UPPER: Self = Self::expect_symbol("UInt");
+    pub const RAW_PTR : Self = Self::expect_symbol("RawPtr");
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }
