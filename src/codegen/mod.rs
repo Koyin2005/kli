@@ -1636,8 +1636,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         }
                     }
                     mir::IntegerCast::Truncate(to_kind) => {
-                        let from_kind = operand_value.ty.as_integer().unwrap();
-                        if from_kind == to_kind {
+                        let from_kind = operand_value.ty.as_simple_scalar().unwrap();
+                        if from_kind.as_integer() == to_kind {
                             value
                         } else {
                             self.builder
