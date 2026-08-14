@@ -122,6 +122,9 @@ impl<'ctxt> TypeInfer<'ctxt> {
             (&TypeKind::Array(ty1), &TypeKind::Array(ty2)) => self
                 .unify_ty(ty1, ty2)
                 .map(|ty| Type::new_array(self.ctxt, ty)),
+            (&TypeKind::RawPtr(ty1), &TypeKind::RawPtr(ty2)) => self
+                .unify_ty(ty1, ty2)
+                .map(|ty| Type::new_raw_ptr(self.ctxt, ty)),
             (&TypeKind::Uninit(ty1), &TypeKind::Uninit(ty2)) => self
                 .unify_ty(ty1, ty2)
                 .map(|ty| Type::new_uninit(self.ctxt, ty)),
@@ -212,7 +215,8 @@ impl<'ctxt> TypeInfer<'ctxt> {
                 | TypeKind::String
                 | TypeKind::Box(_)
                 | TypeKind::Uninit(_)
-                | TypeKind::IntVar(_),
+                | TypeKind::IntVar(_)
+                | TypeKind::RawPtr(_),
                 _,
             ) => None,
         }

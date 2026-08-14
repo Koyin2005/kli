@@ -389,6 +389,7 @@ pub fn calculate_layout<'ctxt>(
     ty: Type<'ctxt>,
 ) -> Result<Layout, LayoutError> {
     Ok(match ty.kind() {
+        TypeKind::RawPtr(_) => Layout::pointer(false),
         &TypeKind::Uninit(ty) => {
             let layout = calculate_layout(ctxt, ty)?;
 
