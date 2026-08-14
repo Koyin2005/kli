@@ -232,6 +232,7 @@ pub enum TypeName {
     Param(Symbol, usize),
     Never,
     Uninit,
+    RawPtr,
 }
 #[derive(Debug)]
 pub enum TypeKind {

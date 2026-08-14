@@ -42,6 +42,7 @@ enum TypeAlias {
     UInt8,
     Int32,
     UInt32,
+    RawPtr
 }
 impl TypeAlias {
     fn into_type_name(self) -> res::TypeName {
@@ -57,6 +58,7 @@ impl TypeAlias {
             TypeAlias::Never => res::TypeName::Never,
             TypeAlias::RawArray => res::TypeName::RawArray,
             TypeAlias::Uninit => res::TypeName::Uninit,
+            TypeAlias::RawPtr => res::TypeName::RawPtr,
         }
     }
 }
@@ -134,6 +136,7 @@ impl<'info> Resolve<'info> {
             (Symbol::intern("Int64"), Res::TypeAlias(TypeAlias::Int64)),
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),
+            (Symbol::RAW_PTR, Res::TypeAlias(TypeAlias::RawPtr)),
             (
                 Symbol::intern("raw_array"),
                 Res::TypeAlias(TypeAlias::RawArray),

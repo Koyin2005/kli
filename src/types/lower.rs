@@ -115,6 +115,16 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::new_int(self.ctxt, size)
             }
+            TypeName::RawPtr => {
+             
+                let args = self.lower_generic_args_with(Generics::default(), 1, loc, args);
+                let ty = if let Ok([GenericArg(ty)]) = <[_; _]>::try_from(args) {
+                    ty
+                } else {
+                    Type::new_unknown(self.ctxt)
+                };
+                Type::new_raw_ptr(self.ctxt, ty)   
+            }
             TypeName::UInt(size) => {
                 let size = match size {
                     res::IntegerSize::Int64 => IntegerSize::Int64,
