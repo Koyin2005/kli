@@ -2,6 +2,9 @@
 fun gc_alloc[T](cap : UInt64) -> RawPtr[T];
 
 @builtin
+fun ptr_copy[T](dst : RawPtr[T], src : RawPtr[T], count : UInt64) -> ();
+
+@builtin
 fun box_alloc[T](value : T) -> Box[T];
 
 # Safety:

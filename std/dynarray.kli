@@ -44,9 +44,7 @@ fun ensure_capacity[T](arr : DynArray[T], target_cap : UInt64) -> () = do
         do
             let new_cap = uint.max(target_cap,current_cap * 2);
             let new_buf = builtins.gc_alloc[T](new_cap);
-            unsafe 
-                arrays.copy_unchecked(new_buf,old_buf,0,0,len)
-            end;
+            builtins.ptr_co
             arr.inner^.buf = new_buf;
         end
     end
