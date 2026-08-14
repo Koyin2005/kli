@@ -9,6 +9,8 @@ pub enum IntegerBuiltin {
     OverflowingAdd,
     WrappingSub,
     OverflowingSub,
+    WrappingMul,
+    OverflowingMul,
     Truncate,
     Widen,
 }
@@ -60,6 +62,8 @@ impl Builtin {
             Builtin::IntegerBuiltin(IntegerBuiltin::Truncate) => "trunc",
             Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub) => "overflowing_sub",
             Builtin::IntegerBuiltin(IntegerBuiltin::WrappingSub) => "wrapping_sub",
+            Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingMul) => "overflowing_mul",
+            Builtin::IntegerBuiltin(IntegerBuiltin::WrappingMul) => "wrapping_mul",
             Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue) => "int_max_value",
             Builtin::IntegerBuiltin(IntegerBuiltin::ShiftLeft) => "shift_left",
             Builtin::IntegerBuiltin(IntegerBuiltin::ShiftRight) => "shift_right",
@@ -97,6 +101,10 @@ impl Builtin {
             Symbol::WRAPPING_SUB => Some(Builtin::IntegerBuiltin(IntegerBuiltin::WrappingSub)),
             Symbol::OVERFLOWING_SUB => {
                 Some(Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub))
+            }
+            Symbol::WRAPPING_MUL => Some(Builtin::IntegerBuiltin(IntegerBuiltin::WrappingMul)),
+            Symbol::OVERFLOWING_MUL => {
+                Some(Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingMul))
             }
             Symbol::WIDEN => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Widen)),
             Symbol::TRUNCATE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Truncate)),

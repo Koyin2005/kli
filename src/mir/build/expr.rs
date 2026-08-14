@@ -381,6 +381,22 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                         right,
                     ))
                 }
+                IntegerBuiltin::WrappingMul => {
+                    let [left, right] = operands().try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::Wrapping(OverflowOp::Multiply),
+                        left,
+                        right,
+                    ))
+                }
+                IntegerBuiltin::OverflowingMul => {
+                    let [left, right] = operands().try_into().unwrap();
+                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
+                        mir::BinaryOp::Overflow(OverflowOp::Multiply),
+                        left,
+                        right,
+                    ))
+                }
                 IntegerBuiltin::Truncate => {
                     let [arg] = operands().try_into().unwrap();
                     let kind = ty.as_integer().unwrap();

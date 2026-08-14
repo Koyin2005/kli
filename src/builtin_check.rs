@@ -62,7 +62,9 @@ impl<'ctxt> BuiltinCheck<'ctxt> {
                 | IntegerBuiltin::OverflowingAdd
                 | IntegerBuiltin::OverflowingSub
                 | IntegerBuiltin::WrappingAdd
-                | IntegerBuiltin::WrappingSub => {
+                | IntegerBuiltin::WrappingSub
+                | IntegerBuiltin::OverflowingMul
+                | IntegerBuiltin::WrappingMul => {
                     let ty = generic_args[0].expect_ty();
                     (!ty.is_integer()).then(|| {
                         format!(

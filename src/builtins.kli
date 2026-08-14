@@ -49,6 +49,12 @@ fun wrapping_sub[T](x : T, y : T) -> T;
 fun overflowing_sub[T](x : T, y : T) -> (T, bool);
 
 @builtin
+fun wrapping_mul[T](x : T, y : T) -> T;
+
+@builtin
+fun overflowing_mul[T](x : T, y : T) -> (T, bool);
+
+@builtin
 fun widen[T,U](x : T) -> U;
 
 @builtin

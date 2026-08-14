@@ -69,6 +69,8 @@ impl Symbol {
         "gc_alloc",
         "ptr_copy",
         "eprint_string",
+        "wrapping_mul",
+        "overflowing_mul",
     ];
     const _NO_REPEATS: () = {
         let mut i = 0;
@@ -125,6 +127,8 @@ impl Symbol {
     pub const OVERFLOWING_ADD: Self = Self::expect_symbol("overflowing_add");
     pub const WRAPPING_SUB: Self = Self::expect_symbol("wrapping_sub");
     pub const OVERFLOWING_SUB: Self = Self::expect_symbol("overflowing_sub");
+    pub const WRAPPING_MUL: Self = Self::expect_symbol("wrapping_mul");
+    pub const OVERFLOWING_MUL: Self = Self::expect_symbol("overflowing_mul");
     pub const WIDEN: Self = Self::expect_symbol("widen");
     pub const TRUNCATE: Self = Self::expect_symbol("truncate");
     pub const BITCAST: Self = Self::expect_symbol("bitcast");
