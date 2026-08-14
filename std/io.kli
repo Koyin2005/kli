@@ -15,7 +15,7 @@ end
 
 fun eprint_string(value : string) -> () = builtins.eprint_string(value)
 
-fun eprint_string_newline(value : string) -> () = do 
+fun eprint_newline(value : string) -> () = do 
     builtins.eprint_string(value);
     builtins.eprint_string("\n")
 end
