@@ -27,6 +27,7 @@ pub enum PatternKind<'ctxt> {
     Unit,
     Int(u64),
     Bool(bool),
+    Char(char),
     Case(
         DefId,
         GenericArgs<'ctxt>,

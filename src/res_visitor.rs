@@ -14,7 +14,8 @@ pub trait Visitor {
         match &pattern.kind {
             crate::resolved_ast::PatternKind::Unit
             | crate::resolved_ast::PatternKind::Int(_)
-            | crate::resolved_ast::PatternKind::Bool(_) => {}
+            | crate::resolved_ast::PatternKind::Bool(_)
+            | crate::resolved_ast::PatternKind::Char(_) => {}
             &crate::resolved_ast::PatternKind::Binding(.., name, var) => {
                 self.visit_var_def(Var(name.symbol, var))
             }

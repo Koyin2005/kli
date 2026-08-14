@@ -242,6 +242,13 @@ impl Parser {
                     kind: PatternKind::Int(lit),
                 })
             }
+            TokenKind::CharLiteral(c) => {
+                self.advance();
+                Ok(Pattern {
+                    loc,
+                    kind: PatternKind::Char(c),
+                })
+            }
             TokenKind::Ident(_) => self.parse_pattern_ident(loc, Mutable::Immutable),
             TokenKind::Mut => {
                 self.advance();

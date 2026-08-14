@@ -18,6 +18,14 @@ impl<'ctxt> FunctionCtxt<'_, 'ctxt> {
         let root = self.root();
         let expected_type = root.simplify_type(expected_type);
         match pattern.kind {
+            PatternKind::Char(c) => {
+                let _ = root.unify(expected_type, Type::new_unit(self.ctxt()), pattern.loc);
+                typed_ast::Pattern {
+                    ty: Type::new_char(self.ctxt()),
+                    loc,
+                    kind: typed_ast::PatternKind::Char(c),
+                }
+            }
             PatternKind::Int(value) => {
                 let (ty, value) = self.root().check_int_lit(loc, Some(expected_type), value);
                 let _ = root.unify(expected_type, ty, pattern.loc);

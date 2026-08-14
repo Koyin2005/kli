@@ -164,6 +164,7 @@ pub enum PatternKind {
     Binding(Mutable, Ident, VarId),
     Record(Box<[PatternField]>),
     Tuple(Box<[Pattern]>),
+    Char(char),
     Unit,
 }
 #[derive(Debug)]

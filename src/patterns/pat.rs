@@ -38,6 +38,9 @@ impl<'ctxt> Pat<'ctxt> {
                     f.write_str("false")
                 }
             }
+            Constructor::Char(c) => {
+                write!(f, "{}", c)
+            }
             Constructor::Int(value) => {
                 write!(f, "{}", value)
             }

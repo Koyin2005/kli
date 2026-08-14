@@ -31,9 +31,11 @@ where
         PatternKind::Int(value) => {
             v.visit_lit(pattern.loc, *value, pattern.ty);
         }
-        PatternKind::Binding(..) | PatternKind::Err | PatternKind::Bool(_) | PatternKind::Unit => {
-            ()
-        }
+        PatternKind::Binding(..)
+        | PatternKind::Char(_)
+        | PatternKind::Err
+        | PatternKind::Bool(_)
+        | PatternKind::Unit => (),
         PatternKind::Case(.., inner) => {
             if let Some(inner) = inner {
                 v.visit_pattern(inner);

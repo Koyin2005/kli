@@ -32,7 +32,11 @@ impl<'a, 'ctxt> TypeSubst<'a, 'ctxt> {
     }
     pub fn subst_pattern(&mut self, pattern: &mut Pattern<'ctxt>) {
         match &mut pattern.kind {
-            PatternKind::Bool(_) | PatternKind::Int(_) | PatternKind::Err | PatternKind::Unit => (),
+            PatternKind::Bool(_)
+            | PatternKind::Int(_)
+            | PatternKind::Char(_)
+            | PatternKind::Err
+            | PatternKind::Unit => (),
             PatternKind::Binding(.., ty) => self.subst_type(ty),
             PatternKind::Case(.., args, _, inner) => {
                 self.subst_generic_args(args);

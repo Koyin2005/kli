@@ -14,6 +14,7 @@ pub enum Constructor {
     Case(Symbol),
     NonExhaustive,
     Missing,
+    Char(char),
 }
 
 pub enum ConstructorSet {
@@ -87,7 +88,8 @@ pub fn fields_of<'ctxt>(
         | Constructor::Bool(_)
         | Constructor::NonExhaustive
         | Constructor::Wildcard
-        | Constructor::Missing => Vec::new(),
+        | Constructor::Missing
+        | Constructor::Char(_) => Vec::new(),
         Constructor::Record => match ty.kind() {
             &TypeKind::Named(id, _, ref args) => ctxt
                 .type_def(id)

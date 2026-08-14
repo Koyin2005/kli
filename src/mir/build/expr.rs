@@ -158,7 +158,8 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
             typed_ast::PatternKind::Bool(_)
             | typed_ast::PatternKind::Int(_)
-            | typed_ast::PatternKind::Unit => (),
+            | typed_ast::PatternKind::Unit
+            | typed_ast::PatternKind::Char(_) => (),
             typed_ast::PatternKind::Record(ref fields) => {
                 for field in fields {
                     self.assign_place_to_pattern(

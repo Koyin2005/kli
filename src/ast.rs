@@ -110,6 +110,7 @@ pub enum PatternKind {
     Binding(Mutable, Ident),
     Case(Ident, Option<Box<Pattern>>),
     Int(IntLit),
+    Char(char),
     Record(Vec<PatternField>),
     Tuple(Vec<Pattern>),
     Unit,

@@ -15,7 +15,8 @@ enum Test {
 enum TestCase {
     True,
     False,
-    Equals(i128),
+    EqualsChar(char),
+    EqualsInt(i128),
     Variant(CaseId),
 }
 type TestMatrix = Vec<(SrcLoc, usize, Vec<MatchTest>)>;
@@ -41,9 +42,10 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         };
         let head_test = head_test.clone();
         let test = match head_test.case {
-            TestCase::Equals(_) => Test::IntSwitch,
+            TestCase::EqualsInt(_) => Test::IntSwitch,
             TestCase::False | TestCase::True => Test::If,
             TestCase::Variant(_) => Test::VariantSwitch,
+            TestCase::EqualsChar(_) => Test::IntSwitch,
         };
         fn group_tests(
             place: &Place,
@@ -107,7 +109,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let targets = tests
                     .into_iter()
                     .filter_map(|(case, block)| {
-                        let TestCase::Equals(value) = case else {
+                        let TestCase::EqualsInt(value) = case else {
                             return None;
                         };
                         Some(SwitchTarget {
@@ -161,6 +163,13 @@ impl<'ctxt> Builder<'_, 'ctxt> {
     }
     fn match_tests(&self, place: Place, pattern: &Pattern) -> Vec<MatchTest> {
         match &pattern.kind {
+            PatternKind::Char(c) => {
+                vec![MatchTest {
+                    place,
+                    case: TestCase::EqualsChar(*c),
+                    loc: pattern.loc,
+                }]
+            }
             PatternKind::Case(id, .., index, inner) => {
                 if let Some(inner) = inner {
                     let mut tests = vec![MatchTest {
@@ -188,7 +197,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             PatternKind::Int(value) => {
                 vec![MatchTest {
                     place,
-                    case: TestCase::Equals(*value as i128),
+                    case: TestCase::EqualsInt(*value as i128),
                     loc: pattern.loc,
                 }]
             }

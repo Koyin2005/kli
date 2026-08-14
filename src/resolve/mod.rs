@@ -412,6 +412,7 @@ impl<'info> Resolve<'info> {
     fn resolve_pattern(&mut self, pattern: ast::Pattern) -> res::Pattern {
         let loc = pattern.loc;
         let kind = match pattern.kind {
+            ast::PatternKind::Char(c) => res::PatternKind::Char(c),
             ast::PatternKind::Unit => res::PatternKind::Unit,
             ast::PatternKind::Tuple(fields) => res::PatternKind::Tuple(
                 fields
