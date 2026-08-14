@@ -77,6 +77,9 @@ fun array_get_unchecked[T](a : array[T], index : UInt64) -> T;
 fun print_string(s : string) -> ();
 
 @builtin
+fun eprint_string(s : string) -> ();
+
+@builtin
 fun int_max_value[T]() -> T;
 
 @builtin

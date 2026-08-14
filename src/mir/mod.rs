@@ -557,7 +557,10 @@ pub struct Stmt<'ctxt> {
 pub enum StmtKind<'ctxt> {
     Noop,
     Assign(Place, Box<Rvalue<'ctxt>>),
-    Print(Operand<'ctxt>),
+    Print {
+        value: Operand<'ctxt>,
+        err: bool,
+    },
     Copy {
         dst: Operand<'ctxt>,
         src: Operand<'ctxt>,

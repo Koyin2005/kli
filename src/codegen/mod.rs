@@ -135,6 +135,7 @@ struct RuntimeFunctions {
     panic: FuncId,
     alloc: FuncId,
     print_string: FuncId,
+    eprint_string : FuncId,
     read_string: FuncId,
 }
 struct FunctionMap<'ctxt> {
@@ -250,6 +251,13 @@ impl<'ctxt> CodegenRoot<'ctxt> {
 
         let print_string =
             self.declare_function("kli_print_string", cranelift_module::Linkage::Import, &{
+                let mut sig = ir::Signature::new(self.module.target_config().default_call_conv);
+                sig.params.push(AbiParam::new(PTR_IR_TYPE));
+                sig.params.push(AbiParam::new(ir::types::I64));
+                sig
+            });
+        let eprint_string =
+            self.declare_function("kli_eprint_string", cranelift_module::Linkage::Import, &{
                 let mut sig = ir::Signature::new(self.module.target_config().default_call_conv);
                 sig.params.push(AbiParam::new(PTR_IR_TYPE));
                 sig.params.push(AbiParam::new(ir::types::I64));
@@ -374,6 +382,7 @@ impl<'ctxt> CodegenRoot<'ctxt> {
             alloc: allocate_function,
             print_string,
             read_string,
+            eprint_string
         };
 
         for instance in self.instances {
@@ -1305,15 +1314,17 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         );
         self.codegen_alloc_call(size_val, align)
     }
-    fn print_string(&mut self, ptr: ir::Value, len: ir::Value) {
-        let print_string = self.runtime_functions.print_string;
+    fn print_string(&mut self, ptr: ir::Value, len: ir::Value, err: bool) {
+        let print_string = if err {self.runtime_functions.eprint_string} else {
+            self.runtime_functions.print_string
+        };
         self.codegen_direct_void_call(print_string, &[ptr, len]);
     }
-    fn print_string_newline(&mut self, ptr: ir::Value, len: ir::Value) {
-        self.print_string(ptr, len);
+    fn print_string_newline(&mut self, ptr: ir::Value, len: ir::Value, err: bool) {
+        self.print_string(ptr, len,err);
 
         let (ptr, len) = self.build_string_value("\n".to_string());
-        self.print_string(ptr, len);
+        self.print_string(ptr, len,err);
     }
     fn codegen_direct_void_call(&mut self, id: FuncId, args: &[ir::Value]) {
         let func = self.module.declare_func_in_func(id, self.builder.func);
@@ -1959,7 +1970,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         };
     }
 
-    fn codegen_print_stmt(&mut self, operand: &mir::Operand<'ctxt>) {
+    fn codegen_print_stmt(&mut self, operand: &mir::Operand<'ctxt>,err: bool) {
         let operand = self.eval_operand(operand);
         let TypeKind::String = operand.ty.kind() else {
             unreachable!()
@@ -1973,7 +1984,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             OperandValueKind::Value(ScalarValue::Pair([first, second], _)) => (first, second),
             _ => unreachable!("{:?}", operand.kind),
         };
-        self.print_string(first_val, second_val);
+        self.print_string(first_val, second_val,err);
     }
     fn write_zeros(&mut self, place: MemPlace<'ctxt>) {
         let size = place.layout.size;
@@ -1993,8 +2004,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             mir::StmtKind::Assign(place, rvalue) => {
                 self.codegen_rvalue_assign(place, rvalue);
             }
-            mir::StmtKind::Print(operand) => {
-                self.codegen_print_stmt(operand);
+            mir::StmtKind::Print { value:operand, err } => {
+                self.codegen_print_stmt(operand,*err);
             }
             mir::StmtKind::Copy { dst, src, count } => {
                 let dst_operand = self.eval_operand(dst);
@@ -2066,7 +2077,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                             "attempted to compute overflowing division".to_string()
                         }
                     });
-                    self.print_string_newline(first, second);
+                    self.print_string_newline(first, second,true);
                     self.builder.ins().trap(code);
                 }
                 mir::TerminatorKind::Switch(operand, targets) => {

@@ -284,6 +284,17 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 .collect::<Vec<_>>()
         };
         match builtin {
+            Builtin::EprintString => {
+                let [arg] = operands().try_into().unwrap();
+                self.push_stmt(
+                    args[0].loc,
+                    mir::StmtKind::Print {
+                        value: arg,
+                        err: true,
+                    },
+                );
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
+            }
             Builtin::PtrCopy => {
                 let [dst, src, count] = operands().try_into().unwrap();
                 self.push_stmt(loc, mir::StmtKind::Copy { dst, src, count });
@@ -409,7 +420,13 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
             Builtin::PrintString => {
                 let [arg] = operands().try_into().unwrap();
-                self.push_stmt(args[0].loc, mir::StmtKind::Print(arg));
+                self.push_stmt(
+                    args[0].loc,
+                    mir::StmtKind::Print {
+                        value: arg,
+                        err: false,
+                    },
+                );
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
             }
             Builtin::ArrayGetUnchecked => {

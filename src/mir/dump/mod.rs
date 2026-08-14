@@ -330,8 +330,8 @@ impl<'ctxt> MirDump<'ctxt> {
         for stmt in &block.stmts {
             write!(self.output, "  ")?;
             match &stmt.kind {
-                StmtKind::Print(value) => {
-                    write!(self.output, "print(")?;
+                StmtKind::Print { value, err } => {
+                    write!(self.output, "{}print(", if *err { "e" } else { "" })?;
                     self.write_operand(value)?;
 
                     writeln!(self.output, ")")?;

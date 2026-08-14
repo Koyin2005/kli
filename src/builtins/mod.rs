@@ -38,6 +38,7 @@ pub enum Builtin {
 
     // IO
     PrintString,
+    EprintString,
     ReadLine,
 
     // Integers
@@ -78,6 +79,7 @@ impl Builtin {
             Builtin::PtrWrite => "ptr_write",
             Builtin::GcAlloc => "gc_alloc",
             Builtin::PtrCopy => "ptr_copy",
+            Builtin::EprintString => "eprint_string",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
@@ -113,6 +115,7 @@ impl Builtin {
             Symbol::OFFSET => Some(Builtin::Offset),
             Symbol::GC_ALLOC => Some(Builtin::GcAlloc),
             Symbol::PTR_COPY => Some(Builtin::PtrCopy),
+            Symbol::EPRINT_STRING => Some(Builtin::EprintString),
             _ => None,
         }
     }

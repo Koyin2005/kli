@@ -8,7 +8,7 @@ use crate::{
         visitor::{PlaceCtxt, Visit},
     },
     src_loc::SrcLoc,
-    types::{FunctionSig, IntegerKind, IntegerSize, SimpleScalar},
+    types::{FunctionSig, IntegerKind, IntegerSize, SimpleScalar, Type},
     unsafety,
 };
 pub struct WellFormed<'ctxt, 'body> {
@@ -425,7 +425,14 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 );
             }
             StmtKind::Noop => (),
-            StmtKind::Print(_) => {}
+            StmtKind::Print { value, err: _ } => {
+                self.assert(
+                    value.type_of(self.ctxt, &self.body.locals, self.body.return_type)
+                        == Type::new_string(self.ctxt),
+                    || format!("cannot print non string"),
+                    stmt.loc,
+                );
+            }
         }
     }
 }

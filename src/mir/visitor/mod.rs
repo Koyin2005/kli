@@ -24,7 +24,7 @@ pub trait Visit<'ctxt> {
             StmtKind::Assign(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
             }
-            StmtKind::Print(operand) => {
+            StmtKind::Print { value: operand, .. } => {
                 self.visit_operand(loc, operand);
             }
             StmtKind::Copy { dst, src, count } => {
@@ -179,7 +179,10 @@ pub trait MutVisit<'ctxt> {
             StmtKind::Assign(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
             }
-            StmtKind::Print(operand) => {
+            StmtKind::Print {
+                value: operand,
+                err: _,
+            } => {
                 self.visit_operand(loc, operand);
             }
         }

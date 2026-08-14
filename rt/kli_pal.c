@@ -40,6 +40,44 @@
             fflush(stdout);
         }
     }
+    void kli_eprint_string(uint8_t *ptr, size_t len){
+        if (len == 0){
+            return;
+        }
+        HANDLE stdout_handle = GetStdHandle(STD_ERROR_HANDLE);
+        DWORD mode;
+        // Is stdout attached to a console
+        if (GetConsoleMode(stdout_handle, &mode))
+        {
+            wchar_t buffer[4096];
+            // Convert UTF-8 -> UTF-16
+            int wide_len = MultiByteToWideChar(
+                CP_UTF8,
+                MB_ERR_INVALID_CHARS,
+                ptr,
+                len,
+                buffer,
+                sizeof(buffer));
+
+            if (wide_len == 0){
+                return;
+            }
+
+            DWORD written;
+            WriteConsoleW(
+                stdout_handle,
+                buffer,
+                wide_len,
+                &written,
+                NULL);
+
+        }
+        else
+        {
+            fwrite(ptr, 1,len, stderr);
+            fflush(stderr);
+        }
+    }
     size_t kli_read_string(uint8_t *ptr, size_t len) {
         if (!len){
             return 0;
