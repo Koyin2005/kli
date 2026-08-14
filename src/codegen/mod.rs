@@ -1512,6 +1512,15 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn monomorphize<T: TypeMappable<'ctxt>>(&self, value: T) -> T {
         Scheme::new(value).bind(self.ctxt, self.args)
     }
+    fn codegen_gc_alloc(&mut self, place: &mir::Place, ty: Type<'ctxt>, count : &mir::Operand<'ctxt>){
+        
+        let ty = self.monomorphize(ty);
+        let count = self.eval_operand(count);
+        let count =  count.expect_immediate(self);
+        let ptr = self.codegen_runtime_size_alloc_call(ty,count);
+        let place = self.eval_place(place).as_non_zst_place().unwrap();
+        self.store_immediate(place, ptr);
+    }
     fn codegen_box(&mut self, place: &mir::Place, ty: Type<'ctxt>, operand: &mir::Operand<'ctxt>) {
         let ty = self.monomorphize(ty);
         let ptr = self.codegen_static_size_alloc_call(ty, 1);
@@ -1622,6 +1631,9 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     }
     fn codegen_rvalue_assign(&mut self, place: &mir::Place, value: &mir::Rvalue<'ctxt>) {
         match value {
+            mir::Rvalue::GcAlloc(ty,count) => {
+                self.codegen_gc_alloc(place, *ty, count);
+            } 
             mir::Rvalue::ReadLine => {
                 let size = 4096;
                 let slot = self.builder.create_sized_stack_slot(ir::StackSlotData::new(

@@ -61,6 +61,9 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue<'ctxt>) {
         match rvalue {
+            Rvalue::GcAlloc(_,operand) => {
+                self.visit_operand(loc, operand);
+            }
             Rvalue::UninitZeroed(_) | Rvalue::ReadLine => (),
             Rvalue::AllocateRawArray { ty: _, count } => self.visit_operand(loc, count),
             Rvalue::Discriminant(place) => self.visit_place(PlaceCtxt::Read, loc, place),
@@ -203,6 +206,9 @@ pub trait MutVisit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &mut Rvalue<'ctxt>) {
         match rvalue {
+            Rvalue::GcAlloc(_,operand) => {
+                self.visit_operand(loc, operand);
+            }
             Rvalue::UninitZeroed(_) | Rvalue::ReadLine => (),
             Rvalue::Discriminant(place) => self.visit_place(loc, place),
             Rvalue::Len(place) => self.visit_place(loc, place),

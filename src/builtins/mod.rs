@@ -22,6 +22,7 @@ pub enum Builtin {
     // Allocation
     BoxAlloc,
     RawArrayAlloc,
+    GcAlloc,
 
     //Pointers
     PtrWrite,
@@ -74,6 +75,7 @@ impl Builtin {
             Builtin::Offset => "offset",
             Builtin::PtrRead => "ptr_read",
             Builtin::PtrWrite => "ptr_write",
+            Builtin::GcAlloc => "gc_alloc"
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
@@ -107,6 +109,7 @@ impl Builtin {
             Symbol::PTR_READ => Some(Builtin::PtrRead),
             Symbol::PTR_WRITE => Some(Builtin::PtrWrite),
             Symbol::OFFSET => Some(Builtin::Offset),
+            Symbol::GC_ALLOC => Some(Builtin::GcAlloc),
             _ => None,
         }
     }

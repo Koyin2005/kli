@@ -287,6 +287,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let [ptr, offset] = operands().try_into().unwrap();
                 BuiltinResult::Rvalue(Self::binary_op_rvalue(mir::BinaryOp::Offset, ptr, offset))
             }
+            Builtin::GcAlloc => {
+                let [cap] = operands().try_into().unwrap();
+                let ty = ty.as_raw_ptr().unwrap();
+                BuiltinResult::Rvalue(Rvalue::GcAlloc(ty,cap))
+            }
             Builtin::PtrRead => {
                 let [ptr] = args else { unreachable!() };
                 let ptr = self.place(ptr);
