@@ -18,7 +18,7 @@ enum TestCase {
     Equals(i128),
     Variant(CaseId),
 }
-type TestMatrix = Vec<(SrcLoc, Vec<MatchTest>)>;
+type TestMatrix = Vec<(SrcLoc, usize, Vec<MatchTest>)>;
 #[derive(Debug, Clone)]
 struct MatchTest {
     place: Place,
@@ -29,14 +29,14 @@ impl<'ctxt> Builder<'_, 'ctxt> {
     fn build_tree(
         &mut self,
         tests: TestMatrix,
-        end_blocks: &mut Vec<(SrcLoc, BasicBlockId)>,
+        end_blocks: &mut Vec<(SrcLoc, usize, BasicBlockId)>,
     ) -> BasicBlockId {
         /* No more arms */
-        let Some(&(loc, ref row)) = tests.first() else {
+        let Some(&(loc, index, ref row)) = tests.first() else {
             return self.current_block;
         };
         let Some(head_test) = row.first() else {
-            end_blocks.push((loc, self.current_block));
+            end_blocks.push((loc, index, self.current_block));
             return self.current_block;
         };
         let head_test = head_test.clone();
@@ -52,7 +52,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             let mut branches: BTreeMap<TestCase, TestMatrix> = BTreeMap::new();
             let mut others = TestMatrix::new();
             for mut row in tests {
-                let Some(head) = row.1.first() else {
+                let Some(head) = row.2.first() else {
                     others.push(row);
                     continue;
                 };
@@ -65,7 +65,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     others.push(row);
                     continue;
                 }
-                row.1.remove(0);
+                row.2.remove(0);
                 branches.entry(case).or_default().push(row);
             }
             (branches, others)
@@ -73,23 +73,18 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         let (tests, rest) = group_tests(&head_test.place, tests);
 
         let start_block = self.current_block;
-
-        let mut otherwise_blocks = Vec::with_capacity(tests.len());
+        let otherwise_start = self.switch_to_new_block();
         let tests = tests
             .into_iter()
             .map(|(case, info)| {
                 let start_branch = self.switch_to_new_block();
                 let otherwise_block = self.build_tree(info, end_blocks);
-                otherwise_blocks.push(otherwise_block);
+                self.switch_to_block(otherwise_block);
+                self.finish_block_with_goto(head_test.loc, otherwise_start);
                 (case, start_branch)
             })
             .collect::<HashMap<_, _>>();
 
-        let otherwise_start = self.switch_to_new_block();
-        for block in otherwise_blocks {
-            self.switch_to_block(block);
-            self.finish_block_with_goto(head_test.loc, otherwise_start);
-        }
         self.switch_to_block(start_block);
         match test {
             Test::If => {
@@ -220,9 +215,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         let place = self.place(expr);
         let tests = arms
             .iter()
-            .map(|arm| {
+            .enumerate()
+            .map(|(i, arm)| {
                 (
                     arm.pattern.loc,
+                    i,
                     self.match_tests(place.clone(), &arm.pattern),
                 )
             })
@@ -232,7 +229,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         self.finish_block(expr.loc, TerminatorKind::Unreachable);
 
         let end_block = self.switch_to_new_block();
-        for (i, (loc, block)) in end_blocks.into_iter().enumerate() {
+        for (loc, i, block) in end_blocks.into_iter() {
             self.switch_to_block(block);
             self.assign_place_to_pattern(&arms[i].pattern, place.clone());
             self.expr_into_dest(dest.clone(), &arms[i].body);
