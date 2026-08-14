@@ -1427,8 +1427,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let right_value = right_operand.expect_immediate(self);
         let (left, right) = match binary_op {
             BinaryOp::Offset => {
-                let offset_ptr = self.builder.ins().iadd(left_value,right_value);
-                (offset_ptr,None)
+                let offset_ptr = self.builder.ins().iadd(left_value, right_value);
+                (offset_ptr, None)
             }
             BinaryOp::Overflow(op) => {
                 let kind = left_operand.ty.as_integer().unwrap();
