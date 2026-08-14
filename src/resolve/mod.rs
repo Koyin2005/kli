@@ -42,7 +42,7 @@ enum TypeAlias {
     UInt8,
     Int32,
     UInt32,
-    RawPtr
+    RawPtr,
 }
 impl TypeAlias {
     fn into_type_name(self) -> res::TypeName {

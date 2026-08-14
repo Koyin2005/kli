@@ -73,7 +73,7 @@ impl Builtin {
             Builtin::ReadLine => "read_line",
             Builtin::Offset => "offset",
             Builtin::PtrRead => "ptr_read",
-            Builtin::PtrWrite => "ptr_write"
+            Builtin::PtrWrite => "ptr_write",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {

@@ -8,7 +8,7 @@ use crate::{
         visitor::{PlaceCtxt, Visit},
     },
     src_loc::SrcLoc,
-    types::{FunctionSig, IntegerKind, IntegerSize, SimpleScalar, Type},
+    types::{FunctionSig, IntegerKind, IntegerSize, SimpleScalar},
     unsafety,
 };
 pub struct WellFormed<'ctxt, 'body> {
@@ -81,7 +81,12 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     )
                 }
                 super::PlaceProjection::Deref => {
-                    ty = self.assert_with_some(ty, Type::as_box, || "Cannot deref non box", loc)
+                    ty = self.assert_with_some(
+                        ty,
+                        |ty| ty.as_box().or(ty.as_raw_ptr()),
+                        || "Cannot deref non box or ptr",
+                        loc,
+                    )
                 }
             }
         }
@@ -254,6 +259,10 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                         || format!("Cannot equate '{}' and '{}'", left, right),
                         loc,
                     ),
+                    (BinaryOp::Offset, left, right)
+                        if left
+                            .as_raw_ptr()
+                            .is_some_and(|_| right.is_uint(IntegerSize::Int64)) => {}
                     (op, left, right) => self.assert(
                         false,
                         || format!("invalid '{op:?}' with operands {} and {}", left, right),

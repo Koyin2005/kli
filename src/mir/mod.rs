@@ -253,6 +253,7 @@ pub enum BinaryOp {
     BitwiseOr,
     ShiftLeft,
     ShiftRight,
+    Offset,
 }
 #[derive(Clone, Debug, Copy)]
 pub enum IntegerCast {
@@ -337,6 +338,9 @@ impl<'ctxt> Rvalue<'ctxt> {
                 BinaryOp::Divide => left_and_right.0.type_of(ctxt, locals, return_type),
                 BinaryOp::Equals => Type::new_bool(ctxt),
                 BinaryOp::Lesser | BinaryOp::Greater => Type::new_bool(ctxt),
+                BinaryOp::Offset => {
+                    Type::new_raw_ptr(ctxt, left_and_right.0.type_of(ctxt, locals, return_type))
+                }
             },
             Rvalue::AllocateArray(element, _) => Type::new_array(ctxt, *element),
             Rvalue::AllocateRawArray { ty, .. } => Type::new_raw_array(ctxt, *ty),

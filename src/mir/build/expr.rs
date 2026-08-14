@@ -272,30 +272,35 @@ impl<'ctxt> Builder<'_, 'ctxt> {
     }
     pub(super) fn builtin_call(
         &mut self,
-        _: SrcLoc,
+        loc: SrcLoc,
         ty: Type<'ctxt>,
         builtin: Builtin,
         args: &[Expr<'ctxt>],
     ) -> BuiltinResult<'ctxt> {
-        let operands = args
-            .iter()
-            .map(|operand| self.operand(operand))
-            .collect::<Vec<_>>();
+        let mut operands = || {
+            args.iter()
+                .map(|operand| self.operand(operand))
+                .collect::<Vec<_>>()
+        };
         match builtin {
             Builtin::Offset => {
-                let [ptr,offset] = operands.try_into().unwrap();
-                todo!("ptr offset")
-            },
+                let [ptr, offset] = operands().try_into().unwrap();
+                BuiltinResult::Rvalue(Self::binary_op_rvalue(mir::BinaryOp::Offset, ptr, offset))
+            }
             Builtin::PtrRead => {
-                let [ptr] = operands.try_into().unwrap();
-                todo!("ptr read")
-            },
+                let [ptr] = args else { unreachable!() };
+                let ptr = self.place(ptr);
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Load(ptr.with_deref())))
+            }
             Builtin::PtrWrite => {
-                let [ptr,value] = operands.try_into().unwrap();
-                todo!("ptr write")
+                let [ptr, value] = args else { unreachable!() };
+                let ptr = self.place(ptr);
+                let value = self.build_rvalue(value);
+                self.assign(loc, ptr.with_deref(), value);
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
             }
             Builtin::Bitcast => {
-                let [arg] = operands.try_into().unwrap();
+                let [arg] = operands().try_into().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, arg, ty))
             }
             Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
@@ -307,7 +312,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     ))))
                 }
                 IntegerBuiltin::ShiftLeft => {
-                    let [first, second] = operands.try_into().unwrap();
+                    let [first, second] = operands().try_into().unwrap();
                     BuiltinResult::Rvalue(Self::binary_op_rvalue(
                         mir::BinaryOp::ShiftLeft,
                         first,
@@ -315,7 +320,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     ))
                 }
                 IntegerBuiltin::ShiftRight => {
-                    let [first, second] = operands.try_into().unwrap();
+                    let [first, second] = operands().try_into().unwrap();
                     BuiltinResult::Rvalue(Self::binary_op_rvalue(
                         mir::BinaryOp::ShiftRight,
                         first,
@@ -323,7 +328,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     ))
                 }
                 IntegerBuiltin::WrappingAdd => {
-                    let [left, right] = operands.try_into().unwrap();
+                    let [left, right] = operands().try_into().unwrap();
                     BuiltinResult::Rvalue(Self::binary_op_rvalue(
                         mir::BinaryOp::Wrapping(OverflowOp::Add),
                         left,
@@ -331,7 +336,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     ))
                 }
                 IntegerBuiltin::OverflowingAdd => {
-                    let [left, right] = operands.try_into().unwrap();
+                    let [left, right] = operands().try_into().unwrap();
                     BuiltinResult::Rvalue(Self::binary_op_rvalue(
                         mir::BinaryOp::Overflow(OverflowOp::Add),
                         left,
@@ -339,7 +344,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     ))
                 }
                 IntegerBuiltin::WrappingSub => {
-                    let [left, right] = operands.try_into().unwrap();
+                    let [left, right] = operands().try_into().unwrap();
                     BuiltinResult::Rvalue(Self::binary_op_rvalue(
                         mir::BinaryOp::Wrapping(OverflowOp::Subtract),
                         left,
@@ -347,7 +352,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     ))
                 }
                 IntegerBuiltin::OverflowingSub => {
-                    let [left, right] = operands.try_into().unwrap();
+                    let [left, right] = operands().try_into().unwrap();
                     BuiltinResult::Rvalue(Self::binary_op_rvalue(
                         mir::BinaryOp::Overflow(OverflowOp::Subtract),
                         left,
@@ -355,7 +360,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     ))
                 }
                 IntegerBuiltin::Truncate => {
-                    let [arg] = operands.try_into().unwrap();
+                    let [arg] = operands().try_into().unwrap();
                     let kind = ty.as_integer().unwrap();
                     BuiltinResult::Rvalue(Rvalue::Cast(
                         mir::CastKind::IntegerCast(mir::IntegerCast::Truncate(kind)),
@@ -364,7 +369,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     ))
                 }
                 IntegerBuiltin::Widen => {
-                    let [operand] = operands.try_into().unwrap();
+                    let [operand] = operands().try_into().unwrap();
                     let kind = ty.as_simple_scalar().unwrap();
                     let (signed, size) = kind.as_integer().signed_and_size();
                     BuiltinResult::Rvalue(Rvalue::Cast(
@@ -380,11 +385,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             },
             Builtin::ReadLine => BuiltinResult::Rvalue(Rvalue::ReadLine),
             Builtin::UninitNew => {
-                let [operand] = operands.try_into().unwrap();
+                let [operand] = operands().try_into().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, operand, ty))
             }
             Builtin::UninitAssumeInit => {
-                let [operand] = operands.try_into().unwrap();
+                let [operand] = operands().try_into().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, operand, ty))
             }
             Builtin::UninitZeroed => {
@@ -392,56 +397,51 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 BuiltinResult::Rvalue(Rvalue::UninitZeroed(ty))
             }
             Builtin::PrintString => {
-                let [arg] = operands.try_into().unwrap();
+                let [arg] = operands().try_into().unwrap();
                 self.push_stmt(args[0].loc, mir::StmtKind::Print(arg));
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
             }
             Builtin::ArrayGetUnchecked => {
-                let [array, index] = operands.try_into().unwrap();
-                let Operand::Load(place) = array else {
-                    unreachable!()
-                };
+                let [array, index] = args else { unreachable!() };
+                let place = self.place(array);
+                let index = self.operand(index);
                 let index = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Load(place.with_index(index))))
             }
             Builtin::ArraySetUnchecked => {
-                let [array, index, value] = operands.try_into().unwrap();
-                let Operand::Load(place) = array else {
+                let [array, index, value] = args else {
                     unreachable!()
                 };
+                let place = self.place(array);
+                let index = self.operand(index);
                 let index = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
+                let value = self.operand(value);
                 self.assign(args[0].loc, place.with_index(index), Rvalue::Use(value));
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
             }
             Builtin::RawArrayAlloc => {
-                let [count] = operands.try_into().unwrap();
+                let [count] = operands().try_into().unwrap();
                 let ty = ty.as_raw_array().unwrap();
                 BuiltinResult::Rvalue(Rvalue::AllocateRawArray { ty, count })
             }
             Builtin::BoxAlloc => {
-                let [operand] = operands.try_into().unwrap();
+                let [operand] = operands().try_into().unwrap();
                 let Some(ty) = ty.as_box() else {
                     unreachable!()
                 };
                 BuiltinResult::Rvalue(Rvalue::AllocateBox(ty, operand))
             }
             Builtin::Len => {
-                let [operand] = operands.try_into().unwrap();
-                let Operand::Load(place) = operand else {
-                    unreachable!()
-                };
+                let place = self.place(&args[0]);
                 BuiltinResult::Rvalue(Rvalue::Len(place))
             }
             Builtin::ArrayAddr => {
-                let [operand] = operands.try_into().unwrap();
-                let Operand::Load(place) = operand else {
-                    unreachable!()
-                };
+                let place = self.place(&args[0]);
                 BuiltinResult::Rvalue(Rvalue::AddrOf(place))
             }
             Builtin::Transmute => BuiltinResult::Rvalue(Rvalue::Cast(
                 mir::CastKind::Transmute,
-                { operands }.swap_remove(0),
+                { operands() }.swap_remove(0),
                 ty,
             )),
         }

@@ -269,10 +269,10 @@ pub struct Type<'ctxt>(&'ctxt TypeKind<'ctxt>);
 impl<'ctxt> Type<'ctxt> {
     pub const UNKNOWN: Self = Self(&TypeKind::Unknown);
     pub const BYTE: Self = Self(&TypeKind::Unknown);
-    pub fn new_raw_ptr(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self{
+    pub fn new_raw_ptr(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
         TypeKind::RawPtr(ty).intern(ctxt)
     }
-    pub fn as_raw_ptr(self) -> Option<Self>{
+    pub fn as_raw_ptr(self) -> Option<Self> {
         let TypeKind::RawPtr(ty) = *self.0 else {
             return None;
         };
@@ -468,7 +468,7 @@ pub enum TypeKind<'ctxt> {
     String,
     Box(Type<'ctxt>),
     Uninit(Type<'ctxt>),
-    RawPtr(Type<'ctxt>)
+    RawPtr(Type<'ctxt>),
 }
 impl<'ctxt> TypeKind<'ctxt> {
     pub const UNIT: Self = Self::Tuple(Vec::new());
@@ -569,7 +569,7 @@ impl Display for TypeKind<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::RawPtr(ty) => {
-                write!(f,"{}[{}]",Symbol::RAW_PTR,ty)
+                write!(f, "{}[{}]", Symbol::RAW_PTR, ty)
             }
             Self::Box(ty) => {
                 write!(f, "Box[{ty}]")
@@ -635,7 +635,7 @@ pub trait TypeMap<'ctxt> {
             | TypeKind::Param(..)
             | TypeKind::IntVar(_)
             | TypeKind::Never => Ok(ty),
-            &TypeKind::RawPtr(ty) => Ok(Type::new_raw_ptr(self.ctxt(),ty)),
+            &TypeKind::RawPtr(ty) => Ok(Type::new_raw_ptr(self.ctxt(), ty)),
             TypeKind::Function(function_type) => Ok(self
                 .map_function_type(function_type.clone())?
                 .into_type(self.ctxt())),
