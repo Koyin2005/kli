@@ -1,5 +1,9 @@
 import std.(strings,string_buf)
 
+@unsafe
+fun from_u32_unchecked(c : UInt32) -> char = 
+    builtins.transmute(c)
+
 
 fun utf8_len(c : char) -> UInt64 = 
     case c < '\u00FF' of

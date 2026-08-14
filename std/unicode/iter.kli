@@ -1,4 +1,8 @@
-import std.(optional.Option,strings)
+import std.(
+    optional.Option,
+    strings,
+    chars as chr
+)
 
 @opaque
 type CharIter =  {    
@@ -40,14 +44,14 @@ fun next_index(iter : CharIterIndices) -> Option[(UInt64,char)] = do
     | .Some((next_index,next)) -> 
         do
             iter.index^ = next_index;
-            Option.Some((current,next))
+            Option.Some((current,unsafe chr.from_u32_unchecked(next) end))
         end
     end
 
 end
 
 @unsafe
-fun next_char_unchecked(current_index : UInt64, bytes : array[UInt8]) -> Option[(UInt64,char)] = do
+fun next_char_unchecked(current_index : UInt64, bytes : array[UInt8]) -> Option[(UInt64,UInt32)] = do
     let len =  builtins.array_len(bytes);
     let first_byte : UInt32 = case current_index < len of 
     | false -> return Option.None
@@ -57,7 +61,7 @@ fun next_char_unchecked(current_index : UInt64, bytes : array[UInt8]) -> Option[
     # Its an ascii char?
     let second_byte : UInt32 = case first_byte < 128 of 
     | true -> return Option.Some(
-            (current_index,unsafe builtins.transmute(first_byte) end)
+            (current_index,first_byte)
         )
     | false -> builtins.widen(bytes.[current_index])
     end;
@@ -82,7 +86,7 @@ fun next_char_unchecked(current_index : UInt64, bytes : array[UInt8]) -> Option[
 
             let code = first_part bor second_part;
             return Option.Some(
-                (current_index, unsafe builtins.transmute(code) end)
+                (current_index, code)
             )
         end
     end;
@@ -106,7 +110,7 @@ fun next_char_unchecked(current_index : UInt64, bytes : array[UInt8]) -> Option[
             
             let code = first_part bor second_part;
             return Option.Some(
-                (current_index,unsafe builtins.transmute(code) end)
+                (current_index,code)
             )
         end
     | false -> builtins.widen(bytes.[current_index])
@@ -128,5 +132,5 @@ fun next_char_unchecked(current_index : UInt64, bytes : array[UInt8]) -> Option[
 
     let code = first_part bor second_part bor third_part;
 
-    Option.Some((current_index,unsafe builtins.transmute(code) end))
+    Option.Some((current_index,code))
 end
