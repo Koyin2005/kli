@@ -2,6 +2,16 @@ import std.optional.Option
 import builtins
 import std.panicking.panic_message
 
+@unsafe
+fun from_raw_parts[T](p : RawPtr[T], len : UInt64) -> array[T] = do
+    builtins.transmute((p,len))
+end
+
+@unsafe
+fun assume_init[T](r : array[uninit[T]]) -> array[T] = do
+    builtins.transmute(r)
+end
+
 fun alloc_copy[T](this : array[T]) -> array[T] = do
     let len = builtins.array_len(this);
     let r = builtins.raw_array_alloc(len);
@@ -14,7 +24,7 @@ fun alloc_copy[T](this : array[T]) -> array[T] = do
             ) 
         end;
     end;
-    unsafe builtins.transmute(r) end
+    unsafe assume_init(r) end
 
 end
 
@@ -37,7 +47,7 @@ fun repeat[T](count : UInt64, value : T) -> array[T] = do
             ) 
         end;
     end;
-    unsafe builtins.transmute(arr) end
+    unsafe assume_init(arr) end
 end
 
 fun get_checked[T](this : array[T], index : UInt64) -> Option[T] = 

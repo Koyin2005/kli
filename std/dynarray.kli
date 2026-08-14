@@ -173,7 +173,7 @@ fun into_array[T](arr : DynArray[T]) -> array[T] = do
     | len -> do
         let buf = builtins.gc_alloc[T](len);
         unsafe builtins.ptr_copy[T](buf,arr.inner^.ptr,len) end;
-        unsafe builtins.transmute((buf,len)) end
+        unsafe arrays.from_raw_parts(buf,len) end
         end
     end
 end
@@ -194,7 +194,7 @@ end
 
 fun drain_to_array[T](this : DynArray[T]) -> array[T] = do
     shrink_to_fit(this);
-    let arr : array[T] = unsafe builtins.transmute((this.inner^.ptr,this.inner^.len)) end;
+    let arr : array[T] = unsafe arrays.from_raw_parts(this.inner^.ptr,this.inner^.len) end;
     this.inner^ = 
         DynArrayInner{
             ptr = builtins.gc_alloc[T](0),
