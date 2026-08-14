@@ -109,8 +109,10 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let targets = tests
                     .into_iter()
                     .filter_map(|(case, block)| {
-                        let TestCase::EqualsInt(value) = case else {
-                            return None;
+                        let value = match case{
+                            TestCase::EqualsInt(value) => value,
+                            TestCase::EqualsChar(char) => u32::from(char).into(),
+                            _ => return None
                         };
                         Some(SwitchTarget {
                             value,
