@@ -63,6 +63,9 @@ impl Symbol {
         "bitwise_or",
         "shift_left",
         "shift_right",
+        "ptr_read",
+        "ptr_write",
+        "offset"
     ];
     const _NO_REPEATS: () = {
         let mut i = 0;
@@ -133,6 +136,9 @@ impl Symbol {
     pub const READ_LINE: Self = Self::expect_symbol("read_line");
     pub const SHIFT_LEFT: Self = Self::expect_symbol("shift_left");
     pub const SHIFT_RIGHT: Self = Self::expect_symbol("shift_right");
+    pub const PTR_READ: Self = Self::expect_symbol("ptr_read");
+    pub const PTR_WRITE: Self = Self::expect_symbol("ptr_write");
+    pub const OFFSET: Self = Self::expect_symbol("offset");
     pub const BITWISE_OR: Self = Self::expect_symbol("bitwise_or");
     pub const INT_FIRST_UPPER: Self = Self::expect_symbol("Int");
     pub const UINT_FIRST_UPPER: Self = Self::expect_symbol("UInt");

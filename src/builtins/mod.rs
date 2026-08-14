@@ -23,6 +23,11 @@ pub enum Builtin {
     BoxAlloc,
     RawArrayAlloc,
 
+    //Pointers
+    PtrWrite,
+    Offset,
+    PtrRead,
+
     // Arrays
     ArraySetUnchecked,
     ArrayGetUnchecked,
@@ -66,6 +71,9 @@ impl Builtin {
             Builtin::UninitZeroed => "uninit_zeroed",
             Builtin::UninitNew => "uninit_new",
             Builtin::ReadLine => "read_line",
+            Builtin::Offset => "offset",
+            Builtin::PtrRead => "ptr_read",
+            Builtin::PtrWrite => "ptr_write"
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
@@ -96,6 +104,9 @@ impl Builtin {
             Symbol::UNINIT_ASSUME_INIT => Some(Builtin::UninitAssumeInit),
             Symbol::UNINIT_NEW => Some(Builtin::UninitNew),
             Symbol::READ_LINE => Some(Builtin::ReadLine),
+            Symbol::PTR_READ => Some(Builtin::PtrRead),
+            Symbol::PTR_WRITE => Some(Builtin::PtrWrite),
+            Symbol::OFFSET => Some(Builtin::Offset),
             _ => None,
         }
     }

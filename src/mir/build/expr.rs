@@ -282,6 +282,18 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             .map(|operand| self.operand(operand))
             .collect::<Vec<_>>();
         match builtin {
+            Builtin::Offset => {
+                let [ptr,offset] = operands.try_into().unwrap();
+                todo!("ptr offset")
+            },
+            Builtin::PtrRead => {
+                let [ptr] = operands.try_into().unwrap();
+                todo!("ptr read")
+            },
+            Builtin::PtrWrite => {
+                let [ptr,value] = operands.try_into().unwrap();
+                todo!("ptr write")
+            }
             Builtin::Bitcast => {
                 let [arg] = operands.try_into().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, arg, ty))
