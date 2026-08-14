@@ -21,7 +21,12 @@ fun from_array[T](arr : array[T]) -> DynArray[T] = do
     let len = builtins.array_len(arr);
     let dyn_arr : DynArray[T] = with_capacity(len);
     for i in 0..len do 
-        push(dyn_arr,builtins.array_get_unchecked(arr,i))
+        push(
+            dyn_arr,
+            unsafe
+                builtins.array_get_unchecked(arr,i)
+            end
+        )
     end;
     dyn_arr
 
@@ -43,9 +48,10 @@ fun ensure_capacity[T](arr : DynArray[T], target_cap : UInt64) -> () = do
     | false ->
         do
             let new_cap = uint.max(target_cap,current_cap * 2);
-            let new_buf = builtins.gc_alloc[T](new_cap);
-            builtins.ptr_co
-            arr.inner^.buf = new_buf;
+            let new_buf : RawPtr[T] = builtins.gc_alloc[T](new_cap);
+            builtins.ptr_copy[T](new_buf,old_buf,len);
+            arr.inner^.ptr = new_buf;
+            arr.inner^.cap = new_cap;
         end
     end
 end
@@ -60,11 +66,6 @@ end
 fun clear[T](this : DynArray[T]) -> () = do
     let len = this.inner^.len;
     this.inner^.len = 0;
-    for i in 0 .. len do
-        unsafe 
-            arrays.zero_slot_unchecked[T](this.inner^.buf,i)
-        end
-    end
 end
 
 fun set[T](arr : DynArray[T], index : UInt64, element : T) -> () = do
@@ -72,7 +73,7 @@ fun set[T](arr : DynArray[T], index : UInt64, element : T) -> () = do
     | false -> arrays.index_out_bounds()
     | true -> 
         unsafe 
-            builtins.array_set_unchecked(arr.inner^.buf,index,builtins.uninit_new(element))
+            builtins.ptr_write[T](builtins.offset[T](arr.inner^.ptr,index),element)
         end
     end
 end
@@ -82,7 +83,7 @@ fun get[T](arr : DynArray[T], index : UInt64) -> T = do
     | false -> arrays.index_out_bounds()
     | true -> 
         unsafe 
-            builtins.transmute(builtins.array_get_unchecked(arr.inner^.buf,index))
+            builtins.ptr_read[T](builtins.offset[T](arr.inner^.ptr,index))
         end
     end
 end
@@ -90,7 +91,7 @@ end
 fun push[T](arr : DynArray[T], element : T) -> () = do
     reserve(arr,1);
     unsafe 
-        builtins.array_set_unchecked(arr.inner^.buf,arr.inner^.len,builtins.transmute(element));
+        builtins.ptr_write[T](builtins.offset[T](arr.inner^.ptr,arr.inner^.len),element);
     end;
     arr.inner^.len = arr.inner^.len + 1;
 end
@@ -101,8 +102,7 @@ fun pop[T](this : DynArray[T]) -> Option[T] = do
     | old_len ->
         do
             let new_len = builtins.wrapping_sub(old_len,1);
-            let value = unsafe builtins.uninit_assume_init(builtins.array_get_unchecked(this.inner^.buf,new_len)) end;
-            unsafe arrays.zero_slot_unchecked(this.inner^.buf,new_len) end;
+            let value = unsafe builtins.ptr_read[T](builtins.offset[T](this.inner^.ptr,new_len)) end;
             this.inner^.len = new_len;
             Option.Some(value)
         end
@@ -119,8 +119,11 @@ fun insert[T](arr : DynArray[T], index : UInt64, value : T) -> () = do
     reserve(arr,1);
 
     let elems_to_move = uint.wrapping_sub(old_len,index);
-    unsafe arrays.copy_unchecked(arr.inner^.buf,arr.inner^.buf,index + 1, index, elems_to_move) end;
-    unsafe builtins.array_set_unchecked(arr.inner^.buf,index,builtins.transmute(value)) end;
+    builtins.ptr_copy[T](
+        builtins.offset[T](arr.inner^.ptr,index + 1),
+        builtins.offset[T](arr.inner^.ptr,index),
+        elems_to_move
+    );
     arr.inner^.len = new_len;
 end
 
@@ -131,15 +134,16 @@ fun remove[T](arr : DynArray[T], index : UInt64) -> T = do
     | true -> arrays.index_out_bounds()
     | false -> ()
     end;
-    let value : T = unsafe 
-        builtins.transmute(builtins.array_get_unchecked(arr.inner^.buf,index)) 
-    end;
-    unsafe 
-        arrays.zero_slot_unchecked((arr.inner^.buf),index);
-    end;
+    let value : T = unsafe builtins.ptr_read(
+        builtins.offset[T](arr.inner^.ptr,index)
+    ) end;
     let new_len = arr.inner^.len - 1;
     let elems_to_move = uint.wrapping_sub(old_len,index);
-    unsafe arrays.copy_unchecked(arr.inner^.buf,arr.inner^.buf,index, index + 1, elems_to_move) end;
+    builtins.ptr_copy[T](
+        builtins.offset[T](arr.inner^.ptr,index),
+        builtins.offset[T](arr.inner^.ptr,index + 1),
+        elems_to_move
+    );
     arr.inner^.len = new_len;
     value
 end
@@ -161,15 +165,15 @@ end
 
 fun len[T](arr : DynArray[T]) -> UInt64 = arr.inner^.len
 
-fun capacity[T](arr : DynArray[T]) -> UInt64 = builtins.array_len(arr.inner^.buf)
+fun capacity[T](arr : DynArray[T]) -> UInt64 = arr.inner^.cap
 
 fun into_array[T](arr : DynArray[T]) -> array[T] = do
     case arr.inner^.len of
     | 0 -> []
     | len -> do
-        let buf = builtins.raw_array_alloc[T](len);
-        unsafe arrays.copy_unchecked(buf,arr.inner^.buf,0,0,len) end;
-        unsafe builtins.transmute(buf) end
+        let buf = builtins.gc_alloc[T](len);
+        unsafe builtins.ptr_copy[T](buf,arr.inner^.ptr,len) end;
+        unsafe builtins.transmute((buf,len)) end
         end
     end
 end
@@ -180,19 +184,23 @@ fun shrink_to_fit[T](this : DynArray[T]) -> () = do
     | true -> return ()
     | false -> ()
     end;
-    let old_buf = this.inner^.buf;
-    let new_buf = builtins.raw_array_alloc[T](len);
+    let old_buf = this.inner^.ptr;
+    let new_buf = builtins.gc_alloc[T](len);
     unsafe 
-        arrays.copy_unchecked(new_buf,old_buf,0,0,len)
+        builtins.ptr_copy[T](new_buf,old_buf,len);
     end;
-    this.inner^.buf = new_buf;
+    this.inner^.ptr = new_buf;
 end
 
 fun drain_to_array[T](this : DynArray[T]) -> array[T] = do
     shrink_to_fit(this);
-    let arr : array[T] = unsafe builtins.transmute(this.inner^.buf) end;
-    this.inner^.buf = [];
-    this.inner^.len = 0;
+    let arr : array[T] = unsafe builtins.transmute((this.inner^.ptr,this.inner^.len)) end;
+    this.inner^ = 
+        DynArrayInner{
+            ptr = builtins.gc_alloc[T](0),
+            cap = 0,
+            len = 0
+        };
     arr
 end
 

@@ -635,7 +635,7 @@ pub trait TypeMap<'ctxt> {
             | TypeKind::Param(..)
             | TypeKind::IntVar(_)
             | TypeKind::Never => Ok(ty),
-            &TypeKind::RawPtr(ty) => Ok(Type::new_raw_ptr(self.ctxt(), ty)),
+            &TypeKind::RawPtr(ty) => Ok(Type::new_raw_ptr(self.ctxt(), self.map_type(ty)?)),
             TypeKind::Function(function_type) => Ok(self
                 .map_function_type(function_type.clone())?
                 .into_type(self.ctxt())),

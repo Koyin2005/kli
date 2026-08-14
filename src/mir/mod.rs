@@ -51,8 +51,8 @@ impl PlaceProjection {
                 ty
             }
             PlaceProjection::Deref => {
-                let TypeKind::Box(ty) = ty.kind() else {
-                    unreachable!("Should be a box but got {}", ty)
+                let (TypeKind::Box(ty) | TypeKind::RawPtr(ty)) = ty.kind() else {
+                    unreachable!("Should be a box or raw ptr but got {}", ty)
                 };
                 *ty
             }
@@ -342,7 +342,7 @@ impl<'ctxt> Rvalue<'ctxt> {
                 BinaryOp::Equals => Type::new_bool(ctxt),
                 BinaryOp::Lesser | BinaryOp::Greater => Type::new_bool(ctxt),
                 BinaryOp::Offset => {
-                    Type::new_raw_ptr(ctxt, left_and_right.0.type_of(ctxt, locals, return_type))
+                    left_and_right.0.type_of(ctxt, locals, return_type)
                 }
             },
             Rvalue::AllocateArray(element, _) => Type::new_array(ctxt, *element),

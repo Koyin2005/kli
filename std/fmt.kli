@@ -134,6 +134,18 @@ fun fmt_pair[T,U,S,C1,C2](value : (T,U), format_pair : (Format[T,S,C1],Format[U,
     write_string(writer,")")
 end
 
+fun fmt_bool[S](value : bool, _ : (), writer : Writer[S]) -> () = do
+    case value of 
+    | true -> write_string(writer,"true")
+    | false -> write_string(writer,"false")
+    end
+end
+
+fun make_bool_fmt[S]() -> Format[bool,S,()] = Format{
+    ctxt = (),
+    fmt = fmt_bool[S]
+}
+
 fun make_pair_fmt[T,U,S,C1,C2](first : Format[T,S,C1], second : Format[U,S,C2]) -> Format[(T,U),S,(Format[T,S,C1],Format[U,S,C2])] = 
     Format {
         ctxt = (first,second),

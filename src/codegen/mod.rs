@@ -1,22 +1,13 @@
 use std::{cell::Cell, collections::HashMap};
 
 use crate::{
-    CtxtRef,
-    codegen::{
+    CtxtRef, codegen::{
         backend_repr::{BackendRepr, backend_repr},
         locals::{LocalKind, ReturnSlot},
-    },
-    config::Feature,
-    index_vec::IndexVec,
-    layout::{self, Align, LayoutKind, Scalar, Size, TagEncoding},
-    mir::{
+    }, config::Feature, index_vec::IndexVec, layout::{self, Align, LayoutKind, Scalar, Size, TagEncoding}, mir::{
         self, AggregateKind, AssertKind, BasicBlockId, BinaryOp, ConstValue, Constant, Operand,
         OverflowOp, Place, PlaceBase, traversal::reachable,
-    },
-    monomorph::collect::{Instance, InstanceKind},
-    scheme::Scheme,
-    typed_ast::FieldId,
-    types::{
+    }, monomorph::collect::{Instance, InstanceKind}, scheme::Scheme, typed_ast::FieldId, types::{
         CaseId, FunctionSig, GenericArgsRef, IntegerKind, IntegerSize, Type, TypeKind, TypeMappable,
     },
 };
@@ -846,6 +837,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             CodegenPlace::ZeroSized(_) => (),
         }
     }
+    #[track_caller]
     fn store_operand(&mut self, place: &mir::Place, operand: &mir::Operand<'ctxt>) {
         let operand = self.eval_operand(operand);
         self.store_value(place, operand);
@@ -871,7 +863,12 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     }
     #[track_caller]
     fn layout_for(&self, ty: Type<'ctxt>) -> layout::Layout {
-        self.ctxt.layout_of(ty).expect("should be monoed enough")
+        match self.ctxt.layout_of(ty){
+            Ok(layout) => layout,
+            Err(e) => {
+            panic!("got '{e:?}' for layout of {}",ty)
+            }
+        }
     }
     fn array_index_place(
         &mut self,
@@ -1444,7 +1441,10 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let right_value = right_operand.expect_immediate(self);
         let (left, right) = match binary_op {
             BinaryOp::Offset => {
-                let offset_ptr = self.builder.ins().iadd(left_value, right_value);
+                let ty = left_operand.ty.as_raw_ptr().expect("should be a raw pointer");
+                let size = self.layout_for(ty).size;
+                let offset = self.builder.ins().imul_imm_u(right_value, size.in_bytes_i64());
+                let offset_ptr = self.builder.ins().iadd(left_value, offset);
                 (offset_ptr, None)
             }
             BinaryOp::Overflow(op) => {
