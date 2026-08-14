@@ -2,6 +2,22 @@ import std.optional.Option
 import builtins
 import std.panicking.panic_message
 
+fun alloc_copy[T](this : array[T]) -> array[T] = do
+    let len = builtins.array_len(this);
+    let r = builtins.raw_array_alloc(len);
+    for i in 0..len do
+        unsafe 
+            builtins.array_set_unchecked(
+                r,
+                i,
+                builtins.uninit_new(builtins.array_get_unchecked(this,i))
+            ) 
+        end;
+    end;
+    unsafe builtins.transmute(r) end
+
+end
+
 fun index_out_bounds() -> never = panic_message("index out of bounds")
 
 fun empty[T]() -> array[T] = []

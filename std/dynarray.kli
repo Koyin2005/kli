@@ -18,7 +18,7 @@ fun new[T]() -> DynArray[T] = do
     DynArray {
         inner = boxed.alloc(
         DynArrayInner {
-            buf = builtins.raw_array_alloc[T](0),
+            buf = [],
             len = 0
         })
     }

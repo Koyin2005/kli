@@ -13,17 +13,20 @@ type String = {}
 @unsafe
 fun as_bytes(this : string) -> array[UInt8] = builtins.transmute(this)
 
+@unsafe
+fun from_utf8_unchecked(this : array[UInt8]) -> string = builtins.transmute(this)
+
 
 fun empty() -> string = ""
 
 fun clone(s : string) -> string = do
-    let bytes = unsafe as_bytes(s) end;
-    let byte_len = builtins.array_len(bytes);
-    let mut bs = builtins.raw_array_alloc[UInt8](byte_len);
-    for i in 0..byte_len do
-        (bs).[i] = builtins.uninit_new(bytes.[i]);
-    end;
-    unsafe builtins.transmute(bs) end
+    unsafe 
+        from_utf8_unchecked(
+            arrays.alloc_copy(
+                as_bytes(s)
+            )
+        )
+    end
 end
 
 fun char_to_uint32(c : char) -> UInt32 = 

@@ -31,7 +31,7 @@ end
 
 # Clones the current string in the StringBuf
 fun into_string(this : StringBuf) -> string = 
-    unsafe builtins.transmute(dynarray.into_array(this.buf)) end
+    unsafe strings.from_utf8_unchecked(dynarray.into_array(this.buf)) end
 
 
 # Clears the StringBuf and leaves it empty
@@ -41,5 +41,5 @@ end
 
 # Returns the current string, and clears the StringBuf
 fun drain_into_string(this : StringBuf) -> string = do
-    unsafe builtins.transmute(dynarray.drain_to_array(this.buf)) end
+    unsafe strings.from_utf8_unchecked(dynarray.drain_to_array(this.buf)) end
 end
