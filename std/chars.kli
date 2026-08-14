@@ -1,9 +1,23 @@
-import std.(strings,string_buf)
+import std.(strings,string_buf,optional.Option)
 
 @unsafe
 fun from_u32_unchecked(c : UInt32) -> char = 
     builtins.transmute(c)
 
+fun as_ascii_digit(c : char) -> Option[UInt8] = 
+    case c of 
+    | '0' -> Option.Some(0)
+    | '1' -> Option.Some(1)
+    | '2' -> Option.Some(2)
+    | '3' -> Option.Some(3)
+    | '4' -> Option.Some(4)
+    | '5' -> Option.Some(5)
+    | '6' -> Option.Some(6)
+    | '7' -> Option.Some(7)
+    | '8' -> Option.Some(8)
+    | '9' -> Option.Some(9)
+    | _ -> Option.None
+    end
 
 fun utf8_len(c : char) -> UInt64 = 
     case c < '\u00FF' of
