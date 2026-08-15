@@ -201,6 +201,9 @@ impl IntegerSize {
     pub const fn is_byte_sized(self) -> bool {
         matches!(self, IntegerSize::Int8)
     }
+    pub const fn is_64_bit(self) -> bool {
+        matches!(self, IntegerSize::Int64)
+    }
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
 pub enum IntegerKind {

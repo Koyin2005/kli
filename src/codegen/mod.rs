@@ -591,6 +591,7 @@ impl<'ctxt> MemPlace<'ctxt> {
                 let (size, align) = match tag {
                     layout::TagEncoding::Field { scalar } => (scalar.size(), scalar.align()),
                     layout::TagEncoding::Uninhabited => (Size::ZERO, Align::BYTE),
+                    layout::TagEncoding::Niche { .. } => (Size::ZERO, self.layout.alignment),
                 };
                 layout::Layout::prefixed_by(size, align, cases[case].clone())
             }
@@ -609,13 +610,25 @@ impl<'ctxt> MemPlace<'ctxt> {
                     .layout,
             ),
             LayoutKind::Variant { tag, .. } if field == FieldId::FIRST_FIELD => (
-                ctxt.type_def(self.ty.as_named().unwrap().0)
-                    .tag_type()
-                    .into_type(ctxt),
+                if let TagEncoding::Niche {
+                    untagged_scalar: scalar,
+                    ..
+                } = tag
+                {
+                    Type::new_integer(ctxt, scalar.integer_kind())
+                } else {
+                    ctxt.type_def(self.ty.as_named().unwrap().0)
+                        .tag_type()
+                        .into_type(ctxt)
+                },
                 self.offset,
                 match tag {
                     TagEncoding::Field { scalar } => layout::Layout::from_scalar(scalar),
                     TagEncoding::Uninhabited => layout::Layout::zst(),
+                    TagEncoding::Niche {
+                        untagged_scalar: scalar,
+                        ..
+                    } => layout::Layout::from_scalar(scalar),
                 },
             ),
             kind => unreachable!(
@@ -866,16 +879,32 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             CodegenPlace::ZeroSized(_) => None,
         }
     }
-    fn load_place_mem(&mut self, place: &MemPlace<'ctxt>) -> Option<ScalarValue> {
+    fn load_scalar_from_mem(&mut self, place: &MemPlace<'ctxt>, scalar: ScalarType) -> ScalarValue {
         let (base_ptr, offset) = place.ptr_and_offset();
-        let scalar = place.scalar?;
         match scalar {
-            ScalarType::Single(single) => Some(ScalarValue::Single(self.builder.ins().load(
+            ScalarType::Single(single) => ScalarValue::Single(self.builder.ins().load(
                 scalar_to_cranelift_type(single),
                 ir::MemFlagsData::new(),
                 base_ptr,
                 Offset32::new(offset),
-            ))),
+            )),
+        }
+    }
+    fn load_place_mem(&mut self, place: &MemPlace<'ctxt>) -> Option<ScalarValue> {
+        let scalar = place.scalar?;
+        Some(self.load_scalar_from_mem(place, scalar))
+    }
+    fn load_scalar_from_place<'b, Z>(
+        &mut self,
+        place: &'b CodegenPlace<'ctxt, Z>,
+        scalar: layout::Scalar,
+    ) -> Result<ScalarValue, &'b Z> {
+        match place {
+            CodegenPlace::ZeroSized(zero) => Err(zero),
+            CodegenPlace::MemPlace(place) => {
+                Ok(self.load_scalar_from_mem(place, ScalarType::Single(scalar)))
+            }
+            CodegenPlace::Ssa(_, var) => Ok(ScalarValue::Single(self.builder.use_var(*var))),
         }
     }
     #[track_caller]
@@ -1070,6 +1099,15 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         }
         CodegenPlace::MemPlace(place_value)
     }
+    fn build_scalar_value(&mut self, scalar: layout::Scalar, value: u32) -> ir::Value {
+        let signed = scalar.signed();
+        let ty = integer_size_to_cranelift_type(scalar.integer_size());
+        self.builder.ins().build_imm_const(
+            ty,
+            codegen::ir::immediates::Imm64::new(value.into()),
+            signed,
+        )
+    }
     fn build_scalar_const(&mut self, ty: Type<'ctxt>, value: i128) -> codegen::ir::Value {
         let (ty, value, signed) = match ty.kind() {
             TypeKind::Bool => (
@@ -1130,9 +1168,21 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let (tag_ty, value) = self.ctxt.type_def(id).case_value(case);
                 let layout = self.layout_for(ty);
                 match backend_repr(&layout) {
-                    BackendRepr::Scalar(_) => OperandValueKind::Value(ScalarValue::Single(
-                        self.build_scalar_const(tag_ty.into_type(self.ctxt), value.into()),
-                    )),
+                    BackendRepr::Scalar(_) => OperandValueKind::Value(ScalarValue::Single({
+                        if let LayoutKind::Variant {
+                            tag:
+                                TagEncoding::Niche {
+                                    untagged_scalar: scalar,
+                                    ..
+                                },
+                            cases: _,
+                        } = layout.kind
+                        {
+                            self.build_scalar_value(scalar, value)
+                        } else {
+                            self.build_scalar_const(tag_ty.into_type(self.ctxt), value.into())
+                        }
+                    })),
                     BackendRepr::ZeroSized => unreachable!(),
                     BackendRepr::Memory => {
                         let mut bytes: Box<[u8]> =
@@ -1683,6 +1733,150 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             }
         }
     }
+    fn codegen_discriminant(
+        &mut self,
+        dst_place: NonZstPlace<'ctxt>,
+        variant_place: CodegenPlace<'ctxt>,
+    ) {
+        let ty = variant_place.type_of();
+        let (id, _, _) = ty.as_named().unwrap();
+        let layout = self.layout_for(ty);
+        let LayoutKind::Variant { tag, cases: _ } = layout.kind else {
+            unreachable!("Should be a variant type")
+        };
+
+        let dst_layout = self.layout_for(dst_place.type_of());
+        let (place, tag_scalar) = match tag {
+            TagEncoding::Uninhabited => return,
+            TagEncoding::Field { scalar } => {
+                let variant_place = variant_place.as_non_zst_place().unwrap();
+                (variant_place, scalar)
+            }
+            TagEncoding::Niche {
+                untagged_scalar, ..
+            } => {
+                let variant_place = variant_place.as_non_zst_place().unwrap();
+                (variant_place, untagged_scalar)
+            }
+        };
+        let tag_value = match self.load_scalar_from_place(&place, tag_scalar) {
+            Ok(value) => value,
+            Err(&e) => match e {},
+        }
+        .first_value();
+        let discr_value = match tag {
+            TagEncoding::Uninhabited => {
+                unreachable!();
+            }
+            // Value is stored directly as a field
+            TagEncoding::Field { scalar: _ } => tag_value,
+            TagEncoding::Niche {
+                encoded,
+                direct,
+                untagged_scalar: _,
+            } => {
+                let type_def = self.ctxt.type_def(id);
+                let encoded_value =
+                    self.build_scalar_value(tag_scalar, type_def.case_value(encoded).1);
+                let direct_value =
+                    self.build_scalar_value(tag_scalar, type_def.case_value(direct).1);
+
+                let is_encoded = self.builder.ins().icmp(
+                    ir::condcodes::IntCC::NotEqual,
+                    tag_value,
+                    direct_value,
+                );
+                self.builder
+                    .ins()
+                    .select(is_encoded, encoded_value, direct_value)
+            }
+        };
+
+        let dst_scalar = dst_layout.as_scalar().unwrap();
+        let discr_value = if dst_scalar.size() > tag_scalar.size() {
+            self.builder.ins().uextend(
+                integer_size_to_cranelift_type(dst_scalar.integer_size()),
+                discr_value,
+            )
+        } else {
+            discr_value
+        };
+
+        self.store_immediate(dst_place, discr_value);
+        /*
+
+
+
+        let discr_value = {
+            let (tag_value, extend) = match variant_place {
+                CodegenPlace::ZeroSized(_) => {
+                    todo!()
+                },
+                CodegenPlace::MemPlace(place) => {
+                    let tag_place = place.project_field(self.ctxt, FieldId::FIRST_FIELD);
+                    let value = self.load_place_mem(&tag_place).unwrap().first_value();
+                    (
+                        value,
+                        !tag_place
+                            .ty
+                            .as_integer()
+                            .is_some_and(|kind| kind.size().is_64_bit()),
+                    )
+                }
+                CodegenPlace::Ssa(ty, .., var) => {
+                    let (id, ..) = ty.as_named().unwrap();
+                    let var_value = self.builder.use_var(var);
+                    let (tag_ty, discr_value) = if let LayoutKind::Variant {
+                        tag:
+                            TagEncoding::Niche {
+                                encoded,
+                                direct,
+                                tag_scalar: scalar,
+                            },
+                        cases: _,
+                    } = self.layout_for(ty).kind
+                    {
+                        let ty = Type::new_integer(self.ctxt, scalar.integer_kind());
+                        let type_def = self.ctxt.type_def(id);
+
+                        let encdoed_value =
+                            self.build_scalar_value(scalar, type_def.case_value(encoded).1);
+                        let direct_value =
+                            self.build_scalar_value(scalar, type_def.case_value(direct).1);
+
+                        let is_encoded = self.builder.ins().icmp(
+                            ir::condcodes::IntCC::NotEqual,
+                            var_value,
+                            direct_value,
+                        );
+                        let discr_value = self.builder.ins().select(
+                            is_encoded,
+                            encdoed_value,
+                            direct_value,
+                        );
+                        (ty, discr_value)
+                    } else {
+                        (
+                            self.ctxt.type_def(id).tag_type().into_type(self.ctxt),
+                            var_value,
+                        )
+                    };
+
+                    (
+                        discr_value,
+                        tag_ty
+                            .as_integer()
+                            .is_some_and(|kind| !kind.size().is_64_bit()),
+                    )
+                }
+            };
+            if extend {
+                self.builder.ins().uextend(ir::types::I64, tag_value)
+            } else {
+                tag_value
+            }
+        };*/
+    }
     fn codegen_rvalue_assign(&mut self, place: &mir::Place, value: &mir::Rvalue<'ctxt>) {
         match value {
             mir::Rvalue::GcAlloc(ty, count) => {
@@ -1769,6 +1963,29 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                             }
                         }
                         layout::TagEncoding::Uninhabited => (),
+                        layout::TagEncoding::Niche {
+                            encoded: _,
+                            direct,
+                            untagged_scalar: scalar,
+                        } => {
+                            if *case == direct {
+                                let (id, ..) = dst_place.type_of().as_named().unwrap();
+                                let (_, value) = self.ctxt.type_def(id).case_value(*case);
+
+                                let discr = self.build_scalar_value(scalar, value);
+                                match dst_place {
+                                    CodegenPlace::MemPlace(dst_place) => {
+                                        let tag = dst_place
+                                            .project_field(self.ctxt, FieldId::FIRST_FIELD);
+                                        self.store_immediate_mem(tag, discr);
+                                    }
+                                    CodegenPlace::Ssa(.., var) => {
+                                        self.store_var_imm(var, discr);
+                                    }
+                                    CodegenPlace::ZeroSized(_) => (),
+                                }
+                            }
+                        }
                     }
                 }
             },
@@ -1777,7 +1994,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let ty_layout = self.layout_for(ty);
                 let len: u64 = fields.len().try_into().unwrap();
                 let ptr = self.codegen_static_size_alloc_call(ty, len);
-                if ty_layout.is_zst() || fields.is_empty() {
+                if ty_layout.is_align_1_zst() || fields.is_empty() {
                     let len_value = self.build_scalar_const(
                         Type::new_uint(self.ctxt, IntegerSize::Int64),
                         len.into(),
@@ -1851,41 +2068,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             }
             mir::Rvalue::Discriminant(variant_place) => {
                 let dst_place = self.eval_place(place).as_non_zst_place().unwrap();
-                let (tag_value, extend) = match self.eval_place(variant_place).as_non_zst_place() {
-                    Ok(place) => match place {
-                        CodegenPlace::MemPlace(place) => {
-                            let tag_place = place.project_field(self.ctxt, FieldId::FIRST_FIELD);
-                            let value = self.load_place_mem(&tag_place).unwrap().first_value();
-                            (
-                                value,
-                                tag_place
-                                    .ty
-                                    .as_integer()
-                                    .is_some_and(|kind| kind.size().is_byte_sized()),
-                            )
-                        }
-                        CodegenPlace::Ssa(ty, .., var) => {
-                            let (id, ..) = ty.as_named().unwrap();
-                            let tag_ty = self.ctxt.type_def(id).tag_type().into_type(self.ctxt);
-                            (
-                                self.builder.use_var(var),
-                                tag_ty
-                                    .as_integer()
-                                    .is_some_and(|kind| kind.size().is_byte_sized()),
-                            )
-                        }
-                        CodegenPlace::ZeroSized(_) => return,
-                    },
-                    Err(_) => {
-                        return;
-                    }
-                };
-                let value = if extend {
-                    self.builder.ins().uextend(ir::types::I64, tag_value)
-                } else {
-                    tag_value
-                };
-                self.store_immediate(dst_place, value);
+                let variant_place = self.eval_place(variant_place);
+                self.codegen_discriminant(dst_place, variant_place);
             }
         }
     }

@@ -47,7 +47,8 @@ impl<'ctxt> Locals<'ctxt> {
         Self {
             return_slot: match ret_mode {
                 PassMode::ByValue(single) if ssa.is_local_ssa(PlaceBase::ReturnPlace) => {
-                    ReturnSlot::Scalar(builder.declare_var(scalar_to_cranelift_type(single)))
+                    let var = builder.declare_var(scalar_to_cranelift_type(single));
+                    ReturnSlot::Scalar(var)
                 }
                 PassMode::ByValue(_) => {
                     let layout = ctxt

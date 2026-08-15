@@ -6,12 +6,14 @@ pub enum BackendRepr {
     Memory,
 }
 pub fn backend_repr(layout: &layout::Layout) -> BackendRepr {
-    if layout.is_zst() {
+    if layout.is_align_1_zst() {
         return BackendRepr::ZeroSized;
     }
     match layout.kind {
         layout::LayoutKind::Aggregate(ref field_layouts, ..) => {
-            let mut non_zst_fields = field_layouts.iter().filter(|field| !field.layout.is_zst());
+            let mut non_zst_fields = field_layouts
+                .iter()
+                .filter(|field| !field.layout.is_align_1_zst());
 
             let Some(first_field) = non_zst_fields.next() else {
                 return BackendRepr::Memory;
@@ -27,6 +29,12 @@ pub fn backend_repr(layout: &layout::Layout) -> BackendRepr {
             let tag_repr = match tag {
                 TagEncoding::Uninhabited => BackendRepr::ZeroSized,
                 TagEncoding::Field { scalar } => BackendRepr::Scalar(scalar),
+                TagEncoding::Niche { .. } => {
+                    return case_reprs
+                        .into_iter()
+                        .find(|case| !matches!(case, BackendRepr::ZeroSized))
+                        .expect("must have a non-zst case");
+                }
             };
             if case_reprs
                 .iter()

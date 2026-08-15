@@ -10,7 +10,7 @@ impl RemoveZst {
     fn is_zst<'ctxt>(ty: Type<'ctxt>, ctxt: CtxtRef<'ctxt>) -> bool {
         calculate_layout(ctxt, ty)
             .as_ref()
-            .is_ok_and(Layout::is_zst)
+            .is_ok_and(Layout::is_align_1_zst)
     }
 }
 impl<'ctxt> MirPass<'ctxt> for RemoveZst {

@@ -5,7 +5,7 @@ use crate::{
     collect::TypeDefKind,
     index_vec::IndexVec,
     typed_ast::FieldId,
-    types::{CaseId, IntegerSize, TagType, Type, TypeKind},
+    types::{CaseId, IntegerKind, IntegerSize, TagType, Type, TypeKind},
 };
 
 pub const BITS_IN_BYTE: u8 = 8;
@@ -113,7 +113,9 @@ pub struct Align(u8);
 impl Align {
     pub const BYTE: Self = Self(0);
     pub const FOUR_BYTE: Self = Self(2);
-
+    pub const fn equal(self, other: Self) -> bool {
+        self.0 == other.0
+    }
     pub const fn from_bytes(alignment: u64) -> Option<Align> {
         let Some(pow_2) = alignment.checked_ilog2() else {
             return None;
@@ -130,7 +132,14 @@ impl Align {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TagEncoding {
     Uninhabited,
-    Field { scalar: Scalar },
+    Field {
+        scalar: Scalar,
+    },
+    Niche {
+        encoded: CaseId,
+        direct: CaseId,
+        untagged_scalar: Scalar,
+    },
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariantLayout {
@@ -156,6 +165,9 @@ impl Layout {
             size: IntegerSize::Int8,
         }),
     };
+    pub const fn is_zero_sized(&self) -> bool {
+        self.size.equal(Size::ZERO)
+    }
     ///Produces an aggregate with only layout as its field, but
     /// is prefixed by prefix size
     pub fn prefixed_by(prefix: Size, align: Align, layout: Self) -> Self {
@@ -220,8 +232,8 @@ impl Layout {
             },
         }
     }
-    pub const fn is_zst(&self) -> bool {
-        self.size.equal(Size::ZERO)
+    pub const fn is_align_1_zst(&self) -> bool {
+        self.size.equal(Size::ZERO) && self.alignment.equal(Align::BYTE)
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -232,12 +244,34 @@ pub enum Scalar {
 }
 impl Scalar {
     pub const BYTE: Self = Self::uint(IntegerSize::Int8);
-
+    pub const fn signed(self) -> bool {
+        matches!(
+            self,
+            Self::Int {
+                signed: true,
+                size: _
+            }
+        )
+    }
     pub const fn integer(signed: bool, size: IntegerSize) -> Self {
         Self::Int { signed, size }
     }
     pub const fn uint(size: IntegerSize) -> Self {
         Self::integer(false, size)
+    }
+    pub const fn integer_kind(self) -> IntegerKind {
+        if self.signed() {
+            IntegerKind::Signed(self.integer_size())
+        } else {
+            IntegerKind::Unsigned(self.integer_size())
+        }
+    }
+    pub const fn integer_size(self) -> IntegerSize {
+        match self {
+            Self::Bool => IntegerSize::Int8,
+            Self::Pointer { non_null: _ } => IntegerSize::Int64,
+            Self::Int { signed: _, size } => size,
+        }
     }
     pub const fn size(self) -> Size {
         match self {
@@ -322,22 +356,47 @@ fn variant_layout<'ctxt>(
         )
     };
 
-    let biggest_size = case_layouts
-        .iter()
-        .reduce(
-            |acc, layout| {
-                if acc.size >= layout.size { acc } else { layout }
+    let (size, align, encoding) = if let [first, second] = case_layouts.as_slice()
+        && let (Some((untagged, non_zero)), None) | (None, Some((untagged, non_zero))) = (
+            (!first.is_align_1_zst()).then_some((CaseId::new(0), first)),
+            (!second.is_align_1_zst()).then_some((CaseId::new(1), second)),
+        )
+        && let LayoutKind::Scalar(Scalar::Pointer { non_null: true }) = non_zero.kind
+    {
+        let tagged_case = if untagged == CaseId::new(0) {
+            CaseId::new(1)
+        } else {
+            CaseId::new(0)
+        };
+        (
+            non_zero.size,
+            non_zero.alignment,
+            TagEncoding::Niche {
+                encoded: untagged,
+                direct: tagged_case,
+                untagged_scalar: Scalar::Pointer { non_null: false },
             },
         )
-        .unwrap();
+    } else {
+        let biggest_size = case_layouts
+            .iter()
+            .reduce(
+                |acc, layout| {
+                    if acc.size >= layout.size { acc } else { layout }
+                },
+            )
+            .unwrap();
 
-    let max_align = tag_align.max(biggest_size.alignment);
-
+        let max_align = tag_align.max(biggest_size.alignment);
+        let size = tag_size.add(biggest_size.size).align_to(max_align);
+        let encoding = TagEncoding::Field { scalar: tag_scalar };
+        (size, max_align, encoding)
+    };
     Ok(Layout {
-        size: tag_size.add(biggest_size.size).align_to(max_align),
-        alignment: max_align,
+        size,
+        alignment: align,
         kind: LayoutKind::Variant {
-            tag: TagEncoding::Field { scalar: tag_scalar },
+            tag: encoding,
             cases: case_layouts,
         },
     })
