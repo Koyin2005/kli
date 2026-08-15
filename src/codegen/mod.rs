@@ -1291,8 +1291,10 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     };
                     all_args.push(mem_place.ptr(self));
                 }
-                (OperandValueKind::Indirect(codegen_place), PassMode::ByValue(_)) => {
-                    let value = self.load_place(&codegen_place).unwrap();
+                (OperandValueKind::Indirect(codegen_place), PassMode::ByValue(scalar)) => {
+                    let Some(value) = self.load_place(&codegen_place) else {
+                        unreachable!("{:?} {:?}", scalar, codegen_place)
+                    };
                     all_args.extend(value.into_iter());
                 }
                 (OperandValueKind::ZeroSized, _) => unreachable!(),

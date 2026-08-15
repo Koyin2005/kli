@@ -8,13 +8,14 @@ use crate::{
         BasicBlock, BasicBlockId, Body, BodySource,
         dump::MirDump,
         passes::{
-            dead_store::DeadStoreElim, remove_unreachable::RemoveUnreachable,
+            dead_store::DeadStoreElim, inlining::Inline, remove_unreachable::RemoveUnreachable,
             remove_unused_locals::RemoveUnusedLocals, remove_zst::RemoveZst,
             simplify_cfg::SimplifyCfg,
         },
     },
 };
 mod dead_store;
+mod inlining;
 mod remove_unreachable;
 mod remove_unused_locals;
 mod remove_zst;
@@ -62,6 +63,7 @@ pub fn passes<'a>() -> &'a [&'a dyn MirPass<'a>] {
         &RemoveZst,
         &SimplifyCfg,
         &SimplifyCfg,
+        &Inline,
         &RemoveUnreachable,
         &DeadStoreElim,
         &RemoveUnusedLocals,

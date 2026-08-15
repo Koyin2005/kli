@@ -131,6 +131,9 @@ impl<I: Id, V> IndexVec<I, V> {
     pub fn extend(&mut self, iter: impl IntoIterator<Item = V>) {
         self.0.extend(iter);
     }
+    pub fn truncate(&mut self, i: I) {
+        self.0.truncate(i.into_usize());
+    }
     pub fn retain(&mut self, mut f: impl FnMut(I, &V) -> bool) {
         let mut i = I::new(0);
         self.0.retain(|v| {
@@ -138,6 +141,16 @@ impl<I: Id, V> IndexVec<I, V> {
             i = i.next();
             keep
         });
+    }
+    pub fn swap(&mut self, first: I, second: I) {
+        let Ok([first, second]) = self
+            .0
+            .as_mut_slice()
+            .get_disjoint_mut([first.into_usize(), second.into_usize()])
+        else {
+            return;
+        };
+        std::mem::swap(first, second);
     }
 }
 

@@ -611,14 +611,14 @@ impl BodySource {
             .any(|id| ctxt.ident(id).map(|ident| ident.symbol) == Some(name))
     }
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum LocalKind {
     Temp,
     Env,
     Var(Var),
     Param(Option<Var>),
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct LocalInfo<'ctxt> {
     pub ty: Type<'ctxt>,
     pub kind: LocalKind,
