@@ -1,6 +1,4 @@
-use std::{
-    collections::HashMap,
-};
+use std::collections::HashMap;
 
 use kli::{
     Arenas,
@@ -94,6 +92,5 @@ fn main() {
     });
     if let Some((..)) = ctxt.main_function()
         && !matches!(ctxt.config().command(), CommandArg::Check)
-    {
-    }
+    {}
 }

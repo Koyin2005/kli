@@ -202,7 +202,7 @@ impl Generics {
     ) -> GenericArgs<'ctxt> {
         self.kinds()
             .map(|kind| match kind {
-                GenericKind::Type => GenericArg(Type::infer_var(ctxt, infer.fresh_ty(loc))),
+                GenericKind::Type => GenericArg(Type::infer_var(ctxt, infer.fresh_ty(loc, false))),
             })
             .collect()
     }

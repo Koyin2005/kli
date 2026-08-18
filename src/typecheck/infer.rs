@@ -1,7 +1,9 @@
 use crate::{
     CtxtRef,
     src_loc::SrcLoc,
-    types::{GenericArg, GenericArgs, IntegerKind, Type, TypeKind, TypeMap, visit::Visit},
+    types::{
+        GenericArg, GenericArgs, IntegerKind, IntegerSize, Type, TypeKind, TypeMap, visit::Visit,
+    },
 };
 enum UnifyError {
     OccursCheck,
@@ -10,6 +12,7 @@ enum UnifyError {
 #[derive(Debug)]
 pub struct TypeVarInfo<'ctxt> {
     ty: Option<Type<'ctxt>>,
+    is_int_var: bool,
     loc: SrcLoc,
 }
 pub struct TypeInfer<'ctxt> {
@@ -26,9 +29,22 @@ impl<'ctxt> TypeInfer<'ctxt> {
     pub fn clear(&mut self) {
         self.type_vars.clear();
     }
-    pub fn fresh_ty(&mut self, loc: SrcLoc) -> usize {
+    pub fn set_int_defaults(&mut self) {
+        for var in self.type_vars.iter_mut() {
+            if let ty @ None = &mut var.ty
+                && var.is_int_var
+            {
+                *ty = Some(Type::new_int(self.ctxt, IntegerSize::Int64));
+            }
+        }
+    }
+    pub fn fresh_ty(&mut self, loc: SrcLoc, is_int_var: bool) -> usize {
         let next_var = self.type_vars.len();
-        self.type_vars.push(TypeVarInfo { ty: None, loc });
+        self.type_vars.push(TypeVarInfo {
+            ty: None,
+            loc,
+            is_int_var,
+        });
         next_var
     }
     fn occurs_check(&self, var: usize, ty: Type<'ctxt>) -> bool {
@@ -62,6 +78,7 @@ impl<'ctxt> TypeInfer<'ctxt> {
         check.visit_type(ty);
         check.found
     }
+
     pub fn unsolved_locs(&self) -> Vec<SrcLoc> {
         self.type_vars
             .iter()
@@ -236,6 +253,7 @@ impl<'ctxt> TypeMap<'ctxt> for Simplify<'_, 'ctxt> {
         if let &TypeVarInfo {
             ty: Some(ty),
             loc: _,
+            is_int_var: _,
         } = &self.0.type_vars[var]
         {
             self.map_type(ty)

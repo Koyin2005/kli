@@ -140,7 +140,7 @@ impl<'ctxt> RootCtxt<'ctxt> {
                 if let Some(kind) = hint.and_then(|hint| hint.as_integer()) {
                     Type::new_integer(self.ctxt(), kind)
                 } else {
-                    Type::new_integer_var(self.ctxt(), self.infer.borrow_mut().fresh_ty(loc))
+                    Type::new_integer_var(self.ctxt(), self.infer.borrow_mut().fresh_ty(loc, true))
                 }
             }
             res::IntegerLiteralKind::Signed(size) => Type::new_int(self.ctxt(), convert_size(size)),
@@ -176,7 +176,7 @@ impl<'ctxt> RootCtxt<'ctxt> {
     }
 
     pub(super) fn fresh_ty(&self, loc: SrcLoc) -> Type<'ctxt> {
-        Type::infer_var(self.ctxt, self.infer.borrow_mut().fresh_ty(loc))
+        Type::infer_var(self.ctxt, self.infer.borrow_mut().fresh_ty(loc, false))
     }
     pub(super) fn check_missing_fields(
         &self,
@@ -443,6 +443,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
             &function.params,
             function.body.as_deref(),
         );
+        root_ctxt.infer.borrow_mut().set_int_defaults();
         for (id, mut function) in root_ctxt.functions.into_inner() {
             let unsolved = root_ctxt.infer.borrow().unsolved_locs();
             if !unsolved.is_empty() {
