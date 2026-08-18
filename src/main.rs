@@ -1,18 +1,14 @@
 use std::{
     collections::HashMap,
-    io::{self, Write},
-    process::Command,
 };
 
 use kli::{
     Arenas,
     builtin_check::BuiltinCheck,
-    codegen::CodegenRoot,
     config::{CommandArg, Feature, config},
-    files::{FileError, build_file_tree, kli_runtime_path},
+    files::{FileError, build_file_tree},
     literal_check::LiteralCheck,
     mir::{self, passes::passes},
-    monomorph::collect::{Instance, InstanceCollector, InstanceKind},
     parsing,
     patterns::visit::PatternCheck,
     resolve::Resolve,
@@ -96,43 +92,8 @@ fn main() {
             pass.run(ctxt, body);
         }
     });
-    if let Some((main, _)) = ctxt.main_function()
+    if let Some((..)) = ctxt.main_function()
         && !matches!(ctxt.config().command(), CommandArg::Check)
     {
-        let instances = InstanceCollector::new(&mir_context)
-            .collect(ctxt, Instance::non_generic(InstanceKind::Function(main)));
-        if ctxt.config().has_feature(Feature::OutputInstances) {
-            for instance in &instances {
-                println!("{:?}", instance);
-            }
-        }
-        let obj = CodegenRoot::new(ctxt, instances).codegen_functions(&mir_context);
-        {
-            std::fs::write("foo.o", obj.emit().unwrap()).unwrap();
-        }
-        let kli_rt_path = kli_runtime_path().unwrap();
-
-        let output = Command::new("gcc")
-            .arg(kli_rt_path.join("kli_pal.c"))
-            .arg(kli_rt_path.join("kli_rt.c"))
-            .arg("-o")
-            .arg("output")
-            .arg("foo.o")
-            .output()
-            .unwrap();
-
-        let success = output.status.success();
-        if !success {
-            println!("compilation exited with {}", output.status);
-            io::stdout().write_all(&output.stdout).unwrap();
-            io::stderr().write_all(&output.stderr).unwrap();
-        }
-        if success && matches!(ctxt.config().command(), CommandArg::Run) {
-            Command::new(r".\output.exe")
-                .spawn()
-                .unwrap()
-                .wait()
-                .unwrap();
-        }
     }
 }
