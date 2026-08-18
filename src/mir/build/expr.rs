@@ -6,7 +6,7 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Rvalue,
-        build::{Builder, TargetPlace},
+        build::{Builder, TargetPlace, TargetPlaceKind},
     },
     src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
@@ -93,13 +93,16 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         }
     }
     pub fn assign_to_target(&mut self, target: TargetPlace<'ctxt>, value: &Expr<'ctxt>) {
-        let TargetPlace { place, index } = target;
-        if let Some(index) = index {
-            let loc = value.loc;
-            let value = self.operand(value);
-            self.push_stmt(loc, mir::StmtKind::AssignIndex(place, index, value));
-        } else {
-            self.expr_into_dest(place, value);
+        let TargetPlace { place, kind } = target;
+        match kind {
+            TargetPlaceKind::Base => {
+                self.expr_into_dest(place, value);
+            }
+            TargetPlaceKind::Index(index) => {
+                let loc = value.loc;
+                let value = self.operand(value);
+                self.push_stmt(loc, mir::StmtKind::AssignIndex(place, index, value));
+            }
         }
     }
     pub fn assign_rvalue(
@@ -109,16 +112,19 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         target: TargetPlace<'ctxt>,
         rvalue: Rvalue<'ctxt>,
     ) {
-        let TargetPlace { place, index } = target;
-        if let Some(index) = index {
-            let value = if let Rvalue::Use(operand) = rvalue {
-                operand
-            } else {
-                Operand::Load(Place::local(self.assign_to_temp(loc, ty, rvalue)))
-            };
-            self.push_stmt(loc, mir::StmtKind::AssignIndex(place, index, value));
-        } else {
-            self.assign(loc, place, rvalue);
+        let TargetPlace { place, kind } = target;
+        match kind {
+            TargetPlaceKind::Base => {
+                self.assign(loc, place, rvalue);
+            }
+            TargetPlaceKind::Index(index) => {
+                let value = if let Rvalue::Use(operand) = rvalue {
+                    operand
+                } else {
+                    Operand::Load(Place::local(self.assign_to_temp(loc, ty, rvalue)))
+                };
+                self.push_stmt(loc, mir::StmtKind::AssignIndex(place, index, value));
+            }
         }
     }
     pub fn expr_into_target(&mut self, target: TargetPlace<'ctxt>, expr: &Expr<'ctxt>) {
@@ -200,24 +206,15 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             typed_ast::PlaceKind::Index(array, index) => {
                 let place = self.place(array);
                 let index = self.operand(index);
-                TargetPlace {
-                    place,
-                    index: Some(index),
-                }
+                TargetPlace::with_index(place, index)
             }
-            _ => TargetPlace {
-                place: self.lower_place(place),
-                index: None,
-            },
+            _ => TargetPlace::new(self.lower_place(place)),
         }
     }
     pub fn target_place(&mut self, expr: &Expr<'ctxt>) -> TargetPlace<'ctxt> {
         match expr.kind {
             ExprKind::Load(ref place) => self.lower_target_place(place),
-            _ => TargetPlace {
-                place: Place::local(self.expr_into_temp(expr)),
-                index: None,
-            },
+            _ => TargetPlace::new(Place::local(self.expr_into_temp(expr))),
         }
     }
     pub(super) fn lower_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Place {

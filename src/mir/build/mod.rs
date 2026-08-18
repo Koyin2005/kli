@@ -8,6 +8,7 @@ use crate::{
     },
     resolved_ast::Var,
     src_loc::SrcLoc,
+    typed_ast::FieldId,
     types::Type,
 };
 mod expr;
@@ -18,11 +19,25 @@ mod stmt;
 #[derive(Clone, Debug)]
 pub struct TargetPlace<'ctxt> {
     pub place: Place,
-    pub index: Option<Operand<'ctxt>>,
+    pub kind: TargetPlaceKind<'ctxt>,
+}
+#[derive(Clone, Debug)]
+pub enum TargetPlaceKind<'ctxt> {
+    Index(Operand<'ctxt>),
+    Base,
 }
 impl<'a> TargetPlace<'a> {
     pub fn new(place: Place) -> Self {
-        Self { place, index: None }
+        Self {
+            place,
+            kind: TargetPlaceKind::Base,
+        }
+    }
+    pub fn with_index(place: Place, index: Operand<'a>) -> Self {
+        Self {
+            place,
+            kind: TargetPlaceKind::Index(index),
+        }
     }
 }
 pub struct Builder<'mir, 'ctxt> {
