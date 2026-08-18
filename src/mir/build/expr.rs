@@ -61,8 +61,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             _ => None,
         }
     }
-    fn as_place(&mut self, expr: &Expr<'ctxt>) -> Option<Place> {
+    fn as_place(&mut self, expr: &Expr<'ctxt>, in_value_ctxt : bool) -> Option<Place> {
         if let ExprKind::Load(place) = &expr.kind {
+            if matches!(place.kind,typed_ast::PlaceKind::Index(..)) && in_value_ctxt{
+                return None;
+            }
             Some(self.lower_place(place))
         } else {
             None
@@ -72,11 +75,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         if let Some(constant) = self.as_constant(expr) {
             Some(Operand::Constant(constant))
         } else {
-            self.as_place(expr).map(Operand::Load)
+            self.as_place(expr,true).map(Operand::Load)
         }
     }
     pub(super) fn place(&mut self, expr: &Expr<'ctxt>) -> Place {
-        if let Some(place) = self.as_place(expr) {
+        if let Some(place) = self.as_place(expr,false) {
             place
         } else {
             Place::local(self.expr_into_temp(expr))
@@ -496,7 +499,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             ExprKind::Unit
             | ExprKind::Int(_)
             | ExprKind::Bool(_)
-            | ExprKind::Load(_)
             | ExprKind::Function(..)
             | ExprKind::Const(..)
             | ExprKind::VariantInit(.., None)
@@ -508,6 +510,19 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .unwrap_or_else(|| unreachable!("should be an constant operand '{:?}' ", expr));
                 Rvalue::Use(operand)
             }
+            ExprKind::Load(place) => match place.kind {
+                typed_ast::PlaceKind::Index(ref array, ref index) => {
+                    let place = self.place(array);
+                    let index = self.operand(index);
+                    Rvalue::LoadIndex(place, index)
+                }
+                _ => {
+                    let operand = self.as_operand(expr).unwrap_or_else(|| {
+                        unreachable!("should be an constant operand '{:?}' ", expr)
+                    });
+                    Rvalue::Use(operand)
+                }
+            },
             ExprKind::NamedRecord(id, generic_args, fields) => {
                 let mut field_map = fields
                     .iter()
