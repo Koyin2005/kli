@@ -88,6 +88,16 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         self.super_visit_rvalue(loc, rvalue);
         let loc = self.body.src_info(loc);
         match rvalue {
+            super::Rvalue::LoadField(place, field) => {
+                let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let field_ty = ty.field_info(*field, self.ctxt);
+                self.assert_with_some(
+                    field_ty,
+                    |ty| ty,
+                    || format!("Cannot take a field of '{}'", ty),
+                    loc,
+                );
+            }
             super::Rvalue::LoadIndex(place, index) => {
                 let array_ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 let index_ty = index.type_of(self.ctxt, &self.body.locals, self.body.return_type);

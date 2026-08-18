@@ -71,6 +71,7 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue<'ctxt>) {
         match rvalue {
+            Rvalue::LoadField(place, _) => self.visit_place(PlaceCtxt::Read, loc, place),
             Rvalue::GcAlloc(_, operand) => {
                 self.visit_operand(loc, operand);
             }
@@ -233,6 +234,7 @@ pub trait MutVisit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &mut Rvalue<'ctxt>) {
         match rvalue {
+            Rvalue::LoadField(place, _) => self.visit_place(loc, place),
             Rvalue::GcAlloc(_, operand) => {
                 self.visit_operand(loc, operand);
             }

@@ -605,6 +605,10 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let index = self.operand(index);
                 Rvalue::LoadIndex(place, index)
             }
+            typed_ast::PlaceKind::Field(ref place, field) => {
+                let place = self.lower_place(place);
+                Rvalue::LoadField(place, field)
+            }
             _ => {
                 let operand = self.lower_place(place);
                 Rvalue::Use(Operand::Load(operand))

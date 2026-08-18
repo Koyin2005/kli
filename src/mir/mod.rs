@@ -269,6 +269,7 @@ pub enum Rvalue<'ctxt> {
     Len(Place),
     Discriminant(Place),
     LoadIndex(Place, Operand<'ctxt>),
+    LoadField(Place, FieldId),
     GcAlloc(Type<'ctxt>, Operand<'ctxt>),
 }
 impl<'ctxt> Rvalue<'ctxt> {
@@ -281,7 +282,8 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::AddrOf(_)
             | Self::Len(_)
             | Self::Discriminant(_)
-            | Self::UninitZeroed(_) => true,
+            | Self::UninitZeroed(_)
+            | Self::LoadField(..) => true,
             Self::LoadIndex(..) => false,
             Self::GcAlloc(..) => false,
 
@@ -300,6 +302,12 @@ impl<'ctxt> Rvalue<'ctxt> {
         return_type: Type<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
+            Rvalue::LoadField(place, field) => {
+                let ty = place.type_of(ctxt, locals, return_type);
+                ty.field_info(*field, ctxt)
+                    .unwrap_or_else(|| panic!("should be a type with fields but got '{ty}'"))
+                    .0
+            }
             Rvalue::LoadIndex(place, _) => place
                 .type_of(ctxt, locals, return_type)
                 .as_array()

@@ -119,6 +119,13 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(index)?;
                 write!(self.output, ")")?;
             }
+            Rvalue::LoadField(place, field) => {
+                write!(self.output, "LoadField")?;
+                write!(self.output, "(")?;
+                self.write_place(place)?;
+                write!(self.output, ".{}", field.into_usize())?;
+                write!(self.output, ")")?;
+            }
             Rvalue::AllocateRawArray { ty, count } => {
                 write!(self.output, "raw_array_alloc[{ty}]")?;
                 write!(self.output, "(")?;
