@@ -1,4 +1,4 @@
-import std.io.print_newline
+import std.io.println
 @copy
 type Option[T] = 
 | None

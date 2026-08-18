@@ -8,14 +8,14 @@ fun print_char(value : char) -> () =
 fun print_string(value : string) -> () = builtins.print_string(value)
 
 # Prints the string and then prints a newline 
-fun print_newline(value : string) -> () = do
+fun println(value : string) -> () = do
     builtins.print_string(value);
     builtins.print_string("\n");
 end
 
 fun eprint_string(value : string) -> () = builtins.eprint_string(value)
 
-fun eprint_newline(value : string) -> () = do 
+fun eprintln(value : string) -> () = do 
     builtins.eprint_string(value);
     builtins.eprint_string("\n")
 end
