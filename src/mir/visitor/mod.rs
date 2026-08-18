@@ -21,6 +21,11 @@ pub trait Visit<'ctxt> {
     fn super_visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         match &stmt.kind {
             StmtKind::Noop => (),
+            StmtKind::AssignIndex(place, index, value) => {
+                self.visit_place(PlaceCtxt::Write, loc, place);
+                self.visit_operand(loc, index);
+                self.visit_operand(loc, value);
+            }
             StmtKind::Assign(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
             }
@@ -110,9 +115,9 @@ pub trait Visit<'ctxt> {
         }
     }
     fn super_visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
+        _ = loc;
         match projection {
-            PlaceProjection::ConstantIndex(_) | PlaceProjection::Field(_) => (),
-            PlaceProjection::Index(local) => self.visit_local(PlaceCtxt::Read, loc, local),
+            PlaceProjection::Field(_) => (),
             PlaceProjection::CaseDowncast(..) => (),
             PlaceProjection::Deref => (),
         }
@@ -174,6 +179,11 @@ pub trait MutVisit<'ctxt> {
     }
     fn super_visit_stmt(&mut self, loc: Location, stmt: &mut Stmt<'ctxt>) {
         match &mut stmt.kind {
+            StmtKind::AssignIndex(place, index, value) => {
+                self.visit_place(loc, place);
+                self.visit_operand(loc, index);
+                self.visit_operand(loc, value);
+            }
             StmtKind::Noop => (),
             StmtKind::Copy { dst, src, count } => {
                 self.visit_operand(loc, dst);
@@ -267,9 +277,9 @@ pub trait MutVisit<'ctxt> {
         }
     }
     fn super_visit_projection(&mut self, loc: Location, projection: &mut PlaceProjection) {
+        _ = loc;
         match projection {
-            PlaceProjection::ConstantIndex(_) | PlaceProjection::Field(_) => (),
-            PlaceProjection::Index(local) => self.visit_local(loc, local),
+            PlaceProjection::Field(_) => (),
             PlaceProjection::CaseDowncast(..) => (),
             PlaceProjection::Deref => (),
         }

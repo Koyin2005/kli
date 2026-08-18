@@ -1,7 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::{
-    mir::{BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind, build::Builder},
+    mir::{
+        BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind,
+        build::{Builder, TargetPlace},
+    },
     src_loc::SrcLoc,
     typed_ast::{CaseArm, Expr, FieldId, Pattern, PatternKind},
     types::{CaseId, IntegerSize, Type},
@@ -222,7 +225,12 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         }
     }
 
-    pub(super) fn build_match(&mut self, dest: Place, expr: &Expr<'ctxt>, arms: &[CaseArm<'ctxt>]) {
+    pub(super) fn build_match(
+        &mut self,
+        dest: TargetPlace<'ctxt>,
+        expr: &Expr<'ctxt>,
+        arms: &[CaseArm<'ctxt>],
+    ) {
         let place = self.place(expr);
         let tests = arms
             .iter()
@@ -243,7 +251,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         for (loc, i, block) in end_blocks.into_iter() {
             self.switch_to_block(block);
             self.assign_place_to_pattern(&arms[i].pattern, place.clone());
-            self.expr_into_dest(dest.clone(), &arms[i].body);
+            self.assign_to_target(dest.clone(), &arms[i].body);
             self.finish_block_with_goto(loc, end_block);
         }
         self.switch_to_block(end_block);

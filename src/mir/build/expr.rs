@@ -6,11 +6,11 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Rvalue,
-        build::Builder,
+        build::{Builder, TargetPlace},
     },
     src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
-    types::{IntegerKind, IntegerSize, Type},
+    types::{IntegerKind, Type},
 };
 pub(super) enum BuiltinResult<'ctxt> {
     Rvalue(Rvalue<'ctxt>),
@@ -61,9 +61,9 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             _ => None,
         }
     }
-    fn as_place(&mut self, expr: &Expr<'ctxt>, in_value_ctxt : bool) -> Option<Place> {
+    fn as_place(&mut self, expr: &Expr<'ctxt>, in_value_ctxt: bool) -> Option<Place> {
         if let ExprKind::Load(place) = &expr.kind {
-            if matches!(place.kind,typed_ast::PlaceKind::Index(..)) && in_value_ctxt{
+            if matches!(place.kind, typed_ast::PlaceKind::Index(..)) && in_value_ctxt {
                 return None;
             }
             Some(self.lower_place(place))
@@ -75,11 +75,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         if let Some(constant) = self.as_constant(expr) {
             Some(Operand::Constant(constant))
         } else {
-            self.as_place(expr,true).map(Operand::Load)
+            self.as_place(expr, true).map(Operand::Load)
         }
     }
     pub(super) fn place(&mut self, expr: &Expr<'ctxt>) -> Place {
-        if let Some(place) = self.as_place(expr,false) {
+        if let Some(place) = self.as_place(expr, false) {
             place
         } else {
             Place::local(self.expr_into_temp(expr))
@@ -92,31 +92,57 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             Operand::Load(Place::local(self.expr_into_temp(expr)))
         }
     }
+    pub fn assign_to_target(&mut self, target: TargetPlace<'ctxt>, value: &Expr<'ctxt>) {
+        let TargetPlace { place, index } = target;
+        if let Some(index) = index {
+            let loc = value.loc;
+            let value = self.operand(value);
+            self.push_stmt(loc, mir::StmtKind::AssignIndex(place, index, value));
+        } else {
+            self.expr_into_dest(place, value);
+        }
+    }
+    pub fn expr_into_target(&mut self, target: TargetPlace<'ctxt>, value: &Expr<'ctxt>) {
+        match &value.kind {
+            ExprKind::Case(scrutinee, arms) => {
+                self.build_match(target, scrutinee, arms);
+            }
+            _ => {
+                self.assign_to_target(target, value);
+            }
+        }
+    }
+    pub fn lower_target_place(&mut self, place: &typed_ast::Place<'ctxt>) -> TargetPlace<'ctxt> {
+        match &place.kind {
+            typed_ast::PlaceKind::Index(array, index) => {
+                let place = self.place(array);
+                let index = self.operand(index);
+                TargetPlace {
+                    place,
+                    index: Some(index),
+                }
+            }
+            _ => TargetPlace {
+                place: self.lower_place(place),
+                index: None,
+            },
+        }
+    }
+    pub fn target_place(&mut self, expr: &Expr<'ctxt>) -> TargetPlace<'ctxt> {
+        match expr.kind {
+            ExprKind::Load(ref place) => self.lower_target_place(place),
+            _ => TargetPlace {
+                place: Place::local(self.expr_into_temp(expr)),
+                index: None,
+            },
+        }
+    }
     pub(super) fn lower_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Place {
         match &place.kind {
-            typed_ast::PlaceKind::Index(base, index) => {
-                let base = self.place(base);
-                let index = self.expr_into_temp(index);
-                let len = self.assign_to_temp(
-                    place.loc,
-                    Type::new_uint(self.ctxt, IntegerSize::Int64),
-                    Rvalue::Len(base.clone()),
-                );
-                let in_bounds = self.assign_to_temp(
-                    place.loc,
-                    Type::new_bool(self.ctxt),
-                    Self::binary_op_rvalue(
-                        mir::BinaryOp::Lesser,
-                        Operand::Load(Place::local(index)),
-                        Operand::Load(Place::local(len)),
-                    ),
-                );
-                self.finish_assert_to_new_block(
-                    place.loc,
-                    Operand::Load(Place::local(in_bounds)),
-                    mir::AssertKind::InBounds,
-                );
-                base.with_index(index)
+            typed_ast::PlaceKind::Index(..) => {
+                let index_rvalue = self.load_place(place);
+                let local = self.assign_to_temp(place.loc, place.ty, index_rvalue);
+                Place::local(local)
             }
             typed_ast::PlaceKind::Deref(base) => self.place(base).with_deref(),
             typed_ast::PlaceKind::Var(var) => {
@@ -210,7 +236,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 self.expr_stmt(expr);
             }
             ExprKind::Case(expr, arms) => {
-                self.build_match(dest, expr, arms);
+                self.build_match(TargetPlace::new(dest), expr, arms);
             }
             ExprKind::Logic(op, left, right) => {
                 //Evaluate the left hand side
@@ -450,21 +476,20 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
             Builtin::ArrayGetUnchecked => {
                 let [array, index] = args else { unreachable!() };
-                let place = self.place(array);
+                let _ = self.place(array);
                 let index = self.operand(index);
-                let index = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Load(place.with_index(index))))
+                let _ = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
+                todo!("remove me")
             }
             Builtin::ArraySetUnchecked => {
                 let [array, index, value] = args else {
                     unreachable!()
                 };
-                let place = self.place(array);
+                let _ = self.place(array);
                 let index = self.operand(index);
-                let index = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
-                let value = self.operand(value);
-                self.assign(args[0].loc, place.with_index(index), Rvalue::Use(value));
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
+                let _ = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
+                let _ = self.operand(value);
+                todo!("remove me")
             }
             Builtin::RawArrayAlloc => {
                 let [count] = operands().try_into().unwrap();
@@ -493,6 +518,19 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             )),
         }
     }
+    pub fn load_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Rvalue<'ctxt> {
+        match place.kind {
+            typed_ast::PlaceKind::Index(ref array, ref index) => {
+                let place = self.place(array);
+                let index = self.operand(index);
+                Rvalue::LoadIndex(place, index)
+            }
+            _ => {
+                let operand = self.lower_place(place);
+                Rvalue::Use(Operand::Load(operand))
+            }
+        }
+    }
     pub fn build_rvalue(&mut self, expr: &Expr<'ctxt>) -> Rvalue<'ctxt> {
         match &expr.kind {
             ExprKind::Err => unreachable!("Cannot have err here"),
@@ -510,19 +548,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .unwrap_or_else(|| unreachable!("should be an constant operand '{:?}' ", expr));
                 Rvalue::Use(operand)
             }
-            ExprKind::Load(place) => match place.kind {
-                typed_ast::PlaceKind::Index(ref array, ref index) => {
-                    let place = self.place(array);
-                    let index = self.operand(index);
-                    Rvalue::LoadIndex(place, index)
-                }
-                _ => {
-                    let operand = self.as_operand(expr).unwrap_or_else(|| {
-                        unreachable!("should be an constant operand '{:?}' ", expr)
-                    });
-                    Rvalue::Use(operand)
-                }
-            },
+            ExprKind::Load(place) => self.load_place(place),
             ExprKind::NamedRecord(id, generic_args, fields) => {
                 let mut field_map = fields
                     .iter()

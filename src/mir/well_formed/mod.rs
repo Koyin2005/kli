@@ -72,14 +72,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                         loc,
                     )
                 }
-                super::PlaceProjection::ConstantIndex(_) | super::PlaceProjection::Index(_) => {
-                    ty = self.assert_with_some(
-                        ty,
-                        |ty| ty.as_array(),
-                        || "Cannot take an index for non-array",
-                        loc,
-                    )
-                }
                 super::PlaceProjection::Deref => {
                     ty = self.assert_with_some(
                         ty,
@@ -393,6 +385,32 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
+            StmtKind::AssignIndex(array, index, rhs) => {
+                let array = array.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let index = index.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let rhs_ty = rhs.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let element_ty = self.assert_with_some(
+                    array,
+                    |ty| ty.as_array(),
+                    || format!("should be an array but got '{}'", array),
+                    stmt.loc,
+                );
+                self.assert(
+                    index.is_uint(IntegerSize::Int64),
+                    || format!("should be index type but got '{}'", index),
+                    stmt.loc,
+                );
+                self.assert(
+                    element_ty == rhs_ty,
+                    || {
+                        format!(
+                            "Cannot assign non equal types {} and {}",
+                            element_ty, rhs_ty
+                        )
+                    },
+                    stmt.loc,
+                );
+            }
             StmtKind::Assign(lhs, rhs) => {
                 let lhs_ty = lhs.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 let rhs_ty = rhs.type_of(self.ctxt, &self.body.locals, self.body.return_type);

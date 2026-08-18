@@ -84,12 +84,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 PlaceProjection::Field(field) => {
                     let _ = write!(&mut output, ".{}", field.into_usize());
                 }
-                PlaceProjection::ConstantIndex(index) => {
-                    let _ = write!(&mut output, ".[{}]", index);
-                }
-                PlaceProjection::Index(index) => {
-                    let _ = write!(&mut output, ".[_{}]", index.0);
-                }
                 PlaceProjection::CaseDowncast(_, name) => {
                     let current = std::mem::take(&mut output);
                     let _ = write!(&mut output, "({} as {})", current, name);
@@ -338,6 +332,14 @@ impl<'ctxt> MirDump<'ctxt> {
         for stmt in &block.stmts {
             write!(self.output, "  ")?;
             match &stmt.kind {
+                StmtKind::AssignIndex(place, index, value) => {
+                    self.write_place(place)?;
+                    write!(self.output, ".[")?;
+                    self.write_operand(index)?;
+                    write!(self.output, "] = ")?;
+                    self.write_operand(value)?;
+                    writeln!(self.output)?;
+                }
                 StmtKind::Print { value, err } => {
                     write!(self.output, "{}print(", if *err { "e" } else { "" })?;
                     self.write_operand(value)?;

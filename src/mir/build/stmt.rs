@@ -11,9 +11,8 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
         match &expr.kind {
             ExprKind::Err => (),
             ExprKind::Assign(place, value) => {
-                let place = self.lower_place(place);
-                let value = self.build_rvalue(value);
-                self.assign(expr.loc, place, value);
+                let target = self.lower_target_place(place);
+                self.expr_into_target(target, value);
             }
             ExprKind::Panic => {
                 self.panic(expr.loc);

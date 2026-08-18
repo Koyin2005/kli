@@ -15,6 +15,16 @@ mod function;
 mod loops;
 mod matches;
 mod stmt;
+#[derive(Clone, Debug)]
+pub struct TargetPlace<'ctxt> {
+    pub place: Place,
+    pub index: Option<Operand<'ctxt>>,
+}
+impl<'a> TargetPlace<'a> {
+    pub fn new(place: Place) -> Self {
+        Self { place, index: None }
+    }
+}
 pub struct Builder<'mir, 'ctxt> {
     pub mir_context: &'mir mut Context<'ctxt>,
     body: Body<'ctxt>,

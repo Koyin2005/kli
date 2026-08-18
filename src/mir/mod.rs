@@ -27,8 +27,6 @@ impl Local {
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
 pub enum PlaceProjection {
     Field(FieldId),
-    ConstantIndex(u32),
-    Index(Local),
     CaseDowncast(CaseId, Symbol),
     Deref,
 }
@@ -43,12 +41,6 @@ impl PlaceProjection {
                 ty.field_info(field, ctxt)
                     .unwrap_or_else(|| panic!("should be a type with fields but got '{ty}'"))
                     .0
-            }
-            PlaceProjection::Index(_) | PlaceProjection::ConstantIndex(_) => {
-                let Some(ty) = ty.as_array() else {
-                    unreachable!("Should be an array")
-                };
-                ty
             }
             PlaceProjection::Deref => {
                 let (TypeKind::Box(ty) | TypeKind::RawPtr(ty)) = ty.kind() else {
@@ -112,16 +104,8 @@ impl Place {
         self.projections.push(PlaceProjection::Field(field));
         self
     }
-    pub fn with_index(mut self, index: Local) -> Self {
-        self.projections.push(PlaceProjection::Index(index));
-        self
-    }
     pub fn with_deref(mut self) -> Self {
         self.projections.push(PlaceProjection::Deref);
-        self
-    }
-    pub fn with_constant_index(mut self, index: u32) -> Self {
-        self.projections.push(PlaceProjection::ConstantIndex(index));
         self
     }
     pub fn with_case_downcast(mut self, index: CaseId, name: Symbol) -> Self {
@@ -562,6 +546,7 @@ pub struct Stmt<'ctxt> {
 #[derive(Clone)]
 pub enum StmtKind<'ctxt> {
     Noop,
+    AssignIndex(Place, Operand<'ctxt>, Operand<'ctxt>),
     Assign(Place, Box<Rvalue<'ctxt>>),
     Print {
         value: Operand<'ctxt>,
