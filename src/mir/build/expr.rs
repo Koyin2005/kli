@@ -102,13 +102,96 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             self.expr_into_dest(place, value);
         }
     }
-    pub fn expr_into_target(&mut self, target: TargetPlace<'ctxt>, value: &Expr<'ctxt>) {
-        match &value.kind {
-            ExprKind::Case(scrutinee, arms) => {
-                self.build_match(target, scrutinee, arms);
+    pub fn assign_rvalue(
+        &mut self,
+        loc: SrcLoc,
+        ty: Type<'ctxt>,
+        target: TargetPlace<'ctxt>,
+        rvalue: Rvalue<'ctxt>,
+    ) {
+        let TargetPlace { place, index } = target;
+        if let Some(index) = index {
+            let value = if let Rvalue::Use(operand) = rvalue {
+                operand
+            } else {
+                Operand::Load(Place::local(self.assign_to_temp(loc, ty, rvalue)))
+            };
+            self.push_stmt(loc, mir::StmtKind::AssignIndex(place, index, value));
+        } else {
+            self.assign(loc, place, rvalue);
+        }
+    }
+    pub fn expr_into_target(&mut self, target: TargetPlace<'ctxt>, expr: &Expr<'ctxt>) {
+        match &expr.kind {
+            ExprKind::Err => unreachable!("Cannot have err here"),
+            ExprKind::Block(block_body, ..) => {
+                for stmt in block_body.stmts.iter() {
+                    self.stmt(stmt);
+                }
+                self.expr_into_target(target, &block_body.expr);
             }
-            _ => {
-                self.assign_to_target(target, value);
+            ExprKind::Unsafe(expr) => {
+                self.expr_into_target(target, expr);
+            }
+            ExprKind::Panic | ExprKind::NeverToAny(_) | ExprKind::Return(_) => {
+                self.expr_stmt(expr);
+            }
+            ExprKind::Case(expr, arms) => {
+                self.build_match(target, expr, arms);
+            }
+            ExprKind::Logic(op, left, right) => {
+                //Evaluate the left hand side
+                let left_operand = self.operand(left);
+                let branch_block = self.current_block;
+
+                //Create the block for the short circuit side
+                let constant_block = self.new_block();
+
+                //Evaluate the right hand side
+                let rhs_block = self.switch_to_new_block();
+                self.expr_into_target(target.clone(), right);
+                let merge_block = self.goto_to_new_block(right.loc);
+
+                let (true_block, false_block, value, const_loc) = match op {
+                    LogicalOp::And => (rhs_block, constant_block, false, left.loc),
+                    LogicalOp::Or => (constant_block, rhs_block, true, right.loc),
+                };
+
+                self.switch_to_block(constant_block);
+                self.assign_rvalue(
+                    const_loc,
+                    Type::new_bool(self.ctxt),
+                    target,
+                    Rvalue::Use(Operand::Constant(Constant::bool(self.ctxt, value))),
+                );
+                self.finish_block_with_goto(const_loc, merge_block);
+
+                self.switch_to_block(branch_block);
+                self.finish_block_with_if(left.loc, left_operand, true_block, false_block);
+
+                self.switch_to_block(merge_block);
+            }
+            ExprKind::Function(..)
+            | ExprKind::Bool(_)
+            | ExprKind::Int(_)
+            | ExprKind::Unit
+            | ExprKind::Load(_)
+            | ExprKind::Call(..)
+            | ExprKind::Binary(..)
+            | ExprKind::For { .. }
+            | ExprKind::Assign(..)
+            | ExprKind::VariantInit(..)
+            | ExprKind::String(_)
+            | ExprKind::Lambda(_)
+            | ExprKind::BuiltinCall(..)
+            | ExprKind::Const(..)
+            | ExprKind::NamedRecord(..)
+            | ExprKind::While(..)
+            | ExprKind::Tuple(..)
+            | ExprKind::Array(..)
+            | ExprKind::Char(_) => {
+                let rvalue = self.build_rvalue(expr);
+                self.assign_rvalue(expr.loc, expr.ty, target, rvalue);
             }
         }
     }
