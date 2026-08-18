@@ -8,7 +8,6 @@ use crate::{
     },
     resolved_ast::Var,
     src_loc::SrcLoc,
-    typed_ast::FieldId,
     types::Type,
 };
 mod expr;
