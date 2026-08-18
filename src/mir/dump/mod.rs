@@ -117,6 +117,14 @@ impl<'ctxt> MirDump<'ctxt> {
             Rvalue::Use(operand) => {
                 self.write_operand(operand)?;
             }
+            Rvalue::LoadIndex(place, index) => {
+                write!(self.output, "LoadIndex")?;
+                write!(self.output, "(")?;
+                self.write_place(place)?;
+                write!(self.output, ",")?;
+                self.write_operand(index)?;
+                write!(self.output, ")")?;
+            }
             Rvalue::AllocateRawArray { ty, count } => {
                 write!(self.output, "raw_array_alloc[{ty}]")?;
                 write!(self.output, "(")?;
@@ -124,7 +132,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, ")")?;
             }
             Rvalue::AllocateArray(ty, elements) => {
-                write!(self.output, "AllocateArray[{}](",ty)?;
+                write!(self.output, "AllocateArray[{}](", ty)?;
                 self.write_with_coma_sep(elements, |this, element| this.write_operand(element))?;
                 write!(self.output, ")")?;
             }

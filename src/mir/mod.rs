@@ -284,6 +284,7 @@ pub enum Rvalue<'ctxt> {
     Cast(CastKind, Operand<'ctxt>, Type<'ctxt>),
     Len(Place),
     Discriminant(Place),
+    LoadIndex(Place, Operand<'ctxt>),
     GcAlloc(Type<'ctxt>, Operand<'ctxt>),
 }
 impl<'ctxt> Rvalue<'ctxt> {
@@ -297,6 +298,7 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::Len(_)
             | Self::Discriminant(_)
             | Self::UninitZeroed(_) => true,
+            Self::LoadIndex(..) => false,
             Self::GcAlloc(..) => false,
 
             Self::AllocateArray(..)
@@ -314,6 +316,10 @@ impl<'ctxt> Rvalue<'ctxt> {
         return_type: Type<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
+            Rvalue::LoadIndex(place, _) => place
+                .type_of(ctxt, locals, return_type)
+                .as_array()
+                .expect("should be an array"),
             Rvalue::GcAlloc(ty, _) => Type::new_raw_ptr(ctxt, *ty),
             Rvalue::ReadLine => Type::new_string(ctxt),
             &Rvalue::UninitZeroed(ty) => Type::new_uninit(ctxt, ty),
