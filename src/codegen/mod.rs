@@ -535,7 +535,7 @@ impl<'ctxt> CodegenPlace<'ctxt, Type<'ctxt>> {
     }
 }
 impl<'ctxt, Z> CodegenPlace<'ctxt, Z> {
-    fn as_non_zst_place(self) -> Result<NonZstPlace<'ctxt>, Z> {
+    fn into_non_zst_place(self) -> Result<NonZstPlace<'ctxt>, Z> {
         match self {
             Self::MemPlace(mem) => Ok(CodegenPlace::MemPlace(mem)),
             Self::Ssa(ty, var) => Ok(CodegenPlace::Ssa(ty, var)),
@@ -987,7 +987,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 return CodegenPlaceBase::ZeroSized(*ty);
             }
         }
-        return CodegenPlaceBase::Ssa(variable);
+        CodegenPlaceBase::Ssa(variable)
     }
     fn eval_place(&mut self, place: &mir::Place) -> CodegenPlace<'ctxt> {
         let (mut place_value, projections) = {
@@ -1260,7 +1260,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn eval_operand(&mut self, operand: &mir::Operand<'ctxt>) -> OperandValue<'ctxt> {
         match operand {
             Operand::Constant(constant) => self.build_const(constant),
-            Operand::Load(place) => match self.eval_place(place).as_non_zst_place() {
+            Operand::Load(place) => match self.eval_place(place).into_non_zst_place() {
                 Err(ty) => OperandValue {
                     ty,
                     kind: OperandValueKind::ZeroSized,
@@ -1398,7 +1398,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let func = self.module.declare_func_in_func(id, self.builder.func);
         let call = self.builder.ins().call(func, args);
         let values = self.builder.inst_results(call).to_vec();
-        if let Some(ret_place) = ret_place.as_non_zst_place().ok() {
+        if let Ok(ret_place) = ret_place.into_non_zst_place() {
             self.store_return_value(values, ret_place);
         }
     }
@@ -1439,7 +1439,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     .id;
                 let flattened_args = self.explode_args(
                     (abi.ret == PassMode::ByPtr)
-                        .then(|| ret_place.clone().as_non_zst_place().ok())
+                        .then(|| ret_place.clone().into_non_zst_place().ok())
                         .flatten(),
                     &abi,
                     args,
@@ -1459,7 +1459,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
 
                 let flattened_args = self.explode_args(
                     (abi.ret == PassMode::ByPtr)
-                        .then(|| ret_place.clone().as_non_zst_place().ok())
+                        .then(|| ret_place.clone().into_non_zst_place().ok())
                         .flatten(),
                     &abi,
                     args,
@@ -1469,7 +1469,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     .ins()
                     .call_indirect(sig, callee, &flattened_args);
                 let values = self.builder.inst_results(results).to_vec();
-                if let Some(ret_place) = ret_place.as_non_zst_place().ok() {
+                if let Ok(ret_place) = ret_place.into_non_zst_place() {
                     self.store_return_value(values, ret_place);
                 }
             }
@@ -1597,7 +1597,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             BinaryOp::ShiftLeft => (self.builder.ins().ishl(left_value, right_value), None),
             BinaryOp::ShiftRight => (self.builder.ins().ushr(left_value, right_value), None),
         };
-        let place = self.eval_place(place).as_non_zst_place().unwrap();
+        let place = self.eval_place(place).into_non_zst_place().unwrap();
         if let Some(right) = right {
             let Some(fields) = place.type_of().as_tuple() else {
                 unreachable!()
@@ -1624,7 +1624,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let count = self.eval_operand(count);
         let count = count.expect_immediate(self);
         let ptr = self.codegen_runtime_size_alloc_call(ty, count);
-        let place = self.eval_place(place).as_non_zst_place().unwrap();
+        let place = self.eval_place(place).into_non_zst_place().unwrap();
         self.store_immediate(place, ptr);
     }
     fn codegen_box(&mut self, place: &mir::Place, ty: Type<'ctxt>, operand: &mir::Operand<'ctxt>) {
@@ -1633,7 +1633,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let value = self.eval_operand(operand);
         let box_inner_ptr = MemPlace::new(ptr, self.layout_for(ty), ty);
         self.store_operand_with_mem_place(box_inner_ptr.clone(), value.clone());
-        let place = self.eval_place(place).as_non_zst_place().unwrap();
+        let place = self.eval_place(place).into_non_zst_place().unwrap();
         let box_ptr = box_inner_ptr.ptr(self);
         self.store_immediate(place, box_ptr);
     }
@@ -1647,7 +1647,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         match cast {
             mir::CastKind::Transmute => {
                 //Zero sized transmutes are no ops
-                let Ok(dst_place) = self.eval_place(place).as_non_zst_place() else {
+                let Ok(dst_place) = self.eval_place(place).into_non_zst_place() else {
                     return;
                 };
                 /*
@@ -1696,7 +1696,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 }
             }
             mir::CastKind::IntegerCast(cast) => {
-                let place = self.eval_place(place).as_non_zst_place().unwrap();
+                let place = self.eval_place(place).into_non_zst_place().unwrap();
                 let operand_value = self.eval_operand(operand);
                 let value = operand_value.expect_immediate(self);
                 let value = match cast {
@@ -1751,13 +1751,13 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let (place, tag_scalar) = match tag {
             TagEncoding::Uninhabited => return,
             TagEncoding::Field { scalar } => {
-                let variant_place = variant_place.as_non_zst_place().unwrap();
+                let variant_place = variant_place.into_non_zst_place().unwrap();
                 (variant_place, scalar)
             }
             TagEncoding::Niche {
                 untagged_scalar, ..
             } => {
-                let variant_place = variant_place.as_non_zst_place().unwrap();
+                let variant_place = variant_place.into_non_zst_place().unwrap();
                 (variant_place, untagged_scalar)
             }
         };
@@ -1905,18 +1905,18 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 self.builder
                     .call_memcpy(self.target_config, dst_ptr, ptr, written);
 
-                let dst_place = self.eval_place(place).as_non_zst_place().unwrap();
+                let dst_place = self.eval_place(place).into_non_zst_place().unwrap();
                 self.store_immediate_pair(dst_place, ptr, written, layout::POINTER_SIZE);
             }
             mir::Rvalue::UninitZeroed(_) => {
-                let place = self.eval_place(place).as_non_zst_place().unwrap();
+                let place = self.eval_place(place).into_non_zst_place().unwrap();
                 let CodegenPlace::MemPlace(place) = place else {
                     unreachable!("Uninit should be in memory")
                 };
                 self.write_zeros(place);
             }
             mir::Rvalue::AllocateRawArray { ty, count } => {
-                let dst_place = self.eval_place(place).as_non_zst_place().unwrap();
+                let dst_place = self.eval_place(place).into_non_zst_place().unwrap();
                 let ty = self.monomorphize(*ty);
                 let len = self.eval_operand(count).expect_immediate(self);
                 let ptr = self.codegen_runtime_size_alloc_call(ty, len);
@@ -1943,7 +1943,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     let LayoutKind::Variant { tag, .. } = self.layout_for(ty).kind else {
                         unreachable!()
                     };
-                    let Ok(dst_place) = self.eval_place(place).as_non_zst_place() else {
+                    let Ok(dst_place) = self.eval_place(place).into_non_zst_place() else {
                         return;
                     };
                     match tag {
@@ -2050,8 +2050,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 self.codegen_binary_op(place, *binary_op, left, right);
             }
             mir::Rvalue::AddrOf(array_place) => {
-                let place = self.eval_place(place).as_non_zst_place().unwrap();
-                let array_place = self.eval_place(array_place).as_non_zst_place().unwrap();
+                let place = self.eval_place(place).into_non_zst_place().unwrap();
+                let array_place = self.eval_place(array_place).into_non_zst_place().unwrap();
                 let CodegenPlace::MemPlace(array_place) = array_place else {
                     unreachable!()
                 };
@@ -2060,8 +2060,8 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             }
             mir::Rvalue::Cast(kind, operand, ty) => self.codegen_cast(place, *kind, operand, *ty),
             mir::Rvalue::Len(array_place) => {
-                let place = self.eval_place(place).as_non_zst_place().unwrap();
-                let array_place = self.eval_place(array_place).as_non_zst_place().unwrap();
+                let place = self.eval_place(place).into_non_zst_place().unwrap();
+                let array_place = self.eval_place(array_place).into_non_zst_place().unwrap();
                 let CodegenPlace::MemPlace(array_place) = array_place else {
                     unreachable!("arrays never ssa")
                 };
@@ -2069,7 +2069,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 self.store_immediate(place, len_value);
             }
             mir::Rvalue::Discriminant(variant_place) => {
-                let dst_place = self.eval_place(place).as_non_zst_place().unwrap();
+                let dst_place = self.eval_place(place).into_non_zst_place().unwrap();
                 let variant_place = self.eval_place(variant_place);
                 self.codegen_discriminant(dst_place, variant_place);
             }
@@ -2107,7 +2107,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             let local_kind = self.local_info.info_for(local).kind;
             let ty = self.local_info.info_for(local).ty;
             if matches!(local_kind, LocalKind::Memory(_) | LocalKind::Scalar(..))
-                && let Ok(place) = self.eval_place(&Place::local(local)).as_non_zst_place()
+                && let Ok(place) = self.eval_place(&Place::local(local)).into_non_zst_place()
             {
                 let (param_index, scalar_ty) = param_values[i];
                 let Some(scalar_ty) = scalar_ty else {

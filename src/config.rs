@@ -43,6 +43,7 @@ impl FeatureArgSet {
 pub enum CommandArg {
     Build,
     Run,
+    Check,
 }
 pub struct Config {
     path: PathBuf,
@@ -78,6 +79,7 @@ pub fn config() -> Result<Config, ConfigError> {
     let command = match command.as_str() {
         "run" => CommandArg::Run,
         "build" => CommandArg::Build,
+        "check" => CommandArg::Check,
         name => {
             eprintln!("Unknown command '{name}'");
             return Err(ConfigError);

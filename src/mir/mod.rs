@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display};
 
 use crate::{
     Symbol,
@@ -684,7 +684,7 @@ impl<'ctxt> Context<'ctxt> {
             f(self.bodies.get_mut(src).unwrap());
         }
     }
-    pub fn add_body(&mut self, body: Body<'ctxt>){
+    pub fn add_body(&mut self, body: Body<'ctxt>) {
         let src = body.src;
         self.bodies.insert(src, body);
         self.body_sources.push(src);

@@ -96,7 +96,9 @@ fn main() {
             pass.run(ctxt, body);
         }
     });
-    if let Some((main, _)) = ctxt.main_function() {
+    if let Some((main, _)) = ctxt.main_function()
+        && !matches!(ctxt.config().command(), CommandArg::Check)
+    {
         let instances = InstanceCollector::new(&mir_context)
             .collect(ctxt, Instance::non_generic(InstanceKind::Function(main)));
         if ctxt.config().has_feature(Feature::OutputInstances) {

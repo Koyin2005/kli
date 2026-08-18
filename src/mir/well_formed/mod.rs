@@ -253,15 +253,9 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     (BinaryOp::Lesser | BinaryOp::Greater, left, right)
                         if left == right && left.is_builtin_scalar() => {}
                     (BinaryOp::BitwiseAnd | BinaryOp::BitwiseOr, left, right)
-                        if left == right && (left.is_integer() || left.is_bool()) =>
-                    {
-                        ()
-                    }
+                        if left == right && (left.is_integer() || left.is_bool()) => {}
                     (BinaryOp::ShiftLeft | BinaryOp::ShiftRight, left, right)
-                        if left == right && left.is_integer() =>
-                    {
-                        ()
-                    }
+                        if left == right && left.is_integer() => {}
                     (BinaryOp::Equals, left, right) => self.assert(
                         left == right,
                         || format!("Cannot equate '{}' and '{}'", left, right),
@@ -429,7 +423,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 self.assert(
                     value.type_of(self.ctxt, &self.body.locals, self.body.return_type)
                         == Type::new_string(self.ctxt),
-                    || format!("cannot print non string"),
+                    || "cannot print non string",
                     stmt.loc,
                 );
             }

@@ -299,7 +299,7 @@ impl<'s> Lexer<'s> {
     fn char_literal(&mut self) -> Option<Token> {
         self.next_char()?;
         let c = if self.match_char('\\').is_some() {
-            let c = match self.next_char()? {
+            match self.next_char()? {
                 'n' => '\n',
                 't' => '\t',
                 'r' => '\r',
@@ -308,11 +308,10 @@ impl<'s> Lexer<'s> {
                 'u' if let Some(c) = self.char_escape() => c,
                 _ => {
                     self.diag
-                        .add_diagnostic(format!("Invalid character escape"), self.current_loc());
+                        .add_diagnostic("Invalid character escape", self.current_loc());
                     return None;
                 }
-            };
-            c
+            }
         } else {
             self.next_char()?
         };
@@ -323,8 +322,8 @@ impl<'s> Lexer<'s> {
             })
         } else {
             self.diag
-                .add_diagnostic(format!("Expected ' at end of char",), self.current_loc());
-            return None;
+                .add_diagnostic("Expected ' at end of char", self.current_loc());
+            None
         }
     }
     fn current_token_src(&self) -> &str {
