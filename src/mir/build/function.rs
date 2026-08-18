@@ -13,15 +13,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
     fn add_finished_body(self) {
         let body = self.body;
         let context = self.mir_context;
-        context.body_sources.push(body.src);
         if context.check_well_formed {
             let mut wf = WellFormed::new(&body, self.ctxt);
             wf.visit_body(&body);
         }
-        assert!(
-            context.bodies.insert(body.src, body).is_none(),
-            "Can only have one source for each body"
-        );
+        context.add_body(body);
     }
     fn add_param_locals(&mut self, params: impl Iterator<Item = (LocalKind, Type<'ctxt>)>) {
         for (kind, ty) in params {

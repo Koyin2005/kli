@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{cell::RefCell, collections::HashMap, fmt::Display};
 
 use crate::{
     Symbol,
@@ -666,8 +666,8 @@ pub type Locals<'ctxt> = IndexVec<Local, LocalInfo<'ctxt>>;
 #[derive(Default)]
 pub struct Context<'ctxt> {
     pub check_well_formed: bool,
-    pub(super) bodies: HashMap<BodySource, Body<'ctxt>>,
-    pub(super) body_sources: Vec<BodySource>,
+    bodies: HashMap<BodySource, Body<'ctxt>>,
+    body_sources: Vec<BodySource>,
 }
 impl<'ctxt> Context<'ctxt> {
     pub fn new(well_formed: bool) -> Self {
@@ -683,6 +683,11 @@ impl<'ctxt> Context<'ctxt> {
         for src in self.body_sources.iter() {
             f(self.bodies.get_mut(src).unwrap());
         }
+    }
+    pub fn add_body(&mut self, body: Body<'ctxt>){
+        let src = body.src;
+        self.bodies.insert(src, body);
+        self.body_sources.push(src);
     }
     #[track_caller]
     pub fn expect_body(&self, src: BodySource) -> &Body<'ctxt> {

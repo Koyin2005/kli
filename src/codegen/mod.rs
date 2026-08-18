@@ -227,7 +227,7 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                     cranelift_module::Linkage::Local,
                 )
             };
-            let function = &mir_ctxt.bodies[&instance.body_src()];
+            let function = mir_ctxt.expect_body(instance.body_src());
 
             let sig = Scheme::new(FunctionSig::new(
                 function.param_types(),
@@ -397,7 +397,7 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                 ctxt.func.signature = sig;
             }
 
-            let body = &mir_ctxt.bodies[&instance.body_src()];
+            let body = mir_ctxt.expect_body(instance.body_src());
             let mut builder = frontend::FunctionBuilder::new(&mut ctxt.func, &mut f_ctxt);
             let block_map = BlockMap::new(body, &mut builder);
             for param in sig.params.iter() {
