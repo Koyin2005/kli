@@ -616,7 +616,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             )),
         }
     }
-    pub fn assign_builder_to(&mut self, loc: SrcLoc, dest: Place, mut place_builder: PlaceBuilder) {
+    pub(super) fn assign_builder_to(&mut self, loc: SrcLoc, dest: Place, mut place_builder: PlaceBuilder) {
         let projection = place_builder.projections.pop();
         let place = self.load_place_from_builder(loc, place_builder);
         let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
@@ -625,21 +625,14 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             return;
         };
         let (_, value) = self.load_projection(ty, place, projection);
-        match value {
-            Ok(value) => {
-                self.assign(loc, dest, value);
-            }
-            Err(place) => {
-                self.assign(loc, dest, Rvalue::Use(Operand::Load(place)));
-            }
-        }
+        self.assign(loc, dest, value);
     }
     pub fn load_projection(
         &mut self,
         mut ty: Type<'ctxt>,
-        mut place: Place,
+        place: Place,
         projection: FieldProjection,
-    ) -> (Type<'ctxt>, Result<Rvalue<'ctxt>, Place>) {
+    ) -> (Type<'ctxt>, Rvalue<'ctxt>) {
         match projection {
             FieldProjection::CaseDowncast(case) => {
                 let Some((id, _, args)) = ty.as_named() else {
@@ -649,16 +642,15 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let type_def = self.ctxt.type_def(id);
                 let case_info = type_def.case(case);
                 ty = case_info.payload_type(args, self.ctxt);
-                place = place.with_case_downcast(case, case_info.name);
-                (ty, Err(place))
+                (ty, Rvalue::LoadPayload(place, case))
             }
             FieldProjection::Field(field) => {
                 ty = ty.field_info(field, self.ctxt).unwrap().0;
-                (ty, Ok(Rvalue::LoadField(place, field)))
+                (ty, Rvalue::LoadField(place, field))
             }
         }
     }
-    pub fn load_place_from_builder(&mut self, loc: SrcLoc, place_builder: PlaceBuilder) -> Place {
+    pub(super) fn load_place_from_builder(&mut self, loc: SrcLoc, place_builder: PlaceBuilder) -> Place {
         let mut ty =
             place_builder
                 .place
@@ -668,10 +660,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             for projection in place_builder.projections {
                 let (new_ty, value) = self.load_projection(ty, place, projection);
                 ty = new_ty;
-                place = match value {
-                    Ok(rvalue) => Place::local(self.assign_to_temp(loc, ty, rvalue)),
-                    Err(place) => place,
-                };
+                place = Place::local(self.assign_to_temp(loc, ty, value));
             }
         }
         place

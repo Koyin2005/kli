@@ -53,16 +53,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         for proj in &place.projections {
             let loc = self.body.src_info(loc);
             match proj {
-                super::PlaceProjection::CaseDowncast(index, _) => {
-                    ty = if let Some((id, _, args)) = ty.as_named() {
-                        self.ctxt
-                            .type_def(id)
-                            .case(*index)
-                            .payload_type(args, self.ctxt)
-                    } else {
-                        emit_fatal_diagnostic(loc, format!("Cannot get inner value of '{}'", ty))
-                    };
-                }
                 super::PlaceProjection::Deref => {
                     ty = self.assert_with_some(
                         ty,
@@ -79,6 +69,27 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         self.super_visit_rvalue(loc, rvalue);
         let loc = self.body.src_info(loc);
         match rvalue {
+            super::Rvalue::LoadPayload(place, case) => {
+                let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let (id, name, _) = self.assert_with_some(
+                    &ty,
+                    |ty| ty.as_named(),
+                    || format!("Should be a named type but got '{}'", ty),
+                    loc,
+                );
+                let type_def = self.ctxt.type_def(id);
+                let cases = self.assert_with_some(
+                    type_def.cases(),
+                    std::convert::identity,
+                    || format!("should be a type with cases for '{name}'"),
+                    loc,
+                );
+                self.assert(
+                    cases.len() >= case.into_usize(),
+                    || format!("Case id {} too high", case.into_usize()),
+                    loc,
+                );
+            }
             super::Rvalue::LoadField(place, field) => {
                 let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 let field_ty = ty.field_info(*field, self.ctxt);

@@ -26,7 +26,6 @@ impl Local {
 }
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
 pub enum PlaceProjection {
-    CaseDowncast(CaseId, Symbol),
     Deref,
 }
 impl PlaceProjection {
@@ -41,13 +40,6 @@ impl PlaceProjection {
                     unreachable!("Should be a box or raw ptr but got {}", ty)
                 };
                 *ty
-            }
-            PlaceProjection::CaseDowncast(index, _) => {
-                let Some((id, _, args)) = ty.as_named() else {
-                    unreachable!("Should be named")
-                };
-
-                ctxt.type_def(id).case(index).payload_type(args, ctxt)
             }
         }
     }
@@ -96,11 +88,6 @@ impl Place {
     }
     pub(super) fn with_deref(mut self) -> Self {
         self.projections.push(PlaceProjection::Deref);
-        self
-    }
-    pub(super) fn with_case_downcast(mut self, index: CaseId, name: Symbol) -> Self {
-        self.projections
-            .push(PlaceProjection::CaseDowncast(index, name));
         self
     }
 
@@ -260,6 +247,7 @@ pub enum Rvalue<'ctxt> {
     Discriminant(Place),
     LoadIndex(Place, Operand<'ctxt>),
     LoadField(Place, FieldId),
+    LoadPayload(Place, CaseId),
     GcAlloc(Type<'ctxt>, Operand<'ctxt>),
 }
 impl<'ctxt> Rvalue<'ctxt> {
@@ -273,7 +261,8 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::Len(_)
             | Self::Discriminant(_)
             | Self::UninitZeroed(_)
-            | Self::LoadField(..) => true,
+            | Self::LoadField(..)
+            | Self::LoadPayload(..) => true,
             Self::LoadIndex(..) => false,
             Self::GcAlloc(..) => false,
 
@@ -292,6 +281,16 @@ impl<'ctxt> Rvalue<'ctxt> {
         return_type: Type<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
+            Rvalue::LoadPayload(place, case) => {
+                let ty = place.type_of(ctxt, locals, return_type);
+                let Some((id, _, args)) = ty.as_named() else {
+                    unreachable!("Should be named")
+                };
+
+                let type_def = ctxt.type_def(id);
+                let case_info = type_def.case(*case);
+                case_info.payload_type(args, ctxt)
+            }
             Rvalue::LoadField(place, field) => {
                 let ty = place.type_of(ctxt, locals, return_type);
                 ty.field_info(*field, ctxt)

@@ -75,7 +75,9 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue<'ctxt>) {
         match rvalue {
-            Rvalue::LoadField(place, _) => self.visit_place(PlaceCtxt::Read, loc, place),
+            Rvalue::LoadField(place, _) | Rvalue::LoadPayload(place, _) => {
+                self.visit_place(PlaceCtxt::Read, loc, place)
+            }
             Rvalue::GcAlloc(_, operand) => {
                 self.visit_operand(loc, operand);
             }
@@ -122,7 +124,6 @@ pub trait Visit<'ctxt> {
     fn super_visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
         _ = loc;
         match projection {
-            PlaceProjection::CaseDowncast(..) => (),
             PlaceProjection::Deref => (),
         }
     }
@@ -241,7 +242,9 @@ pub trait MutVisit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &mut Rvalue<'ctxt>) {
         match rvalue {
-            Rvalue::LoadField(place, _) => self.visit_place(loc, place),
+            Rvalue::LoadField(place, _) | Rvalue::LoadPayload(place, _) => {
+                self.visit_place(loc, place)
+            }
             Rvalue::GcAlloc(_, operand) => {
                 self.visit_operand(loc, operand);
             }
@@ -288,7 +291,6 @@ pub trait MutVisit<'ctxt> {
     fn super_visit_projection(&mut self, loc: Location, projection: &mut PlaceProjection) {
         _ = loc;
         match projection {
-            PlaceProjection::CaseDowncast(..) => (),
             PlaceProjection::Deref => (),
         }
     }

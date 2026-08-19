@@ -2,9 +2,9 @@ use crate::{
     collect::CtxtRef,
     index_vec::IndexVec,
     mir::{
-        BasicBlock, BasicBlockId, BinaryOp, Body, BodySource, Context, Local,
-        LocalInfo, LocalKind, Locals, Operand, Place, Rvalue, Stmt, StmtKind, SwitchTarget,
-        SwitchTargets, Terminator, TerminatorKind, basic_blocks::BasicBlocks,
+        BasicBlock, BasicBlockId, Body, BodySource, Context, Local, LocalInfo, LocalKind, Locals,
+        Operand, Place, Rvalue, Stmt, StmtKind, SwitchTarget, SwitchTargets, Terminator,
+        TerminatorKind, basic_blocks::BasicBlocks,
     },
     resolved_ast::Var,
     src_loc::SrcLoc,
@@ -23,7 +23,7 @@ pub enum FieldProjection {
     CaseDowncast(CaseId),
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PlaceBuilder {
+pub(super) struct PlaceBuilder {
     pub place: Place,
     pub projections: Vec<FieldProjection>,
 }
