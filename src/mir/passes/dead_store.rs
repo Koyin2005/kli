@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::mir::{
-    Local, LocalKind, PlaceBase, StmtKind,
+    Local, LocalKind, StmtKind,
     passes::{MirPass, optimisation_enabled},
     visitor::{MutVisit, PlaceCtxt, Visit},
 };
@@ -51,8 +51,7 @@ struct LocalReplacer<'a> {
 impl<'ctxt> MutVisit<'ctxt> for LocalReplacer<'_> {
     fn visit_stmt(&mut self, loc: crate::mir::Location, stmt: &mut crate::mir::Stmt) {
         if let StmtKind::Assign(place, rvalue) = &mut stmt.kind
-            && let PlaceBase::Local(local) = place.base
-            && place.projections.is_empty()
+            && let local = place.local
             && rvalue.can_remove_if_unused()
             && !self.locals.contains(&local)
         {

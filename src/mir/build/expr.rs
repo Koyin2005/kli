@@ -98,6 +98,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             TargetPlaceKind::Base => {
                 self.expr_into_dest(place, value);
             }
+            TargetPlaceKind::Deref => {
+                let loc = value.loc;
+                let value = self.operand(value);
+                self.push_stmt(loc, mir::StmtKind::AssignBox(place, value));
+            }
             TargetPlaceKind::Field(field) => {
                 let loc = value.loc;
                 let value = self.operand(value);
@@ -121,6 +126,14 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         match kind {
             TargetPlaceKind::Base => {
                 self.assign(loc, place, rvalue);
+            }
+            TargetPlaceKind::Deref => {
+                let value = if let Rvalue::Use(operand) = rvalue {
+                    operand
+                } else {
+                    Operand::Load(Place::local(self.assign_to_temp(loc, ty, rvalue)))
+                };
+                self.push_stmt(loc, mir::StmtKind::AssignBox(place, value));
             }
             TargetPlaceKind::Field(field) => {
                 let value = if let Rvalue::Use(operand) = rvalue {
@@ -224,6 +237,10 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             typed_ast::PlaceKind::Field(receiver, field) => {
                 let place = self.local_for(receiver);
                 TargetPlace::with_field(place, *field)
+            }
+            typed_ast::PlaceKind::Deref(place) => {
+                let place = self.place(place);
+                TargetPlace::with_deref(place)
             }
             _ => TargetPlace::new(self.local_for(place)),
         }

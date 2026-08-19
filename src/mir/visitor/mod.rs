@@ -1,7 +1,7 @@
 use crate::{
     CtxtRef,
     mir::{
-        BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Place, PlaceBase,
+        BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Place,
         PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
     },
 };
@@ -21,6 +21,10 @@ pub trait Visit<'ctxt> {
     fn super_visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         match &stmt.kind {
             StmtKind::Noop => (),
+            StmtKind::AssignBox(place, value) => {
+                self.visit_place(PlaceCtxt::Write,loc, place);
+                self.visit_operand(loc, value);
+            }
             StmtKind::AssignField(place, _, value) => {
                 self.visit_place(PlaceCtxt::Write, loc, place);
                 self.visit_operand(loc, value);
@@ -128,12 +132,7 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_local(&mut self, _: PlaceCtxt, _loc: Location, _local: Local) {}
     fn super_visit_place(&mut self, ctxt: PlaceCtxt, loc: Location, place: &Place) {
-        if let PlaceBase::Local(local) = place.base {
-            self.visit_local(ctxt, loc, local);
-        }
-        for projection in place.projections.iter() {
-            self.visit_projection(loc, *projection);
-        }
+        self.visit_local(ctxt, loc, place.local);
     }
     fn super_visit_operand(&mut self, loc: Location, operand: &Operand<'ctxt>) {
         match operand {
@@ -183,6 +182,10 @@ pub trait MutVisit<'ctxt> {
     }
     fn super_visit_stmt(&mut self, loc: Location, stmt: &mut Stmt<'ctxt>) {
         match &mut stmt.kind {
+            StmtKind::AssignBox(place, value) => {
+                self.visit_place(loc, place);
+                self.visit_operand(loc, value);
+            }
             StmtKind::AssignField(place, _, value) => {
                 self.visit_place(loc, place);
                 self.visit_operand(loc, value);
@@ -294,12 +297,7 @@ pub trait MutVisit<'ctxt> {
     }
     fn super_visit_local(&mut self, _loc: Location, _local: &mut Local) {}
     fn super_visit_place(&mut self, loc: Location, place: &mut Place) {
-        if let PlaceBase::Local(local) = &mut place.base {
-            self.visit_local(loc, local);
-        }
-        for projection in place.projections.iter_mut() {
-            self.visit_projection(loc, projection);
-        }
+        self.visit_local(loc, &mut place.local);
     }
     fn super_visit_operand(&mut self, loc: Location, operand: &mut Operand<'ctxt>) {
         match operand {

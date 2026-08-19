@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::collections::HashMap;
 
 use crate::{
     Symbol,
@@ -11,7 +11,7 @@ use crate::{
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
     typed_ast::FieldId,
-    types::{CaseId, FieldName, GenericArgs, IntegerKind, IntegerSize, Type, TypeKind},
+    types::{CaseId, FieldName, GenericArgs, IntegerKind, IntegerSize, Type},
 };
 pub mod basic_blocks;
 pub mod build;
@@ -30,67 +30,30 @@ pub enum PlaceProjection {
 impl PlaceProjection {
     pub fn apply_projection_to_type<'ctxt>(
         self,
-        ty: Type<'ctxt>,
+        _: Type<'ctxt>,
         _: CtxtRef<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
         }
     }
 }
-#[derive(Clone, PartialEq, Eq, Hash, Debug, Copy, PartialOrd, Ord)]
-pub enum PlaceBase {
-    Local(Local),
-    ReturnPlace,
-}
-impl PlaceBase {
-    pub fn type_of<'ctxt>(self, locals: &Locals<'ctxt>, return_type: Type<'ctxt>) -> Type<'ctxt> {
-        match self {
-            PlaceBase::Local(local) => locals[local].ty,
-            PlaceBase::ReturnPlace => return_type,
-        }
-    }
-}
-impl Display for PlaceBase {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Local(local) => write!(f, "_{}", local.0),
-            Self::ReturnPlace => write!(f, "ret"),
-        }
-    }
-}
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Place {
-    pub base: PlaceBase,
-    pub projections: Vec<PlaceProjection>,
+    pub local : Local
 }
 impl Place {
-    pub fn as_base_only(&self) -> Option<PlaceBase> {
-        self.projections.is_empty().then_some(self.base)
-    }
     pub fn local(local: Local) -> Self {
         Self {
-            base: PlaceBase::Local(local),
-            projections: Vec::new(),
+            local
         }
     }
-    pub fn return_place() -> Self {
-        Self {
-            base: PlaceBase::ReturnPlace,
-            projections: Vec::new(),
-        }
-    }
-
     pub fn type_of<'ctxt>(
         &self,
-        ctxt: CtxtRef<'ctxt>,
+        _: CtxtRef<'ctxt>,
         locals: &Locals<'ctxt>,
-        return_type: Type<'ctxt>,
+        _: Type<'ctxt>,
     ) -> Type<'ctxt> {
-        let mut ty = self.base.type_of(locals, return_type);
-        for projection in self.projections.iter() {
-            ty = projection.apply_projection_to_type(ty, ctxt);
-        }
-        ty
+        locals[self.local].ty
     }
 }
 
@@ -538,6 +501,7 @@ pub struct Stmt<'ctxt> {
 #[derive(Clone)]
 pub enum StmtKind<'ctxt> {
     Noop,
+    AssignBox(Place,Operand<'ctxt>),
     AssignField(Place, FieldId, Operand<'ctxt>),
     AssignIndex(Place, Operand<'ctxt>, Operand<'ctxt>),
     Assign(Place, Box<Rvalue<'ctxt>>),

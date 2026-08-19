@@ -74,15 +74,7 @@ impl<'ctxt> MirDump<'ctxt> {
         Ok(())
     }
     fn write_place(&mut self, place: &Place) -> std::io::Result<()> {
-        if place.projections.is_empty() {
-            return write!(self.output, "{}", place.base);
-        }
-        let output = format!("{}", place.base);
-        for projection in place.projections.iter() {
-            match *projection {
-            };
-        }
-        write!(self.output, "{}", output)
+        write!(self.output, "_{}", place.local.into_usize())
     }
     fn write_rvalue(&mut self, rvalue: &Rvalue) -> std::io::Result<()> {
         match rvalue {
@@ -341,6 +333,12 @@ impl<'ctxt> MirDump<'ctxt> {
         for stmt in &block.stmts {
             write!(self.output, "  ")?;
             match &stmt.kind {
+                StmtKind::AssignBox(place, value) => {
+                    self.write_place(place)?;
+                    write!(self.output, "^ = ")?;
+                    self.write_operand(value)?;
+                    writeln!(self.output)?;
+                }
                 StmtKind::AssignField(place, field, value) => {
                     self.write_place(place)?;
                     write!(self.output, ".{}", field.into_usize())?;

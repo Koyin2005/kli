@@ -48,13 +48,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn ctxt(&self) -> CtxtRef<'ctxt> {
         self.ctxt
     }
-    fn visit_place(&mut self, _: PlaceCtxt, loc: Location, place: &super::Place) {
-        let mut ty = place.base.type_of(&self.body.locals, self.body.return_type);
-        for proj in &place.projections {
-            let loc = self.body.src_info(loc);
-            match *proj {
-            }
-        }
+    fn visit_place(&mut self, _: PlaceCtxt, _: Location, _: &super::Place) {
     }
 
     fn visit_rvalue(&mut self, loc: Location, rvalue: &super::Rvalue<'ctxt>) {
@@ -397,6 +391,26 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
+            StmtKind::AssignBox(place, rhs) => {
+                let receiver = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let rhs_ty = rhs.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let lhs_ty = self.assert_with_some(
+                    receiver.as_box(),
+                    |ty| ty,
+                    || {
+                        format!(
+                            "'{}' should be a box",
+                            receiver
+                        )
+                    },
+                    stmt.loc,
+                );
+                self.assert(
+                    lhs_ty == rhs_ty,
+                    || format!("Cannot assign non equal types {} and {}", lhs_ty, rhs_ty),
+                    stmt.loc,
+                );
+            }
             StmtKind::AssignField(place, field, rhs) => {
                 let receiver = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 let rhs_ty = rhs.type_of(self.ctxt, &self.body.locals, self.body.return_type);

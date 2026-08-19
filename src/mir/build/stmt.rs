@@ -1,6 +1,6 @@
 use crate::{
     mir::{
-        Place, TerminatorKind,
+        TerminatorKind,
         build::{Builder, expr::BuiltinResult},
     },
     typed_ast::{Expr, ExprKind},

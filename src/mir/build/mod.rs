@@ -42,13 +42,6 @@ impl PlaceBuilder {
         self.push_field(field);
         self
     }
-    pub fn push_deref(&mut self) {
-        self.projections.push(FieldProjection::Deref);
-    }
-    pub fn with_deref(mut self) -> Self {
-        self.push_deref();
-        self
-    }
     pub fn push_case_downcast(&mut self, case: CaseId) {
         self.projections.push(FieldProjection::CaseDowncast(case));
     }
@@ -66,6 +59,7 @@ pub struct TargetPlace<'ctxt> {
 pub enum TargetPlaceKind<'ctxt> {
     Index(Operand<'ctxt>),
     Field(FieldId),
+    Deref,
     Base,
 }
 impl<'a> TargetPlace<'a> {
@@ -85,6 +79,12 @@ impl<'a> TargetPlace<'a> {
         Self {
             place,
             kind: TargetPlaceKind::Field(field),
+        }
+    }
+    pub fn with_deref(place: Place) -> Self {
+        Self {
+            place,
+            kind: TargetPlaceKind::Deref,
         }
     }
 }
