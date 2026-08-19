@@ -11,7 +11,7 @@ use crate::{
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
     typed_ast::FieldId,
-    types::{CaseId, FieldName, GenericArgs, IntegerKind, IntegerSize, Type},
+    types::{CaseId, GenericArgs, IntegerKind, IntegerSize, Type},
 };
 pub mod basic_blocks;
 pub mod build;
@@ -141,9 +141,6 @@ impl<'ctxt> Operand<'ctxt> {
 }
 #[derive(Clone, Debug)]
 pub enum AggregateKind<'ctxt> {
-    Record {
-        field_names: IndexVec<FieldId, FieldName>,
-    },
     Tuple,
     NamedRecord(DefId, GenericArgs<'ctxt>),
     Variant(DefId, CaseId, GenericArgs<'ctxt>),
@@ -291,7 +288,6 @@ impl<'ctxt> Rvalue<'ctxt> {
             Rvalue::AllocateArray(element, _) => Type::new_array(ctxt, *element),
             Rvalue::AllocateRawArray { ty, .. } => Type::new_raw_array(ctxt, *ty),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
-                AggregateKind::Record { field_names: _ } => todo!("remove me"),
                 &AggregateKind::Variant(id, _, ref args)
                 | &AggregateKind::NamedRecord(id, ref args) => {
                     let name = ctxt.type_def(id).name;

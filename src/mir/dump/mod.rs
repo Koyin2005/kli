@@ -156,7 +156,7 @@ impl<'ctxt> MirDump<'ctxt> {
             }
             Rvalue::Aggregate(kind, fields) => {
                 match kind {
-                    AggregateKind::Record { .. } | AggregateKind::Tuple => (),
+                    AggregateKind::Tuple => (),
                     AggregateKind::Variant(id, index, args) => {
                         let name = self.ctxt.type_def(*id).case(*index).name;
                         write!(self.output, "{}{}", name, args)?;
@@ -173,9 +173,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 let ctxt = self.ctxt;
                 let write_field_name = move |this: &mut MirDump<'_>, i: FieldId| match kind {
                     AggregateKind::Tuple => Ok(()),
-                    AggregateKind::Record { field_names } => {
-                        write!(this.output, "{} = ", field_names[i])
-                    }
                     AggregateKind::Variant(_, _, _) => write!(this.output, "{} = ", i.into_usize()),
                     AggregateKind::NamedRecord(id, ..) => {
                         write!(this.output, "{} = ", ctxt.type_def(*id).fields()[i].name)
