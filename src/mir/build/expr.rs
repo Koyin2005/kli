@@ -10,7 +10,7 @@ use crate::{
     },
     src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
-    types::{IntegerKind, Type},
+    types::Type,
 };
 pub(super) enum BuiltinResult<'ctxt> {
     Rvalue(Rvalue<'ctxt>),
@@ -98,6 +98,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             TargetPlaceKind::Base => {
                 self.expr_into_dest(place, value);
             }
+            TargetPlaceKind::Field(field) => {
+                let loc = value.loc;
+                let value = self.operand(value);
+                self.push_stmt(loc, mir::StmtKind::AssignField(place, field, value));
+            }
             TargetPlaceKind::Index(index) => {
                 let loc = value.loc;
                 let value = self.operand(value);
@@ -116,6 +121,14 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         match kind {
             TargetPlaceKind::Base => {
                 self.assign(loc, place, rvalue);
+            }
+            TargetPlaceKind::Field(field) => {
+                let value = if let Rvalue::Use(operand) = rvalue {
+                    operand
+                } else {
+                    Operand::Load(Place::local(self.assign_to_temp(loc, ty, rvalue)))
+                };
+                self.push_stmt(loc, mir::StmtKind::AssignField(place, field, value));
             }
             TargetPlaceKind::Index(index) => {
                 let value = if let Rvalue::Use(operand) = rvalue {
@@ -208,6 +221,10 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let index = self.operand(index);
                 TargetPlace::with_index(place, index)
             }
+            typed_ast::PlaceKind::Field(receiver, field) => {
+                let place = self.lower_place(receiver);
+                TargetPlace::with_field(place, *field)
+            }
             _ => TargetPlace::new(self.lower_place(place)),
         }
     }
@@ -219,7 +236,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
     }
     pub(super) fn lower_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Place {
         match &place.kind {
-            typed_ast::PlaceKind::Index(..) => {
+            typed_ast::PlaceKind::Index(..) | typed_ast::PlaceKind::Field(..) => {
                 let index_rvalue = self.load_place(place);
                 let local = self.assign_to_temp(place.loc, place.ty, index_rvalue);
                 Place::local(local)
@@ -238,7 +255,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .capture_index(var.1)
                     .unwrap(),
             )),
-            typed_ast::PlaceKind::Field(place, field) => todo!("lower me"),
             typed_ast::PlaceKind::Invalid => unreachable!("cannot lower invalid place"),
         }
     }
@@ -728,70 +744,37 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 Rvalue::Call(callee_value, arg_values)
             }
             ExprKind::Binary(binary_op, left, right) => {
-                let (left_operand, right_operand, overflow_op) = match binary_op {
-                    BinaryOp::Add => (self.operand(left), self.operand(right), OverflowOp::Add),
+                match binary_op {
+                    BinaryOp::Add => {
+                        return Self::binary_op_rvalue(
+                            mir::BinaryOp::Wrapping(OverflowOp::Add),
+                            self.operand(left),
+                            self.operand(right),
+                        );
+                    }
                     BinaryOp::Divide => {
                         let left_operand = self.operand(left);
                         let right_operand = self.operand(right);
-                        let kind = left.ty.as_integer().unwrap();
-                        //Division can fail in 2 ways
-                        //Divide by zero
-                        //Divide int min by -1
-                        let is_zero = self.assign_equals(
-                            expr.loc,
-                            right_operand.clone(),
-                            Operand::Constant(Constant::integer(self.ctxt, kind, 0)),
-                        );
-                        self.finish_assert_to_new_block(
-                            expr.loc,
-                            Operand::Load(Place::local(is_zero)),
-                            mir::AssertKind::DivideByZero,
-                        );
-
-                        if let IntegerKind::Signed(size) = kind {
-                            let is_left_min = self.assign_equals(
-                                expr.loc,
-                                left_operand.clone(),
-                                Operand::Constant(Constant::integer(
-                                    self.ctxt,
-                                    kind,
-                                    kind.min_value_scalar(),
-                                )),
-                            );
-                            let is_right_neg_1 = self.assign_equals(
-                                expr.loc,
-                                left_operand.clone(),
-                                Operand::Constant(Constant::int(self.ctxt, size, -1)),
-                            );
-                            let overflow = self.assign_binary_result(
-                                expr.loc,
-                                Type::new_bool(self.ctxt),
-                                mir::BinaryOp::BitwiseAnd,
-                                Operand::Load(Place::local(is_left_min)),
-                                Operand::Load(Place::local(is_right_neg_1)),
-                            );
-                            self.finish_assert_to_new_block(
-                                expr.loc,
-                                Operand::Load(Place::local(overflow)),
-                                mir::AssertKind::DivideOverflow,
-                            );
-                        }
                         return Self::binary_op_rvalue(
                             mir::BinaryOp::Divide,
                             left_operand,
                             right_operand,
                         );
                     }
-                    BinaryOp::Subtract => (
-                        self.operand(left),
-                        self.operand(right),
-                        OverflowOp::Subtract,
-                    ),
-                    BinaryOp::Multiply => (
-                        self.operand(left),
-                        self.operand(right),
-                        OverflowOp::Multiply,
-                    ),
+                    BinaryOp::Subtract => {
+                        return Self::binary_op_rvalue(
+                            mir::BinaryOp::Wrapping(OverflowOp::Subtract),
+                            self.operand(left),
+                            self.operand(right),
+                        );
+                    }
+                    BinaryOp::Multiply => {
+                        return Self::binary_op_rvalue(
+                            mir::BinaryOp::Wrapping(OverflowOp::Multiply),
+                            self.operand(left),
+                            self.operand(right),
+                        );
+                    }
                     BinaryOp::Equals => {
                         let left_operand = self.operand(left);
                         let right_operand = self.operand(right);
@@ -838,24 +821,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                         );
                     }
                 };
-                let checked_result = self.assign_to_temp(
-                    expr.loc,
-                    Type::pair(self.ctxt, expr.ty, Type::new_bool(self.ctxt)),
-                    Rvalue::Binary(
-                        mir::BinaryOp::Overflow(overflow_op),
-                        Box::new((left_operand, right_operand)),
-                    ),
-                );
-                let overflow =
-                    Operand::Load(Place::local(checked_result).with_field(FieldId::new(1)));
-                self.finish_assert_to_new_block(
-                    expr.loc,
-                    overflow,
-                    mir::AssertKind::Overflow(overflow_op),
-                );
-                let result =
-                    Operand::Load(Place::local(checked_result).with_field(FieldId::new(0)));
-                Rvalue::Use(result)
             }
             ExprKind::Block(..)
             | ExprKind::Panic

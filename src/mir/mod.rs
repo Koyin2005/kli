@@ -94,14 +94,11 @@ impl Place {
             projections: Vec::new(),
         }
     }
-    pub fn with_field(mut self, field: FieldId) -> Self {
-        todo!("Field indexing")
-    }
-    pub fn with_deref(mut self) -> Self {
+    pub(super) fn with_deref(mut self) -> Self {
         self.projections.push(PlaceProjection::Deref);
         self
     }
-    pub fn with_case_downcast(mut self, index: CaseId, name: Symbol) -> Self {
+    pub(super) fn with_case_downcast(mut self, index: CaseId, name: Symbol) -> Self {
         self.projections
             .push(PlaceProjection::CaseDowncast(index, name));
         self
@@ -547,6 +544,7 @@ pub struct Stmt<'ctxt> {
 #[derive(Clone)]
 pub enum StmtKind<'ctxt> {
     Noop,
+    AssignField(Place, FieldId, Operand<'ctxt>),
     AssignIndex(Place, Operand<'ctxt>, Operand<'ctxt>),
     Assign(Place, Box<Rvalue<'ctxt>>),
     Print {

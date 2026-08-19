@@ -386,6 +386,27 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
+            StmtKind::AssignField(place, field, rhs) => {
+                let receiver = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let rhs_ty = rhs.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let (lhs_ty, _) = self.assert_with_some(
+                    receiver.field_info(*field, self.ctxt()),
+                    |ty| ty,
+                    || {
+                        format!(
+                            "'{}' does not have a field '{}'",
+                            receiver,
+                            field.into_usize()
+                        )
+                    },
+                    stmt.loc,
+                );
+                self.assert(
+                    lhs_ty == rhs_ty,
+                    || format!("Cannot assign non equal types {} and {}", lhs_ty, rhs_ty),
+                    stmt.loc,
+                );
+            }
             StmtKind::AssignIndex(array, index, rhs) => {
                 let array = array.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 let index = index.type_of(self.ctxt, &self.body.locals, self.body.return_type);

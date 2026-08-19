@@ -2,7 +2,7 @@ use crate::{
     collect::CtxtRef,
     index_vec::IndexVec,
     mir::{
-        AssertKind, BasicBlock, BasicBlockId, BinaryOp, Body, BodySource, Context, Local,
+        BasicBlock, BasicBlockId, BinaryOp, Body, BodySource, Context, Local,
         LocalInfo, LocalKind, Locals, Operand, Place, Rvalue, Stmt, StmtKind, SwitchTarget,
         SwitchTargets, Terminator, TerminatorKind, basic_blocks::BasicBlocks,
     },
@@ -57,6 +57,7 @@ pub struct TargetPlace<'ctxt> {
 #[derive(Clone, Debug)]
 pub enum TargetPlaceKind<'ctxt> {
     Index(Operand<'ctxt>),
+    Field(FieldId),
     Base,
 }
 impl<'a> TargetPlace<'a> {
@@ -70,6 +71,12 @@ impl<'a> TargetPlace<'a> {
         Self {
             place,
             kind: TargetPlaceKind::Index(index),
+        }
+    }
+    pub fn with_field(place: Place, field: FieldId) -> Self {
+        Self {
+            place,
+            kind: TargetPlaceKind::Field(field),
         }
     }
 }
@@ -103,16 +110,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     }
     pub(super) fn new_local_from_info(&mut self, info: LocalInfo<'ctxt>) -> Local {
         self.body.locals.push(info)
-    }
-    pub(super) fn finish_assert_to_new_block(
-        &mut self,
-        loc: SrcLoc,
-        operand: Operand<'ctxt>,
-        assert_kind: AssertKind,
-    ) {
-        let new_block = self.new_block();
-        self.finish_block(loc, TerminatorKind::Assert(operand, assert_kind, new_block));
-        self.switch_to_block(new_block);
     }
     pub(super) fn new_temp(&mut self, ty: Type<'ctxt>) -> Local {
         self.new_local_from_info(LocalInfo {
@@ -210,30 +207,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         let temp = self.new_temp(ty);
         self.assign(loc, Place::local(temp), value);
         temp
-    }
-    pub(super) fn assign_equals(
-        &mut self,
-        loc: SrcLoc,
-        left: Operand<'ctxt>,
-        right: Operand<'ctxt>,
-    ) -> Local {
-        self.assign_binary_result(
-            loc,
-            Type::new_bool(self.ctxt),
-            BinaryOp::Equals,
-            left,
-            right,
-        )
-    }
-    pub(super) fn assign_binary_result(
-        &mut self,
-        loc: SrcLoc,
-        ty: Type<'ctxt>,
-        op: BinaryOp,
-        left: Operand<'ctxt>,
-        right: Operand<'ctxt>,
-    ) -> Local {
-        self.assign_to_temp(loc, ty, Rvalue::Binary(op, Box::new((left, right))))
     }
     pub(super) fn panic(&mut self, loc: SrcLoc) {
         let block = self.new_block();

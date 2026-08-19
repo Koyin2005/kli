@@ -336,6 +336,13 @@ impl<'ctxt> MirDump<'ctxt> {
         for stmt in &block.stmts {
             write!(self.output, "  ")?;
             match &stmt.kind {
+                StmtKind::AssignField(place, field, value) => {
+                    self.write_place(place)?;
+                    write!(self.output, ".{}", field.into_usize())?;
+                    write!(self.output, " = ")?;
+                    self.write_operand(value)?;
+                    writeln!(self.output)?;
+                }
                 StmtKind::AssignIndex(place, index, value) => {
                     self.write_place(place)?;
                     write!(self.output, ".[")?;
