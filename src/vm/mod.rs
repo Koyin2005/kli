@@ -1,7 +1,6 @@
-use std::{cell::Cell, collections::HashMap};
+use std::cell::Cell;
 
 use crate::{
-    def_ids::DefId,
     define_id,
     index_vec::IndexVec,
     mir::{
@@ -41,6 +40,9 @@ impl GcHeap {
     }
     fn data(&self, object: ObjectId) -> &Object {
         &self.objects[object]
+    }
+    fn data_mut(&mut self, object: ObjectId) -> &mut Object {
+        &mut self.objects[object]
     }
     fn alloc_object(&mut self, o: Object) -> ObjectId {
         let id = self.objects.len().try_into().expect("too many objects");
@@ -111,13 +113,11 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
     }
     fn eval_constant(&mut self, constant: &Constant) -> Value {
         match constant.value {
-            ConstValue::ZeroSized => {
-                Value::Unit
-            }
+            ConstValue::ZeroSized => Value::Unit,
             ConstValue::Function(def_id, ..) => Value::Function(BodySource::Function(def_id)),
             ConstValue::Int(value) => Value::Int(value),
             ConstValue::Bool(value) => Value::Bool(value),
-            ConstValue::Scalar(value) => todo!(),
+            ConstValue::Char(value) => Value::Char(value),
             ConstValue::String(symbol) => Value::String(self.alloc_string(symbol.to_string())),
         }
     }
@@ -153,18 +153,16 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
                     .collect::<Vec<_>>();
                 let value = match aggregate_kind {
                     AggregateKind::Tuple => Value::Tuple(self.alloc_tuple(fields)),
-                    AggregateKind::NamedRecord(def_id, generic_args) => {
-                        Value::Tuple(self.alloc_tuple(fields))
-                    }
+                    AggregateKind::NamedRecord(..) => Value::Tuple(self.alloc_tuple(fields)),
                     AggregateKind::Variant(_, case_id, _) => {
                         Value::Variant(case_id.into_usize() as u32, self.alloc_tuple(fields))
                     }
                 };
                 self.store_local(local, value);
             }
-            Rvalue::AllocateRawArray { ty, count } => todo!(),
-            Rvalue::AllocateArray(_, operands) => todo!(),
-            Rvalue::AllocateBox(_, operand) => todo!(),
+            Rvalue::AllocateRawArray { .. } => todo!(),
+            Rvalue::AllocateArray(..) => todo!(),
+            Rvalue::AllocateBox(..) => todo!(),
             Rvalue::Use(operand) => {
                 let value = self.eval_operand(operand);
                 self.store_local(local, value);
@@ -177,17 +175,17 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
                     .collect::<Vec<_>>();
                 self.call(local, callee, arguments);
             }
-            Rvalue::Binary(binary_op, _) => todo!(),
-            Rvalue::AddrOf(place) => todo!(),
-            Rvalue::Cast(cast_kind, operand, _) => todo!(),
-            Rvalue::Len(place) => todo!(),
+            Rvalue::Binary(..) => todo!(),
+            Rvalue::AddrOf(_) => todo!("get rid of me"),
+            Rvalue::Cast(..) => todo!(),
+            Rvalue::Len(_) => todo!(),
             Rvalue::Discriminant(place) => {
                 let Value::Variant(discrim, _) = self.load_place(place) else {
                     panic!("Should be a variant value")
                 };
                 self.store_local(local, Value::Int(discrim.into()));
             }
-            Rvalue::LoadIndex(place, operand) => todo!(),
+            Rvalue::LoadIndex(..) => todo!(),
             Rvalue::LoadField(place, field_id) => {
                 let Value::Tuple(tuple) = self.load_place(place) else {
                     panic!("Should be a tuple value")
@@ -203,8 +201,8 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
                 };
                 self.store_local(local, Value::Tuple(object));
             }
-            Rvalue::Unbox(place) => todo!(),
-            Rvalue::GcAlloc(_, operand) => todo!(),
+            Rvalue::Unbox(_) => todo!("Unbox"),
+            Rvalue::GcAlloc(..) => todo!("Get rid of me"),
         }
     }
     fn store_local(&mut self, local: Local, value: Value) {
@@ -218,7 +216,16 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
         match &stmt.kind {
             StmtKind::Noop => (),
             StmtKind::AssignBox(place, operand) => todo!(),
-            StmtKind::AssignField(place, field_id, operand) => todo!(),
+            StmtKind::AssignField(place, field_id, operand) => {
+                let Value::Tuple(tuple) = self.load_place(place) else {
+                    panic!("Should be a tuple")
+                };
+                let value = self.eval_operand(operand);
+                let Object::Tuple(fields) = self.heap.data_mut(tuple) else {
+                    panic!("Should be a tuple")
+                };
+                fields[field_id.into_usize()] = value;
+            }
             StmtKind::AssignIndex(place, operand, operand1) => todo!(),
             StmtKind::Assign(place, rvalue) => {
                 self.eval_rvalue(place.local, rvalue);

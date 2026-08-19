@@ -229,11 +229,8 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, "unknown of '{}'", ty)
             }
             types::TypeKind::Char => {
-                let &ConstValue::Scalar(value) = value else {
-                    unreachable!("can only be a scalar for char")
-                };
-                let Some(char) = value.try_into().ok().and_then(char::from_u32) else {
-                    unreachable!("Scalar constant should be char")
+                let ConstValue::Char(char) = value else {
+                    unreachable!("Should be a char")
                 };
                 write!(self.output, "'{char}'")
             }

@@ -55,13 +55,15 @@ pub enum ConstValue<'ctxt> {
     Function(DefId, GenericArgs<'ctxt>),
     Int(i64),
     Bool(bool),
-    Scalar(i128),
+    Char(char),
     String(Symbol),
 }
 impl<'ctxt> ConstValue<'ctxt> {
     fn as_scalar(&self) -> Option<i128> {
-        match self {
-            Self::Scalar(value) => Some(*value),
+        match *self {
+            Self::Bool(value) => Some(value.into()),
+            Self::Int(value) => Some(value.into()),
+            Self::Char(value) => Some(u32::from(value).into()),
             _ => None,
         }
     }
@@ -85,11 +87,8 @@ impl<'ctxt> Constant<'ctxt> {
             value: ConstValue::Bool(value),
         }
     }
-    pub fn integer(ctxt: CtxtRef<'ctxt>, kind: IntegerKind, value: i128) -> Self {
-        Self {
-            ty: Type::new_integer(ctxt, kind),
-            value: ConstValue::Scalar(value),
-        }
+    pub fn integer(_: CtxtRef<'ctxt>, _: IntegerKind, _: i128) -> Self {
+        todo!("get rid of me ")
     }
     pub fn int(ctxt: CtxtRef<'ctxt>, size: IntegerSize, value: i64) -> Self {
         Self {
@@ -100,7 +99,7 @@ impl<'ctxt> Constant<'ctxt> {
     pub fn char(ctxt: CtxtRef<'ctxt>, value: char) -> Self {
         Self {
             ty: Type::new_char(ctxt),
-            value: ConstValue::Scalar(value as i128),
+            value: ConstValue::Char(value),
         }
     }
     pub fn uint(ctxt: CtxtRef<'ctxt>, size: IntegerSize, value: u64) -> Self {
