@@ -452,17 +452,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let ty = ty.as_raw_ptr().unwrap();
                 BuiltinResult::Rvalue(Rvalue::GcAlloc(ty, cap))
             }
-            Builtin::PtrRead => {
-                let [ptr] = args else { unreachable!() };
-                let _ = self.place(ptr);
-                todo!("Bye")
-            }
-            Builtin::PtrWrite => {
-                let [ptr, value] = args else { unreachable!() };
-                let _ = self.place(ptr);
-                let _ = self.build_rvalue(value);
-                todo!("Write")
-            }
             Builtin::Bitcast => {
                 let [arg] = operands().try_into().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, arg, ty))

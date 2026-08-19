@@ -27,9 +27,7 @@ pub enum Builtin {
     GcAlloc,
 
     //Pointers
-    PtrWrite,
     Offset,
-    PtrRead,
     PtrCopy,
 
     // Arrays
@@ -75,8 +73,6 @@ impl Builtin {
             Builtin::UninitNew => "uninit_new",
             Builtin::ReadLine => "read_line",
             Builtin::Offset => "offset",
-            Builtin::PtrRead => "ptr_read",
-            Builtin::PtrWrite => "ptr_write",
             Builtin::GcAlloc => "gc_alloc",
             Builtin::PtrCopy => "ptr_copy",
             Builtin::EprintString => "eprint_string",
@@ -112,8 +108,6 @@ impl Builtin {
             Symbol::UNINIT_ASSUME_INIT => Some(Builtin::UninitAssumeInit),
             Symbol::UNINIT_NEW => Some(Builtin::UninitNew),
             Symbol::READ_LINE => Some(Builtin::ReadLine),
-            Symbol::PTR_READ => Some(Builtin::PtrRead),
-            Symbol::PTR_WRITE => Some(Builtin::PtrWrite),
             Symbol::OFFSET => Some(Builtin::Offset),
             Symbol::GC_ALLOC => Some(Builtin::GcAlloc),
             Symbol::PTR_COPY => Some(Builtin::PtrCopy),

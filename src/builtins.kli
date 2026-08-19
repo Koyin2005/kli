@@ -16,19 +16,6 @@ fun transmute[T,U](x : T) -> U;
 @builtin
 fun offset[T](p : RawPtr[T], offset : UInt64) -> RawPtr[T];
 
-# Safety
-# p must be aligned, non-null and not dangling
-@builtin
-@unsafe
-fun ptr_write[T](p : RawPtr[T], value : T) -> ();
-
-
-# Safety
-# p must be aligned, non-null and not dangling
-# p must point to an intialised valid value of T
-@builtin
-@unsafe
-fun ptr_read[T](p : RawPtr[T]) -> T;
 
 @builtin
 fun array_len[T](a : array[T]) -> UInt64;
