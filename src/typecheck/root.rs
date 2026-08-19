@@ -413,21 +413,7 @@ impl<'ctxt> TypeCheck<'ctxt> {
             .borrow_mut()
             .push((func_ctxt.id, function));
     }
-    fn validate_types_non_recursive(&self) {
-        for item in self.ctxt.all_items() {
-            if let res::ItemKind::TypeDef(ref type_def) = item.kind
-                && self.ctxt.is_type_recursive(item.id)
-            {
-                self.ctxt.diag().add_diagnostic(
-                    format!(
-                        "recursive type '{}' without indirection",
-                        type_def.name.symbol
-                    ),
-                    type_def.name.loc,
-                );
-            }
-        }
-    }
+    fn validate_types_non_recursive(&self) {}
     fn check_function_item(
         &self,
         functions: &mut BTreeMap<DefId, Function<'ctxt>>,

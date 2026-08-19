@@ -1,8 +1,8 @@
 use crate::{
     collect::CtxtRef,
     mir::{
-        BodySource, Constant, Context, LocalKind, TerminatorKind, build::Builder,
-        visitor::Visit, well_formed::WellFormed,
+        BodySource, Constant, Context, LocalKind, TerminatorKind, build::Builder, visitor::Visit,
+        well_formed::WellFormed,
     },
     src_loc::SrcLoc,
     typed_ast::{self, Lambda},

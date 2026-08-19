@@ -25,27 +25,19 @@ impl Local {
     pub const FIRST_PARAM: Self = Self(0);
 }
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
-pub enum PlaceProjection {
-}
+pub enum PlaceProjection {}
 impl PlaceProjection {
-    pub fn apply_projection_to_type<'ctxt>(
-        self,
-        _: Type<'ctxt>,
-        _: CtxtRef<'ctxt>,
-    ) -> Type<'ctxt> {
-        match self {
-        }
+    pub fn apply_projection_to_type<'ctxt>(self, _: Type<'ctxt>, _: CtxtRef<'ctxt>) -> Type<'ctxt> {
+        match self {}
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Place {
-    pub local : Local
+    pub local: Local,
 }
 impl Place {
     pub fn local(local: Local) -> Self {
-        Self {
-            local
-        }
+        Self { local }
     }
     pub fn type_of<'ctxt>(
         &self,
@@ -497,7 +489,7 @@ pub struct Stmt<'ctxt> {
 #[derive(Clone)]
 pub enum StmtKind<'ctxt> {
     Noop,
-    AssignBox(Place,Operand<'ctxt>),
+    AssignBox(Place, Operand<'ctxt>),
     AssignField(Place, FieldId, Operand<'ctxt>),
     AssignIndex(Place, Operand<'ctxt>, Operand<'ctxt>),
     Assign(Place, Box<Rvalue<'ctxt>>),

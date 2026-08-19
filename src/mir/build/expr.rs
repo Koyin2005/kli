@@ -253,7 +253,9 @@ impl<'ctxt> Builder<'_, 'ctxt> {
     }
     pub(super) fn local_for(&mut self, place: &typed_ast::Place<'ctxt>) -> Place {
         match &place.kind {
-            typed_ast::PlaceKind::Index(..) | typed_ast::PlaceKind::Field(..) | typed_ast::PlaceKind::Deref(..) => {
+            typed_ast::PlaceKind::Index(..)
+            | typed_ast::PlaceKind::Field(..)
+            | typed_ast::PlaceKind::Deref(..) => {
                 let index_rvalue = self.load_place(place);
                 let local = self.assign_to_temp(place.loc, place.ty, index_rvalue);
                 Place::local(local)
@@ -603,7 +605,12 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             )),
         }
     }
-    pub(super) fn assign_builder_to(&mut self, loc: SrcLoc, dest: Place, mut place_builder: PlaceBuilder) {
+    pub(super) fn assign_builder_to(
+        &mut self,
+        loc: SrcLoc,
+        dest: Place,
+        mut place_builder: PlaceBuilder,
+    ) {
         let projection = place_builder.projections.pop();
         let place = self.load_place_from_builder(loc, place_builder);
         let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
@@ -641,7 +648,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
         }
     }
-    pub(super) fn load_place_from_builder(&mut self, loc: SrcLoc, place_builder: PlaceBuilder) -> Place {
+    pub(super) fn load_place_from_builder(
+        &mut self,
+        loc: SrcLoc,
+        place_builder: PlaceBuilder,
+    ) -> Place {
         let mut ty =
             place_builder
                 .place
@@ -728,83 +739,47 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 Rvalue::Call(callee_value, arg_values)
             }
             ExprKind::Binary(binary_op, left, right) => {
+                let left_operand = self.operand(left);
+                let right_operand = self.operand(right);
                 match binary_op {
-                    BinaryOp::Add => {
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::Wrapping(OverflowOp::Add),
-                            self.operand(left),
-                            self.operand(right),
-                        );
-                    }
+                    BinaryOp::Add => Self::binary_op_rvalue(
+                        mir::BinaryOp::Wrapping(OverflowOp::Add),
+                        left_operand,
+                        right_operand,
+                    ),
                     BinaryOp::Divide => {
-                        let left_operand = self.operand(left);
-                        let right_operand = self.operand(right);
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::Divide,
-                            left_operand,
-                            right_operand,
-                        );
+                        Self::binary_op_rvalue(mir::BinaryOp::Divide, left_operand, right_operand)
                     }
-                    BinaryOp::Subtract => {
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::Wrapping(OverflowOp::Subtract),
-                            self.operand(left),
-                            self.operand(right),
-                        );
-                    }
-                    BinaryOp::Multiply => {
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::Wrapping(OverflowOp::Multiply),
-                            self.operand(left),
-                            self.operand(right),
-                        );
-                    }
+                    BinaryOp::Subtract => Self::binary_op_rvalue(
+                        mir::BinaryOp::Wrapping(OverflowOp::Subtract),
+                        left_operand,
+                        right_operand,
+                    ),
+                    BinaryOp::Multiply => Self::binary_op_rvalue(
+                        mir::BinaryOp::Wrapping(OverflowOp::Multiply),
+                        left_operand,
+                        right_operand,
+                    ),
                     BinaryOp::Equals => {
-                        let left_operand = self.operand(left);
-                        let right_operand = self.operand(right);
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::Equals,
-                            left_operand,
-                            right_operand,
-                        );
+                        Self::binary_op_rvalue(mir::BinaryOp::Equals, left_operand, right_operand)
                     }
                     BinaryOp::Lesser => {
-                        let left_operand = self.operand(left);
-                        let right_operand = self.operand(right);
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::Lesser,
-                            left_operand,
-                            right_operand,
-                        );
+                        Self::binary_op_rvalue(mir::BinaryOp::Lesser, left_operand, right_operand)
                     }
                     BinaryOp::Greater => {
-                        let left_operand = self.operand(left);
-                        let right_operand = self.operand(right);
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::Greater,
-                            left_operand,
-                            right_operand,
-                        );
+                        Self::binary_op_rvalue(mir::BinaryOp::Greater, left_operand, right_operand)
                     }
-                    BinaryOp::BitwiseOr => {
-                        let left_operand = self.operand(left);
-                        let right_operand = self.operand(right);
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::BitwiseOr,
-                            left_operand,
-                            right_operand,
-                        );
-                    }
-                    BinaryOp::BitwiseAnd => {
-                        let left_operand = self.operand(left);
-                        let right_operand = self.operand(right);
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::BitwiseAnd,
-                            left_operand,
-                            right_operand,
-                        );
-                    }
-                };
+                    BinaryOp::BitwiseOr => Self::binary_op_rvalue(
+                        mir::BinaryOp::BitwiseOr,
+                        left_operand,
+                        right_operand,
+                    ),
+                    BinaryOp::BitwiseAnd => Self::binary_op_rvalue(
+                        mir::BinaryOp::BitwiseAnd,
+                        left_operand,
+                        right_operand,
+                    ),
+                }
             }
             ExprKind::Block(..)
             | ExprKind::Panic

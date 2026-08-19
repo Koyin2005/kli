@@ -305,7 +305,7 @@ impl<'ctxt> CtxtRef<'ctxt> {
     fn expect_type(&self, id: DefId) -> &TypeDef {
         self.expect_item(id).expect_type_def()
     }
-    pub fn is_type_recursive(self, id: DefId) -> bool {
+    pub(super) fn is_type_recursive(self, id: DefId) -> bool {
         use types::visit::Visit;
         struct RecursiveIndirection<'a>(CtxtRef<'a>, HashSet<DefId>, bool);
         impl<'a> Visit<'a> for RecursiveIndirection<'a> {

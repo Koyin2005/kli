@@ -1,8 +1,8 @@
 use crate::{
     CtxtRef,
     mir::{
-        BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Place,
-        PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
+        BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Place, PlaceProjection,
+        Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
     },
 };
 pub enum PlaceCtxt {
@@ -22,7 +22,7 @@ pub trait Visit<'ctxt> {
         match &stmt.kind {
             StmtKind::Noop => (),
             StmtKind::AssignBox(place, value) => {
-                self.visit_place(PlaceCtxt::Write,loc, place);
+                self.visit_place(PlaceCtxt::Write, loc, place);
                 self.visit_operand(loc, value);
             }
             StmtKind::AssignField(place, _, value) => {
@@ -50,13 +50,10 @@ pub trait Visit<'ctxt> {
     fn super_visit_constant(&mut self, _loc: Location, _constant: &Constant<'ctxt>) {}
     fn super_visit_terminator(&mut self, loc: Location, terminator: &Terminator<'ctxt>) {
         match &terminator.kind {
-            TerminatorKind::Goto(_)
-            | TerminatorKind::Panic
-            | TerminatorKind::Unreachable => (),
-            TerminatorKind::Switch(operand, _) 
-            | TerminatorKind::Return(operand) | TerminatorKind::Assert(operand, ..) => {
-                self.visit_operand(loc, operand)
-            }
+            TerminatorKind::Goto(_) | TerminatorKind::Panic | TerminatorKind::Unreachable => (),
+            TerminatorKind::Switch(operand, _)
+            | TerminatorKind::Return(operand)
+            | TerminatorKind::Assert(operand, ..) => self.visit_operand(loc, operand),
         }
     }
     fn super_visit_block(&mut self, id: BasicBlockId, info: &BasicBlock<'ctxt>) {
@@ -79,7 +76,7 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue<'ctxt>) {
         match rvalue {
-            Rvalue::LoadField(place, _) | Rvalue::LoadPayload(place, _)| Rvalue::Unbox(place)  => {
+            Rvalue::LoadField(place, _) | Rvalue::LoadPayload(place, _) | Rvalue::Unbox(place) => {
                 self.visit_place(PlaceCtxt::Read, loc, place)
             }
             Rvalue::GcAlloc(_, operand) => {
@@ -127,8 +124,7 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
         _ = loc;
-        match projection {
-        }
+        match projection {}
     }
     fn super_visit_local(&mut self, _: PlaceCtxt, _loc: Location, _local: Local) {}
     fn super_visit_place(&mut self, ctxt: PlaceCtxt, loc: Location, place: &Place) {
@@ -215,13 +211,10 @@ pub trait MutVisit<'ctxt> {
     fn super_visit_constant(&mut self, _loc: Location, _constant: &mut Constant<'ctxt>) {}
     fn super_visit_terminator(&mut self, loc: Location, terminator: &mut Terminator<'ctxt>) {
         match &mut terminator.kind {
-            TerminatorKind::Goto(_)
-            | TerminatorKind::Panic
-            | TerminatorKind::Unreachable => (),
-            TerminatorKind::Switch(operand, _) 
-            | TerminatorKind::Return(operand) | TerminatorKind::Assert(operand, ..) => {
-                self.visit_operand(loc, operand)
-            }
+            TerminatorKind::Goto(_) | TerminatorKind::Panic | TerminatorKind::Unreachable => (),
+            TerminatorKind::Switch(operand, _)
+            | TerminatorKind::Return(operand)
+            | TerminatorKind::Assert(operand, ..) => self.visit_operand(loc, operand),
         }
     }
     fn super_visit_block(&mut self, id: BasicBlockId, info: &mut BasicBlock<'ctxt>) {
@@ -292,8 +285,7 @@ pub trait MutVisit<'ctxt> {
     }
     fn super_visit_projection(&mut self, loc: Location, projection: &mut PlaceProjection) {
         _ = loc;
-        match *projection {
-        }
+        match *projection {}
     }
     fn super_visit_local(&mut self, _loc: Location, _local: &mut Local) {}
     fn super_visit_place(&mut self, loc: Location, place: &mut Place) {

@@ -21,7 +21,7 @@ mod stmt;
 pub enum FieldProjection {
     Field(FieldId),
     CaseDowncast(CaseId),
-    Deref
+    Deref,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PlaceBuilder {

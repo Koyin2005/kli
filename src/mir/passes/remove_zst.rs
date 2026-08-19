@@ -1,16 +1,25 @@
 use crate::{
     CtxtRef,
-    layout::{Layout, calculate_layout},
+    collect::TypeDefKind,
     mir::{Constant, Locals, Location, Operand, StmtKind, passes::MirPass, visitor::MutVisit},
-    types::Type,
+    types::{Type, TypeKind},
 };
 
 pub struct RemoveZst;
 impl RemoveZst {
     fn is_zst<'ctxt>(ty: Type<'ctxt>, ctxt: CtxtRef<'ctxt>) -> bool {
-        calculate_layout(ctxt, ty)
-            .as_ref()
-            .is_ok_and(Layout::is_align_1_zst)
+        match ty.kind() {
+            TypeKind::Tuple(fields) => fields.is_empty(),
+            TypeKind::Never => true,
+            TypeKind::Named(id, ..) => {
+                let type_def = ctxt.type_def(*id);
+                match type_def.kind {
+                    TypeDefKind::Record(fields) => fields.is_empty(),
+                    TypeDefKind::Variant(ref cases) => cases.is_empty(),
+                }
+            }
+            _ => false,
+        }
     }
 }
 impl<'ctxt> MirPass<'ctxt> for RemoveZst {
