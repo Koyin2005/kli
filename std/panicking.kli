@@ -4,7 +4,7 @@ fun panic_message(msg : string) -> never = do
 end
 
 fun todo(msg : string) -> never = do
-    std.io.eprint_string("todo : ");
+    std.io.eprint("todo : ");
     panic_message(msg)
 end
 

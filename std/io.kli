@@ -1,4 +1,4 @@
-fun print_string(value : string) -> () = builtins.print_string(value)
+fun print(value : string) -> () = builtins.print_string(value)
 
 # Prints the string and then prints a newline 
 fun println(value : string) -> () = do
@@ -6,7 +6,7 @@ fun println(value : string) -> () = do
     builtins.print_string("\n");
 end
 
-fun eprint_string(value : string) -> () = builtins.eprint_string(value)
+fun eprint(value : string) -> () = builtins.eprint_string(value)
 
 fun eprintln(value : string) -> () = do 
     builtins.eprint_string(value);
