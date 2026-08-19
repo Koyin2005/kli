@@ -4,8 +4,7 @@ use crate::{
     src_loc::SrcLoc,
     typed_ast::{ExprKind, Function},
     typed_ast_visitor::{Visitor, walk_expr},
-    types::{GenericArg, GenericArgsRef, IntegerKind, IntegerSize, TypeKind},
-    unsafety,
+    types::{GenericArg, GenericArgsRef, IntegerKind},
 };
 
 pub struct BuiltinCheck<'ctxt> {
@@ -32,29 +31,6 @@ impl<'ctxt> BuiltinCheck<'ctxt> {
         generic_args: GenericArgsRef<'_, 'ctxt>,
     ) {
         let error = match builtin {
-            Builtin::Bitcast => {
-                let [from, to] = generic_args.as_array().unwrap().map(GenericArg::expect_ty);
-                let is_valid_bitcast = matches!(
-                    (from.kind(), to.kind()),
-                    (
-                        TypeKind::Bool,
-                        TypeKind::Int(
-                            IntegerKind::Signed(IntegerSize::Int8)
-                                | IntegerKind::Unsigned(IntegerSize::Int8),
-                        ),
-                    ) | (TypeKind::Char, TypeKind::Int(IntegerKind::UINT32))
-                ) || from
-                    .as_integer()
-                    .and_then(|from| to.as_integer().map(|to| (from, to)))
-                    .is_some_and(|(from, to)| from.size() == to.size());
-
-                (!is_valid_bitcast).then(|| format!("cannot bitcast from '{}' to '{}'", from, to))
-            }
-            Builtin::Transmute => {
-                let [from, to] = generic_args.as_array().unwrap().map(GenericArg::expect_ty);
-                let valid_transmute = unsafety::transmutable(self.ctxt, from, to);
-                (!valid_transmute).then(|| format!("cannot transmute from '{}' to '{}'", from, to))
-            }
             Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
                 IntegerBuiltin::IntMaxValue
                 | IntegerBuiltin::ShiftLeft

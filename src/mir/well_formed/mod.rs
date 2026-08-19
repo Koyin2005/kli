@@ -9,7 +9,6 @@ use crate::{
     },
     src_loc::SrcLoc,
     types::{FunctionSig, IntegerKind, IntegerSize, SimpleScalar, Type},
-    unsafety,
 };
 pub struct WellFormed<'ctxt, 'body> {
     ctxt: CtxtRef<'ctxt>,
@@ -275,15 +274,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     ),
                 }
             }
-            &super::Rvalue::Cast(cast_kind, ref operand, to_ty) => match cast_kind {
-                CastKind::Transmute => {
-                    let from = operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                    self.assert(
-                        unsafety::transmutable(self.ctxt, from, to_ty),
-                        || format!("Cannot transmute {} into {}", from, to_ty),
-                        loc,
-                    );
-                }
+            &super::Rvalue::Cast(cast_kind, ref operand, _) => match cast_kind {
                 CastKind::IntegerCast(kind) => match kind {
                     IntegerCast::ZeroExtend(to) => {
                         let from_ty =

@@ -1,6 +1,5 @@
 use crate::{
     CtxtRef,
-    builtins::Builtin,
     def_ids::DefId,
     resolved_ast::AnnotationKind,
     typed_ast::{ExprKind, Function},
@@ -67,23 +66,6 @@ impl<'ctxt> Visitor<'ctxt> for SafetyCheck<'ctxt> {
                 self.visit_expr(expr);
                 self.in_unsafe_block = was_in_unsafe_block;
                 return;
-            }
-            ExprKind::BuiltinCall(id, builtin, ref args, _) => {
-                if let Builtin::Transmute = builtin
-                    && let Some(&[crate::types::GenericArg(ty1), crate::types::GenericArg(ty2)]) =
-                        args.as_array()
-                    && !transmutable(self.ctxt, ty1, ty2)
-                {
-                    self.ctxt.diag().add_diagnostic(
-                        format!("cannot transmute from '{}' to '{}'", ty1, ty2),
-                        expr.loc,
-                    );
-                }
-                walk_expr(self, expr);
-                if !is_unsafe(self.ctxt, id) {
-                    return;
-                }
-                id
             }
             ExprKind::Function(id, _) if is_unsafe(self.ctxt, id) => id,
             _ => return walk_expr(self, expr),

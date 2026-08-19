@@ -7,12 +7,6 @@ fun ptr_copy[T](dst : RawPtr[T], src : RawPtr[T], count : UInt64) -> ();
 @builtin
 fun box_alloc[T](value : T) -> Box[T];
 
-# Safety:
-# The current representation of `x` must be a valid value of `U`
-@builtin
-@unsafe
-fun transmute[T,U](x : T) -> U;
-
 @builtin
 fun offset[T](p : RawPtr[T], offset : UInt64) -> RawPtr[T];
 
@@ -48,9 +42,6 @@ fun widen[T,U](x : T) -> U;
 fun truncate[T,U](x : T) -> U;
 
 @builtin
-fun bitcast[T,U](x : T) -> U;
-
-@builtin
 fun raw_array_alloc[T](size : UInt64) -> array[uninit[T]];
 
 
@@ -65,15 +56,6 @@ fun int_max_value[T]() -> T;
 
 @builtin
 fun uninit_zeroed[T]() -> uninit[T];
-
-# Safety: 
-# `value` must represent a valid value of type `T`
-@unsafe
-@builtin
-fun uninit_assume_init[T](value : uninit[T]) -> T;
-
-@builtin
-fun uninit_new[T](value : T) -> uninit[T];
 
 @builtin
 fun read_line() -> string;

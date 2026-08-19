@@ -191,12 +191,9 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_with_coma_sep(args, |this, arg| this.write_operand(arg))?;
                 write!(self.output, ")")?;
             }
-            Rvalue::Cast(cast, pointer, to) => {
+            Rvalue::Cast(cast, pointer, _) => {
                 write!(self.output, "cast(")?;
                 match cast {
-                    CastKind::Transmute => {
-                        write!(self.output, "Transmute({})", to)?;
-                    }
                     CastKind::IntegerCast(kind) => {
                         write!(self.output, "IntegerCast({:?})", kind)?;
                     }

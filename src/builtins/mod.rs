@@ -17,9 +17,6 @@ pub enum IntegerBuiltin {
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Builtin {
-    // Reinterpretation
-    Transmute,
-    Bitcast,
 
     // Allocation
     BoxAlloc,
@@ -44,14 +41,10 @@ pub enum Builtin {
 
     // Memory
     UninitZeroed,
-    UninitAssumeInit,
-    UninitNew,
 }
 impl Builtin {
     pub const fn name(self) -> &'static str {
         match self {
-            Builtin::Transmute => "transmute",
-            Builtin::Bitcast => "bitcast",
             Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd) => "wrapping_add",
             Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingAdd) => "overflowing_add",
             Builtin::IntegerBuiltin(IntegerBuiltin::Widen) => "widen",
@@ -68,9 +61,7 @@ impl Builtin {
             Builtin::BoxAlloc => "box_alloc",
             Builtin::RawArrayAlloc => "raw_array_alloc",
             Builtin::PrintString => "print_string",
-            Builtin::UninitAssumeInit => "uninit_assume_init",
             Builtin::UninitZeroed => "uninit_zeroed",
-            Builtin::UninitNew => "uninit_new",
             Builtin::ReadLine => "read_line",
             Builtin::Offset => "offset",
             Builtin::GcAlloc => "gc_alloc",
@@ -81,7 +72,6 @@ impl Builtin {
     pub fn find(name: Symbol) -> Option<Builtin> {
         match name {
             Symbol::BOX_ALLOC => Some(Builtin::BoxAlloc),
-            Symbol::TRANSMUTE => Some(Builtin::Transmute),
             Symbol::ARRAY_LEN => Some(Builtin::Len),
             Symbol::ARRAY_ADDR => Some(Builtin::ArrayAddr),
             Symbol::WRAPPING_ADD => Some(Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd)),
@@ -100,13 +90,10 @@ impl Builtin {
             }
             Symbol::WIDEN => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Widen)),
             Symbol::TRUNCATE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Truncate)),
-            Symbol::BITCAST => Some(Builtin::Bitcast),
             Symbol::INT_MAX_VALUE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue)),
             Symbol::RAW_ARRAY_ALLOC => Some(Builtin::RawArrayAlloc),
             Symbol::PRINT_STRING => Some(Builtin::PrintString),
             Symbol::UNINIT_ZEROED => Some(Builtin::UninitZeroed),
-            Symbol::UNINIT_ASSUME_INIT => Some(Builtin::UninitAssumeInit),
-            Symbol::UNINIT_NEW => Some(Builtin::UninitNew),
             Symbol::READ_LINE => Some(Builtin::ReadLine),
             Symbol::OFFSET => Some(Builtin::Offset),
             Symbol::GC_ALLOC => Some(Builtin::GcAlloc),

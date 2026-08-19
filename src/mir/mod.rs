@@ -165,7 +165,6 @@ pub enum IntegerCast {
 }
 #[derive(Clone, Debug, Copy)]
 pub enum CastKind {
-    Transmute,
     IntegerCast(IntegerCast),
 }
 #[derive(Clone, Debug)]

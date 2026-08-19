@@ -454,10 +454,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let ty = ty.as_raw_ptr().unwrap();
                 BuiltinResult::Rvalue(Rvalue::GcAlloc(ty, cap))
             }
-            Builtin::Bitcast => {
-                let [arg] = operands().try_into().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, arg, ty))
-            }
             Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
                 IntegerBuiltin::IntMaxValue => {
                     let kind = ty.as_integer().unwrap();
@@ -555,14 +551,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 }
             },
             Builtin::ReadLine => BuiltinResult::Rvalue(Rvalue::ReadLine),
-            Builtin::UninitNew => {
-                let [operand] = operands().try_into().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, operand, ty))
-            }
-            Builtin::UninitAssumeInit => {
-                let [operand] = operands().try_into().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, operand, ty))
-            }
             Builtin::UninitZeroed => {
                 let ty = ty.as_uninit().unwrap();
                 BuiltinResult::Rvalue(Rvalue::UninitZeroed(ty))
@@ -598,11 +586,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let place = self.place(&args[0]);
                 BuiltinResult::Rvalue(Rvalue::AddrOf(place))
             }
-            Builtin::Transmute => BuiltinResult::Rvalue(Rvalue::Cast(
-                mir::CastKind::Transmute,
-                { operands() }.swap_remove(0),
-                ty,
-            )),
         }
     }
     pub(super) fn assign_builder_to(
