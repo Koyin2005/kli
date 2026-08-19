@@ -81,9 +81,6 @@ impl<'ctxt> MirDump<'ctxt> {
         for projection in place.projections.iter() {
             use std::fmt::Write;
             match projection {
-                PlaceProjection::Field(field) => {
-                    let _ = write!(&mut output, ".{}", field.into_usize());
-                }
                 PlaceProjection::CaseDowncast(_, name) => {
                     let current = std::mem::take(&mut output);
                     let _ = write!(&mut output, "({} as {})", current, name);
@@ -123,7 +120,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, "LoadField")?;
                 write!(self.output, "(")?;
                 self.write_place(place)?;
-                write!(self.output, ".{}", field.into_usize())?;
+                write!(self.output, ",{}", field.into_usize())?;
                 write!(self.output, ")")?;
             }
             Rvalue::AllocateRawArray { ty, count } => {

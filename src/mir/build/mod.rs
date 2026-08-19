@@ -8,13 +8,47 @@ use crate::{
     },
     resolved_ast::Var,
     src_loc::SrcLoc,
-    types::Type,
+    typed_ast::FieldId,
+    types::{CaseId, Type},
 };
 mod expr;
 mod function;
 mod loops;
 mod matches;
 mod stmt;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FieldProjection {
+    Field(FieldId),
+    CaseDowncast(CaseId),
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceBuilder {
+    pub place: Place,
+    pub projections: Vec<FieldProjection>,
+}
+impl PlaceBuilder {
+    pub fn new(place: Place) -> Self {
+        Self {
+            place,
+            projections: Vec::new(),
+        }
+    }
+    pub fn push_field(&mut self, field: FieldId) {
+        self.projections.push(FieldProjection::Field(field));
+    }
+    pub fn with_field(mut self, field: FieldId) -> Self {
+        self.push_field(field);
+        self
+    }
+    pub fn push_case_downcast(&mut self, case: CaseId) {
+        self.projections.push(FieldProjection::CaseDowncast(case));
+    }
+    pub fn with_case_downcast(mut self, case: CaseId) -> Self {
+        self.push_case_downcast(case);
+        self
+    }
+}
 #[derive(Clone, Debug)]
 pub struct TargetPlace<'ctxt> {
     pub place: Place,

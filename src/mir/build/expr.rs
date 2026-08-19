@@ -6,7 +6,7 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Rvalue,
-        build::{Builder, TargetPlace, TargetPlaceKind},
+        build::{Builder, FieldProjection, PlaceBuilder, TargetPlace, TargetPlaceKind},
     },
     src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
@@ -238,7 +238,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .capture_index(var.1)
                     .unwrap(),
             )),
-            typed_ast::PlaceKind::Field(place, field) => self.lower_place(place).with_field(*field),
+            typed_ast::PlaceKind::Field(place, field) => todo!("lower me"),
             typed_ast::PlaceKind::Invalid => unreachable!("cannot lower invalid place"),
         }
     }
@@ -255,15 +255,19 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
             _ => {
                 let local = self.expr_into_temp(value);
-                self.assign_place_to_pattern(pattern, Place::local(local));
+                self.assign_place_to_pattern(pattern, PlaceBuilder::new(Place::local(local)));
             }
         }
     }
-    pub(super) fn assign_place_to_pattern(&mut self, pattern: &Pattern<'ctxt>, place: Place) {
+    pub(super) fn assign_place_to_pattern(
+        &mut self,
+        pattern: &Pattern<'ctxt>,
+        place: PlaceBuilder,
+    ) {
         match pattern.kind {
             typed_ast::PatternKind::Binding(_, var, ty) => {
                 let var_place = Place::local(self.new_var(var, ty));
-                self.assign(pattern.loc, var_place, Rvalue::Use(Operand::Load(place)));
+                self.assign_builder_to(pattern.loc, var_place, place);
             }
             typed_ast::PatternKind::Bool(_)
             | typed_ast::PatternKind::Int(_)
@@ -278,13 +282,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 }
             }
             typed_ast::PatternKind::Err => unreachable!(),
-            typed_ast::PatternKind::Case(id, _, index, ref inner) => {
+            typed_ast::PatternKind::Case(.., index, ref inner) => {
                 if let Some(inner) = inner {
                     self.assign_place_to_pattern(
                         inner,
-                        place
-                            .with_case_downcast(index, self.ctxt.expect_ident(id).symbol)
-                            .with_field(FieldId::new(0)),
+                        place.with_case_downcast(index).with_field(FieldId::new(0)),
                     );
                 }
             }
@@ -597,6 +599,66 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 ty,
             )),
         }
+    }
+    pub fn assign_builder_to(&mut self, loc: SrcLoc, dest: Place, mut place_builder: PlaceBuilder) {
+        let projection = place_builder.projections.pop();
+        let place = self.load_place_from_builder(loc, place_builder);
+        let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+        let Some(projection) = projection else {
+            self.assign(loc, dest, Rvalue::Use(Operand::Load(place)));
+            return;
+        };
+        let (_, value) = self.load_projection(ty, place, projection);
+        match value {
+            Ok(value) => {
+                self.assign(loc, dest, value);
+            }
+            Err(place) => {
+                self.assign(loc, dest, Rvalue::Use(Operand::Load(place)));
+            }
+        }
+    }
+    pub fn load_projection(
+        &mut self,
+        mut ty: Type<'ctxt>,
+        mut place: Place,
+        projection: FieldProjection,
+    ) -> (Type<'ctxt>, Result<Rvalue<'ctxt>, Place>) {
+        match projection {
+            FieldProjection::CaseDowncast(case) => {
+                let Some((id, _, args)) = ty.as_named() else {
+                    unreachable!("Should be named")
+                };
+
+                let type_def = self.ctxt.type_def(id);
+                let case_info = type_def.case(case);
+                ty = case_info.payload_type(args, self.ctxt);
+                place = place.with_case_downcast(case, case_info.name);
+                (ty, Err(place))
+            }
+            FieldProjection::Field(field) => {
+                ty = ty.field_info(field, self.ctxt).unwrap().0;
+                (ty, Ok(Rvalue::LoadField(place, field)))
+            }
+        }
+    }
+    pub fn load_place_from_builder(&mut self, loc: SrcLoc, place_builder: PlaceBuilder) -> Place {
+        let mut ty =
+            place_builder
+                .place
+                .type_of(self.ctxt, &self.body.locals, self.body.return_type);
+        let mut place = place_builder.place;
+        if !place_builder.projections.is_empty() {
+            for projection in place_builder.projections {
+                let (new_ty, value) = self.load_projection(ty, place, projection);
+                ty = new_ty;
+                place = match value {
+                    Ok(rvalue) => Place::local(self.assign_to_temp(loc, ty, rvalue)),
+                    Err(place) => place,
+                };
+            }
+        }
+        place
     }
     pub fn load_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Rvalue<'ctxt> {
         match place.kind {

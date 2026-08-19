@@ -63,15 +63,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                         emit_fatal_diagnostic(loc, format!("Cannot get inner value of '{}'", ty))
                     };
                 }
-                super::PlaceProjection::Field(field_id) => {
-                    let field_ty = ty.field_info(*field_id, self.ctxt);
-                    (ty, _) = self.assert_with_some(
-                        &ty,
-                        |_| field_ty,
-                        || format!("Cannot take a field of '{}'", ty),
-                        loc,
-                    )
-                }
                 super::PlaceProjection::Deref => {
                     ty = self.assert_with_some(
                         ty,

@@ -26,7 +26,6 @@ impl Local {
 }
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
 pub enum PlaceProjection {
-    Field(FieldId),
     CaseDowncast(CaseId, Symbol),
     Deref,
 }
@@ -37,11 +36,6 @@ impl PlaceProjection {
         ctxt: CtxtRef<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
-            PlaceProjection::Field(field) => {
-                ty.field_info(field, ctxt)
-                    .unwrap_or_else(|| panic!("should be a type with fields but got '{ty}'"))
-                    .0
-            }
             PlaceProjection::Deref => {
                 let (TypeKind::Box(ty) | TypeKind::RawPtr(ty)) = ty.kind() else {
                     unreachable!("Should be a box or raw ptr but got {}", ty)
@@ -101,8 +95,7 @@ impl Place {
         }
     }
     pub fn with_field(mut self, field: FieldId) -> Self {
-        self.projections.push(PlaceProjection::Field(field));
-        self
+        todo!("Field indexing")
     }
     pub fn with_deref(mut self) -> Self {
         self.projections.push(PlaceProjection::Deref);

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::{
     mir::{
         BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind,
-        build::{Builder, TargetPlace},
+        build::{Builder, PlaceBuilder, TargetPlace},
     },
     src_loc::SrcLoc,
     typed_ast::{CaseArm, Expr, FieldId, Pattern, PatternKind},
@@ -25,7 +25,7 @@ enum TestCase {
 type TestMatrix = Vec<(SrcLoc, usize, Vec<MatchTest>)>;
 #[derive(Debug, Clone)]
 struct MatchTest {
-    place: Place,
+    place: PlaceBuilder,
     case: TestCase,
     loc: SrcLoc,
 }
@@ -51,7 +51,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             TestCase::EqualsChar(_) => Test::IntSwitch,
         };
         fn group_tests(
-            place: &Place,
+            place: &PlaceBuilder,
             tests: TestMatrix,
         ) -> (BTreeMap<TestCase, TestMatrix>, TestMatrix) {
             let mut branches: BTreeMap<TestCase, TestMatrix> = BTreeMap::new();
@@ -101,14 +101,18 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .get(&TestCase::False)
                     .copied()
                     .unwrap_or(otherwise_start);
+
+                let place = self.load_place_from_builder(loc, head_test.place);
                 self.finish_block_with_if(
                     head_test.loc,
-                    Operand::Load(head_test.place),
+                    Operand::Load(place),
                     true_block,
                     false_block,
                 );
             }
             Test::IntSwitch => {
+                let place = self.load_place_from_builder(loc, head_test.place);
+
                 let targets = tests
                     .into_iter()
                     .filter_map(|(case, block)| {
@@ -125,14 +129,15 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .collect();
                 self.finish_block_with_switch_targets(
                     head_test.loc,
-                    Operand::Load(head_test.place),
+                    Operand::Load(place),
                     targets,
                     otherwise_start,
                 );
             }
             Test::VariantSwitch => {
-                let (id, _, _) = head_test
-                    .place
+                let place = self.load_place_from_builder(loc, head_test.place);
+
+                let (id, _, _) = place
                     .type_of(self.ctxt, &self.body.locals, self.body.return_type)
                     .as_named()
                     .unwrap();
@@ -153,7 +158,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let disrciminant = self.assign_to_temp(
                     head_test.loc,
                     Type::new_uint(self.ctxt, IntegerSize::Int64),
-                    Rvalue::Discriminant(head_test.place),
+                    Rvalue::Discriminant(place),
                 );
                 self.finish_block_with_switch_targets(
                     head_test.loc,
@@ -166,7 +171,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         self.switch_to_block(otherwise_start);
         self.build_tree(rest, end_blocks)
     }
-    fn match_tests(&self, place: Place, pattern: &Pattern) -> Vec<MatchTest> {
+    fn match_tests(&self, place: PlaceBuilder, pattern: &Pattern) -> Vec<MatchTest> {
         match &pattern.kind {
             PatternKind::Char(c) => {
                 vec![MatchTest {
@@ -175,21 +180,17 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     loc: pattern.loc,
                 }]
             }
-            PatternKind::Case(id, .., index, inner) => {
+            PatternKind::Case(.., index, inner) => {
                 if let Some(inner) = inner {
                     let mut tests = vec![MatchTest {
                         place: place.clone(),
                         case: TestCase::Variant(*index),
                         loc: pattern.loc,
                     }];
-                    tests.extend(
-                        self.match_tests(
-                            place
-                                .with_case_downcast(*index, self.ctxt.expect_ident(*id).symbol)
-                                .with_field(FieldId::new(0)),
-                            inner,
-                        ),
-                    );
+                    tests.extend(self.match_tests(
+                        place.with_case_downcast(*index).with_field(FieldId::new(0)),
+                        inner,
+                    ));
                     tests
                 } else {
                     vec![MatchTest {
@@ -239,7 +240,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 (
                     arm.pattern.loc,
                     i,
-                    self.match_tests(place.clone(), &arm.pattern),
+                    self.match_tests(PlaceBuilder::new(place.clone()), &arm.pattern),
                 )
             })
             .collect::<Vec<_>>();
@@ -250,7 +251,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         let end_block = self.switch_to_new_block();
         for (loc, i, block) in end_blocks.into_iter() {
             self.switch_to_block(block);
-            self.assign_place_to_pattern(&arms[i].pattern, place.clone());
+            self.assign_place_to_pattern(&arms[i].pattern, PlaceBuilder::new(place.clone()));
             self.assign_to_target(dest.clone(), &arms[i].body);
             self.finish_block_with_goto(loc, end_block);
         }
