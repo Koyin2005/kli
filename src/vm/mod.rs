@@ -22,7 +22,7 @@ pub enum Object {
     Tuple(Box<[Value]>),
 }
 define_id!(ObjectId);
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Value {
     Int(i64),
     Bool(bool),
@@ -199,17 +199,48 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
                             .checked_add(right_value.expect_int())
                             .ok_or(RuntimeError::ArithmeticOverflow)?,
                     ),
-                    BinaryOp::Subtract => todo!(),
-                    BinaryOp::Multiply => todo!(),
-                    BinaryOp::Greater => todo!(),
-                    BinaryOp::Divide => todo!(),
-                    BinaryOp::Equals => todo!(),
-                    BinaryOp::Lesser => todo!(),
-                    BinaryOp::BitwiseAnd => todo!(),
-                    BinaryOp::BitwiseOr => todo!(),
-                    BinaryOp::ShiftLeft => todo!(),
-                    BinaryOp::ShiftRight => todo!(),
-                    BinaryOp::Offset => todo!(),
+                    BinaryOp::Subtract => Value::Int(
+                        left_value
+                            .expect_int()
+                            .checked_sub(right_value.expect_int())
+                            .ok_or(RuntimeError::ArithmeticOverflow)?,
+                    ),
+                    BinaryOp::Multiply => Value::Int(
+                        left_value
+                            .expect_int()
+                            .checked_mul(right_value.expect_int())
+                            .ok_or(RuntimeError::ArithmeticOverflow)?,
+                    ),
+                    BinaryOp::Divide => Value::Int(
+                        left_value
+                            .expect_int()
+                            .checked_div(right_value.expect_int())
+                            .ok_or(RuntimeError::ArithmeticOverflow)?,
+                    ),
+                    BinaryOp::Greater => {
+                        Value::Bool(left_value.expect_int() > right_value.expect_int())
+                    }
+                    BinaryOp::Equals => Value::Bool(left_value == right_value),
+                    BinaryOp::Lesser => {
+                        Value::Bool(left_value.expect_int() < right_value.expect_int())
+                    }
+                    BinaryOp::BitwiseAnd => match (left_value, right_value) {
+                        (Value::Int(left), Value::Int(right)) => Value::Int(left & right),
+                        (Value::Bool(left), Value::Bool(right)) => Value::Bool(left & right),
+                        _ => panic!("Cannot perform anding {left_value:?} and {right_value:?}"),
+                    },
+                    BinaryOp::BitwiseOr => match (left_value, right_value) {
+                        (Value::Int(left), Value::Int(right)) => Value::Int(left | right),
+                        (Value::Bool(left), Value::Bool(right)) => Value::Bool(left | right),
+                        _ => panic!("Cannot perform anding {left_value:?} and {right_value:?}"),
+                    },
+                    BinaryOp::ShiftLeft => {
+                        Value::Int(left_value.expect_int() << right_value.expect_int())
+                    }
+                    BinaryOp::ShiftRight => {
+                        Value::Int(left_value.expect_int() >> right_value.expect_int())
+                    }
+                    BinaryOp::Offset => todo!("get rid of me"),
                 };
                 self.store_local(local, result_value);
             }
