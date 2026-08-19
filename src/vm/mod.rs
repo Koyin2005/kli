@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use crate::mir::{BasicBlockId, Body, Stmt, StmtId, StmtKind, Terminator};
+use crate::mir::{BasicBlockId, Body, ConstValue, Constant, Operand, Place, Stmt, StmtId, StmtKind, Terminator};
 
 pub enum Value {
     Int(i64),
@@ -24,6 +24,22 @@ impl<'ctxt,'mir> Machine<'ctxt,'mir>{
     fn push_frame(&mut self, body: &'mir Body<'ctxt>){
         self.frames.push(StackFrame { body ,block:Cell::new(BasicBlockId::ENTRY), stmt:Cell::new(StmtId::new(0))});
     }
+    fn load_place(&mut self, place: &Place) -> Value{
+        todo!()
+    }
+    fn eval_constant(&mut self, constant : &Constant) -> Value{
+        todo!()
+    }
+    fn eval_operand(&mut self, operand : &Operand) -> Value{
+        match operand{
+            Operand::Load(place) => {
+                self.load_place(place)
+            },
+            Operand::Constant(constant) => {
+                self.eval_constant(constant)
+            }
+        }
+    }
     fn eval_stmt(&mut self, stmt : &Stmt){
         match &stmt.kind{
             StmtKind::Noop => (),
@@ -31,7 +47,14 @@ impl<'ctxt,'mir> Machine<'ctxt,'mir>{
             StmtKind::AssignField(place, field_id, operand) => todo!(),
             StmtKind::AssignIndex(place, operand, operand1) => todo!(),
             StmtKind::Assign(place, rvalue) => todo!(),
-            StmtKind::Print { value, err } => todo!(),
+            StmtKind::Print { value, err } => {
+                let value = self.eval_operand(value);
+                if *err{
+                    _ = value;
+                } else {
+                    _ = value;
+                }
+            },
             StmtKind::Copy { dst, src, count } => todo!(),
         }
     }
