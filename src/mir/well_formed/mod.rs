@@ -179,8 +179,11 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 super::AggregateKind::Variant(id, index, args) => {
                     let type_def = self.ctxt.type_def(*id);
                     let case_def = type_def.case(*index);
-                    let field = case_def.expect_field();
-                    let field_ty = field.type_of(args, self.ctxt);
+                    let field = case_def.field;
+                    let Some(field_ty) = field.map(|field| field.type_of(args, self.ctxt)) else {
+                        self.assert(fields.is_empty(), || format!("Variant should have no fields"), loc);
+                        return;
+                    };
 
                     let field = self.assert_with_some(
                         fields.as_slice(),
