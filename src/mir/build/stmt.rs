@@ -18,8 +18,8 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
                 self.panic(expr.loc);
             }
             ExprKind::Return(value) => {
-                self.expr_into_dest(Place::return_place(), value);
-                self.finish_block(expr.loc, TerminatorKind::Return);
+                let value = self.operand(value);
+                self.finish_block(expr.loc, TerminatorKind::Return(value));
                 self.switch_to_new_block();
             }
             ExprKind::Block(block_body, ..) => {

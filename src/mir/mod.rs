@@ -26,21 +26,14 @@ impl Local {
 }
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
 pub enum PlaceProjection {
-    Deref,
 }
 impl PlaceProjection {
     pub fn apply_projection_to_type<'ctxt>(
         self,
         ty: Type<'ctxt>,
-        ctxt: CtxtRef<'ctxt>,
+        _: CtxtRef<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
-            PlaceProjection::Deref => {
-                let (TypeKind::Box(ty) | TypeKind::RawPtr(ty)) = ty.kind() else {
-                    unreachable!("Should be a box or raw ptr but got {}", ty)
-                };
-                *ty
-            }
         }
     }
 }
@@ -85,10 +78,6 @@ impl Place {
             base: PlaceBase::ReturnPlace,
             projections: Vec::new(),
         }
-    }
-    pub(super) fn with_deref(mut self) -> Self {
-        self.projections.push(PlaceProjection::Deref);
-        self
     }
 
     pub fn type_of<'ctxt>(
@@ -248,6 +237,7 @@ pub enum Rvalue<'ctxt> {
     LoadIndex(Place, Operand<'ctxt>),
     LoadField(Place, FieldId),
     LoadPayload(Place, CaseId),
+    Unbox(Place),
     GcAlloc(Type<'ctxt>, Operand<'ctxt>),
 }
 impl<'ctxt> Rvalue<'ctxt> {
@@ -262,7 +252,8 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::Discriminant(_)
             | Self::UninitZeroed(_)
             | Self::LoadField(..)
-            | Self::LoadPayload(..) => true,
+            | Self::LoadPayload(..)
+            | Self::Unbox(_) => true,
             Self::LoadIndex(..) => false,
             Self::GcAlloc(..) => false,
 
@@ -281,6 +272,10 @@ impl<'ctxt> Rvalue<'ctxt> {
         return_type: Type<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
+            Rvalue::Unbox(place) => {
+                let ty = place.type_of(ctxt, locals, return_type);
+                ty.as_box().expect("should be a box")
+            }
             Rvalue::LoadPayload(place, case) => {
                 let ty = place.type_of(ctxt, locals, return_type);
                 let Some((id, _, args)) = ty.as_named() else {
@@ -471,7 +466,7 @@ impl<'ctxt> Terminator<'ctxt> {
             TerminatorKind::Assert(.., block) | TerminatorKind::Goto(block) => {
                 SuccessorsIter::Single(Some(block))
             }
-            TerminatorKind::Return | TerminatorKind::Panic | TerminatorKind::Unreachable => {
+            TerminatorKind::Return(_) | TerminatorKind::Panic | TerminatorKind::Unreachable => {
                 SuccessorsIter::Leaf
             }
             TerminatorKind::Switch(_, ref targets) => {
@@ -493,7 +488,7 @@ impl<'ctxt> Terminator<'ctxt> {
                 ),
             ),
             TerminatorKind::Unreachable => None.unzip(),
-            TerminatorKind::Return => None.unzip(),
+            TerminatorKind::Return(_) => None.unzip(),
             TerminatorKind::Panic => None.unzip(),
         };
         single.into_iter().chain(multiple.into_iter().flatten())
@@ -504,7 +499,7 @@ pub enum TerminatorKind<'ctxt> {
     Assert(Operand<'ctxt>, AssertKind, BasicBlockId),
     Switch(Operand<'ctxt>, SwitchTargets),
     Unreachable,
-    Return,
+    Return(Operand<'ctxt>),
     Goto(BasicBlockId),
     Panic,
 }

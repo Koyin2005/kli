@@ -1,7 +1,7 @@
 use crate::{
     collect::CtxtRef,
     mir::{
-        BodySource, Constant, Context, LocalKind, Place, TerminatorKind, build::Builder,
+        BodySource, Constant, Context, LocalKind, TerminatorKind, build::Builder,
         visitor::Visit, well_formed::WellFormed,
     },
     src_loc::SrcLoc,
@@ -38,8 +38,8 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 .map(|param| (LocalKind::Param(param.var()), param.ty)),
         );
         if let Some(body) = function.body.as_ref() {
-            builder.expr_into_dest(Place::return_place(), body);
-            builder.finish_block(body.loc, TerminatorKind::Return);
+            let operand = builder.operand(body);
+            builder.finish_block(body.loc, TerminatorKind::Return(operand));
         } else {
             builder.finish_block(SrcLoc::dummy(), TerminatorKind::Unreachable);
         }

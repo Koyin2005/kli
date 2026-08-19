@@ -52,15 +52,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         let mut ty = place.base.type_of(&self.body.locals, self.body.return_type);
         for proj in &place.projections {
             let loc = self.body.src_info(loc);
-            match proj {
-                super::PlaceProjection::Deref => {
-                    ty = self.assert_with_some(
-                        ty,
-                        |ty| ty.as_box().or(ty.as_raw_ptr()),
-                        || "Cannot deref non box or ptr",
-                        loc,
-                    )
-                }
+            match *proj {
             }
         }
     }
@@ -69,6 +61,14 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         self.super_visit_rvalue(loc, rvalue);
         let loc = self.body.src_info(loc);
         match rvalue {
+            super::Rvalue::Unbox(place) => {
+                let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                self.assert(
+                        ty.as_box().is_some(),
+                        || "Cannot deref non box or ptr",
+                        loc,
+                    );
+            }
             super::Rvalue::LoadPayload(place, case) => {
                 let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 let (id, name, _) = self.assert_with_some(

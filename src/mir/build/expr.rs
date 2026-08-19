@@ -66,7 +66,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             if matches!(place.kind, typed_ast::PlaceKind::Index(..)) && in_value_ctxt {
                 return None;
             }
-            Some(self.lower_place(place))
+            Some(self.local_for(place))
         } else {
             None
         }
@@ -222,10 +222,10 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 TargetPlace::with_index(place, index)
             }
             typed_ast::PlaceKind::Field(receiver, field) => {
-                let place = self.lower_place(receiver);
+                let place = self.local_for(receiver);
                 TargetPlace::with_field(place, *field)
             }
-            _ => TargetPlace::new(self.lower_place(place)),
+            _ => TargetPlace::new(self.local_for(place)),
         }
     }
     pub fn target_place(&mut self, expr: &Expr<'ctxt>) -> TargetPlace<'ctxt> {
@@ -234,14 +234,13 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             _ => TargetPlace::new(Place::local(self.expr_into_temp(expr))),
         }
     }
-    pub(super) fn lower_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Place {
+    pub(super) fn local_for(&mut self, place: &typed_ast::Place<'ctxt>) -> Place {
         match &place.kind {
-            typed_ast::PlaceKind::Index(..) | typed_ast::PlaceKind::Field(..) => {
+            typed_ast::PlaceKind::Index(..) | typed_ast::PlaceKind::Field(..) | typed_ast::PlaceKind::Deref(..) => {
                 let index_rvalue = self.load_place(place);
                 let local = self.assign_to_temp(place.loc, place.ty, index_rvalue);
                 Place::local(local)
             }
-            typed_ast::PlaceKind::Deref(base) => self.place(base).with_deref(),
             typed_ast::PlaceKind::Var(var) => {
                 let Some(local) = self.body.local_for_var(var.1) else {
                     unreachable!("should have a local for {:?} at {:?}", var, place.loc)
@@ -438,15 +437,14 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
             Builtin::PtrRead => {
                 let [ptr] = args else { unreachable!() };
-                let ptr = self.place(ptr);
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Load(ptr.with_deref())))
+                let _ = self.place(ptr);
+                todo!("Bye")
             }
             Builtin::PtrWrite => {
                 let [ptr, value] = args else { unreachable!() };
-                let ptr = self.place(ptr);
-                let value = self.build_rvalue(value);
-                self.assign(loc, ptr.with_deref(), value);
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
+                let _ = self.place(ptr);
+                let _ = self.build_rvalue(value);
+                todo!("Write")
             }
             Builtin::Bitcast => {
                 let [arg] = operands().try_into().unwrap();
@@ -634,6 +632,10 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         projection: FieldProjection,
     ) -> (Type<'ctxt>, Rvalue<'ctxt>) {
         match projection {
+            FieldProjection::Deref => {
+                ty = ty.as_box().unwrap();
+                (ty, Rvalue::Unbox(place))
+            }
             FieldProjection::CaseDowncast(case) => {
                 let Some((id, _, args)) = ty.as_named() else {
                     unreachable!("Should be named")
@@ -673,11 +675,15 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 Rvalue::LoadIndex(place, index)
             }
             typed_ast::PlaceKind::Field(ref place, field) => {
-                let place = self.lower_place(place);
+                let place = self.local_for(place);
                 Rvalue::LoadField(place, field)
             }
+            typed_ast::PlaceKind::Deref(ref place) => {
+                let place = self.place(place);
+                Rvalue::Unbox(place)
+            }
             _ => {
-                let operand = self.lower_place(place);
+                let operand = self.local_for(place);
                 Rvalue::Use(Operand::Load(operand))
             }
         }

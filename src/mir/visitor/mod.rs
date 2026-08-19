@@ -48,9 +48,9 @@ pub trait Visit<'ctxt> {
         match &terminator.kind {
             TerminatorKind::Goto(_)
             | TerminatorKind::Panic
-            | TerminatorKind::Return
             | TerminatorKind::Unreachable => (),
-            TerminatorKind::Switch(operand, _) | TerminatorKind::Assert(operand, ..) => {
+            TerminatorKind::Switch(operand, _) 
+            | TerminatorKind::Return(operand) | TerminatorKind::Assert(operand, ..) => {
                 self.visit_operand(loc, operand)
             }
         }
@@ -75,7 +75,7 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue<'ctxt>) {
         match rvalue {
-            Rvalue::LoadField(place, _) | Rvalue::LoadPayload(place, _) => {
+            Rvalue::LoadField(place, _) | Rvalue::LoadPayload(place, _)| Rvalue::Unbox(place)  => {
                 self.visit_place(PlaceCtxt::Read, loc, place)
             }
             Rvalue::GcAlloc(_, operand) => {
@@ -124,7 +124,6 @@ pub trait Visit<'ctxt> {
     fn super_visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
         _ = loc;
         match projection {
-            PlaceProjection::Deref => (),
         }
     }
     fn super_visit_local(&mut self, _: PlaceCtxt, _loc: Location, _local: Local) {}
@@ -215,9 +214,9 @@ pub trait MutVisit<'ctxt> {
         match &mut terminator.kind {
             TerminatorKind::Goto(_)
             | TerminatorKind::Panic
-            | TerminatorKind::Return
             | TerminatorKind::Unreachable => (),
-            TerminatorKind::Switch(operand, _) | TerminatorKind::Assert(operand, ..) => {
+            TerminatorKind::Switch(operand, _) 
+            | TerminatorKind::Return(operand) | TerminatorKind::Assert(operand, ..) => {
                 self.visit_operand(loc, operand)
             }
         }
@@ -242,7 +241,7 @@ pub trait MutVisit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &mut Rvalue<'ctxt>) {
         match rvalue {
-            Rvalue::LoadField(place, _) | Rvalue::LoadPayload(place, _) => {
+            Rvalue::LoadField(place, _) | Rvalue::LoadPayload(place, _) | Rvalue::Unbox(place) => {
                 self.visit_place(loc, place)
             }
             Rvalue::GcAlloc(_, operand) => {
@@ -290,8 +289,7 @@ pub trait MutVisit<'ctxt> {
     }
     fn super_visit_projection(&mut self, loc: Location, projection: &mut PlaceProjection) {
         _ = loc;
-        match projection {
-            PlaceProjection::Deref => (),
+        match *projection {
         }
     }
     fn super_visit_local(&mut self, _loc: Location, _local: &mut Local) {}

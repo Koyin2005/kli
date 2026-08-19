@@ -4,7 +4,7 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, CastKind,
-        ConstValue, LocalKind, Operand, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
+        ConstValue, LocalKind, Operand, Place, Rvalue, StmtKind, TerminatorKind,
     },
     typed_ast::FieldId,
     types,
@@ -77,13 +77,9 @@ impl<'ctxt> MirDump<'ctxt> {
         if place.projections.is_empty() {
             return write!(self.output, "{}", place.base);
         }
-        let mut output = format!("{}", place.base);
+        let output = format!("{}", place.base);
         for projection in place.projections.iter() {
-            use std::fmt::Write;
-            match projection {
-                PlaceProjection::Deref => {
-                    _ = write!(&mut output, "^");
-                }
+            match *projection {
             };
         }
         write!(self.output, "{}", output)
@@ -124,6 +120,12 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, "(")?;
                 self.write_place(place)?;
                 write!(self.output, ",{}", case.into_usize())?;
+                write!(self.output, ")")?;
+            }
+            Rvalue::Unbox(place) => {
+                write!(self.output, "Unbox")?;
+                write!(self.output, "(")?;
+                self.write_place(place)?;
                 write!(self.output, ")")?;
             }
             Rvalue::AllocateRawArray { ty, count } => {
@@ -384,8 +386,9 @@ impl<'ctxt> MirDump<'ctxt> {
                 TerminatorKind::Unreachable => {
                     write!(self.output, "unreachable")?;
                 }
-                TerminatorKind::Return => {
-                    write!(self.output, "return")?;
+                TerminatorKind::Return(operand) => {
+                    write!(self.output, "return ")?;
+                    self.write_operand(operand)?;
                 }
                 TerminatorKind::Switch(operand, targets) => {
                     write!(self.output, "switch ")?;

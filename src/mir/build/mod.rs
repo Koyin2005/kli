@@ -21,6 +21,7 @@ mod stmt;
 pub enum FieldProjection {
     Field(FieldId),
     CaseDowncast(CaseId),
+    Deref
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PlaceBuilder {
@@ -39,6 +40,13 @@ impl PlaceBuilder {
     }
     pub fn with_field(mut self, field: FieldId) -> Self {
         self.push_field(field);
+        self
+    }
+    pub fn push_deref(&mut self) {
+        self.projections.push(FieldProjection::Deref);
+    }
+    pub fn with_deref(mut self) -> Self {
+        self.push_deref();
         self
     }
     pub fn push_case_downcast(&mut self, case: CaseId) {
