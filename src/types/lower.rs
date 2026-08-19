@@ -192,9 +192,6 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
             res::TypeKind::Tuple(fields) => {
                 Type::tuple_from_iter(self.ctxt, fields.iter().map(|field| self.lower_type(field)))
             }
-            res::TypeKind::Record(_) => {
-                todo!("remove me")
-            }
             res::TypeKind::Unknown => Type::UNKNOWN,
             &res::TypeKind::Named(name, ref args) => self.lower_type_name(ty.loc, name, args),
             res::TypeKind::Function(function_type) => {

@@ -305,17 +305,8 @@ impl<'info> Resolve<'info> {
             ast::TypeKind::String => {
                 res::TypeKind::Named(res::TypeName::String, Box::new(res::GenericArgs::NONE))
             }
-            ast::TypeKind::Record(ast::RecordType { fields }) => {
-                let fields = fields
-                    .into_iter()
-                    .map(
-                        |ast::RecordField { id: _, name, ty }| res::RecordFieldType {
-                            name,
-                            ty: self.resolve_type(ty),
-                        },
-                    )
-                    .collect();
-                res::TypeKind::Record(fields)
+            ast::TypeKind::Record(ast::RecordType { .. }) => {
+                todo!("Remove me")
             }
             ast::TypeKind::Tuple(fields) => res::TypeKind::Tuple(
                 fields

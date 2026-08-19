@@ -46,11 +46,6 @@ pub trait Visitor {
                 self.visit_type(&function_type.return_type);
             }
             TypeKind::Named(_, generic_args) => self.visit_generic_args(generic_args),
-            TypeKind::Record(record_field_types) => {
-                for field in record_field_types {
-                    self.visit_type(&field.ty);
-                }
-            }
             TypeKind::Tuple(fields) => {
                 for field in fields {
                     self.visit_type(field);

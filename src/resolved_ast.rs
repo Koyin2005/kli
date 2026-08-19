@@ -240,7 +240,6 @@ pub enum TypeKind {
     Function(Box<FunctionType>),
     Named(TypeName, Box<GenericArgs>),
     Unknown,
-    Record(Box<[RecordFieldType]>),
     Tuple(Vec<Type>),
 }
 #[derive(Debug)]
