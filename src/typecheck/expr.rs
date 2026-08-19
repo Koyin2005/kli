@@ -5,14 +5,14 @@ use crate::{
     collect::TypeDefKind,
     def_ids::DefId,
     index_vec::IndexVec,
-    resolved_ast::{self, BlockBody, Expr, ExprKind, FieldInit, FunctionDefId, Lambda, Var},
+    resolved_ast::{self, BlockBody, Expr, ExprKind, FunctionDefId, Lambda, Var},
     src_loc::SrcLoc,
     typecheck::{
         coercion::Coercion,
         root::{FunctionCtxt, TypeCheck},
     },
     typed_ast::{self, Capture, FieldId, RecordFieldInit},
-    types::{FieldName, FunctionSig, GenericArgs, IntegerSize, RecordField, Type, TypeKind},
+    types::{FieldName, FunctionSig, GenericArgs, IntegerSize, Type, TypeKind},
 };
 
 impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
@@ -410,75 +410,6 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             kind: typed_ast::ExprKind::Block(body),
         }
     }
-    fn check_record(&self, loc: SrcLoc, field_inits: &[FieldInit]) -> typed_ast::Expr<'ctxt> {
-        let expected_fields: Option<IndexVec<FieldId, RecordField>> = None;
-        let mut seen_fields = HashSet::new();
-        let field_names = expected_fields
-            .iter()
-            .flatten()
-            .enumerate()
-            .map(|(i, field)| (field.name, i))
-            .collect::<HashMap<_, _>>();
-
-        let expr_fields = field_inits
-            .iter()
-            .enumerate()
-            .filter_map(|(i, &FieldInit { name, ref value })| {
-                let field_id = field_names
-                    .get(&FieldName::Named(name.symbol))
-                    .copied()
-                    .map(FieldId::new);
-                let value = self.check_expr_coerces_to(
-                    value,
-                    expected_fields
-                        .as_ref()
-                        .and_then(|fields| field_id.map(|field| fields[field].ty)),
-                );
-                if expected_fields.is_some() && !seen_fields.insert(name.symbol) {
-                    self.root()
-                        .ctxt()
-                        .diag()
-                        .add_diagnostic(format!("Repeated field '{}'", name.symbol), name.loc);
-                    return None;
-                }
-                let field_id = if let Some(field_id) = field_id {
-                    field_id
-                } else if expected_fields.is_some() {
-                    self.root().ctxt().diag().add_diagnostic(
-                        format!("'record' has no field '{}'", name.symbol),
-                        name.loc,
-                    );
-                    return None;
-                } else {
-                    FieldId::new(i)
-                };
-                Some(RecordFieldInit {
-                    index: field_id,
-                    value,
-                })
-            })
-            .collect::<Box<[_]>>();
-        let record_fields = if let Some(fields) = expected_fields {
-            let _ = self.root().check_missing_fields(
-                loc,
-                seen_fields,
-                fields.iter().map(|field| field.name),
-            );
-            fields
-        } else {
-            expr_fields
-                .iter()
-                .zip(field_inits.iter().map(|field| field.name.symbol))
-                .map(|(field, name)| RecordField {
-                    name: FieldName::Named(name),
-                    ty: field.value.ty,
-                })
-                .collect()
-        };
-        _ = record_fields;
-        _ = expr_fields;
-        todo!("remove me")
-    }
     fn check_binary_op(
         &self,
         loc: SrcLoc,
@@ -627,7 +558,6 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                     kind: typed_ast::ExprKind::Tuple(fields),
                 }
             }
-            ExprKind::Record(fields) => self.check_record(loc, fields),
             ExprKind::Block(block) => self.check_block(loc, block, expected_ty),
             ExprKind::Annotate(expr, ty) => self.check_expr(expr, Some(self.root().lower_type(ty))),
             ExprKind::Err => typed_ast::Expr {

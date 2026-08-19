@@ -122,11 +122,6 @@ pub trait Visitor {
                     self.visit_expr(arg);
                 }
             }
-            ExprKind::Record(field_inits) => {
-                for field in field_inits {
-                    self.visit_expr(&field.value);
-                }
-            }
             ExprKind::NamedRecord(_, generic_args, field_inits) => {
                 self.visit_generic_args(generic_args);
                 for field in field_inits {

@@ -677,15 +677,7 @@ impl<'info> Resolve<'info> {
                 Box::new(self.resolve_expr(*left)),
                 Box::new(self.resolve_expr(*right)),
             ),
-            ast::ExprKind::Record(ast::RecordExpr { fields }) => res::ExprKind::Record(
-                fields
-                    .into_iter()
-                    .map(|field| res::FieldInit {
-                        name: field.name,
-                        value: self.resolve_expr(field.value),
-                    })
-                    .collect(),
-            ),
+            ast::ExprKind::Record(ast::RecordExpr { .. }) => todo!("remove me"),
             ast::ExprKind::Path(path) => {
                 self.resolve_path_as_expr(loc, path.path, path.generic_args)
             }
