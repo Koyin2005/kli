@@ -471,52 +471,22 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     ))
                 }
                 IntegerBuiltin::WrappingAdd => {
-                    let [left, right] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::Wrapping(OverflowOp::Add),
-                        left,
-                        right,
-                    ))
+                    todo!("remove me")
                 }
                 IntegerBuiltin::OverflowingAdd => {
-                    let [left, right] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::Overflow(OverflowOp::Add),
-                        left,
-                        right,
-                    ))
+                    todo!("remove me")
                 }
                 IntegerBuiltin::WrappingSub => {
-                    let [left, right] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::Wrapping(OverflowOp::Subtract),
-                        left,
-                        right,
-                    ))
+                    todo!("remove me")
                 }
                 IntegerBuiltin::OverflowingSub => {
-                    let [left, right] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::Overflow(OverflowOp::Subtract),
-                        left,
-                        right,
-                    ))
+                    todo!("remove me")
                 }
                 IntegerBuiltin::WrappingMul => {
-                    let [left, right] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::Wrapping(OverflowOp::Multiply),
-                        left,
-                        right,
-                    ))
+                    todo!("remove me")
                 }
                 IntegerBuiltin::OverflowingMul => {
-                    let [left, right] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::Overflow(OverflowOp::Multiply),
-                        left,
-                        right,
-                    ))
+                    todo!("remove me")
                 }
                 IntegerBuiltin::Truncate => {
                     let [arg] = operands().try_into().unwrap();
@@ -718,24 +688,18 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let left_operand = self.operand(left);
                 let right_operand = self.operand(right);
                 match binary_op {
-                    BinaryOp::Add => Self::binary_op_rvalue(
-                        mir::BinaryOp::Wrapping(OverflowOp::Add),
-                        left_operand,
-                        right_operand,
-                    ),
+                    BinaryOp::Add => {
+                        Self::binary_op_rvalue(mir::BinaryOp::Add, left_operand, right_operand)
+                    }
                     BinaryOp::Divide => {
                         Self::binary_op_rvalue(mir::BinaryOp::Divide, left_operand, right_operand)
                     }
-                    BinaryOp::Subtract => Self::binary_op_rvalue(
-                        mir::BinaryOp::Wrapping(OverflowOp::Subtract),
-                        left_operand,
-                        right_operand,
-                    ),
-                    BinaryOp::Multiply => Self::binary_op_rvalue(
-                        mir::BinaryOp::Wrapping(OverflowOp::Multiply),
-                        left_operand,
-                        right_operand,
-                    ),
+                    BinaryOp::Subtract => {
+                        Self::binary_op_rvalue(mir::BinaryOp::Subtract, left_operand, right_operand)
+                    }
+                    BinaryOp::Multiply => {
+                        Self::binary_op_rvalue(mir::BinaryOp::Multiply, left_operand, right_operand)
+                    }
                     BinaryOp::Equals => {
                         Self::binary_op_rvalue(mir::BinaryOp::Equals, left_operand, right_operand)
                     }

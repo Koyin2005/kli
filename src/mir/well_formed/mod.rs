@@ -255,7 +255,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     right.type_of(self.ctxt, &self.body.locals, self.body.return_type),
                 ) {
                     (
-                        BinaryOp::Divide | BinaryOp::Overflow(_) | BinaryOp::Wrapping(_),
+                        BinaryOp::Divide | BinaryOp::Add | BinaryOp::Multiply | BinaryOp::Subtract,
                         left,
                         right,
                     ) if left == right && left.is_integer() => (),

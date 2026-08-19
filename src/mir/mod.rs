@@ -147,8 +147,9 @@ pub enum OverflowOp {
 }
 #[derive(Debug, Clone, Copy)]
 pub enum BinaryOp {
-    Overflow(OverflowOp),
-    Wrapping(OverflowOp),
+    Add,
+    Subtract,
+    Multiply,
     Greater,
     Divide,
     Equals,
@@ -263,12 +264,9 @@ impl<'ctxt> Rvalue<'ctxt> {
                 function.return_type
             }
             Rvalue::Binary(op, left_and_right) => match op {
-                BinaryOp::Overflow(_) => Type::pair(
-                    ctxt,
-                    left_and_right.0.type_of(ctxt, locals, return_type),
-                    Type::new_bool(ctxt),
-                ),
-                BinaryOp::Wrapping(_)
+                BinaryOp::Add
+                | BinaryOp::Multiply
+                | BinaryOp::Subtract
                 | BinaryOp::BitwiseAnd
                 | BinaryOp::BitwiseOr
                 | BinaryOp::ShiftLeft

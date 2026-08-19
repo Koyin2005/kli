@@ -4,11 +4,15 @@ use crate::{
     define_id,
     index_vec::IndexVec,
     mir::{
-        AggregateKind, BasicBlockId, Body, BodySource, ConstValue, Constant, Context, Local,
-        Operand, Place, Rvalue, Stmt, StmtId, StmtKind, SwitchTarget, Terminator, TerminatorKind,
+        AggregateKind, BasicBlockId, BinaryOp, Body, BodySource, ConstValue, Constant, Context,
+        Local, Operand, Place, Rvalue, Stmt, StmtId, StmtKind, SwitchTarget, Terminator,
+        TerminatorKind,
     },
 };
-
+#[derive(Debug)]
+enum RuntimeError {
+    ArithmeticOverflow,
+}
 enum MachineStatus {
     Continue,
     Exit,
@@ -28,6 +32,15 @@ pub enum Value {
     Tuple(ObjectId),
     Variant(u32, ObjectId),
     Unit,
+}
+impl Value {
+    #[track_caller]
+    pub fn expect_int(self) -> i64 {
+        let Value::Int(value) = self else {
+            panic!("should be an int value but got {:?}", self)
+        };
+        value
+    }
 }
 struct GcHeap {
     objects: IndexVec<ObjectId, Object>,
@@ -137,7 +150,7 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
             frame.store_local(local, value);
         }
     }
-    fn eval_rvalue(&mut self, local: Local, rvalue: &Rvalue) {
+    fn eval_rvalue(&mut self, local: Local, rvalue: &Rvalue) -> Result<(), RuntimeError> {
         match rvalue {
             Rvalue::ReadLine => {
                 let mut output = String::new();
@@ -175,7 +188,31 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
                     .collect::<Vec<_>>();
                 self.call(local, callee, arguments);
             }
-            Rvalue::Binary(..) => todo!(),
+            Rvalue::Binary(op, operands) => {
+                let (left, right) = operands.as_ref();
+                let left_value = self.eval_operand(left);
+                let right_value = self.eval_operand(right);
+                let result_value = match op {
+                    BinaryOp::Add => Value::Int(
+                        left_value
+                            .expect_int()
+                            .checked_add(right_value.expect_int())
+                            .ok_or(RuntimeError::ArithmeticOverflow)?,
+                    ),
+                    BinaryOp::Subtract => todo!(),
+                    BinaryOp::Multiply => todo!(),
+                    BinaryOp::Greater => todo!(),
+                    BinaryOp::Divide => todo!(),
+                    BinaryOp::Equals => todo!(),
+                    BinaryOp::Lesser => todo!(),
+                    BinaryOp::BitwiseAnd => todo!(),
+                    BinaryOp::BitwiseOr => todo!(),
+                    BinaryOp::ShiftLeft => todo!(),
+                    BinaryOp::ShiftRight => todo!(),
+                    BinaryOp::Offset => todo!(),
+                };
+                self.store_local(local, result_value);
+            }
             Rvalue::AddrOf(_) => todo!("get rid of me"),
             Rvalue::Cast(..) => todo!(),
             Rvalue::Len(_) => todo!(),
@@ -204,18 +241,19 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
             Rvalue::Unbox(_) => todo!("Unbox"),
             Rvalue::GcAlloc(..) => todo!("Get rid of me"),
         }
+        Ok(())
     }
     fn store_local(&mut self, local: Local, value: Value) {
         self.current_frame_mut().store_local(local, value);
     }
-    fn eval_stmt(&mut self, stmt: &Stmt) {
+    fn eval_stmt(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
         {
             let stmt = &self.current_frame().stmt;
             stmt.set(stmt.get().next());
         }
         match &stmt.kind {
             StmtKind::Noop => (),
-            StmtKind::AssignBox(place, operand) => todo!(),
+            StmtKind::AssignBox(..) => todo!(),
             StmtKind::AssignField(place, field_id, operand) => {
                 let Value::Tuple(tuple) = self.load_place(place) else {
                     panic!("Should be a tuple")
@@ -226,9 +264,9 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
                 };
                 fields[field_id.into_usize()] = value;
             }
-            StmtKind::AssignIndex(place, operand, operand1) => todo!(),
+            StmtKind::AssignIndex(..) => todo!(),
             StmtKind::Assign(place, rvalue) => {
-                self.eval_rvalue(place.local, rvalue);
+                self.eval_rvalue(place.local, rvalue)?;
             }
             StmtKind::Print { value, err } => {
                 let value = self.eval_operand(value);
@@ -263,8 +301,9 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
                     }
                 }
             }
-            StmtKind::Copy { dst, src, count } => todo!(),
+            StmtKind::Copy { .. } => todo!(),
         }
+        Ok(())
     }
     fn eval_terminator(&mut self, term: &Terminator) -> MachineStatus {
         match term.kind {
@@ -288,7 +327,7 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
                 let frame = self.current_frame_mut();
                 frame.store_local(return_local, return_value);
             }
-            TerminatorKind::Assert(ref operand, ref assert_kind, basic_block_id) => todo!(),
+            TerminatorKind::Assert(..) => todo!(),
             TerminatorKind::Switch(ref operand, ref switch_targets) => {
                 let scalar_value: i128 = match self.eval_operand(operand) {
                     Value::Int(value) => value.into(),
@@ -320,15 +359,23 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
     }
     pub fn run(mut self, entry_point: &'mir Body<'ctxt>) {
         self.push_frame(Local::new(0), entry_point);
-        loop {
+        let err = loop {
             let frame = self.current_frame();
             let block = frame.block.get();
             let stmt = frame.stmt.get();
             let block = &frame.body.block_info.blocks()[block];
             if let Some(stmt) = block.stmts.get(stmt) {
-                self.eval_stmt(stmt);
+                match self.eval_stmt(stmt) {
+                    Ok(()) => (),
+                    Err(err) => break err,
+                }
             } else if let MachineStatus::Exit = self.eval_terminator(block.expect_terminator()) {
                 return;
+            }
+        };
+        match err {
+            RuntimeError::ArithmeticOverflow => {
+                eprintln!("failed due to arithmetic overflow")
             }
         }
     }
