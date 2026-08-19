@@ -33,8 +33,6 @@ pub enum Builtin {
     PtrCopy,
 
     // Arrays
-    ArraySetUnchecked,
-    ArrayGetUnchecked,
     Len,
     ArrayAddr,
 
@@ -71,8 +69,6 @@ impl Builtin {
             Builtin::Len => "array_len",
             Builtin::BoxAlloc => "box_alloc",
             Builtin::RawArrayAlloc => "raw_array_alloc",
-            Builtin::ArrayGetUnchecked => "array_get_unchecked",
-            Builtin::ArraySetUnchecked => "array_set_unchecked",
             Builtin::PrintString => "print_string",
             Builtin::UninitAssumeInit => "uninit_assume_init",
             Builtin::UninitZeroed => "uninit_zeroed",
@@ -111,8 +107,6 @@ impl Builtin {
             Symbol::BITCAST => Some(Builtin::Bitcast),
             Symbol::INT_MAX_VALUE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue)),
             Symbol::RAW_ARRAY_ALLOC => Some(Builtin::RawArrayAlloc),
-            Symbol::ARRAY_SET_UNCHECKED => Some(Builtin::ArraySetUnchecked),
-            Symbol::ARRAY_GET_UNCHECKED => Some(Builtin::ArrayGetUnchecked),
             Symbol::PRINT_STRING => Some(Builtin::PrintString),
             Symbol::UNINIT_ZEROED => Some(Builtin::UninitZeroed),
             Symbol::UNINIT_ASSUME_INIT => Some(Builtin::UninitAssumeInit),

@@ -587,23 +587,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 );
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
             }
-            Builtin::ArrayGetUnchecked => {
-                let [array, index] = args else { unreachable!() };
-                let _ = self.place(array);
-                let index = self.operand(index);
-                let _ = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
-                todo!("remove me")
-            }
-            Builtin::ArraySetUnchecked => {
-                let [array, index, value] = args else {
-                    unreachable!()
-                };
-                let _ = self.place(array);
-                let index = self.operand(index);
-                let _ = self.assign_to_temp(args[1].loc, args[1].ty, Rvalue::Use(index));
-                let _ = self.operand(value);
-                todo!("remove me")
-            }
             Builtin::RawArrayAlloc => {
                 let [count] = operands().try_into().unwrap();
                 let ty = ty.as_raw_array().unwrap();
