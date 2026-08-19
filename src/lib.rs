@@ -30,3 +30,4 @@ pub mod layout;
 pub mod literal_check;
 mod res_visitor;
 pub mod unsafety;
+pub mod vm;
