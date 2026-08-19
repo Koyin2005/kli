@@ -106,12 +106,8 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
                 let args = self.lower_generic_args(id, loc, args);
                 Type::named(self.ctxt, id, self.ctxt.expect_ident(id).symbol, args)
             }
-            TypeName::Int(size) => {
-                let size = match size {
-                    res::IntegerSize::Int64 => IntegerSize::Int64,
-                    res::IntegerSize::Int32 => IntegerSize::Int32,
-                    res::IntegerSize::Int8 => IntegerSize::Int8,
-                };
+            TypeName::Int => {
+                let size = IntegerSize::Int64;
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
                 Type::new_int(self.ctxt, size)
             }

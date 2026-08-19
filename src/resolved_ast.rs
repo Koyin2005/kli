@@ -214,7 +214,7 @@ pub enum IntegerSize {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TypeName {
-    Int(IntegerSize),
+    Int,
     UInt(IntegerSize),
     Bool,
     String,
