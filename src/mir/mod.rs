@@ -52,10 +52,8 @@ impl Place {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum ConstValue<'ctxt> {
     ZeroSized,
-    Named(DefId, GenericArgs<'ctxt>),
+    Function(DefId, GenericArgs<'ctxt>),
     Scalar(i128),
-    Variant(CaseId, Option<Box<Constant<'ctxt>>>),
-    Record(Box<[Constant<'ctxt>]>),
     String(Symbol),
 }
 impl<'ctxt> ConstValue<'ctxt> {

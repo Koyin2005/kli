@@ -28,7 +28,7 @@ impl<'ctxt> MutVisit<'ctxt> for Inliner<'ctxt> {
         if let Rvalue::Call(
             Operand::Constant(Constant {
                 ty: _,
-                value: ConstValue::Named(..),
+                value: ConstValue::Function(..),
             }),
             ..,
         ) = rvalue

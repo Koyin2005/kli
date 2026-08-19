@@ -58,7 +58,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         };
         Constant {
             ty,
-            value: crate::mir::ConstValue::Named(lambda.id, args),
+            value: crate::mir::ConstValue::Function(lambda.id, args),
         }
     }
 }

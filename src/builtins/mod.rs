@@ -17,7 +17,6 @@ pub enum IntegerBuiltin {
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Builtin {
-
     // Allocation
     BoxAlloc,
     RawArrayAlloc,

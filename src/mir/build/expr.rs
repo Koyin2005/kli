@@ -39,7 +39,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let ty = expr.ty;
                 Some(Constant {
                     ty,
-                    value: ConstValue::Named(id, generic_args.clone()),
+                    value: ConstValue::Function(id, generic_args.clone()),
                 })
             }
             ExprKind::Lambda(ref lambda) => Some(Self::lambda_code_constant(self.ctxt, lambda)),
@@ -47,14 +47,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let ty = expr.ty;
                 Some(Constant {
                     ty,
-                    value: ConstValue::Named(id, args.clone()),
-                })
-            }
-            ExprKind::VariantInit(_, case, _, None) => {
-                let ty = expr.ty;
-                Some(Constant {
-                    ty,
-                    value: ConstValue::Variant(case, None),
+                    value: ConstValue::Function(id, args.clone()),
                 })
             }
             ExprKind::Char(char) => Some(Constant::char(self.ctxt, char)),
@@ -679,7 +672,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             | ExprKind::Bool(_)
             | ExprKind::Function(..)
             | ExprKind::Const(..)
-            | ExprKind::VariantInit(.., None)
             | ExprKind::String(..)
             | ExprKind::Lambda(_)
             | ExprKind::Char(_) => {
@@ -707,9 +699,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 AggregateKind::Tuple,
                 fields.iter().map(|field| self.operand(field)).collect(),
             ),
-            &ExprKind::VariantInit(id, index, ref args, Some(ref value)) => Rvalue::Aggregate(
+            &ExprKind::VariantInit(id, index, ref args, ref value) => Rvalue::Aggregate(
                 AggregateKind::Variant(id, index, args.clone()),
-                [self.operand(value)].into(),
+                value
+                    .as_ref()
+                    .map_or(IndexVec::new(), |value| [self.operand(value)].into()),
             ),
             ExprKind::Call(callee, args) => {
                 let _ = callee
