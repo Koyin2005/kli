@@ -66,18 +66,6 @@ fun bitcast[T,U](x : T) -> U;
 @builtin
 fun raw_array_alloc[T](size : UInt64) -> array[uninit[T]];
 
-# Safety:
-# `index` must be in bounds for `a`
-@unsafe
-@builtin
-fun array_set_unchecked[T](a : array[T], index : UInt64, value : T) -> ();
-
-
-# Safety:
-# `index` must be in bounds for `a`
-@unsafe
-@builtin
-fun array_get_unchecked[T](a : array[T], index : UInt64) -> T;
 
 @builtin
 fun print_string(s : string) -> ();
