@@ -53,6 +53,8 @@ impl Place {
 pub enum ConstValue<'ctxt> {
     ZeroSized,
     Function(DefId, GenericArgs<'ctxt>),
+    Int(i64),
+    Bool(bool),
     Scalar(i128),
     String(Symbol),
 }
@@ -80,7 +82,7 @@ impl<'ctxt> Constant<'ctxt> {
     pub fn bool(ctxt: CtxtRef<'ctxt>, value: bool) -> Self {
         Self {
             ty: Type::new_bool(ctxt),
-            value: ConstValue::Scalar(value as i128),
+            value: ConstValue::Bool(value),
         }
     }
     pub fn integer(ctxt: CtxtRef<'ctxt>, kind: IntegerKind, value: i128) -> Self {
@@ -90,7 +92,10 @@ impl<'ctxt> Constant<'ctxt> {
         }
     }
     pub fn int(ctxt: CtxtRef<'ctxt>, size: IntegerSize, value: i64) -> Self {
-        Self::integer(ctxt, IntegerKind::Signed(size), value.into())
+        Self {
+            ty: Type::new_int(ctxt, size),
+            value: ConstValue::Int(value),
+        }
     }
     pub fn char(ctxt: CtxtRef<'ctxt>, value: char) -> Self {
         Self {
@@ -478,12 +483,12 @@ impl std::fmt::Debug for Location {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Stmt<'ctxt> {
     pub loc: SrcLoc,
     pub kind: StmtKind<'ctxt>,
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum StmtKind<'ctxt> {
     Noop,
     AssignBox(Place, Operand<'ctxt>),

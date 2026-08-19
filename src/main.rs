@@ -12,6 +12,7 @@ use kli::{
     resolve::Resolve,
     typecheck::root::TypeCheck,
     unsafety::SafetyCheck,
+    vm::Machine,
 };
 fn main() {
     let Ok(config) = config() else {
@@ -90,7 +91,10 @@ fn main() {
             pass.run(ctxt, body);
         }
     });
-    if let Some((..)) = ctxt.main_function()
+    if let Some((main, _)) = ctxt.main_function()
         && !matches!(ctxt.config().command(), CommandArg::Check)
-    {}
+    {
+        let machine = Machine::new(&mir_context);
+        machine.run(mir_context.expect_body(mir::BodySource::Function(main)));
+    }
 }

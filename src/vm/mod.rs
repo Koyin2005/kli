@@ -1,39 +1,125 @@
-use std::cell::Cell;
+use std::{cell::Cell, collections::HashMap};
 
-use crate::mir::{
-    BasicBlockId, Body, ConstValue, Constant, Operand, Place, Stmt, StmtId, StmtKind, Terminator,
+use crate::{
+    def_ids::DefId,
+    define_id,
+    index_vec::IndexVec,
+    mir::{
+        AggregateKind, BasicBlockId, Body, BodySource, ConstValue, Constant, Context, Local,
+        Operand, Place, Rvalue, Stmt, StmtId, StmtKind, SwitchTarget, Terminator, TerminatorKind,
+    },
 };
 
+enum MachineStatus {
+    Continue,
+    Exit,
+}
+pub enum Object {
+    String(String),
+    Tuple(Box<[Value]>),
+}
+define_id!(ObjectId);
+#[derive(Debug, Clone, Copy)]
 pub enum Value {
     Int(i64),
     Bool(bool),
     Char(char),
+    Function(BodySource),
+    String(ObjectId),
+    Tuple(ObjectId),
+    Variant(u32, ObjectId),
+    Unit,
 }
-
+struct GcHeap {
+    objects: IndexVec<ObjectId, Object>,
+}
+impl GcHeap {
+    fn new() -> Self {
+        Self {
+            objects: IndexVec::new(),
+        }
+    }
+    fn data(&self, object: ObjectId) -> &Object {
+        &self.objects[object]
+    }
+    fn alloc_object(&mut self, o: Object) -> ObjectId {
+        let id = self.objects.len().try_into().expect("too many objects");
+        self.objects.push(o);
+        ObjectId(id)
+    }
+}
 pub(super) struct StackFrame<'ctxt, 'mir> {
     body: &'mir Body<'ctxt>,
     stmt: Cell<StmtId>,
     block: Cell<BasicBlockId>,
+    locals: IndexVec<Local, Value>,
+    return_local: Local,
+}
+impl StackFrame<'_, '_> {
+    pub fn store_local(&mut self, local: Local, value: Value) {
+        self.locals[local] = value;
+    }
 }
 pub struct Machine<'ctxt, 'mir> {
     frames: Vec<StackFrame<'ctxt, 'mir>>,
+    mir_ctxt: &'mir Context<'ctxt>,
+    unit_object: ObjectId,
+    heap: GcHeap,
+    stdout: String,
+    stderr: String,
 }
 impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
-    pub fn new() -> Self {
-        Self { frames: Vec::new() }
+    pub fn new(mir_ctxt: &'mir Context<'ctxt>) -> Self {
+        let mut heap = GcHeap::new();
+        Self {
+            frames: Vec::new(),
+            mir_ctxt,
+            stderr: String::new(),
+            stdout: String::new(),
+            unit_object: heap.alloc_object(Object::Tuple(Box::new([]))),
+            heap,
+        }
     }
-    fn push_frame(&mut self, body: &'mir Body<'ctxt>) {
-        self.frames.push(StackFrame {
+    pub fn alloc_string(&mut self, s: String) -> ObjectId {
+        self.heap.alloc_object(Object::String(s))
+    }
+    pub fn alloc_tuple(&mut self, values: impl IntoIterator<Item = Value>) -> ObjectId {
+        let values: Box<[_]> = values.into_iter().collect();
+        if values.is_empty() {
+            return self.unit_object;
+        }
+        self.heap.alloc_object(Object::Tuple(values))
+    }
+    fn push_frame(
+        &mut self,
+        return_local: Local,
+        body: &'mir Body<'ctxt>,
+    ) -> &mut StackFrame<'ctxt, 'mir> {
+        self.frames.push_mut(StackFrame {
+            return_local,
+            locals: IndexVec::from_value(body.locals.len(), Value::Int(0)),
             body,
             block: Cell::new(BasicBlockId::ENTRY),
             stmt: Cell::new(StmtId::new(0)),
-        });
+        })
+    }
+    fn pop_frame(&mut self) -> Option<StackFrame<'ctxt, 'mir>> {
+        self.frames.pop()
     }
     fn load_place(&mut self, place: &Place) -> Value {
-        todo!()
+        self.current_frame().locals[place.local]
     }
     fn eval_constant(&mut self, constant: &Constant) -> Value {
-        todo!()
+        match constant.value {
+            ConstValue::ZeroSized => {
+                Value::Unit
+            }
+            ConstValue::Function(def_id, ..) => Value::Function(BodySource::Function(def_id)),
+            ConstValue::Int(value) => Value::Int(value),
+            ConstValue::Bool(value) => Value::Bool(value),
+            ConstValue::Scalar(value) => todo!(),
+            ConstValue::String(symbol) => Value::String(self.alloc_string(symbol.to_string())),
+        }
     }
     fn eval_operand(&mut self, operand: &Operand) -> Value {
         match operand {
@@ -41,30 +127,192 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
             Operand::Constant(constant) => self.eval_constant(constant),
         }
     }
+    fn call(&mut self, return_local: Local, callee: Value, arguments: Vec<Value>) {
+        let Value::Function(src) = callee else {
+            panic!("should be a function")
+        };
+        let body = self.mir_ctxt.expect_body(src);
+        let frame = self.push_frame(return_local, body);
+        for (local, value) in body.params_iter().into_iter().zip(arguments) {
+            frame.store_local(local, value);
+        }
+    }
+    fn eval_rvalue(&mut self, local: Local, rvalue: &Rvalue) {
+        match rvalue {
+            Rvalue::ReadLine => {
+                let mut output = String::new();
+                let _ = std::io::stdin().read_line(&mut output);
+                let s = self.alloc_string(output);
+                self.store_local(local, Value::String(s));
+            }
+            Rvalue::UninitZeroed(_) => todo!(),
+            Rvalue::Aggregate(aggregate_kind, fields) => {
+                let fields = fields
+                    .into_iter()
+                    .map(|field| self.eval_operand(field))
+                    .collect::<Vec<_>>();
+                let value = match aggregate_kind {
+                    AggregateKind::Tuple => Value::Tuple(self.alloc_tuple(fields)),
+                    AggregateKind::NamedRecord(def_id, generic_args) => {
+                        Value::Tuple(self.alloc_tuple(fields))
+                    }
+                    AggregateKind::Variant(_, case_id, _) => {
+                        Value::Variant(case_id.into_usize() as u32, self.alloc_tuple(fields))
+                    }
+                };
+                self.store_local(local, value);
+            }
+            Rvalue::AllocateRawArray { ty, count } => todo!(),
+            Rvalue::AllocateArray(_, operands) => todo!(),
+            Rvalue::AllocateBox(_, operand) => todo!(),
+            Rvalue::Use(operand) => {
+                let value = self.eval_operand(operand);
+                self.store_local(local, value);
+            }
+            Rvalue::Call(operand, operands) => {
+                let callee = self.eval_operand(operand);
+                let arguments = operands
+                    .iter()
+                    .map(|operand| self.eval_operand(operand))
+                    .collect::<Vec<_>>();
+                self.call(local, callee, arguments);
+            }
+            Rvalue::Binary(binary_op, _) => todo!(),
+            Rvalue::AddrOf(place) => todo!(),
+            Rvalue::Cast(cast_kind, operand, _) => todo!(),
+            Rvalue::Len(place) => todo!(),
+            Rvalue::Discriminant(place) => {
+                let Value::Variant(discrim, _) = self.load_place(place) else {
+                    panic!("Should be a variant value")
+                };
+                self.store_local(local, Value::Int(discrim.into()));
+            }
+            Rvalue::LoadIndex(place, operand) => todo!(),
+            Rvalue::LoadField(place, field_id) => {
+                let Value::Tuple(tuple) = self.load_place(place) else {
+                    panic!("Should be a tuple value")
+                };
+                let Object::Tuple(tuple) = self.heap.data(tuple) else {
+                    panic!("Should be a tuple")
+                };
+                self.store_local(local, tuple[field_id.into_usize()]);
+            }
+            Rvalue::LoadPayload(place, _) => {
+                let Value::Variant(_, object) = self.load_place(place) else {
+                    panic!("Should be a variant value")
+                };
+                self.store_local(local, Value::Tuple(object));
+            }
+            Rvalue::Unbox(place) => todo!(),
+            Rvalue::GcAlloc(_, operand) => todo!(),
+        }
+    }
+    fn store_local(&mut self, local: Local, value: Value) {
+        self.current_frame_mut().store_local(local, value);
+    }
     fn eval_stmt(&mut self, stmt: &Stmt) {
+        {
+            let stmt = &self.current_frame().stmt;
+            stmt.set(stmt.get().next());
+        }
         match &stmt.kind {
             StmtKind::Noop => (),
             StmtKind::AssignBox(place, operand) => todo!(),
             StmtKind::AssignField(place, field_id, operand) => todo!(),
             StmtKind::AssignIndex(place, operand, operand1) => todo!(),
-            StmtKind::Assign(place, rvalue) => todo!(),
+            StmtKind::Assign(place, rvalue) => {
+                self.eval_rvalue(place.local, rvalue);
+            }
             StmtKind::Print { value, err } => {
                 let value = self.eval_operand(value);
-                if *err {
-                    _ = value;
+                let Value::String(s) = value else {
+                    panic!("Expected a string got {value:?}")
+                };
+                let Object::String(s) = &self.heap.data(s) else {
+                    panic!("Expected a string")
+                };
+                let (output_buf, out) = if *err {
+                    (
+                        &mut self.stderr,
+                        &mut std::io::stdout() as &mut dyn std::io::Write,
+                    )
                 } else {
-                    _ = value;
+                    (
+                        &mut self.stdout,
+                        &mut std::io::stderr() as &mut dyn std::io::Write,
+                    )
+                };
+                let original = s.as_str();
+                if !original.contains('\n') {
+                    output_buf.push_str(original);
+                } else {
+                    for s in original.split('\n') {
+                        if s.is_empty() && output_buf.is_empty() {
+                            continue;
+                        }
+                        output_buf.push_str(s);
+                        let _ = writeln!(out, "{}", output_buf);
+                        output_buf.clear();
+                    }
                 }
             }
             StmtKind::Copy { dst, src, count } => todo!(),
         }
     }
-    fn eval_terminator(&mut self, term: &Terminator) {}
+    fn eval_terminator(&mut self, term: &Terminator) -> MachineStatus {
+        match term.kind {
+            TerminatorKind::Goto(new_block) => {
+                let frame = self.current_frame_mut();
+                frame.block.set(new_block);
+                frame.stmt.set(StmtId::new(0));
+            }
+            TerminatorKind::Return(ref value) => {
+                let return_value = self.eval_operand(value);
+                let stack_frame = self.pop_frame();
+                if self.frames.is_empty() {
+                    return MachineStatus::Exit;
+                }
+                let return_local = if let Some(old_frame) = stack_frame {
+                    old_frame.return_local
+                } else {
+                    unreachable!("can never have no frames")
+                };
+
+                let frame = self.current_frame_mut();
+                frame.store_local(return_local, return_value);
+            }
+            TerminatorKind::Assert(ref operand, ref assert_kind, basic_block_id) => todo!(),
+            TerminatorKind::Switch(ref operand, ref switch_targets) => {
+                let scalar_value: i128 = match self.eval_operand(operand) {
+                    Value::Int(value) => value.into(),
+                    Value::Bool(value) => value.into(),
+                    Value::Char(c) => u32::from(c).into(),
+                    value => panic!("Can not get the value of {:?}", value),
+                };
+                let frame = self.current_frame_mut();
+                for &SwitchTarget { value, target } in switch_targets.targets.iter() {
+                    if value == scalar_value {
+                        frame.block.set(target);
+                        frame.stmt.set(StmtId::new(0));
+                        return MachineStatus::Continue;
+                    }
+                }
+                frame.block.set(switch_targets.otherwise);
+                frame.stmt.set(StmtId::new(0));
+            }
+            TerminatorKind::Unreachable => todo!(),
+            TerminatorKind::Panic => todo!(),
+        }
+        MachineStatus::Continue
+    }
     fn current_frame(&self) -> &StackFrame<'ctxt, 'mir> {
         self.frames.last().unwrap()
     }
+    fn current_frame_mut(&mut self) -> &mut StackFrame<'ctxt, 'mir> {
+        self.frames.last_mut().unwrap()
+    }
     pub fn run(mut self, entry_point: &'mir Body<'ctxt>) {
-        self.push_frame(entry_point);
+        self.push_frame(Local::new(0), entry_point);
         loop {
             let frame = self.current_frame();
             let block = frame.block.get();
@@ -72,8 +320,8 @@ impl<'ctxt, 'mir> Machine<'ctxt, 'mir> {
             let block = &frame.body.block_info.blocks()[block];
             if let Some(stmt) = block.stmts.get(stmt) {
                 self.eval_stmt(stmt);
-            } else {
-                self.eval_terminator(block.expect_terminator());
+            } else if let MachineStatus::Exit = self.eval_terminator(block.expect_terminator()) {
+                return;
             }
         }
     }

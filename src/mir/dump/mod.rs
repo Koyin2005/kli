@@ -213,7 +213,7 @@ impl<'ctxt> MirDump<'ctxt> {
         if let ConstValue::Function(id, args) = value {
             return write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args);
         } else if let ConstValue::String(string) = value {
-            return write!(self.output, "\"{string}\"");
+            return write!(self.output, "\"{string:?}\"");
         } else if let ConstValue::ZeroSized = value {
             return write!(self.output, "{ty}");
         }

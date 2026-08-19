@@ -10,7 +10,7 @@ use crate::{
     },
     src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
-    types::Type,
+    types::{IntegerSize, Type},
 };
 pub(super) enum BuiltinResult<'ctxt> {
     Rvalue(Rvalue<'ctxt>),
@@ -26,10 +26,9 @@ impl<'ctxt> Builder<'_, 'ctxt> {
     fn as_constant(&mut self, expr: &Expr<'ctxt>) -> Option<Constant<'ctxt>> {
         match expr.kind {
             ExprKind::Bool(value) => Some(Constant::bool(self.ctxt, value)),
-            ExprKind::Int(value) => Some(Constant {
-                ty: expr.ty,
-                value: ConstValue::Scalar(value as i128),
-            }),
+            ExprKind::Int(value) => {
+                Some(Constant::int(self.ctxt, IntegerSize::Int64, value as i64))
+            }
             ExprKind::Unit => Some(Constant::unit(self.ctxt)),
             ExprKind::String(ref value) => Some(Constant {
                 ty: expr.ty,

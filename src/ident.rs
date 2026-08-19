@@ -203,7 +203,7 @@ impl Display for Symbol {
 impl Debug for Symbol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let interner = INTERNER.lock().unwrap();
-        f.pad(interner.resolve(*self))
+        write!(f, "{}", interner.resolve(*self).escape_debug())
     }
 }
 static INTERNER: LazyLock<Mutex<SymbolInterner>> =

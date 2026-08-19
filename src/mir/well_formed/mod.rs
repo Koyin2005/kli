@@ -181,7 +181,11 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     let case_def = type_def.case(*index);
                     let field = case_def.field;
                     let Some(field_ty) = field.map(|field| field.type_of(args, self.ctxt)) else {
-                        self.assert(fields.is_empty(), || format!("Variant should have no fields"), loc);
+                        self.assert(
+                            fields.is_empty(),
+                            || format!("Variant should have no fields"),
+                            loc,
+                        );
                         return;
                     };
 
