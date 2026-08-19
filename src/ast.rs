@@ -210,10 +210,6 @@ pub struct FieldInit {
     pub value: Expr,
 }
 #[derive(Debug)]
-pub struct RecordExpr {
-    pub fields: Vec<FieldInit>,
-}
-#[derive(Debug)]
 pub struct InstancePath {
     pub path: Path,
     pub generic_args: Option<GenericArgs>,
@@ -239,7 +235,6 @@ pub enum ExprKind {
     Field(Box<Expr>, Ident),
     Bool(bool),
     Number(IntLit),
-    Record(RecordExpr),
     Tuple(Vec<Expr>),
     NamedRecord(InstancePath, Vec<FieldInit>),
     MethodCall(Box<Expr>, Ident, Vec<Expr>),
@@ -281,7 +276,6 @@ pub enum TypeKind {
     Bool,
     String,
     Char,
-    Record(RecordType),
     Named(InstancePath),
     Function(FunctionType),
     Tuple(Vec<Type>),

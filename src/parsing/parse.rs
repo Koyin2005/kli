@@ -6,7 +6,7 @@ use crate::{
         ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, GenericParam,
         GenericParamKind, Generics, Import, ImportTree, ImportTreeTail, InstancePath, IntLit, Item,
         ItemKind, Lambda, LetBinding, Method, Module, ModuleId, Mutable, NodeId, NumberKind, Param,
-        Path, Pattern, PatternField, PatternKind, RecordExpr, RecordField, RecordType, Stmt,
+        Path, Pattern, PatternField, PatternKind, RecordField, RecordType, Stmt,
         StmtKind, Type, TypeDef, TypeDefKind, TypeImpl, TypeKind,
     },
     diagnostics::DiagnosticReporter,
@@ -413,13 +413,6 @@ impl Parser {
         })?;
         Ok(fields)
     }
-    fn parse_record_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
-        let fields = self.parse_record_expr_fields()?;
-        Ok(Expr {
-            loc,
-            kind: ExprKind::Record(RecordExpr { fields }),
-        })
-    }
     fn parse_paren_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.advance();
         if self.matches_token(&TokenKind::RightParen) {
@@ -646,7 +639,6 @@ impl Parser {
                     })),
                 })
             }
-            TokenKind::LeftBrace => self.parse_record_expr(loc),
             TokenKind::LeftBracket => {
                 self.advance();
                 let fields = self.delimited_coma_sep(&TokenKind::RightBracket, Self::parse_expr)?;
@@ -874,13 +866,6 @@ impl Parser {
                 Ok(Type {
                     loc,
                     kind: TypeKind::Char,
-                })
-            }
-            TokenKind::LeftBrace => {
-                let record_ty = self.parse_record_type()?;
-                Ok(Type {
-                    loc,
-                    kind: TypeKind::Record(record_ty),
                 })
             }
             _ => Err(self.expect_error("'valid type'")),

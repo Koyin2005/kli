@@ -305,9 +305,6 @@ impl<'info> Resolve<'info> {
             ast::TypeKind::String => {
                 res::TypeKind::Named(res::TypeName::String, Box::new(res::GenericArgs::NONE))
             }
-            ast::TypeKind::Record(ast::RecordType { .. }) => {
-                todo!("Remove me")
-            }
             ast::TypeKind::Tuple(fields) => res::TypeKind::Tuple(
                 fields
                     .into_iter()
@@ -677,7 +674,6 @@ impl<'info> Resolve<'info> {
                 Box::new(self.resolve_expr(*left)),
                 Box::new(self.resolve_expr(*right)),
             ),
-            ast::ExprKind::Record(ast::RecordExpr { .. }) => todo!("remove me"),
             ast::ExprKind::Path(path) => {
                 self.resolve_path_as_expr(loc, path.path, path.generic_args)
             }
