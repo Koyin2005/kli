@@ -17,7 +17,7 @@ fun chars(s : string) -> CharIter = CharIter {
 fun char_indices(s : string) -> CharIterIndices = 
     CharIterIndices {
         string_bytes = unsafe strings.as_bytes(s) end,
-        index = boxed.alloc(0)
+        index = boxed.new(0)
     }
 
 

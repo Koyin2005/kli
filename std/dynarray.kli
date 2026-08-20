@@ -33,7 +33,7 @@ fun from_array[T](arr : array[T]) -> DynArray[T] = do
 end
 
 fun with_capacity[T](cap : UInt64) -> DynArray[T] = DynArray {
-    inner = boxed.alloc(
+    inner = boxed.new(
         DynArrayInner{
             ptr = builtins.gc_alloc[T](cap),
             cap = cap,

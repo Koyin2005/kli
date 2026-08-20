@@ -1,6 +1,10 @@
 import std.refs
 
-fun alloc[T](value : T) -> Box[T] = builtins.box_alloc(value)
+fun new[T](value : T) -> Box[T] = unsafe
+    let ptr = builtins.gc_alloc[T](1);
+    builtins.ptr_write(ptr,value);
+    builtins.transmute(ptr)
+end
 
 fun get[T](this : Box[T]) -> T = this^
 
