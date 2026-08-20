@@ -121,7 +121,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 element_type: ty,
                 count,
             } => {
-                write!(self.output, "raw_array_alloc[{ty}]")?;
+                write!(self.output, "alloc_raw_array[{ty}]")?;
                 write!(self.output, "(")?;
                 self.write_operand(count)?;
                 write!(self.output, ")")?;
