@@ -31,11 +31,6 @@ fun from_raw_parts[T](p : RawPtr[T], len : UInt64) -> array[T] = do
     builtins.transmute((p,len))
 end
 
-@unsafe
-fun assume_init[T](r : array[uninit[T]]) -> array[T] = do
-    builtins.transmute(r)
-end
-
 fun alloc_copy[T](this : array[T]) -> array[T] = do
     let len = builtins.array_len(this);
     let p = builtins.gc_alloc(len);
