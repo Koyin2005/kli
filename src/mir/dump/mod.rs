@@ -190,7 +190,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, ")")?;
             }
             Rvalue::ArrayPtr(place) => {
-                write!(self.output, "addr_of(")?;
+                write!(self.output, "ArrayPtr(")?;
                 self.write_place(place)?;
                 write!(self.output, ")")?;
             }
