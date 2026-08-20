@@ -4,8 +4,9 @@ import std.panicking.panic_message
 
 
 
-fun unsafe_from_raw_parts[T](p : RawPtr[T], len : UInt64) -> array[T] = do
-    unsafe builtins.transmute((p,len)) end
+@unsafe
+fun from_raw_parts[T](p : RawPtr[T], len : UInt64) -> array[T] = do
+    builtins.transmute((p,len))
 end
 
 @unsafe
@@ -15,17 +16,17 @@ end
 
 fun alloc_copy[T](this : array[T]) -> array[T] = do
     let len = builtins.array_len(this);
-    let r = builtins.raw_array_alloc(len);
+    let p = builtins.gc_alloc(len);
     for i in 0..len do
+        let p = builtins.offset(p,i);
         unsafe 
-            builtins.array_set_unchecked(
-                r,
-                i,
-                builtins.uninit_new(builtins.array_get_unchecked(this,i))
+            builtins.ptr_write(
+                p,
+                builtins.array_get_unchecked(this,i)
             ) 
         end;
     end;
-    unsafe assume_init(r) end
+    unsafe from_raw_parts(p,len) end
 
 end
 
