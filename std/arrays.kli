@@ -150,12 +150,12 @@ end
 fun copy[T](dst : array[T], src : array[T], dst_start : UInt64, src_start : UInt64, count : UInt64) -> () = do
     let dst_len = builtins.array_len(dst);
     let src_len = builtins.array_len(src);
-    case (dst_start + dst_len) > count or (src_start + src_len) > count of
+    case (dst_start + count) > dst_len or (src_start + count) > src_len of
     | true -> index_out_bounds()
     | false -> ()
     end;
     unsafe 
-        copy_unchecked(src,dst,src_start,dst_start,count)
+        copy_unchecked(dst,src,dst_start,src_start,count)
     end
 end
 
@@ -165,12 +165,7 @@ end
 #  all indices in the destination range are in bounds for `dst`
 #  all indices in the source range are in bounds for `src` 
 fun copy_unchecked[T](dst : array[T], src : array[T], dst_start : UInt64, src_start : UInt64, count : UInt64) -> () = do
-    for i in 0..count do
-        let dst_index = dst_start + i;
-        let src_index = src_start + i;
-        unsafe
-            let value = unsafe builtins.array_get_unchecked(src,src_index) end;
-            builtins.array_set_unchecked(dst,dst_index,value);
-        end;
-    end
+    let dst_base = builtins.offset(builtins.array_ptr(dst),dst_start);
+    let src_base = builtins.offset(builtins.array_ptr(src),src_start);
+    builtins.ptr_copy(dst_base,src_base,count);
 end
