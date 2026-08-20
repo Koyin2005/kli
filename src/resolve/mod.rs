@@ -32,7 +32,7 @@ pub(super) struct ModuleInfo {
 #[derive(Clone, Copy, Debug)]
 enum TypeAlias {
     Box,
-    ArrayList,
+    Array,
     Never,
     RawArray,
     Uninit,
@@ -54,7 +54,7 @@ impl TypeAlias {
             TypeAlias::UInt8 => res::TypeName::UInt(res::IntegerSize::Int8),
             TypeAlias::UInt32 => res::TypeName::UInt(res::IntegerSize::Int32),
             TypeAlias::UInt64 => res::TypeName::UInt(res::IntegerSize::Int64),
-            TypeAlias::ArrayList => res::TypeName::Array,
+            TypeAlias::Array => res::TypeName::Array,
             TypeAlias::Never => res::TypeName::Never,
             TypeAlias::RawArray => res::TypeName::RawArray,
             TypeAlias::Uninit => res::TypeName::Uninit,
@@ -143,7 +143,7 @@ impl<'info> Resolve<'info> {
             ),
             (
                 Symbol::intern("array"),
-                Res::TypeAlias(TypeAlias::ArrayList),
+                Res::TypeAlias(TypeAlias::Array),
             ),
             (Symbol::intern("uninit"), Res::TypeAlias(TypeAlias::Uninit)),
         ]);
