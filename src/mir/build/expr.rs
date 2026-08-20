@@ -240,25 +240,8 @@ impl<'ctxt> Builder<'_, 'ctxt> {
 
                 self.switch_to_block(merge_block);
             }
-            ExprKind::Array(elements) => {
-                let count: u32 = elements.len().try_into().expect("too many fields");
-                let element_type = expr.ty.as_array().unwrap();
-                let count =
-                    Operand::Constant(Constant::uint(self.ctxt, IntegerSize::Int64, count.into()));
-                self.assign(
-                    expr.loc,
-                    dest.clone(),
-                    Rvalue::AllocateRawArray {
-                        element_type,
-                        count,
-                    },
-                );
-
-                for (i, element) in elements.iter().enumerate() {
-                    self.expr_into_dest(dest.clone().with_constant_index(i as u32), element);
-                }
-            }
-            ExprKind::Function(..)
+            ExprKind::Array(_)
+            | ExprKind::Function(..)
             | ExprKind::Bool(_)
             | ExprKind::Int(_)
             | ExprKind::Unit
@@ -483,10 +466,10 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             Builtin::ArrayNew => {
                 let [ptr, count] = operands().try_into().unwrap();
                 let element_type = ty.as_array().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Aggregate(AggregateKind::Array(element_type),IndexVec::from([
-                    ptr,
-                    count
-                ])))
+                BuiltinResult::Rvalue(Rvalue::Aggregate(
+                    AggregateKind::Array(element_type),
+                    IndexVec::from([ptr, count]),
+                ))
             }
             Builtin::BoxAlloc => {
                 let [operand] = operands().try_into().unwrap();
@@ -690,14 +673,52 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     Operand::Load(Place::local(checked_result).with_field(FieldId::new(0)));
                 Rvalue::Use(result)
             }
+            ExprKind::Array(elements) => {
+                let count: u32 = elements
+                    .len()
+                    .try_into()
+                    .expect("too many elements in array");
+                let element_type = expr.ty.as_array().unwrap();
+                let count_operand =
+                    Operand::Constant(Constant::uint(self.ctxt, IntegerSize::Int64, count.into()));
+                let ptr_type = 
+                    Type::new_raw_ptr(self.ctxt, element_type);
+                let ptr = self.assign_to_temp(
+                    expr.loc,
+                    ptr_type,
+                    Rvalue::GcAlloc(element_type, count_operand.clone()),
+                );
+
+                for (i, element) in elements.iter().enumerate() {
+                    let i = i as u32;
+                    let current_ptr = self.assign_to_temp(
+                        element.loc,
+                        ptr_type,
+                        Self::binary_op_rvalue(
+                            mir::BinaryOp::Offset,
+                            Operand::Load(Place::local(ptr)),
+                            Operand::Constant(Constant::uint(
+                                self.ctxt,
+                                IntegerSize::Int64,
+                                i.into(),
+                            )),
+                        ),
+                    );
+                    self.expr_into_dest(Place::local(current_ptr).with_deref(), element);
+                }
+
+                Rvalue::Aggregate(
+                    AggregateKind::Array(element_type),
+                    IndexVec::from_vec(vec![Operand::Load(Place::local(ptr)), count_operand]),
+                )
+            }
             ExprKind::Block(..)
             | ExprKind::Panic
             | ExprKind::Case(..)
             | ExprKind::NeverToAny(_)
             | ExprKind::Logic(..)
             | ExprKind::Return(_)
-            | ExprKind::Unsafe(_)
-            | ExprKind::Array(_) => {
+            | ExprKind::Unsafe(_) => {
                 let temp = self.expr_into_temp(expr);
                 Rvalue::Use(Operand::Load(Place::local(temp)))
             }
