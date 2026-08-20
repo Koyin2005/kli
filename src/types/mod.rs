@@ -356,12 +356,6 @@ impl<'ctxt> Type<'ctxt> {
         };
         Some(ty)
     }
-    pub fn new_raw_array(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
-        Self::new_array(ctxt, Self::new_uninit(ctxt, ty))
-    }
-    pub fn as_raw_array(self) -> Option<Self> {
-        self.as_array()?.as_uninit()
-    }
     pub fn new_array(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
         TypeKind::Array(ty).intern(ctxt)
     }

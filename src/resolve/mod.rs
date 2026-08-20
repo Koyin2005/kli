@@ -34,7 +34,6 @@ enum TypeAlias {
     Box,
     Array,
     Never,
-    RawArray,
     Uninit,
     Int64,
     UInt64,
@@ -56,7 +55,6 @@ impl TypeAlias {
             TypeAlias::UInt64 => res::TypeName::UInt(res::IntegerSize::Int64),
             TypeAlias::Array => res::TypeName::Array,
             TypeAlias::Never => res::TypeName::Never,
-            TypeAlias::RawArray => res::TypeName::RawArray,
             TypeAlias::Uninit => res::TypeName::Uninit,
             TypeAlias::RawPtr => res::TypeName::RawPtr,
         }
@@ -137,10 +135,6 @@ impl<'info> Resolve<'info> {
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),
             (Symbol::RAW_PTR, Res::TypeAlias(TypeAlias::RawPtr)),
-            (
-                Symbol::intern("raw_array"),
-                Res::TypeAlias(TypeAlias::RawArray),
-            ),
             (Symbol::intern("array"), Res::TypeAlias(TypeAlias::Array)),
             (Symbol::intern("uninit"), Res::TypeAlias(TypeAlias::Uninit)),
         ]);
