@@ -471,13 +471,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     IndexVec::from([ptr, count]),
                 ))
             }
-            Builtin::BoxAlloc => {
-                let [operand] = operands().try_into().unwrap();
-                let Some(ty) = ty.as_box() else {
-                    unreachable!()
-                };
-                BuiltinResult::Rvalue(Rvalue::AllocateBox(ty, operand))
-            }
             Builtin::Len => {
                 let place = self.place(&args[0]);
                 BuiltinResult::Rvalue(Rvalue::Len(place))
@@ -681,8 +674,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let element_type = expr.ty.as_array().unwrap();
                 let count_operand =
                     Operand::Constant(Constant::uint(self.ctxt, IntegerSize::Int64, count.into()));
-                let ptr_type = 
-                    Type::new_raw_ptr(self.ctxt, element_type);
+                let ptr_type = Type::new_raw_ptr(self.ctxt, element_type);
                 let ptr = self.assign_to_temp(
                     expr.loc,
                     ptr_type,

@@ -294,9 +294,7 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::Discriminant(_)
             | Self::UninitZeroed(_) => true,
             Self::GcAlloc(..) => false,
-            Self::AllocateBox(..)
-            | Self::Call(..)
-            | Self::ReadLine => false,
+            Self::AllocateBox(..) | Self::Call(..) | Self::ReadLine => false,
         }
     }
 

@@ -22,7 +22,6 @@ pub enum Builtin {
     Bitcast,
 
     // Allocation
-    BoxAlloc,
     ArrayNew,
     GcAlloc,
 
@@ -69,7 +68,6 @@ impl Builtin {
             Builtin::IntegerBuiltin(IntegerBuiltin::ShiftRight) => "shift_right",
             Builtin::ArrayAddr => "array_addr",
             Builtin::Len => "array_len",
-            Builtin::BoxAlloc => "box_alloc",
             Builtin::ArrayNew => "array_new",
             Builtin::ArrayGetUnchecked => "array_get_unchecked",
             Builtin::ArraySetUnchecked => "array_set_unchecked",
@@ -88,7 +86,6 @@ impl Builtin {
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
         match name {
-            Symbol::BOX_ALLOC => Some(Builtin::BoxAlloc),
             Symbol::TRANSMUTE => Some(Builtin::Transmute),
             Symbol::ARRAY_LEN => Some(Builtin::Len),
             Symbol::ARRAY_ADDR => Some(Builtin::ArrayAddr),

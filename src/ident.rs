@@ -40,7 +40,6 @@ impl Symbol {
         "array",
         "iter",
         // builtins
-        "box_alloc",
         "transmute",
         "array_len",
         "array_addr",
@@ -121,7 +120,6 @@ impl Symbol {
     pub const ITER: Self = Self::expect_symbol("iter");
     pub const TRANSMUTE: Self = Self::expect_symbol("transmute");
     pub const ARRAY_LEN: Self = Self::expect_symbol("array_len");
-    pub const BOX_ALLOC: Self = Self::expect_symbol("box_alloc");
     pub const ARRAY_ADDR: Self = Self::expect_symbol("array_addr");
     pub const WRAPPING_ADD: Self = Self::expect_symbol("wrapping_add");
     pub const OVERFLOWING_ADD: Self = Self::expect_symbol("overflowing_add");
