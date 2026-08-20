@@ -736,6 +736,7 @@ impl<'info> Resolve<'info> {
             }
             ast::ExprKind::For(pattern, start, end, body) => {
                 /*
+                   This should turn this into the latter:
                    for i in start..end body
 
                    do
