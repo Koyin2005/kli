@@ -90,11 +90,6 @@ pub trait Visit<'ctxt> {
                     self.visit_operand(loc, operand);
                 }
             }
-            Rvalue::AllocateArray(_, operands) => {
-                for operand in operands {
-                    self.visit_operand(loc, operand);
-                }
-            }
             Rvalue::Binary(_, operands) => {
                 let (left, right) = operands.as_ref();
                 self.visit_operand(loc, left);
@@ -234,11 +229,6 @@ pub trait MutVisit<'ctxt> {
             Rvalue::Aggregate(_, fields) => {
                 for field in fields {
                     self.visit_operand(loc, field);
-                }
-            }
-            Rvalue::AllocateArray(_, elements) => {
-                for element in elements {
-                    self.visit_operand(loc, element);
                 }
             }
             Rvalue::Call(operand, operands) => {

@@ -1994,51 +1994,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     }
                 }
             },
-            mir::Rvalue::AllocateArray(ty, fields) => {
-                let ty = self.monomorphize(*ty);
-                let ty_layout = self.layout_for(ty);
-                let len: u64 = fields.len().try_into().unwrap();
-                let ptr = self.codegen_static_size_alloc_call(ty, len);
-                if ty_layout.is_align_1_zst() || fields.is_empty() {
-                    let len_value = self.build_scalar_const(
-                        Type::new_uint(self.ctxt, IntegerSize::Int64),
-                        len.into(),
-                    );
-                    self.store_value(
-                        place,
-                        OperandValue {
-                            ty: Type::new_array(self.ctxt, ty),
-                            kind: OperandValueKind::Value(ScalarValue::pair(
-                                ptr,
-                                len_value,
-                                layout::POINTER_SIZE,
-                            )),
-                        },
-                    );
-                    return;
-                }
-                let place_value = MemPlace::new(ptr, ty_layout.clone(), ty);
-                for (i, operand) in fields.iter().enumerate() {
-                    let i: u64 = i.try_into().unwrap();
-                    let offset: u64 = ty_layout.size.in_bytes() * i;
-                    let offset: i32 = offset.try_into().unwrap();
-                    let value = self.eval_operand(operand);
-                    self.store_operand_with_mem_place(place_value.offset_in_bytes(offset), value);
-                }
-                let len_value = self
-                    .build_scalar_const(Type::new_uint(self.ctxt, IntegerSize::Int64), len.into());
-                self.store_value(
-                    place,
-                    OperandValue {
-                        ty: Type::new_array(self.ctxt, ty),
-                        kind: OperandValueKind::Value(ScalarValue::pair(
-                            ptr,
-                            len_value,
-                            layout::POINTER_SIZE,
-                        )),
-                    },
-                );
-            }
             mir::Rvalue::AllocateBox(ty, operand) => {
                 self.codegen_box(place, *ty, operand);
             }

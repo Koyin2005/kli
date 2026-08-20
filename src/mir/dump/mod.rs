@@ -126,11 +126,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(count)?;
                 write!(self.output, ")")?;
             }
-            Rvalue::AllocateArray(_, elements) => {
-                write!(self.output, "[")?;
-                self.write_with_coma_sep(elements, |this, element| this.write_operand(element))?;
-                write!(self.output, "]")?;
-            }
             Rvalue::AllocateBox(ty, operand) => {
                 write!(self.output, "Box[{}](", ty)?;
                 self.write_operand(operand)?;

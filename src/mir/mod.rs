@@ -275,7 +275,6 @@ pub enum Rvalue<'ctxt> {
         element_type: Type<'ctxt>,
         count: Operand<'ctxt>,
     },
-    AllocateArray(Type<'ctxt>, Vec<Operand<'ctxt>>),
     AllocateBox(Type<'ctxt>, Operand<'ctxt>),
     Use(Operand<'ctxt>),
     Call(Operand<'ctxt>, Vec<Operand<'ctxt>>),
@@ -298,8 +297,6 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::Discriminant(_)
             | Self::UninitZeroed(_) => true,
             Self::GcAlloc(..) => false,
-
-            Self::AllocateArray(..)
             | Self::AllocateBox(..)
             | Self::Call(..)
             | Self::AllocateRawArray { .. }
@@ -343,7 +340,6 @@ impl<'ctxt> Rvalue<'ctxt> {
                 BinaryOp::Lesser | BinaryOp::Greater => Type::new_bool(ctxt),
                 BinaryOp::Offset => left_and_right.0.type_of(ctxt, locals, return_type),
             },
-            Rvalue::AllocateArray(element, _) => Type::new_array(ctxt, *element),
             Rvalue::AllocateRawArray {
                 element_type: ty, ..
             } => Type::new_array(ctxt, *ty),
