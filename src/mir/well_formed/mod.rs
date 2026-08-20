@@ -147,11 +147,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                         loc,
                     );
                 }
-                super::AggregateKind::Record { field_names } => self.assert(
-                    fields.len() == field_names.len(),
-                    || "Field names should be same length as fields",
-                    loc,
-                ),
                 super::AggregateKind::NamedRecord(id, args) => {
                     let type_def = self.ctxt.type_def(*id);
                     let field_info = type_def.fields();

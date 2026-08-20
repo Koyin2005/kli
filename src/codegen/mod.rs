@@ -1900,9 +1900,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     let ptr = self.eval_operand(ptr).expect_immediate(self);
                     self.store_immediate_pair(dst_place, ptr, len, layout::POINTER_SIZE);
                 }
-                AggregateKind::Tuple
-                | AggregateKind::NamedRecord(..)
-                | AggregateKind::Record { field_names: _ } => {
+                AggregateKind::Tuple | AggregateKind::NamedRecord(..) => {
                     for (id, field) in fields.iter_enumerated() {
                         self.store_operand(&place.clone().with_field(id), field);
                     }
