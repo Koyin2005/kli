@@ -272,7 +272,7 @@ pub enum Rvalue<'ctxt> {
     UninitZeroed(Type<'ctxt>),
     Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Operand<'ctxt>>),
     AllocateRawArray {
-        ty: Type<'ctxt>,
+        element_type: Type<'ctxt>,
         count: Operand<'ctxt>,
     },
     AllocateArray(Type<'ctxt>, Vec<Operand<'ctxt>>),
@@ -344,7 +344,9 @@ impl<'ctxt> Rvalue<'ctxt> {
                 BinaryOp::Offset => left_and_right.0.type_of(ctxt, locals, return_type),
             },
             Rvalue::AllocateArray(element, _) => Type::new_array(ctxt, *element),
-            Rvalue::AllocateRawArray { ty, .. } => Type::new_raw_array(ctxt, *ty),
+            Rvalue::AllocateRawArray {
+                element_type: ty, ..
+            } => Type::new_array(ctxt, *ty),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 AggregateKind::Record { field_names: _ } => todo!("remove me"),
                 &AggregateKind::Variant(id, _, ref args)

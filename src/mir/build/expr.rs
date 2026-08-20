@@ -240,6 +240,24 @@ impl<'ctxt> Builder<'_, 'ctxt> {
 
                 self.switch_to_block(merge_block);
             }
+            ExprKind::Array(elements) => {
+                let count: u32 = elements.len().try_into().expect("too many fields");
+                let element_type = expr.ty.as_array().unwrap();
+                let count =
+                    Operand::Constant(Constant::uint(self.ctxt, IntegerSize::Int64, count.into()));
+                self.assign(
+                    expr.loc,
+                    dest.clone(),
+                    Rvalue::AllocateRawArray {
+                        element_type,
+                        count,
+                    },
+                );
+
+                for (i, element) in elements.iter().enumerate() {
+                    self.expr_into_dest(dest.clone().with_constant_index(i as u32), element);
+                }
+            }
             ExprKind::Function(..)
             | ExprKind::Bool(_)
             | ExprKind::Int(_)
@@ -257,7 +275,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             | ExprKind::NamedRecord(..)
             | ExprKind::While(..)
             | ExprKind::Tuple(..)
-            | ExprKind::Array(..)
             | ExprKind::Char(_) => {
                 let rvalue = self.build_rvalue(expr);
                 self.assign(expr.loc, dest, rvalue);
@@ -465,8 +482,20 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
             Builtin::RawArrayAlloc => {
                 let [count] = operands().try_into().unwrap();
-                let ty = ty.as_raw_array().unwrap();
-                BuiltinResult::Rvalue(Rvalue::AllocateRawArray { ty, count })
+                let element_type = ty.as_raw_array().unwrap();
+                let local = self.assign_to_temp(
+                    loc,
+                    Type::new_array(self.ctxt, element_type),
+                    Rvalue::AllocateRawArray {
+                        element_type,
+                        count,
+                    },
+                );
+                BuiltinResult::Rvalue(Rvalue::Cast(
+                    mir::CastKind::Transmute,
+                    Operand::Load(Place::local(local)),
+                    ty,
+                ))
             }
             Builtin::BoxAlloc => {
                 let [operand] = operands().try_into().unwrap();
@@ -676,7 +705,8 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             | ExprKind::NeverToAny(_)
             | ExprKind::Logic(..)
             | ExprKind::Return(_)
-            | ExprKind::Unsafe(_) => {
+            | ExprKind::Unsafe(_)
+            | ExprKind::Array(_) => {
                 let temp = self.expr_into_temp(expr);
                 Rvalue::Use(Operand::Load(Place::local(temp)))
             }
@@ -686,10 +716,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
             &ExprKind::BuiltinCall(_, builtin, _, ref args) => {
                 self.builtin_call(expr.loc, expr.ty, builtin, args).into()
-            }
-            ExprKind::Array(fields) => {
-                let ty = expr.ty.as_array().unwrap();
-                Rvalue::AllocateArray(ty, fields.iter().map(|field| self.operand(field)).collect())
             }
         }
     }

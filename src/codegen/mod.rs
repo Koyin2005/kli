@@ -1915,7 +1915,10 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 };
                 self.write_zeros(place);
             }
-            mir::Rvalue::AllocateRawArray { ty, count } => {
+            mir::Rvalue::AllocateRawArray {
+                element_type: ty,
+                count,
+            } => {
                 let dst_place = self.eval_place(place).into_non_zst_place().unwrap();
                 let ty = self.monomorphize(*ty);
                 let len = self.eval_operand(count).expect_immediate(self);

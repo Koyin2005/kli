@@ -117,7 +117,10 @@ impl<'ctxt> MirDump<'ctxt> {
             Rvalue::Use(operand) => {
                 self.write_operand(operand)?;
             }
-            Rvalue::AllocateRawArray { ty, count } => {
+            Rvalue::AllocateRawArray {
+                element_type: ty,
+                count,
+            } => {
                 write!(self.output, "raw_array_alloc[{ty}]")?;
                 write!(self.output, "(")?;
                 self.write_operand(count)?;

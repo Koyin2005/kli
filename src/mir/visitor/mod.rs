@@ -70,7 +70,10 @@ pub trait Visit<'ctxt> {
                 self.visit_operand(loc, operand);
             }
             Rvalue::UninitZeroed(_) | Rvalue::ReadLine => (),
-            Rvalue::AllocateRawArray { ty: _, count } => self.visit_operand(loc, count),
+            Rvalue::AllocateRawArray {
+                element_type: _,
+                count,
+            } => self.visit_operand(loc, count),
             Rvalue::Discriminant(place) => self.visit_place(PlaceCtxt::Read, loc, place),
             Rvalue::Len(place) => self.visit_place(PlaceCtxt::Read, loc, place),
             Rvalue::Use(operand) | Rvalue::AllocateBox(_, operand) => {
@@ -255,7 +258,10 @@ pub trait MutVisit<'ctxt> {
             Rvalue::Cast(_, operand, _) => {
                 self.visit_operand(loc, operand);
             }
-            Rvalue::AllocateRawArray { ty: _, count } => self.visit_operand(loc, count),
+            Rvalue::AllocateRawArray {
+                element_type: _,
+                count,
+            } => self.visit_operand(loc, count),
         }
     }
     fn super_visit_projection(&mut self, loc: Location, projection: &mut PlaceProjection) {
