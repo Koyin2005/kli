@@ -27,7 +27,7 @@ end
 
 @unsafe
 fun from_raw_parts[T](p : RawPtr[T], len : UInt64) -> array[T] = do
-    builtins.transmute((p,len))
+    builtins.array_new(p,len)
 end
 
 fun alloc_copy[T](this : array[T]) -> array[T] = do
