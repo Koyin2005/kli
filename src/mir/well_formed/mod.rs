@@ -105,13 +105,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 );
             }
             super::Rvalue::UninitZeroed(_) | super::Rvalue::ReadLine => (),
-            super::Rvalue::AllocateBox(ty, operand) => {
-                self.assert(
-                    *ty == operand.type_of(self.ctxt, &self.body.locals, self.body.return_type),
-                    || "Same type",
-                    loc,
-                );
-            }
             super::Rvalue::Discriminant(place) => {
                 self.assert(
                     if let Some((id, _, _)) = place

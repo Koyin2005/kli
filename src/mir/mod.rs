@@ -272,7 +272,6 @@ pub enum Rvalue<'ctxt> {
     ReadLine,
     UninitZeroed(Type<'ctxt>),
     Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Operand<'ctxt>>),
-    AllocateBox(Type<'ctxt>, Operand<'ctxt>),
     Use(Operand<'ctxt>),
     Call(Operand<'ctxt>, Vec<Operand<'ctxt>>),
     Binary(BinaryOp, Box<(Operand<'ctxt>, Operand<'ctxt>)>),
@@ -294,7 +293,7 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::Discriminant(_)
             | Self::UninitZeroed(_) => true,
             Self::GcAlloc(..) => false,
-            Self::AllocateBox(..) | Self::Call(..) | Self::ReadLine => false,
+            Self::Call(..) | Self::ReadLine => false,
         }
     }
 
@@ -308,7 +307,6 @@ impl<'ctxt> Rvalue<'ctxt> {
             Rvalue::GcAlloc(ty, _) => Type::new_raw_ptr(ctxt, *ty),
             Rvalue::ReadLine => Type::new_string(ctxt),
             &Rvalue::UninitZeroed(ty) => Type::new_uninit(ctxt, ty),
-            &Rvalue::AllocateBox(ty, _) => Type::new_box(ctxt, ty),
             Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),
             Rvalue::Len(_) => Type::new_uint(ctxt, IntegerSize::Int64),
             Rvalue::Call(operand, _) => {

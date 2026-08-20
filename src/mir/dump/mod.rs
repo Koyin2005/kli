@@ -117,11 +117,6 @@ impl<'ctxt> MirDump<'ctxt> {
             Rvalue::Use(operand) => {
                 self.write_operand(operand)?;
             }
-            Rvalue::AllocateBox(ty, operand) => {
-                write!(self.output, "Box[{}](", ty)?;
-                self.write_operand(operand)?;
-                write!(self.output, ")")?;
-            }
             Rvalue::Binary(op, operands) => {
                 let (left, right) = &**operands;
                 write!(self.output, "{:?}(", op)?;

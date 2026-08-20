@@ -1353,19 +1353,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let byte_size = self.builder.ins().imul(byte_size, count);
         self.codegen_alloc_call(byte_size, byte_align)
     }
-    fn codegen_static_size_alloc_call(&mut self, ty: Type<'ctxt>, count: u64) -> ir::Value {
-        let ty_layout = self.layout_for(ty);
-        let total_size = ty_layout.size.mul(count).in_bytes();
-        let size_val = self.build_scalar_const(
-            Type::new_uint(self.ctxt, IntegerSize::Int64),
-            total_size.into(),
-        );
-        let align = self.build_scalar_const(
-            Type::new_uint(self.ctxt, IntegerSize::Int64),
-            ty_layout.alignment.in_bytes().into(),
-        );
-        self.codegen_alloc_call(size_val, align)
-    }
     fn print_string(&mut self, ptr: ir::Value, len: ir::Value, err: bool) {
         let print_string = if err {
             self.runtime_functions.eprint_string
@@ -1626,16 +1613,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         let ptr = self.codegen_runtime_size_alloc_call(ty, count);
         let place = self.eval_place(place).into_non_zst_place().unwrap();
         self.store_immediate(place, ptr);
-    }
-    fn codegen_box(&mut self, place: &mir::Place, ty: Type<'ctxt>, operand: &mir::Operand<'ctxt>) {
-        let ty = self.monomorphize(ty);
-        let ptr = self.codegen_static_size_alloc_call(ty, 1);
-        let value = self.eval_operand(operand);
-        let box_inner_ptr = MemPlace::new(ptr, self.layout_for(ty), ty);
-        self.store_operand_with_mem_place(box_inner_ptr.clone(), value.clone());
-        let place = self.eval_place(place).into_non_zst_place().unwrap();
-        let box_ptr = box_inner_ptr.ptr(self);
-        self.store_immediate(place, box_ptr);
     }
     fn codegen_cast(
         &mut self,
@@ -1991,9 +1968,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                     }
                 }
             },
-            mir::Rvalue::AllocateBox(ty, operand) => {
-                self.codegen_box(place, *ty, operand);
-            }
             mir::Rvalue::Use(operand) => {
                 self.store_operand(place, operand);
             }
