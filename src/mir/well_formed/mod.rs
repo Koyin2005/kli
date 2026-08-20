@@ -127,14 +127,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     loc,
                 );
             }
-            super::Rvalue::AllocateRawArray { count, .. } => {
-                let count_ty = count.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                self.assert(
-                    count_ty.is_integer_kind(IntegerKind::Unsigned(IntegerSize::Int64)),
-                    || format!("count should be a uint not '{}'", count_ty),
-                    loc,
-                );
-            }
             super::Rvalue::Aggregate(aggregate_kind, fields) => match aggregate_kind {
                 &super::AggregateKind::Array(ty) => {
                     let [ptr, len] = self.assert_with_some(

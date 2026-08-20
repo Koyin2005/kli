@@ -272,10 +272,6 @@ pub enum Rvalue<'ctxt> {
     ReadLine,
     UninitZeroed(Type<'ctxt>),
     Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Operand<'ctxt>>),
-    AllocateRawArray {
-        element_type: Type<'ctxt>,
-        count: Operand<'ctxt>,
-    },
     AllocateBox(Type<'ctxt>, Operand<'ctxt>),
     Use(Operand<'ctxt>),
     Call(Operand<'ctxt>, Vec<Operand<'ctxt>>),
@@ -300,7 +296,6 @@ impl<'ctxt> Rvalue<'ctxt> {
             Self::GcAlloc(..) => false,
             Self::AllocateBox(..)
             | Self::Call(..)
-            | Self::AllocateRawArray { .. }
             | Self::ReadLine => false,
         }
     }
@@ -341,9 +336,6 @@ impl<'ctxt> Rvalue<'ctxt> {
                 BinaryOp::Lesser | BinaryOp::Greater => Type::new_bool(ctxt),
                 BinaryOp::Offset => left_and_right.0.type_of(ctxt, locals, return_type),
             },
-            Rvalue::AllocateRawArray {
-                element_type: ty, ..
-            } => Type::new_array(ctxt, *ty),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 &AggregateKind::Array(ty) => Type::new_array(ctxt, ty),
                 AggregateKind::Record { field_names: _ } => todo!("remove me"),

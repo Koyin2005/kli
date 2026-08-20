@@ -1915,16 +1915,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 };
                 self.write_zeros(place);
             }
-            mir::Rvalue::AllocateRawArray {
-                element_type: ty,
-                count,
-            } => {
-                let dst_place = self.eval_place(place).into_non_zst_place().unwrap();
-                let ty = self.monomorphize(*ty);
-                let len = self.eval_operand(count).expect_immediate(self);
-                let ptr = self.codegen_runtime_size_alloc_call(ty, len);
-                self.store_immediate_pair(dst_place, ptr, len, layout::POINTER_SIZE);
-            }
             mir::Rvalue::Aggregate(kind, fields) => match kind {
                 AggregateKind::Array(_) => {
                     let [ptr, len] = fields.as_slice().as_array().expect("should be an array");
