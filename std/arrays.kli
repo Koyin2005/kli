@@ -2,9 +2,10 @@ import std.optional.Option
 import builtins
 import std.panicking.panic_message
 
-@unsafe
-fun from_raw_parts[T](p : RawPtr[T], len : UInt64) -> array[T] = do
-    builtins.transmute((p,len))
+
+
+fun unsafe_from_raw_parts[T](p : RawPtr[T], len : UInt64) -> array[T] = do
+    unsafe builtins.transmute((p,len)) end
 end
 
 @unsafe
