@@ -23,7 +23,7 @@ pub enum Builtin {
 
     // Allocation
     BoxAlloc,
-    RawArrayAlloc,
+    ArrayNew,
     GcAlloc,
 
     //Pointers
@@ -70,7 +70,7 @@ impl Builtin {
             Builtin::ArrayAddr => "array_addr",
             Builtin::Len => "array_len",
             Builtin::BoxAlloc => "box_alloc",
-            Builtin::RawArrayAlloc => "raw_array_alloc",
+            Builtin::ArrayNew => "array_new",
             Builtin::ArrayGetUnchecked => "array_get_unchecked",
             Builtin::ArraySetUnchecked => "array_set_unchecked",
             Builtin::PrintString => "print_string",
@@ -110,7 +110,7 @@ impl Builtin {
             Symbol::TRUNCATE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Truncate)),
             Symbol::BITCAST => Some(Builtin::Bitcast),
             Symbol::INT_MAX_VALUE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue)),
-            Symbol::RAW_ARRAY_ALLOC => Some(Builtin::RawArrayAlloc),
+            Symbol::ARRAY_NEW => Some(Builtin::ArrayNew),
             Symbol::ARRAY_SET_UNCHECKED => Some(Builtin::ArraySetUnchecked),
             Symbol::ARRAY_GET_UNCHECKED => Some(Builtin::ArrayGetUnchecked),
             Symbol::PRINT_STRING => Some(Builtin::PrintString),

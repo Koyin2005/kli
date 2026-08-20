@@ -136,6 +136,32 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 );
             }
             super::Rvalue::Aggregate(aggregate_kind, fields) => match aggregate_kind {
+                &super::AggregateKind::Array(ty) => {
+                    let [ptr, len] = self.assert_with_some(
+                        fields.as_slice(),
+                        |fields| fields.as_array(),
+                        || "Array should have 2 fields",
+                        loc,
+                    );
+                    let ptr_ty = ptr.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                    let len_ty = len.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                    let pointee_ty = self.assert_with_some(
+                        ptr_ty,
+                        |ty| ty.as_raw_ptr(),
+                        || format!("Expected a pointer not '{}'", ptr_ty),
+                        loc,
+                    );
+                    self.assert(
+                        len_ty.is_integer_kind(IntegerKind::Unsigned(IntegerSize::Int64)),
+                        || format!("len should be a uint not '{}'", pointee_ty),
+                        loc,
+                    );
+                    self.assert(
+                        pointee_ty == ty,
+                        || format!("Array pointee should be '{ty}' not '{pointee_ty}'"),
+                        loc,
+                    );
+                }
                 super::AggregateKind::Record { field_names } => self.assert(
                     fields.len() == field_names.len(),
                     || "Field names should be same length as fields",

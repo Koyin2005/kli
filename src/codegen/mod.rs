@@ -1926,6 +1926,13 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 self.store_immediate_pair(dst_place, ptr, len, layout::POINTER_SIZE);
             }
             mir::Rvalue::Aggregate(kind, fields) => match kind {
+                AggregateKind::Array(_) => {
+                    let [ptr, len] = fields.as_slice().as_array().expect("should be an array");
+                    let dst_place = self.eval_place(place).into_non_zst_place().unwrap();
+                    let len = self.eval_operand(len).expect_immediate(self);
+                    let ptr = self.eval_operand(ptr).expect_immediate(self);
+                    self.store_immediate_pair(dst_place, ptr, len, layout::POINTER_SIZE);
+                }
                 AggregateKind::Tuple
                 | AggregateKind::NamedRecord(..)
                 | AggregateKind::Record { field_names: _ } => {

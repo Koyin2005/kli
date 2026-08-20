@@ -64,7 +64,7 @@ fun truncate[T,U](x : T) -> U;
 fun bitcast[T,U](x : T) -> U;
 
 @builtin
-fun raw_array_alloc[T](size : UInt64) -> array[uninit[T]];
+fun array_new[T](p : RawPtr[T], c : UInt64) -> array[T];
 
 # Safety:
 # `index` must be in bounds for `a`

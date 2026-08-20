@@ -234,6 +234,7 @@ pub enum AggregateKind<'ctxt> {
     Tuple,
     NamedRecord(DefId, GenericArgs<'ctxt>),
     Variant(DefId, CaseId, GenericArgs<'ctxt>),
+    Array(Type<'ctxt>),
 }
 #[derive(Debug, Clone, Copy)]
 pub enum OverflowOp {
@@ -297,7 +298,7 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::Discriminant(_)
             | Self::UninitZeroed(_) => true,
             Self::GcAlloc(..) => false,
-            | Self::AllocateBox(..)
+            Self::AllocateBox(..)
             | Self::Call(..)
             | Self::AllocateRawArray { .. }
             | Self::ReadLine => false,
@@ -344,6 +345,7 @@ impl<'ctxt> Rvalue<'ctxt> {
                 element_type: ty, ..
             } => Type::new_array(ctxt, *ty),
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
+                &AggregateKind::Array(ty) => Type::new_array(ctxt, ty),
                 AggregateKind::Record { field_names: _ } => todo!("remove me"),
                 &AggregateKind::Variant(id, _, ref args)
                 | &AggregateKind::NamedRecord(id, ref args) => {

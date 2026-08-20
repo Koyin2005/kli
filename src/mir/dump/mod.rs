@@ -151,6 +151,9 @@ impl<'ctxt> MirDump<'ctxt> {
             }
             Rvalue::Aggregate(kind, fields) => {
                 match kind {
+                    AggregateKind::Array(ty) => {
+                        write!(self.output, "Array[{}]", ty)?;
+                    }
                     AggregateKind::Record { .. } | AggregateKind::Tuple => (),
                     AggregateKind::Variant(id, index, args) => {
                         let name = self.ctxt.type_def(*id).case(*index).name;
@@ -167,7 +170,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 };
                 let ctxt = self.ctxt;
                 let write_field_name = move |this: &mut MirDump<'_>, i: FieldId| match kind {
-                    AggregateKind::Tuple => Ok(()),
                     AggregateKind::Record { field_names } => {
                         write!(this.output, "{} = ", field_names[i])
                     }
@@ -175,6 +177,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     AggregateKind::NamedRecord(id, ..) => {
                         write!(this.output, "{} = ", ctxt.type_def(*id).fields()[i].name)
                     }
+                    _ => Ok(()),
                 };
                 write!(self.output, "{open_bracket}")?;
                 self.write_with_coma_sep(fields.iter_enumerated(), |this, (i, operand)| {

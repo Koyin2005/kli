@@ -51,7 +51,7 @@ impl Symbol {
         "widen",
         "truncate",
         "bitcast",
-        "raw_array_alloc",
+        "array_new",
         "array_set_unchecked",
         "array_get_unchecked",
         "print_string",
@@ -132,7 +132,7 @@ impl Symbol {
     pub const WIDEN: Self = Self::expect_symbol("widen");
     pub const TRUNCATE: Self = Self::expect_symbol("truncate");
     pub const BITCAST: Self = Self::expect_symbol("bitcast");
-    pub const RAW_ARRAY_ALLOC: Self = Self::expect_symbol("raw_array_alloc");
+    pub const ARRAY_NEW: Self = Self::expect_symbol("array_new");
     pub const ARRAY_SET_UNCHECKED: Self = Self::expect_symbol("array_set_unchecked");
     pub const ARRAY_GET_UNCHECKED: Self = Self::expect_symbol("array_get_unchecked");
     pub const PRINT_STRING: Self = Self::expect_symbol("print_string");

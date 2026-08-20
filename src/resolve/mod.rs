@@ -141,10 +141,7 @@ impl<'info> Resolve<'info> {
                 Symbol::intern("raw_array"),
                 Res::TypeAlias(TypeAlias::RawArray),
             ),
-            (
-                Symbol::intern("array"),
-                Res::TypeAlias(TypeAlias::Array),
-            ),
+            (Symbol::intern("array"), Res::TypeAlias(TypeAlias::Array)),
             (Symbol::intern("uninit"), Res::TypeAlias(TypeAlias::Uninit)),
         ]);
         Self {

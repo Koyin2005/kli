@@ -480,22 +480,13 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 self.assign(args[0].loc, place.with_index(index), Rvalue::Use(value));
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
             }
-            Builtin::RawArrayAlloc => {
-                let [count] = operands().try_into().unwrap();
-                let element_type = ty.as_raw_array().unwrap();
-                let local = self.assign_to_temp(
-                    loc,
-                    Type::new_array(self.ctxt, element_type),
-                    Rvalue::AllocateRawArray {
-                        element_type,
-                        count,
-                    },
-                );
-                BuiltinResult::Rvalue(Rvalue::Cast(
-                    mir::CastKind::Transmute,
-                    Operand::Load(Place::local(local)),
-                    ty,
-                ))
+            Builtin::ArrayNew => {
+                let [ptr, count] = operands().try_into().unwrap();
+                let element_type = ty.as_array().unwrap();
+                BuiltinResult::Rvalue(Rvalue::Aggregate(AggregateKind::Array(element_type),IndexVec::from([
+                    ptr,
+                    count
+                ])))
             }
             Builtin::BoxAlloc => {
                 let [operand] = operands().try_into().unwrap();
