@@ -430,9 +430,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let [operand] = operands().try_into().unwrap();
                 BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, operand, ty))
             }
-            Builtin::UninitZeroed => {
-                BuiltinResult::Rvalue(Rvalue::UninitZeroed(ty))
-            }
             Builtin::PrintString => {
                 let [arg] = operands().try_into().unwrap();
                 self.push_stmt(

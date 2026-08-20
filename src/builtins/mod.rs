@@ -47,7 +47,6 @@ pub enum Builtin {
     IntegerBuiltin(IntegerBuiltin),
 
     // Memory
-    UninitZeroed,
     UninitAssumeInit,
     UninitNew,
 }
@@ -74,7 +73,6 @@ impl Builtin {
             Builtin::ArraySetUnchecked => "array_set_unchecked",
             Builtin::PrintString => "print_string",
             Builtin::UninitAssumeInit => "uninit_assume_init",
-            Builtin::UninitZeroed => "uninit_zeroed",
             Builtin::UninitNew => "uninit_new",
             Builtin::ReadLine => "read_line",
             Builtin::Offset => "offset",
@@ -113,7 +111,6 @@ impl Builtin {
             Symbol::ARRAY_SET_UNCHECKED => Some(Builtin::ArraySetUnchecked),
             Symbol::ARRAY_GET_UNCHECKED => Some(Builtin::ArrayGetUnchecked),
             Symbol::PRINT_STRING => Some(Builtin::PrintString),
-            Symbol::UNINIT_ZEROED => Some(Builtin::UninitZeroed),
             Symbol::UNINIT_ASSUME_INIT => Some(Builtin::UninitAssumeInit),
             Symbol::UNINIT_NEW => Some(Builtin::UninitNew),
             Symbol::READ_LINE => Some(Builtin::ReadLine),

@@ -92,9 +92,6 @@ fun eprint_string(s : string) -> ();
 @builtin
 fun int_max_value[T]() -> T;
 
-@builtin
-fun uninit_zeroed[T]() -> uninit[T];
-
 # Safety: 
 # `value` must represent a valid value of type `T`
 @unsafe
