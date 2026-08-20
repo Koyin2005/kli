@@ -46,11 +46,6 @@ pub trait Visitor {
                 self.visit_type(&function_type.return_type);
             }
             TypeKind::Named(_, generic_args) => self.visit_generic_args(generic_args),
-            TypeKind::Record(record_field_types) => {
-                for field in record_field_types {
-                    self.visit_type(&field.ty);
-                }
-            }
             TypeKind::Tuple(fields) => {
                 for field in fields {
                     self.visit_type(field);
@@ -125,11 +120,6 @@ pub trait Visitor {
                 self.visit_expr(callee);
                 for arg in args {
                     self.visit_expr(arg);
-                }
-            }
-            ExprKind::Record(field_inits) => {
-                for field in field_inits {
-                    self.visit_expr(&field.value);
                 }
             }
             ExprKind::NamedRecord(_, generic_args, field_inits) => {

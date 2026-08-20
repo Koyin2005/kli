@@ -296,18 +296,6 @@ impl<'info> Resolve<'info> {
             ast::TypeKind::String => {
                 res::TypeKind::Named(res::TypeName::String, Box::new(res::GenericArgs::NONE))
             }
-            ast::TypeKind::Record(ast::RecordType { fields }) => {
-                let fields = fields
-                    .into_iter()
-                    .map(
-                        |ast::RecordField { id: _, name, ty }| res::RecordFieldType {
-                            name,
-                            ty: self.resolve_type(ty),
-                        },
-                    )
-                    .collect();
-                res::TypeKind::Record(fields)
-            }
             ast::TypeKind::Tuple(fields) => res::TypeKind::Tuple(
                 fields
                     .into_iter()
@@ -676,15 +664,6 @@ impl<'info> Resolve<'info> {
                 op,
                 Box::new(self.resolve_expr(*left)),
                 Box::new(self.resolve_expr(*right)),
-            ),
-            ast::ExprKind::Record(ast::RecordExpr { fields }) => res::ExprKind::Record(
-                fields
-                    .into_iter()
-                    .map(|field| res::FieldInit {
-                        name: field.name,
-                        value: self.resolve_expr(field.value),
-                    })
-                    .collect(),
             ),
             ast::ExprKind::Path(path) => {
                 self.resolve_path_as_expr(loc, path.path, path.generic_args)

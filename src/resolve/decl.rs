@@ -79,8 +79,7 @@ impl DeclareInBody<'_, '_> {
                 self.declare_in_exprs(&block_body.expr);
             }
             ast::ExprKind::Return(expr) => self.declare_in_exprs(expr),
-            ast::ExprKind::Record(ast::RecordExpr { fields })
-            | ast::ExprKind::NamedRecord(_, fields) => {
+            ast::ExprKind::NamedRecord(_, fields) => {
                 for field in fields.iter() {
                     self.declare_in_exprs(&field.value);
                 }

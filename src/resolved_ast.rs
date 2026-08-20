@@ -127,7 +127,6 @@ pub enum ExprKind {
     For(Box<ForExpr>),
     Case(Box<Expr>, Box<[CaseArm]>),
     Call(Box<Expr>, Box<[Expr]>),
-    Record(Vec<FieldInit>),
     VariantCase(DefId, Box<GenericArgs>),
     Field(Box<Expr>, Ident),
     NamedRecord(TypeName, Box<GenericArgs>, Box<[FieldInit]>),
@@ -202,12 +201,6 @@ pub struct Function {
     pub body: Option<Box<Expr>>,
 }
 #[derive(Debug)]
-pub struct RecordFieldType {
-    pub name: Ident,
-    pub ty: Type,
-}
-
-#[derive(Debug)]
 pub struct FunctionType {
     pub params: Vec<Type>,
     pub return_type: Box<Type>,
@@ -239,7 +232,6 @@ pub enum TypeKind {
     Function(Box<FunctionType>),
     Named(TypeName, Box<GenericArgs>),
     Unknown,
-    Record(Box<[RecordFieldType]>),
     Tuple(Vec<Type>),
 }
 #[derive(Debug)]
