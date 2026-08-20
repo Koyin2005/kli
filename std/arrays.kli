@@ -39,17 +39,14 @@ fun len[T](this : array[T]) -> UInt64 = builtins.array_len(this)
 fun addr_eq[T](this : array[T], other : array[T]) -> bool = builtins.array_addr(this) == builtins.array_addr(other)
 
 fun repeat[T](count : UInt64, value : T) -> array[T] = do
-    let arr = builtins.raw_array_alloc[T](count);
+    let ptr = builtins.gc_alloc[T](count);
     for i in 0..count do
+        let p = builtins.offset(ptr,i);
         unsafe 
-            builtins.array_set_unchecked(
-                arr,
-                i,
-                builtins.uninit_new(value)
-            ) 
+            builtins.ptr_write(p,value)
         end;
     end;
-    unsafe assume_init(arr) end
+    unsafe from_raw_parts(ptr,count) end
 end
 
 fun get_checked[T](this : array[T], index : UInt64) -> Option[T] = 
