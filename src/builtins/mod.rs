@@ -45,10 +45,6 @@ pub enum Builtin {
 
     // Integers
     IntegerBuiltin(IntegerBuiltin),
-
-    // Memory
-    UninitAssumeInit,
-    UninitNew,
 }
 impl Builtin {
     pub const fn name(self) -> &'static str {
@@ -72,8 +68,6 @@ impl Builtin {
             Builtin::ArrayGetUnchecked => "array_get_unchecked",
             Builtin::ArraySetUnchecked => "array_set_unchecked",
             Builtin::PrintString => "print_string",
-            Builtin::UninitAssumeInit => "uninit_assume_init",
-            Builtin::UninitNew => "uninit_new",
             Builtin::ReadLine => "read_line",
             Builtin::Offset => "offset",
             Builtin::PtrRead => "ptr_read",
@@ -111,8 +105,6 @@ impl Builtin {
             Symbol::ARRAY_SET_UNCHECKED => Some(Builtin::ArraySetUnchecked),
             Symbol::ARRAY_GET_UNCHECKED => Some(Builtin::ArrayGetUnchecked),
             Symbol::PRINT_STRING => Some(Builtin::PrintString),
-            Symbol::UNINIT_ASSUME_INIT => Some(Builtin::UninitAssumeInit),
-            Symbol::UNINIT_NEW => Some(Builtin::UninitNew),
             Symbol::READ_LINE => Some(Builtin::ReadLine),
             Symbol::PTR_READ => Some(Builtin::PtrRead),
             Symbol::PTR_WRITE => Some(Builtin::PtrWrite),

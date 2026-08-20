@@ -422,14 +422,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 }
             },
             Builtin::ReadLine => BuiltinResult::Rvalue(Rvalue::ReadLine),
-            Builtin::UninitNew => {
-                let [operand] = operands().try_into().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, operand, ty))
-            }
-            Builtin::UninitAssumeInit => {
-                let [operand] = operands().try_into().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, operand, ty))
-            }
             Builtin::PrintString => {
                 let [arg] = operands().try_into().unwrap();
                 self.push_stmt(

@@ -55,8 +55,6 @@ impl Symbol {
         "array_get_unchecked",
         "print_string",
         "int_max_value",
-        "uninit_assume_init",
-        "uninit_new",
         "read_line",
         "bitwise_or",
         "shift_left",
@@ -135,8 +133,6 @@ impl Symbol {
     pub const ARRAY_GET_UNCHECKED: Self = Self::expect_symbol("array_get_unchecked");
     pub const PRINT_STRING: Self = Self::expect_symbol("print_string");
     pub const INT_MAX_VALUE: Self = Self::expect_symbol("int_max_value");
-    pub const UNINIT_ASSUME_INIT: Self = Self::expect_symbol("uninit_assume_init");
-    pub const UNINIT_NEW: Self = Self::expect_symbol("uninit_new");
     pub const READ_LINE: Self = Self::expect_symbol("read_line");
     pub const SHIFT_LEFT: Self = Self::expect_symbol("shift_left");
     pub const SHIFT_RIGHT: Self = Self::expect_symbol("shift_right");
