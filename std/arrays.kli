@@ -12,8 +12,7 @@ fun assert_in_bounds[T](this : array[T], index : UInt64) -> () =
     end
 
 fun base_ptr[T](this : array[T]) -> RawPtr[T] = do
-    let (ptr,len) : (RawPtr[T],UInt64) = unsafe builtins.transmute(this) end;
-    ptr
+    builtins.array_ptr(this)
 end
 
 fun ptr_to_element[T](this : array[T], index : UInt64) -> RawPtr[T] = do
@@ -53,7 +52,7 @@ fun empty[T]() -> array[T] = []
 
 fun len[T](this : array[T]) -> UInt64 = builtins.array_len(this)
 
-fun addr_eq[T](this : array[T], other : array[T]) -> bool = builtins.array_addr(this) == builtins.array_addr(other)
+fun addr_eq[T](this : array[T], other : array[T]) -> bool = builtins.array_ptr(this) == builtins.array_ptr(other)
 
 fun repeat[T](count : UInt64, value : T) -> array[T] = do
     let ptr = builtins.gc_alloc[T](count);

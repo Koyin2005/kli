@@ -1903,7 +1903,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let (left, right) = &**operands;
                 self.codegen_binary_op(place, *binary_op, left, right);
             }
-            mir::Rvalue::AddrOf(array_place) => {
+            mir::Rvalue::ArrayPtr(array_place) => {
                 let place = self.eval_place(place).into_non_zst_place().unwrap();
                 let array_place = self.eval_place(array_place).into_non_zst_place().unwrap();
                 let CodegenPlace::MemPlace(array_place) = array_place else {

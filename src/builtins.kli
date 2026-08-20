@@ -38,7 +38,7 @@ fun write_zeroes[T](p : RawPtr[T]) -> ();
 fun array_len[T](a : array[T]) -> UInt64;
 
 @builtin
-fun array_addr[T](a : array[T]) -> UInt64;
+fun array_ptr[T](a : array[T]) -> RawPtr[T];
 
 @builtin
 fun wrapping_add[T](x : T, y : T) -> T;

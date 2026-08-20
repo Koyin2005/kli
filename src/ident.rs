@@ -42,7 +42,7 @@ impl Symbol {
         // builtins
         "transmute",
         "array_len",
-        "array_addr",
+        "array_ptr",
         "wrapping_add",
         "overflowing_add",
         "wrapping_sub",
@@ -118,7 +118,7 @@ impl Symbol {
     pub const ITER: Self = Self::expect_symbol("iter");
     pub const TRANSMUTE: Self = Self::expect_symbol("transmute");
     pub const ARRAY_LEN: Self = Self::expect_symbol("array_len");
-    pub const ARRAY_ADDR: Self = Self::expect_symbol("array_addr");
+    pub const ARRAY_PTR: Self = Self::expect_symbol("array_ptr");
     pub const WRAPPING_ADD: Self = Self::expect_symbol("wrapping_add");
     pub const OVERFLOWING_ADD: Self = Self::expect_symbol("overflowing_add");
     pub const WRAPPING_SUB: Self = Self::expect_symbol("wrapping_sub");

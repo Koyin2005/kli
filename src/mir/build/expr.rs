@@ -463,9 +463,9 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let place = self.place(&args[0]);
                 BuiltinResult::Rvalue(Rvalue::Len(place))
             }
-            Builtin::ArrayAddr => {
+            Builtin::ArrayPtr => {
                 let place = self.place(&args[0]);
-                BuiltinResult::Rvalue(Rvalue::AddrOf(place))
+                BuiltinResult::Rvalue(Rvalue::ArrayPtr(place))
             }
             Builtin::Transmute => BuiltinResult::Rvalue(Rvalue::Cast(
                 mir::CastKind::Transmute,

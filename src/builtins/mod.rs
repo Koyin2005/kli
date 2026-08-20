@@ -36,7 +36,7 @@ pub enum Builtin {
     ArraySetUnchecked,
     ArrayGetUnchecked,
     Len,
-    ArrayAddr,
+    ArrayPtr,
 
     // IO
     PrintString,
@@ -62,7 +62,7 @@ impl Builtin {
             Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue) => "int_max_value",
             Builtin::IntegerBuiltin(IntegerBuiltin::ShiftLeft) => "shift_left",
             Builtin::IntegerBuiltin(IntegerBuiltin::ShiftRight) => "shift_right",
-            Builtin::ArrayAddr => "array_addr",
+            Builtin::ArrayPtr => "array_ptr",
             Builtin::Len => "array_len",
             Builtin::ArrayNew => "array_new",
             Builtin::ArrayGetUnchecked => "array_get_unchecked",
@@ -82,7 +82,7 @@ impl Builtin {
         match name {
             Symbol::TRANSMUTE => Some(Builtin::Transmute),
             Symbol::ARRAY_LEN => Some(Builtin::Len),
-            Symbol::ARRAY_ADDR => Some(Builtin::ArrayAddr),
+            Symbol::ARRAY_PTR => Some(Builtin::ArrayPtr),
             Symbol::WRAPPING_ADD => Some(Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd)),
             Symbol::OVERFLOWING_ADD => {
                 Some(Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingAdd))

@@ -203,7 +203,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 super::AggregateKind::Tuple => (),
             },
             super::Rvalue::Use(_) => (),
-            super::Rvalue::AddrOf(place) => {
+            super::Rvalue::ArrayPtr(place) => {
                 self.assert(
                     place
                         .type_of(self.ctxt, &self.body.locals, self.body.return_type)
