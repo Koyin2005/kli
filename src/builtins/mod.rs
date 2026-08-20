@@ -22,7 +22,6 @@ pub enum Builtin {
     Bitcast,
 
     // Allocation
-    ArrayNew,
     GcAlloc,
 
     //Pointers
@@ -33,6 +32,7 @@ pub enum Builtin {
     WriteZeroes,
 
     // Arrays
+    ArrayNew,
     ArraySetUnchecked,
     ArrayGetUnchecked,
     Len,
