@@ -431,7 +431,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, operand, ty))
             }
             Builtin::UninitZeroed => {
-                let ty = ty.as_uninit().unwrap();
                 BuiltinResult::Rvalue(Rvalue::UninitZeroed(ty))
             }
             Builtin::PrintString => {
@@ -484,6 +483,13 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 { operands() }.swap_remove(0),
                 ty,
             )),
+            Builtin::WriteZeroes => {
+                let [ptr] = args.as_array().unwrap();
+                let ty = ptr.ty.as_raw_ptr().unwrap();
+                let ptr = self.place(ptr);
+                self.assign(loc, ptr.with_deref(), Rvalue::UninitZeroed(ty));
+                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
+            }
         }
     }
     pub fn build_rvalue(&mut self, expr: &Expr<'ctxt>) -> Rvalue<'ctxt> {

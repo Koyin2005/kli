@@ -27,6 +27,13 @@ fun ptr_write[T](p : RawPtr[T], value : T) -> ();
 @unsafe
 fun ptr_read[T](p : RawPtr[T]) -> T;
 
+# Safety
+# p must be aligned, non-null and not dangling
+# A bit pattern of all 0's must produce a valid value of T
+@builtin
+@unsafe
+fun write_zeroes[T](p : RawPtr[T]) -> ();
+
 @builtin
 fun array_len[T](a : array[T]) -> UInt64;
 

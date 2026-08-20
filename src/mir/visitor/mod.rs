@@ -72,9 +72,7 @@ pub trait Visit<'ctxt> {
             Rvalue::UninitZeroed(_) | Rvalue::ReadLine => (),
             Rvalue::Discriminant(place) => self.visit_place(PlaceCtxt::Read, loc, place),
             Rvalue::Len(place) => self.visit_place(PlaceCtxt::Read, loc, place),
-            Rvalue::Use(operand) => {
-                self.visit_operand(loc, operand)
-            }
+            Rvalue::Use(operand) => self.visit_operand(loc, operand),
             Rvalue::Aggregate(_, fields) => {
                 for field in fields {
                     self.visit_operand(loc, field);
@@ -219,9 +217,7 @@ pub trait MutVisit<'ctxt> {
             Rvalue::UninitZeroed(_) | Rvalue::ReadLine => (),
             Rvalue::Discriminant(place) => self.visit_place(loc, place),
             Rvalue::Len(place) => self.visit_place(loc, place),
-            Rvalue::Use(operand) => {
-                self.visit_operand(loc, operand)
-            }
+            Rvalue::Use(operand) => self.visit_operand(loc, operand),
             Rvalue::Aggregate(_, fields) => {
                 for field in fields {
                     self.visit_operand(loc, field);

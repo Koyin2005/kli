@@ -30,6 +30,7 @@ pub enum Builtin {
     Offset,
     PtrRead,
     PtrCopy,
+    WriteZeroes,
 
     // Arrays
     ArraySetUnchecked,
@@ -82,6 +83,7 @@ impl Builtin {
             Builtin::GcAlloc => "gc_alloc",
             Builtin::PtrCopy => "ptr_copy",
             Builtin::EprintString => "eprint_string",
+            Builtin::WriteZeroes => "write_zeroes",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
@@ -121,6 +123,7 @@ impl Builtin {
             Symbol::GC_ALLOC => Some(Builtin::GcAlloc),
             Symbol::PTR_COPY => Some(Builtin::PtrCopy),
             Symbol::EPRINT_STRING => Some(Builtin::EprintString),
+            Symbol::WRITE_ZEROES => Some(Builtin::WriteZeroes),
             _ => None,
         }
     }

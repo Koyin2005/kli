@@ -270,6 +270,7 @@ pub enum CastKind {
 #[derive(Clone, Debug)]
 pub enum Rvalue<'ctxt> {
     ReadLine,
+    /// Produces a value of type T with a bit pattern of all zeroes
     UninitZeroed(Type<'ctxt>),
     Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Operand<'ctxt>>),
     Use(Operand<'ctxt>),
@@ -306,7 +307,7 @@ impl<'ctxt> Rvalue<'ctxt> {
         match self {
             Rvalue::GcAlloc(ty, _) => Type::new_raw_ptr(ctxt, *ty),
             Rvalue::ReadLine => Type::new_string(ctxt),
-            &Rvalue::UninitZeroed(ty) => Type::new_uninit(ctxt, ty),
+            &Rvalue::UninitZeroed(ty) => ty,
             Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),
             Rvalue::Len(_) => Type::new_uint(ctxt, IntegerSize::Int64),
             Rvalue::Call(operand, _) => {

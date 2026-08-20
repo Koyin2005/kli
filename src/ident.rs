@@ -64,6 +64,7 @@ impl Symbol {
         "shift_right",
         "ptr_read",
         "ptr_write",
+        "write_zeroes",
         "offset",
         "gc_alloc",
         "ptr_copy",
@@ -151,6 +152,7 @@ impl Symbol {
     pub const GC_ALLOC: Self = Self::expect_symbol("gc_alloc");
     pub const PTR_COPY: Self = Self::expect_symbol("ptr_copy");
     pub const EPRINT_STRING: Self = Self::expect_symbol("eprint_string");
+    pub const WRITE_ZEROES: Self = Self::expect_symbol("write_zeroes");
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }

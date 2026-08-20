@@ -4,6 +4,28 @@ import std.panicking.panic_message
 
 
 
+
+fun assert_in_bounds[T](this : array[T], index : UInt64) -> () = 
+    case index < builtins.array_len(this) of
+    | false -> index_out_bounds()
+    | true -> ()
+    end
+
+fun base_ptr[T](this : array[T]) -> RawPtr[T] = do
+    let (ptr,len) : (RawPtr[T],UInt64) = unsafe builtins.transmute(this) end;
+    ptr
+end
+
+fun ptr_to_element[T](this : array[T], index : UInt64) -> RawPtr[T] = do
+    assert_in_bounds(this,index);
+    unsafe ptr_to_element_unchecked(this,index) end
+end
+
+@unsafe
+fun ptr_to_element_unchecked[T](this : array[T], index : UInt64) -> RawPtr[T] = do
+    builtins.offset(base_ptr(this),index)
+end
+
 @unsafe
 fun from_raw_parts[T](p : RawPtr[T], len : UInt64) -> array[T] = do
     builtins.transmute((p,len))
@@ -106,13 +128,21 @@ fun for_each_with_ctxt[C,T](ctxt : C, elements : array[T], f : fun(C, UInt64,T) 
     end
 
 
-fun zero_slot[T](this : array[uninit[T]], index : UInt64) -> () = 
-    this.[index] = builtins.uninit_zeroed[T]()
+fun zero_slot[T](this : array[uninit[T]], index : UInt64) -> () = do
+    assert_in_bounds(this,index);
+    unsafe
+        zero_slot_unchecked(this,index);
+    end
+
+end
 
 # Safety: 
 # `index` must be in bounds for `this`
 @unsafe
-fun zero_slot_unchecked[T](this : array[uninit[T]], index : UInt64) -> () = builtins.array_set_unchecked(this,index,builtins.uninit_zeroed())
+fun zero_slot_unchecked[T](this : array[uninit[T]], index : UInt64) -> () = do 
+    let ptr = ptr_to_element_unchecked(this,index);
+    builtins.write_zeroes(ptr);
+end
 
 # Copies all elements in the range `src_start` .. `src_start` + `count` of `src`
 # to range `dst_start` .. `dst_start` + `count` of `dst`
