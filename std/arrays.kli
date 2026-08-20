@@ -123,7 +123,10 @@ fun for_each_with_ctxt[C,T](ctxt : C, elements : array[T], f : fun(C, UInt64,T) 
     end
 
 
-fun zero_slot[T](this : array[uninit[T]], index : UInt64) -> () = do
+# Safety: 
+#  all zeroes must be a valid bit pattern for T
+@unsafe
+fun zero_slot[T](this : array[T], index : UInt64) -> () = do
     assert_in_bounds(this,index);
     unsafe
         zero_slot_unchecked(this,index);
@@ -133,8 +136,9 @@ end
 
 # Safety: 
 # `index` must be in bounds for `this`
+#  all zeroes must be a valid bit pattern for T
 @unsafe
-fun zero_slot_unchecked[T](this : array[uninit[T]], index : UInt64) -> () = do 
+fun zero_slot_unchecked[T](this : array[T], index : UInt64) -> () = do 
     let ptr = ptr_to_element_unchecked(this,index);
     builtins.write_zeroes(ptr);
 end
