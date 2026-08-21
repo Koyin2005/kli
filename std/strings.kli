@@ -10,13 +10,20 @@ import std.(
 @lang_item("string")
 type String = {}
 
-fun utf8_len(this : string) -> UInt64 = builtins.array_len(unsafe as_bytes(this) end)
+fun utf8_len(this : string) -> UInt64 = builtins.string_len(this)
 
 @unsafe
-fun as_bytes(this : string) -> array[UInt8] = builtins.transmute(this)
+fun as_bytes(this : string) -> array[UInt8] = 
+    builtins.array_new(
+        builtins.string_ptr(this),
+        builtins.string_len(this)
+    )
 
 @unsafe
-fun from_utf8_unchecked(this : array[UInt8]) -> string = builtins.transmute(this)
+fun from_utf8_unchecked(this : array[UInt8]) -> string = builtins.string_new(
+    builtins.array_ptr(this),
+    builtins.array_len(this)
+)
 
 fun equals(first : string, second : string) -> bool = do
     let first_len = utf8_len(first);

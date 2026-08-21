@@ -350,7 +350,9 @@ impl<'ctxt> Rvalue<'ctxt> {
             Rvalue::Discriminant(_) => Type::new_uint(ctxt, IntegerSize::Int64),
             Rvalue::ArrayPtr(place) => match place.type_of(ctxt, locals, return_type).kind() {
                 &TypeKind::Array(ty) => Type::new_raw_ptr(ctxt, ty),
-                TypeKind::String => Type::new_raw_ptr(ctxt, Type::new_unit(ctxt)),
+                TypeKind::String => {
+                    Type::new_raw_ptr(ctxt, Type::new_uint(ctxt, IntegerSize::Int8))
+                }
                 _ => unreachable!(),
             },
         }
