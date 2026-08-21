@@ -1,6 +1,7 @@
 @builtin
 fun gc_alloc[T](cap : UInt64) -> RawPtr[T];
 
+@unsafe
 @builtin
 fun ptr_copy[T](dst : RawPtr[T], src : RawPtr[T], count : UInt64) -> ();
 

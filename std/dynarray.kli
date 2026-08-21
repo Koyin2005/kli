@@ -20,14 +20,10 @@ fun new[T]() -> DynArray[T] = with_capacity(0)
 fun from_array[T](arr : array[T]) -> DynArray[T] = do
     let len = builtins.array_len(arr);
     let dyn_arr : DynArray[T] = with_capacity(len);
-    for i in 0..len do 
-        push(
-            dyn_arr,
-            unsafe
-                builtins.array_get_unchecked(arr,i)
-            end
-        )
+    unsafe
+        builtins.ptr_copy(dyn_arr.inner^.ptr,builtins.array_ptr(arr),len);
     end;
+    dyn_arr.inner^.len = len;
     dyn_arr
 
 end
@@ -49,7 +45,7 @@ fun ensure_capacity[T](arr : DynArray[T], target_cap : UInt64) -> () = do
         do
             let new_cap = uint.max(target_cap,current_cap * 2);
             let new_buf : RawPtr[T] = builtins.gc_alloc[T](new_cap);
-            builtins.ptr_copy[T](new_buf,old_buf,len);
+            unsafe builtins.ptr_copy[T](new_buf,old_buf,len) end;
             arr.inner^.ptr = new_buf;
             arr.inner^.cap = new_cap;
         end
@@ -119,11 +115,13 @@ fun insert[T](arr : DynArray[T], index : UInt64, value : T) -> () = do
     reserve(arr,1);
 
     let elems_to_move = uint.wrapping_sub(old_len,index);
-    builtins.ptr_copy[T](
-        builtins.offset[T](arr.inner^.ptr,index + 1),
-        builtins.offset[T](arr.inner^.ptr,index),
-        elems_to_move
-    );
+    unsafe 
+        builtins.ptr_copy[T](
+            builtins.offset[T](arr.inner^.ptr,index + 1),
+            builtins.offset[T](arr.inner^.ptr,index),
+            elems_to_move
+        )
+    end;
     arr.inner^.len = new_len;
 end
 
@@ -139,11 +137,11 @@ fun remove[T](arr : DynArray[T], index : UInt64) -> T = do
     ) end;
     let new_len = arr.inner^.len - 1;
     let elems_to_move = uint.wrapping_sub(old_len,index);
-    builtins.ptr_copy[T](
+    unsafe builtins.ptr_copy[T](
         builtins.offset[T](arr.inner^.ptr,index),
         builtins.offset[T](arr.inner^.ptr,index + 1),
         elems_to_move
-    );
+    ) end;
     arr.inner^.len = new_len;
     value
 end
@@ -156,11 +154,12 @@ fun remove_last[T](arr : DynArray[T]) -> T =
 
 fun append_array[T](this : DynArray[T], arr : array[T]) -> () = do
     let len = builtins.array_len(arr);
+    let current_len = this.inner^.len;
+    let new_len = current_len + len;
     reserve(this,len);
-    for i in 0..len do
-        let value = unsafe builtins.array_get_unchecked(arr,i) end;
-        push(this,value);
-    end
+    let start_ptr = builtins.offset(this.inner^.ptr,current_len);
+    unsafe builtins.ptr_copy(start_ptr,builtins.array_ptr(arr),len) end;
+    this.inner^.len = new_len;
 end
 
 fun len[T](arr : DynArray[T]) -> UInt64 = arr.inner^.len

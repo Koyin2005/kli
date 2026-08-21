@@ -33,16 +33,10 @@ end
 fun alloc_copy[T](this : array[T]) -> array[T] = do
     let len = builtins.array_len(this);
     let p = builtins.gc_alloc(len);
-    for i in 0..len do
-        let p = builtins.offset(p,i);
-        unsafe 
-            builtins.ptr_write(
-                p,
-                builtins.array_get_unchecked(this,i)
-            ) 
-        end;
-    end;
-    unsafe from_raw_parts(p,len) end
+    unsafe 
+        builtins.ptr_copy(p,builtins.array_ptr(this),len);
+        builtins.array_new(p,len) 
+    end
 
 end
 
@@ -164,6 +158,7 @@ end
 # Safety:
 #  all indices in the destination range are in bounds for `dst`
 #  all indices in the source range are in bounds for `src` 
+@unsafe
 fun copy_unchecked[T](dst : array[T], src : array[T], dst_start : UInt64, src_start : UInt64, count : UInt64) -> () = do
     let dst_base = builtins.offset(builtins.array_ptr(dst),dst_start);
     let src_base = builtins.offset(builtins.array_ptr(src),src_start);
