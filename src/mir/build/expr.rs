@@ -284,6 +284,9 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 .collect::<Vec<_>>()
         };
         match builtin {
+            Builtin::StringNew => {
+                todo!("lower string new")
+            }
             Builtin::EprintString => {
                 let [arg] = operands().try_into().unwrap();
                 self.push_stmt(

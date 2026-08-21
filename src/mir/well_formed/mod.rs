@@ -121,6 +121,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 );
             }
             super::Rvalue::Aggregate(aggregate_kind, fields) => match aggregate_kind {
+                super::AggregateKind::String => (),
                 &super::AggregateKind::Array(ty) => {
                     let [ptr, len] = self.assert_with_some(
                         fields.as_slice(),

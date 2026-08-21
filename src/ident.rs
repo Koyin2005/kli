@@ -66,6 +66,7 @@ impl Symbol {
         "eprint_string",
         "wrapping_mul",
         "overflowing_mul",
+        "string_new",
     ];
     const _NO_REPEATS: () = {
         let mut i = 0;
@@ -143,6 +144,7 @@ impl Symbol {
     pub const PTR_COPY: Self = Self::expect_symbol("ptr_copy");
     pub const EPRINT_STRING: Self = Self::expect_symbol("eprint_string");
     pub const WRITE_ZEROES: Self = Self::expect_symbol("write_zeroes");
+    pub const STRING_NEW: Self = Self::expect_symbol("string_new");
     pub fn intern(txt: &str) -> Self {
         INTERNER.lock().unwrap().intern(txt)
     }

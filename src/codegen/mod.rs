@@ -1820,7 +1820,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 self.write_zeros(place);
             }
             mir::Rvalue::Aggregate(kind, fields) => match kind {
-                AggregateKind::Array(_) => {
+                AggregateKind::Array(_) | AggregateKind::String => {
                     let [ptr, len] = fields.as_slice().as_array().expect("should be an array");
                     let dst_place = self.eval_place(place).into_non_zst_place().unwrap();
                     let ptr = self.eval_operand(ptr).expect_immediate(self);

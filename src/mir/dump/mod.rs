@@ -137,6 +137,9 @@ impl<'ctxt> MirDump<'ctxt> {
             }
             Rvalue::Aggregate(kind, fields) => {
                 match kind {
+                    AggregateKind::String => {
+                        write!(self.output, "String")?;
+                    }
                     AggregateKind::Array(ty) => {
                         write!(self.output, "Array[{}]", ty)?;
                     }
