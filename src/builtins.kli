@@ -71,19 +71,6 @@ fun bitcast[T,U](x : T) -> U;
 @builtin
 fun array_new[T](p : RawPtr[T], c : UInt64) -> array[T];
 
-# Safety:
-# `index` must be in bounds for `a`
-@unsafe
-@builtin
-fun array_set_unchecked[T](a : array[T], index : UInt64, value : T) -> ();
-
-
-# Safety:
-# `index` must be in bounds for `a`
-@unsafe
-@builtin
-fun array_get_unchecked[T](a : array[T], index : UInt64) -> T;
-
 @builtin
 fun print_string(s : string) -> ();
 

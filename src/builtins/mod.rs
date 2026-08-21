@@ -33,8 +33,6 @@ pub enum Builtin {
 
     // Arrays
     ArrayNew,
-    ArraySetUnchecked,
-    ArrayGetUnchecked,
     Len,
     ArrayPtr,
 
@@ -65,8 +63,6 @@ impl Builtin {
             Builtin::ArrayPtr => "array_ptr",
             Builtin::Len => "array_len",
             Builtin::ArrayNew => "array_new",
-            Builtin::ArrayGetUnchecked => "array_get_unchecked",
-            Builtin::ArraySetUnchecked => "array_set_unchecked",
             Builtin::PrintString => "print_string",
             Builtin::ReadLine => "read_line",
             Builtin::Offset => "offset",
@@ -102,8 +98,6 @@ impl Builtin {
             Symbol::BITCAST => Some(Builtin::Bitcast),
             Symbol::INT_MAX_VALUE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue)),
             Symbol::ARRAY_NEW => Some(Builtin::ArrayNew),
-            Symbol::ARRAY_SET_UNCHECKED => Some(Builtin::ArraySetUnchecked),
-            Symbol::ARRAY_GET_UNCHECKED => Some(Builtin::ArrayGetUnchecked),
             Symbol::PRINT_STRING => Some(Builtin::PrintString),
             Symbol::READ_LINE => Some(Builtin::ReadLine),
             Symbol::PTR_READ => Some(Builtin::PtrRead),

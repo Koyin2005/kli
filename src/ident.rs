@@ -51,8 +51,6 @@ impl Symbol {
         "truncate",
         "bitcast",
         "array_new",
-        "array_set_unchecked",
-        "array_get_unchecked",
         "print_string",
         "int_max_value",
         "read_line",
@@ -129,8 +127,6 @@ impl Symbol {
     pub const TRUNCATE: Self = Self::expect_symbol("truncate");
     pub const BITCAST: Self = Self::expect_symbol("bitcast");
     pub const ARRAY_NEW: Self = Self::expect_symbol("array_new");
-    pub const ARRAY_SET_UNCHECKED: Self = Self::expect_symbol("array_set_unchecked");
-    pub const ARRAY_GET_UNCHECKED: Self = Self::expect_symbol("array_get_unchecked");
     pub const PRINT_STRING: Self = Self::expect_symbol("print_string");
     pub const INT_MAX_VALUE: Self = Self::expect_symbol("int_max_value");
     pub const READ_LINE: Self = Self::expect_symbol("read_line");
