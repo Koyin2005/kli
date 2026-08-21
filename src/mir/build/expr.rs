@@ -284,8 +284,17 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 .collect::<Vec<_>>()
         };
         match builtin {
-            Builtin::StringNew => {
-                todo!("lower string new")
+            Builtin::StringNew => BuiltinResult::Rvalue(Rvalue::Aggregate(
+                AggregateKind::String,
+                operands().into_iter().collect(),
+            )),
+            Builtin::StringLen => {
+                let place = self.place(&args[0]);
+                BuiltinResult::Rvalue(Rvalue::Len(place))
+            }
+            Builtin::StringPtr => {
+                let place = self.place(&args[0]);
+                BuiltinResult::Rvalue(Rvalue::ArrayPtr(place))
             }
             Builtin::EprintString => {
                 let [arg] = operands().try_into().unwrap();

@@ -74,6 +74,12 @@ fun array_new[T](p : RawPtr[T], c : UInt64) -> array[T];
 @builtin
 fun string_new(p : RawPtr[()], c : UInt64) -> string;
 
+@builtin
+fun string_len(s : string) -> UInt64;
+
+@builtin
+fun string_ptr(s : string) -> RawPtr[()];
+
 
 @builtin
 fun print_string(s : string) -> ();

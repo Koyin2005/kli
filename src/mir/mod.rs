@@ -348,10 +348,11 @@ impl<'ctxt> Rvalue<'ctxt> {
             },
             &Rvalue::Cast(.., ty) => ty,
             Rvalue::Discriminant(_) => Type::new_uint(ctxt, IntegerSize::Int64),
-            Rvalue::ArrayPtr(place) => Type::new_raw_ptr(
-                ctxt,
-                place.type_of(ctxt, locals, return_type).as_array().unwrap(),
-            ),
+            Rvalue::ArrayPtr(place) => match place.type_of(ctxt, locals, return_type).kind() {
+                &TypeKind::Array(ty) => Type::new_raw_ptr(ctxt, ty),
+                TypeKind::String => Type::new_raw_ptr(ctxt, Type::new_unit(ctxt)),
+                _ => unreachable!(),
+            },
         }
     }
 }

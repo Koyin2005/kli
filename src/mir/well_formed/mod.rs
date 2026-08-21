@@ -8,7 +8,7 @@ use crate::{
         visitor::{PlaceCtxt, Visit},
     },
     src_loc::SrcLoc,
-    types::{FunctionSig, IntegerKind, IntegerSize, SimpleScalar, Type},
+    types::{FunctionSig, IntegerKind, IntegerSize, SimpleScalar, Type, TypeKind},
     unsafety,
 };
 pub struct WellFormed<'ctxt, 'body> {
@@ -205,12 +205,10 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             },
             super::Rvalue::Use(_) => (),
             super::Rvalue::ArrayPtr(place) => {
+                let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 self.assert(
-                    place
-                        .type_of(self.ctxt, &self.body.locals, self.body.return_type)
-                        .as_array()
-                        .is_some(),
-                    || "Expected an array".to_string(),
+                    ty.as_array().is_some() || matches!(ty.kind(), TypeKind::String),
+                    || "Expected an array or string".to_string(),
                     loc,
                 );
             }
@@ -356,7 +354,11 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             },
             super::Rvalue::Len(place) => {
                 let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                self.assert(ty.as_array().is_some(), || "Expected an array type", loc);
+                self.assert(
+                    ty.as_array().is_some() || matches!(ty.kind(), TypeKind::String),
+                    || "Expected an array or string type",
+                    loc,
+                );
             }
         }
     }

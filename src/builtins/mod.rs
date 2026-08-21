@@ -38,6 +38,8 @@ pub enum Builtin {
 
     //Strings
     StringNew,
+    StringLen,
+    StringPtr,
     // IO
     PrintString,
     EprintString,
@@ -75,6 +77,8 @@ impl Builtin {
             Builtin::EprintString => "eprint_string",
             Builtin::WriteZeroes => "write_zeroes",
             Builtin::StringNew => "string_new",
+            Builtin::StringLen => "string_len",
+            Builtin::StringPtr => "string_ptr",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
@@ -111,6 +115,8 @@ impl Builtin {
             Symbol::EPRINT_STRING => Some(Builtin::EprintString),
             Symbol::WRITE_ZEROES => Some(Builtin::WriteZeroes),
             Symbol::STRING_NEW => Some(Builtin::StringNew),
+            Symbol::STRING_PTR => Some(Builtin::StringPtr),
+            Symbol::STRING_LEN => Some(Builtin::StringLen),
             _ => None,
         }
     }
