@@ -668,7 +668,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
 
                 for (i, element) in elements.iter().enumerate() {
                     let i = i as u32;
-                    self.expr_into_dest(Place::local(ptr).with_constant_offset(i), element);
+                    self.expr_into_dest(Place::local(ptr).with_deref().with_constant_offset(i), element);
                 }
 
                 Rvalue::Aggregate(

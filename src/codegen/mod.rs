@@ -1069,8 +1069,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
             place_value = match *projection {
                 mir::PlaceProjection::ConstantOffset(offset) => {
                     let byte_offset : i32 = (offset * place_value.layout.size.in_bytes_u32()).try_into().unwrap();
-                    let ptr = self.load_place_mem(&place_value).unwrap().first_value();
-                    MemPlace::new_with_offset(ptr, place_value.layout, place_value.ty, byte_offset)
+                    MemPlace::new_with_offset(place_value.base_ptr, place_value.layout, place_value.ty, place_value.offset + byte_offset)
                 }
                 mir::PlaceProjection::Field(field_id) => {
                     place_value.project_field(self.ctxt, field_id)

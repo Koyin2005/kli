@@ -82,7 +82,7 @@ impl<'ctxt> MirDump<'ctxt> {
             match projection {
                 PlaceProjection::ConstantOffset(offset) => {
                     let current = std::mem::take(&mut output);
-                    let _ = write!(&mut output, "({}^.Offset({offset}))", current);
+                    let _ = write!(&mut output, "{}.Offset({offset})", current);
                 }
                 PlaceProjection::Field(field) => {
                     let _ = write!(&mut output, ".{}", field.into_usize());

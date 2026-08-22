@@ -89,12 +89,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     )
                 }
                 super::PlaceProjection::ConstantOffset(_) => {
-                    ty = self.assert_with_some(
-                        ty,
-                        |ty| ty.as_raw_ptr(),
-                        || format!("Cannot deref non box or ptr type {}",ty),
-                        loc,
-                    )
                 }
             }
         }

@@ -58,10 +58,7 @@ impl PlaceProjection {
                 *ty
             }
             PlaceProjection::ConstantOffset(_) => {
-                let TypeKind::RawPtr(ty) = ty.kind() else {
-                    unreachable!("Should be a raw ptr but got {}", ty)
-                };
-                *ty
+                ty
             }
             PlaceProjection::CaseDowncast(index, _) => {
                 let Some((id, _, args)) = ty.as_named() else {
