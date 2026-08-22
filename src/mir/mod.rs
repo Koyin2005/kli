@@ -57,9 +57,7 @@ impl PlaceProjection {
                 };
                 *ty
             }
-            PlaceProjection::ConstantOffset(_) => {
-                ty
-            }
+            PlaceProjection::ConstantOffset(_) => ty,
             PlaceProjection::CaseDowncast(index, _) => {
                 let Some((id, _, args)) = ty.as_named() else {
                     unreachable!("Should be named")
@@ -557,6 +555,10 @@ pub struct Stmt<'ctxt> {
 pub enum StmtKind<'ctxt> {
     Noop,
     Assign(Place, Box<Rvalue<'ctxt>>),
+    StoreArrayElements {
+        dst: Place,
+        elements: Box<[Operand<'ctxt>]>,
+    },
     Print {
         value: Operand<'ctxt>,
         err: bool,

@@ -665,12 +665,17 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     ptr_type,
                     Rvalue::GcAlloc(element_type, count_operand.clone()),
                 );
-
-                for (i, element) in elements.iter().enumerate() {
-                    let i = i as u32;
-                    self.expr_into_dest(Place::local(ptr).with_deref().with_constant_offset(i), element);
-                }
-
+                let elements = elements
+                    .into_iter()
+                    .map(|element| self.operand(element))
+                    .collect();
+                self.push_stmt(
+                    expr.loc,
+                    mir::StmtKind::StoreArrayElements {
+                        dst: Place::local(ptr),
+                        elements,
+                    },
+                );
                 Rvalue::Aggregate(
                     AggregateKind::Array(element_type),
                     IndexVec::from_vec(vec![Operand::Load(Place::local(ptr)), count_operand]),

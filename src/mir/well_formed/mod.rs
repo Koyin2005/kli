@@ -84,12 +84,11 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     ty = self.assert_with_some(
                         ty,
                         |ty| ty.as_box().or(ty.as_raw_ptr()),
-                        || format!("Cannot deref non box or ptr type {}",ty),
+                        || format!("Cannot deref non box or ptr type {}", ty),
                         loc,
                     )
                 }
-                super::PlaceProjection::ConstantOffset(_) => {
-                }
+                super::PlaceProjection::ConstantOffset(_) => {}
             }
         }
     }
@@ -178,36 +177,38 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
 
                     let field = case_def.field;
                     let field_ty = field.map(|field| field.type_of(args, self.ctxt));
-                    if let Some(field_ty) = field_ty{
-
-                    let field = self.assert_with_some(
-                        fields.as_slice(),
-                        |fields| {
-                            if let [field] = fields {
-                                Some(field)
-                            } else {
-                                None
-                            }
-                        },
-                        || {
-                            format!(
-                                "Variants can only have at most 1 inner field not {}",
-                                fields.len()
-                            )
-                        },
-                        loc,
-                    );
-                    let operand_ty =
-                        field.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                    self.assert(
-                        field_ty == operand_ty,
-                        || format!("{field_ty} and {operand_ty} should be same types"),
-                        loc,
-                    );
-                }
-                else {
-                    self.assert(fields.is_empty(), || format!("{} should have no fields",case_def.name), loc);
-                }
+                    if let Some(field_ty) = field_ty {
+                        let field = self.assert_with_some(
+                            fields.as_slice(),
+                            |fields| {
+                                if let [field] = fields {
+                                    Some(field)
+                                } else {
+                                    None
+                                }
+                            },
+                            || {
+                                format!(
+                                    "Variants can only have at most 1 inner field not {}",
+                                    fields.len()
+                                )
+                            },
+                            loc,
+                        );
+                        let operand_ty =
+                            field.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                        self.assert(
+                            field_ty == operand_ty,
+                            || format!("{field_ty} and {operand_ty} should be same types"),
+                            loc,
+                        );
+                    } else {
+                        self.assert(
+                            fields.is_empty(),
+                            || format!("{} should have no fields", case_def.name),
+                            loc,
+                        );
+                    }
                 }
                 super::AggregateKind::Tuple => (),
             },
@@ -397,6 +398,24 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     },
                     stmt.loc,
                 );
+            }
+            StmtKind::StoreArrayElements { dst, elements } => {
+                let dst_ty = dst.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                let pointee = self.assert_with_some(
+                    dst_ty,
+                    |ty| ty.as_raw_ptr(),
+                    || format!("should be a raw pointer '{dst_ty}'"),
+                    stmt.loc,
+                );
+                for element in elements {
+                    let element_ty =
+                        element.type_of(self.ctxt, &self.body.locals, self.body.return_type);
+                    self.assert(
+                        pointee == element_ty,
+                        || "should have same type as pointee",
+                        stmt.loc,
+                    );
+                }
             }
             StmtKind::Copy { dst, src, count } => {
                 let lhs_ty = dst.type_of(self.ctxt, &self.body.locals, self.body.return_type);

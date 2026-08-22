@@ -1068,8 +1068,15 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         for projection in projections {
             place_value = match *projection {
                 mir::PlaceProjection::ConstantOffset(offset) => {
-                    let byte_offset : i32 = (offset * place_value.layout.size.in_bytes_u32()).try_into().unwrap();
-                    MemPlace::new_with_offset(place_value.base_ptr, place_value.layout, place_value.ty, place_value.offset + byte_offset)
+                    let byte_offset: i32 = (offset * place_value.layout.size.in_bytes_u32())
+                        .try_into()
+                        .unwrap();
+                    MemPlace::new_with_offset(
+                        place_value.base_ptr,
+                        place_value.layout,
+                        place_value.ty,
+                        place_value.offset + byte_offset,
+                    )
                 }
                 mir::PlaceProjection::Field(field_id) => {
                     place_value.project_field(self.ctxt, field_id)
@@ -1982,6 +1989,21 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn codegen_stmt(&mut self, stmt: &mir::Stmt<'ctxt>) {
         match &stmt.kind {
             mir::StmtKind::Noop => (),
+            mir::StmtKind::StoreArrayElements { dst, elements } => {
+                let place = self.eval_place(dst);
+                let element_ty = place.type_of().as_raw_ptr().unwrap();
+                let layout = self.layout_for(element_ty);
+                let ptr = self.load_place(&place).unwrap().first_value();
+                for (i, element) in elements.iter().enumerate() {
+                    let i: i32 = i.try_into().unwrap();
+                    let offset = (i * layout.size.in_bytes_i32()).try_into().unwrap();
+                    let operand_value = self.eval_operand(element);
+                    self.store_operand_with_mem_place(
+                        MemPlace::new_with_offset(ptr, layout.clone(), element_ty, offset),
+                        operand_value,
+                    );
+                }
+            }
             mir::StmtKind::Assign(place, rvalue) => {
                 self.codegen_rvalue_assign(place, rvalue);
             }

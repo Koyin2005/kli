@@ -21,6 +21,12 @@ pub trait Visit<'ctxt> {
     fn super_visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         match &stmt.kind {
             StmtKind::Noop => (),
+            StmtKind::StoreArrayElements { dst, elements } => {
+                self.visit_place(PlaceCtxt::Write, loc, dst);
+                for element in elements {
+                    self.visit_operand(loc, element);
+                }
+            }
             StmtKind::Assign(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
             }
@@ -165,6 +171,12 @@ pub trait MutVisit<'ctxt> {
     fn super_visit_stmt(&mut self, loc: Location, stmt: &mut Stmt<'ctxt>) {
         match &mut stmt.kind {
             StmtKind::Noop => (),
+            StmtKind::StoreArrayElements { dst, elements } => {
+                self.visit_place(loc, dst);
+                for element in elements {
+                    self.visit_operand(loc, element);
+                }
+            }
             StmtKind::Copy { dst, src, count } => {
                 self.visit_operand(loc, dst);
                 self.visit_operand(loc, src);
