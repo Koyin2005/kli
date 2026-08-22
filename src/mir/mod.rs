@@ -28,7 +28,6 @@ impl Local {
 pub enum PlaceProjection {
     Field(FieldId),
     ConstantIndex(u32),
-    ConstantOffset(u32),
     Index(Local),
     CaseDowncast(CaseId, Symbol),
     Deref,
@@ -57,7 +56,6 @@ impl PlaceProjection {
                 };
                 *ty
             }
-            PlaceProjection::ConstantOffset(_) => ty,
             PlaceProjection::CaseDowncast(index, _) => {
                 let Some((id, _, args)) = ty.as_named() else {
                     unreachable!("Should be named")
@@ -120,11 +118,6 @@ impl Place {
     }
     pub fn with_deref(mut self) -> Self {
         self.projections.push(PlaceProjection::Deref);
-        self
-    }
-    pub fn with_constant_offset(mut self, offset: u32) -> Self {
-        self.projections
-            .push(PlaceProjection::ConstantOffset(offset));
         self
     }
     pub fn with_constant_index(mut self, index: u32) -> Self {

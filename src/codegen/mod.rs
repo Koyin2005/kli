@@ -974,9 +974,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                         unreachable!("shouldn't be scalar then")
                     }
                     mir::PlaceProjection::CaseDowncast(..) | mir::PlaceProjection::Field(_) => (),
-                    mir::PlaceProjection::ConstantOffset(_) => {
-                        todo!("Handle me")
-                    }
                     mir::PlaceProjection::Deref => {
                         let value = self
                             .load_place(&NonZstPlace::Ssa(*ty, variable))
@@ -1067,17 +1064,6 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
         };
         for projection in projections {
             place_value = match *projection {
-                mir::PlaceProjection::ConstantOffset(offset) => {
-                    let byte_offset: i32 = (offset * place_value.layout.size.in_bytes_u32())
-                        .try_into()
-                        .unwrap();
-                    MemPlace::new_with_offset(
-                        place_value.base_ptr,
-                        place_value.layout,
-                        place_value.ty,
-                        place_value.offset + byte_offset,
-                    )
-                }
                 mir::PlaceProjection::Field(field_id) => {
                     place_value.project_field(self.ctxt, field_id)
                 }

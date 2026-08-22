@@ -106,8 +106,7 @@ pub trait Visit<'ctxt> {
     fn super_visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
         match projection {
             PlaceProjection::ConstantIndex(_)
-            | PlaceProjection::Field(_)
-            | PlaceProjection::ConstantOffset(_) => (),
+            | PlaceProjection::Field(_) => (),
             PlaceProjection::Index(local) => self.visit_local(PlaceCtxt::Read, loc, local),
             PlaceProjection::CaseDowncast(..) => (),
             PlaceProjection::Deref => (),
@@ -259,8 +258,7 @@ pub trait MutVisit<'ctxt> {
     fn super_visit_projection(&mut self, loc: Location, projection: &mut PlaceProjection) {
         match projection {
             PlaceProjection::ConstantIndex(_)
-            | PlaceProjection::Field(_)
-            | PlaceProjection::ConstantOffset(_) => (),
+            | PlaceProjection::Field(_) => (),
             PlaceProjection::Index(local) => self.visit_local(loc, local),
             PlaceProjection::CaseDowncast(..) => (),
             PlaceProjection::Deref => (),

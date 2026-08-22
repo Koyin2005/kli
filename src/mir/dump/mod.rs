@@ -80,10 +80,6 @@ impl<'ctxt> MirDump<'ctxt> {
         for projection in place.projections.iter() {
             use std::fmt::Write;
             match projection {
-                PlaceProjection::ConstantOffset(offset) => {
-                    let current = std::mem::take(&mut output);
-                    let _ = write!(&mut output, "{}.Offset({offset})", current);
-                }
                 PlaceProjection::Field(field) => {
                     let _ = write!(&mut output, ".{}", field.into_usize());
                 }

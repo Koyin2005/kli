@@ -88,7 +88,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                         loc,
                     )
                 }
-                super::PlaceProjection::ConstantOffset(_) => {}
             }
         }
     }
