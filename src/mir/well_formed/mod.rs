@@ -84,7 +84,15 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     ty = self.assert_with_some(
                         ty,
                         |ty| ty.as_box().or(ty.as_raw_ptr()),
-                        || "Cannot deref non box or ptr",
+                        || format!("Cannot deref non box or ptr type {}",ty),
+                        loc,
+                    )
+                }
+                super::PlaceProjection::ConstantOffset(_) => {
+                    ty = self.assert_with_some(
+                        ty,
+                        |ty| ty.as_raw_ptr(),
+                        || format!("Cannot deref non box or ptr type {}",ty),
                         loc,
                     )
                 }
@@ -173,8 +181,10 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 super::AggregateKind::Variant(id, index, args) => {
                     let type_def = self.ctxt.type_def(*id);
                     let case_def = type_def.case(*index);
-                    let field = case_def.expect_field();
-                    let field_ty = field.type_of(args, self.ctxt);
+
+                    let field = case_def.field;
+                    let field_ty = field.map(|field| field.type_of(args, self.ctxt));
+                    if let Some(field_ty) = field_ty{
 
                     let field = self.assert_with_some(
                         fields.as_slice(),
@@ -200,6 +210,10 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                         || format!("{field_ty} and {operand_ty} should be same types"),
                         loc,
                     );
+                }
+                else {
+                    self.assert(fields.is_empty(), || format!("{} should have no fields",case_def.name), loc);
+                }
                 }
                 super::AggregateKind::Tuple => (),
             },

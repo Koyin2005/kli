@@ -668,20 +668,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
 
                 for (i, element) in elements.iter().enumerate() {
                     let i = i as u32;
-                    let current_ptr = self.assign_to_temp(
-                        element.loc,
-                        ptr_type,
-                        Self::binary_op_rvalue(
-                            mir::BinaryOp::Offset,
-                            Operand::Load(Place::local(ptr)),
-                            Operand::Constant(Constant::uint(
-                                self.ctxt,
-                                IntegerSize::Int64,
-                                i.into(),
-                            )),
-                        ),
-                    );
-                    self.expr_into_dest(Place::local(current_ptr).with_deref(), element);
+                    self.expr_into_dest(Place::local(ptr).with_constant_offset(i), element);
                 }
 
                 Rvalue::Aggregate(

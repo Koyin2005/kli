@@ -80,6 +80,10 @@ impl<'ctxt> MirDump<'ctxt> {
         for projection in place.projections.iter() {
             use std::fmt::Write;
             match projection {
+                PlaceProjection::ConstantOffset(offset) => {
+                    let current = std::mem::take(&mut output);
+                    let _ = write!(&mut output, "({}^.Offset({offset}))", current);
+                }
                 PlaceProjection::Field(field) => {
                     let _ = write!(&mut output, ".{}", field.into_usize());
                 }
@@ -242,7 +246,9 @@ impl<'ctxt> MirDump<'ctxt> {
                 }
                 _ => unreachable!("only values of function type"),
             },
-            types::TypeKind::Tuple(_) | types::TypeKind::Array(_) | types::TypeKind::Box(_) => unimplemented!(),
+            types::TypeKind::Tuple(_) | types::TypeKind::Array(_) | types::TypeKind::Box(_) => {
+                unimplemented!()
+            }
             types::TypeKind::Named(def_id, ..) => match self.ctxt.type_def(*def_id).kind {
                 TypeDefKind::Record(..) => write!(self.output, "unknown value of {ty}"),
                 TypeDefKind::Variant(..) => write!(self.output, "unknown of '{}'", ty),
