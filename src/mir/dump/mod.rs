@@ -176,7 +176,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, "{}", close_bracket)?;
             }
             Rvalue::Call(operand, args) => {
-                write!(self.output,"call ")?;
+                write!(self.output, "call ")?;
                 self.write_operand(operand)?;
                 write!(self.output, "(")?;
                 self.write_with_coma_sep(args, |this, arg| this.write_operand(arg))?;
