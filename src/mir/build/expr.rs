@@ -50,13 +50,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     value: ConstValue::Named(id, args.clone()),
                 })
             }
-            ExprKind::VariantInit(_, case, _, None) => {
-                let ty = expr.ty;
-                Some(Constant {
-                    ty,
-                    value: ConstValue::Variant(case, None),
-                })
-            }
             ExprKind::Char(char) => Some(Constant::char(self.ctxt, char)),
             _ => None,
         }
@@ -484,7 +477,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             | ExprKind::Load(_)
             | ExprKind::Function(..)
             | ExprKind::Const(..)
-            | ExprKind::VariantInit(.., None)
             | ExprKind::String(..)
             | ExprKind::Lambda(_)
             | ExprKind::Char(_) => {
@@ -511,9 +503,13 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 AggregateKind::Tuple,
                 fields.iter().map(|field| self.operand(field)).collect(),
             ),
-            &ExprKind::VariantInit(id, index, ref args, Some(ref value)) => Rvalue::Aggregate(
+            &ExprKind::VariantInit(id, index, ref args, ref value) => Rvalue::Aggregate(
                 AggregateKind::Variant(id, index, args.clone()),
-                [self.operand(value)].into(),
+                value
+                    .as_deref()
+                    .into_iter()
+                    .map(|value| self.operand(value))
+                    .collect(),
             ),
             ExprKind::Call(callee, args) => {
                 let _ = callee

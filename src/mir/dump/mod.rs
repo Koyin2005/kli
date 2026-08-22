@@ -1,7 +1,6 @@
 use crate::{
     Symbol,
     collect::{CtxtRef, TypeDefKind},
-    index_vec::IndexVec,
     mir::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, CastKind,
         ConstValue, LocalKind, Operand, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
@@ -243,60 +242,10 @@ impl<'ctxt> MirDump<'ctxt> {
                 }
                 _ => unreachable!("only values of function type"),
             },
-            types::TypeKind::Tuple(_) => {
-                let ConstValue::Record(field_consts) = value else {
-                    unreachable!("should be a record")
-                };
-                let (fields, (open_bracket, closing_bracket)) = match ty {
-                    types::TypeKind::Tuple(_) => {
-                        (&IndexVec::<FieldId, types::RecordField>::new(), ('(', ')'))
-                    }
-                    _ => unreachable!(),
-                };
-                write!(self.output, "{}", open_bracket)?;
-                self.write_with_coma_sep(
-                    field_consts.iter().enumerate(),
-                    move |this, (i, value)| {
-                        let i = FieldId::new(i);
-                        if let Some(field) = fields.get(i) {
-                            write!(this.output, "{} = ", field.name)?;
-                        }
-                        this.write_constant(&value.ty, &value.value)
-                    },
-                )?;
-                write!(self.output, "{}", closing_bracket)
-            }
-            types::TypeKind::Array(_) | types::TypeKind::Box(_) => unimplemented!(),
-            types::TypeKind::Named(def_id, name, args) => match self.ctxt.type_def(*def_id).kind {
-                TypeDefKind::Record(fields) => match value {
-                    ConstValue::Record(values) => {
-                        write!(self.output, "{name}{}{{", args)?;
-                        self.write_with_coma_sep(
-                            values.iter().zip(fields),
-                            |this, (value, field)| {
-                                write!(this.output, "{} = ", field.name)?;
-                                this.write_constant(&value.ty, &value.value)
-                            },
-                        )?;
-                        write!(self.output, "}}")
-                    }
-                    _ => write!(self.output, "unknown value of {ty}"),
-                },
-                TypeDefKind::Variant(cases) => match value {
-                    ConstValue::Variant(case, inner) => {
-                        let name = cases[*case].name;
-                        write!(self.output, "{name}{}", args)?;
-                        if let Some(inner) = inner {
-                            write!(self.output, "(")?;
-                            self.write_constant(&inner.ty, &inner.value)?;
-                            write!(self.output, ")")?;
-                        } else {
-                            write!(self.output, "")?;
-                        }
-                        Ok(())
-                    }
-                    _ => write!(self.output, "unknown of '{}'", ty),
-                },
+            types::TypeKind::Tuple(_) | types::TypeKind::Array(_) | types::TypeKind::Box(_) => unimplemented!(),
+            types::TypeKind::Named(def_id, ..) => match self.ctxt.type_def(*def_id).kind {
+                TypeDefKind::Record(..) => write!(self.output, "unknown value of {ty}"),
+                TypeDefKind::Variant(..) => write!(self.output, "unknown of '{}'", ty),
             },
         }
     }
