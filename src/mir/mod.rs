@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{cell::RefCell, collections::HashMap, fmt::Display};
 
 use crate::{
     Symbol,
@@ -661,7 +661,7 @@ pub type Locals<'ctxt> = IndexVec<Local, LocalInfo<'ctxt>>;
 #[derive(Default)]
 pub struct Context<'ctxt> {
     pub check_well_formed: bool,
-    bodies: HashMap<BodySource, Body<'ctxt>>,
+    bodies: HashMap<BodySource, RefCell<Body<'ctxt>>>,
     body_sources: Vec<BodySource>,
 }
 impl<'ctxt> Context<'ctxt> {
@@ -671,21 +671,18 @@ impl<'ctxt> Context<'ctxt> {
             ..Default::default()
         }
     }
-    pub fn body_iter(&self) -> impl Iterator<Item = &Body<'ctxt>> {
-        self.body_sources.iter().map(|src| &self.bodies[src])
-    }
-    pub fn for_each_body_mut<'a>(&mut self, mut f: impl FnMut(&mut Body<'ctxt>) + 'a) {
+    pub fn for_each_body_mut<'a>(&self, mut f: impl FnMut(&mut Body<'ctxt>) + 'a) {
         for src in self.body_sources.iter() {
-            f(self.bodies.get_mut(src).unwrap());
+            f(&mut *self.bodies[src].borrow_mut());
         }
     }
     pub fn add_body(&mut self, body: Body<'ctxt>) {
         let src = body.src;
-        self.bodies.insert(src, body);
+        self.bodies.insert(src, RefCell::new(body));
         self.body_sources.push(src);
     }
     #[track_caller]
-    pub fn expect_body(&self, src: BodySource) -> &Body<'ctxt> {
-        self.bodies.get(&src).expect("expected a body")
+    pub fn with_body<T>(&self, src: BodySource, f: impl FnOnce(&Body<'ctxt>) -> T) -> T {
+        f(&*self.bodies.get(&src).expect("Expected a body").borrow())
     }
 }

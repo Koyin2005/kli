@@ -227,23 +227,23 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                     cranelift_module::Linkage::Local,
                 )
             };
-            let function = mir_ctxt.expect_body(instance.body_src());
-
-            let sig = Scheme::new(FunctionSig::new(
-                function.param_types(),
-                function.return_type,
-            ))
-            .bind(self.ctxt, &instance.args);
-            let abi = call_abi(self.ctxt, &sig);
-            let sig = signature(&abi, self.module.target_config());
-            self.map.functions.insert(
-                instance.clone(),
-                FunctionInfo {
-                    id: self.module.declare_function(&name, linkage, &sig).unwrap(),
-                    sig,
-                    abi,
-                },
-            );
+            mir_ctxt.with_body(instance.body_src(), |function| {
+                let sig = Scheme::new(FunctionSig::new(
+                    function.param_types(),
+                    function.return_type,
+                ))
+                .bind(self.ctxt, &instance.args);
+                let abi = call_abi(self.ctxt, &sig);
+                let sig = signature(&abi, self.module.target_config());
+                self.map.functions.insert(
+                    instance.clone(),
+                    FunctionInfo {
+                        id: self.module.declare_function(&name, linkage, &sig).unwrap(),
+                        sig,
+                        abi,
+                    },
+                );
+            });
         }
         let mut ctxt = codegen::Context::new();
         let mut f_ctxt = frontend::FunctionBuilderContext::new();
@@ -396,34 +396,34 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                 let sig = sig.clone();
                 ctxt.func.signature = sig;
             }
-
-            let body = mir_ctxt.expect_body(instance.body_src());
-            let mut builder = frontend::FunctionBuilder::new(&mut ctxt.func, &mut f_ctxt);
-            let block_map = BlockMap::new(body, &mut builder);
-            for param in sig.params.iter() {
-                builder.append_block_param(block_map.entry(), param.value_type);
-            }
             let should_print = self.ctxt.config().has_feature(Feature::OutputBackendIr);
-            if should_print {
-                println!(
-                    "building {} {}",
-                    self.ctxt.display_path_for(instance.body_src().def_id()),
-                    instance.args
-                );
-            }
-            FunctionCodegen::new(
-                self.ctxt,
-                builder,
-                body,
-                &instance.args,
-                &mut self.module,
-                &self.map,
-                abi,
-                &block_map,
-                &runtime,
-                &mut constants,
-            )
-            .codegen(body);
+            mir_ctxt.with_body(instance.body_src(), |body| {
+                let mut builder = frontend::FunctionBuilder::new(&mut ctxt.func, &mut f_ctxt);
+                let block_map = BlockMap::new(body, &mut builder);
+                for param in sig.params.iter() {
+                    builder.append_block_param(block_map.entry(), param.value_type);
+                }
+                if should_print {
+                    println!(
+                        "building {} {}",
+                        self.ctxt.display_path_for(instance.body_src().def_id()),
+                        instance.args
+                    );
+                }
+                FunctionCodegen::new(
+                    self.ctxt,
+                    builder,
+                    body,
+                    &instance.args,
+                    &mut self.module,
+                    &self.map,
+                    abi,
+                    &block_map,
+                    &runtime,
+                    &mut constants,
+                )
+                .codegen(body)
+            });
             if should_print {
                 println!("{:?}", ctxt.func);
             }

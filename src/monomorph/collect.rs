@@ -38,7 +38,7 @@ pub struct InstanceCollector<'ctxt> {
     ctxt: &'ctxt Context<'ctxt>,
 }
 impl<'ctxt> InstanceCollector<'ctxt> {
-    pub fn new(context: &'ctxt Context) -> Self {
+    pub fn new(context: &'ctxt Context<'ctxt>) -> Self {
         Self {
             seen_instances: HashSet::new(),
             instances: Vec::new(),
@@ -75,15 +75,16 @@ impl<'ctxt> InstanceCollector<'ctxt> {
                 continue;
             }
             self.instances.push(instance.clone());
-            let body = self.ctxt.expect_body(instance.body_src());
-            let mut collector = Collector {
-                ctxt,
-                v: &mut unvisited,
-                args: &instance.args,
-            };
-            for (id, block) in body.block_info.blocks().iter_enumerated() {
-                collector.visit_block(id, block);
-            }
+            self.ctxt.with_body(instance.body_src(), |body| {
+                let mut collector = Collector {
+                    ctxt,
+                    v: &mut unvisited,
+                    args: &instance.args,
+                };
+                for (id, block) in body.block_info.blocks().iter_enumerated() {
+                    collector.visit_block(id, block);
+                }
+            });
         }
         self.instances
     }
