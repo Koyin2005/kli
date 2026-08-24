@@ -131,8 +131,8 @@ impl<I: Id, V> IndexVec<I, V> {
     pub fn extend(&mut self, iter: impl IntoIterator<Item = V>) {
         self.0.extend(iter);
     }
-    pub fn truncate(&mut self, i: I) {
-        self.0.truncate(i.into_usize());
+    pub fn truncate(&mut self, len: usize) {
+        self.0.truncate(len);
     }
     pub fn retain(&mut self, mut f: impl FnMut(I, &V) -> bool) {
         let mut i = I::new(0);
@@ -141,6 +141,9 @@ impl<I: Id, V> IndexVec<I, V> {
             i = i.next();
             keep
         });
+    }
+    pub fn split_off(&mut self, i: I) -> Self {
+        Self::from_vec(self.0.split_off(i.into_usize()))
     }
     pub fn swap(&mut self, first: I, second: I) {
         let Ok([first, second]) = self

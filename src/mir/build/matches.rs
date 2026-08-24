@@ -134,7 +134,8 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .as_named()
                     .unwrap();
                 let type_def = self.ctxt.type_def(id);
-                let targets = tests
+
+                let mut targets = tests
                     .iter()
                     .filter_map(|(case, block)| {
                         let TestCase::Variant(id) = *case else {
@@ -145,7 +146,9 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                             target: *block,
                         })
                     })
-                    .collect();
+                    .collect::<Vec<_>>();
+                targets.sort_by(|a, b| a.value.cmp(&b.value));
+
                 self.switch_to_block(start_block);
                 let disrciminant = self.assign_to_temp(
                     head_test.loc,

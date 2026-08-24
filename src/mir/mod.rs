@@ -539,12 +539,12 @@ impl std::fmt::Debug for Location {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Stmt<'ctxt> {
     pub loc: SrcLoc,
     pub kind: StmtKind<'ctxt>,
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum StmtKind<'ctxt> {
     Noop,
     Assign(Place, Box<Rvalue<'ctxt>>),

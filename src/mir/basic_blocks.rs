@@ -28,6 +28,9 @@ impl<'ctxt> BasicBlocks<'ctxt> {
             cache: Rc::new(Cache::default()),
         }
     }
+    pub fn into_blocks(self) -> IndexVec<BasicBlockId, BasicBlock<'ctxt>> {
+        self.blocks
+    }
     pub fn blocks(&self) -> &IndexVec<BasicBlockId, BasicBlock<'ctxt>> {
         &self.blocks
     }

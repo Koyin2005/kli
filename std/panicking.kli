@@ -1,5 +1,5 @@
 fun panic_message(msg : string) -> never = do
-    std.io.eprint_newline(msg);
+    std.io.eprintln(msg);
     panic
 end
 

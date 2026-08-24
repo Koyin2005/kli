@@ -74,7 +74,8 @@ impl<'ctxt> Locals<'ctxt> {
                     let kind = match repr {
                         BackendRepr::ZeroSized => LocalKind::ZeroSized,
                         BackendRepr::Scalar(scalar) if ssa.is_local_ssa(PlaceBase::Local(id)) => {
-                            LocalKind::Scalar(builder.declare_var(scalar_to_cranelift_type(scalar)))
+                            let var = builder.declare_var(scalar_to_cranelift_type(scalar));
+                            LocalKind::Scalar(var)
                         }
                         _ => LocalKind::Memory(builder.create_sized_stack_slot(
                             codegen::ir::StackSlotData::new(

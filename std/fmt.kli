@@ -44,7 +44,9 @@ fun io_write() -> Writer[Stdout] =
 
 
 fun write_format[T,S,C](writer : Writer[S],f : Format[T,S,C], value : T) -> () = do
-    f.fmt(value,f.ctxt,writer)
+    io.eprintln("foramt start");
+    f.fmt(value,f.ctxt,writer);
+    io.eprintln("foramt end");
 end
 
 fun fmt_uint[S](value : UInt64, _ : (), writer : Writer[S]) -> () = do

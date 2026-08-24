@@ -26,6 +26,15 @@ pub(super) fn optimisation_enabled(ctxt: CtxtRef<'_>) -> bool {
 pub trait MirPass<'ctxt> {
     fn name(&self) -> &'static str;
     fn run(&self, ctxt: CtxtRef<'ctxt>, body: &'_ mut Body<'ctxt>);
+    fn run_with_ctxt(
+        &self,
+        ctxt: CtxtRef<'ctxt>,
+        body: &'_ mut Body<'ctxt>,
+        mir_ctxt: &super::Context<'ctxt>,
+    ) {
+        _ = mir_ctxt;
+        self.run(ctxt, body);
+    }
     fn enabled(&self, ctxt: CtxtRef<'ctxt>) -> bool {
         _ = ctxt;
         true

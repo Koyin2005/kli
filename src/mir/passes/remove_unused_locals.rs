@@ -47,7 +47,7 @@ impl MirPass<'_> for RemoveUnusedLocals {
             .collect::<IndexVec<Local, _>>();
         LocalReplacer { locals: &local_map }.visit_body(body);
 
-        body.locals.truncate(next_local);
+        body.locals.truncate(next_local.next().into_usize());
         if super::should_dump(ctxt, body.src) {
             println!("{:?}", local_map);
             println!("{:?}", body.locals.indices().collect::<Vec<_>>());

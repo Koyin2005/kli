@@ -204,7 +204,7 @@ impl<'ctxt> MirDump<'ctxt> {
         if let ConstValue::Named(id, args) = value {
             return write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args);
         } else if let ConstValue::String(string) = value {
-            return write!(self.output, "\"{string}\"");
+            return write!(self.output, "\"{}\"", string.to_string().escape_debug());
         } else if let ConstValue::ZeroSized = value {
             return write!(self.output, "{ty}");
         }
@@ -320,7 +320,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     }
                     write!(self.output, "otherwise -> bb{}", targets.otherwise.0)?;
                 }
-                TerminatorKind::Goto(block) => write!(self.output, "goto bb{}", block.0)?,
+                TerminatorKind::Goto(block) => write!(self.output, "goto -> bb{}", block.0)?,
                 TerminatorKind::Panic => write!(self.output, "panic")?,
                 TerminatorKind::Assert(operand, kind, block) => {
                     write!(

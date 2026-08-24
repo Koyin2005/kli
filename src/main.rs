@@ -86,16 +86,19 @@ fn main() {
         })
         .collect::<HashMap<_, _>>();
 
-    mir_context.for_each_body_mut(move |body| {
-        for pass in passes() {
-            let overidde = run_pass.get(pass.name()).copied();
-            let should_run = overidde.unwrap_or_else(|| pass.enabled(ctxt));
-            if !should_run {
-                continue;
+    {
+        let mir_context_ref = &mir_context;
+        mir_context_ref.for_each_body_mut(move |body| {
+            for pass in passes() {
+                let overidde = run_pass.get(pass.name()).copied();
+                let should_run = overidde.unwrap_or_else(|| pass.enabled(ctxt));
+                if !should_run {
+                    continue;
+                }
+                pass.run_with_ctxt(ctxt, body, mir_context_ref);
             }
-            pass.run(ctxt, body);
-        }
-    });
+        })
+    };
     if let Some((main, _)) = ctxt.main_function()
         && !matches!(ctxt.config().command(), CommandArg::Check)
     {
@@ -128,11 +131,12 @@ fn main() {
             io::stderr().write_all(&output.stderr).unwrap();
         }
         if success && matches!(ctxt.config().command(), CommandArg::Run) {
-            Command::new(r".\output.exe")
+            let status = Command::new(r".\output.exe")
                 .spawn()
                 .unwrap()
                 .wait()
                 .unwrap();
+            println!("Exited with {}", status);
         }
     }
 }
