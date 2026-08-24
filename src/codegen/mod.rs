@@ -1982,7 +1982,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
                 let ptr = self.load_place(&place).unwrap().first_value();
                 for (i, element) in elements.iter().enumerate() {
                     let i: i32 = i.try_into().unwrap();
-                    let offset = (i * layout.size.in_bytes_i32()).try_into().unwrap();
+                    let offset = i * layout.size.in_bytes_i32();
                     let operand_value = self.eval_operand(element);
                     self.store_operand_with_mem_place(
                         MemPlace::new_with_offset(ptr, layout.clone(), element_ty, offset),

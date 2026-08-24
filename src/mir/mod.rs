@@ -673,7 +673,7 @@ impl<'ctxt> Context<'ctxt> {
     }
     pub fn for_each_body_mut<'a>(&self, mut f: impl FnMut(&mut Body<'ctxt>) + 'a) {
         for src in self.body_sources.iter() {
-            f(&mut *self.bodies[src].borrow_mut());
+            f(&mut self.bodies[src].borrow_mut());
         }
     }
     pub fn add_body(&mut self, body: Body<'ctxt>) {
@@ -683,6 +683,6 @@ impl<'ctxt> Context<'ctxt> {
     }
     #[track_caller]
     pub fn with_body<T>(&self, src: BodySource, f: impl FnOnce(&Body<'ctxt>) -> T) -> T {
-        f(&*self.bodies.get(&src).expect("Expected a body").borrow())
+        f(&self.bodies.get(&src).expect("Expected a body").borrow())
     }
 }
