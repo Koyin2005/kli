@@ -135,19 +135,18 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .unwrap();
                 let type_def = self.ctxt.type_def(id);
 
-                let mut targets = tests
+                let targets = tests
                     .iter()
                     .filter_map(|(case, block)| {
                         let TestCase::Variant(id) = *case else {
                             return None;
                         };
                         Some(SwitchTarget {
-                            value: type_def.case_value(id).1 as i128,
+                            value: type_def.case_value(id).1.into(),
                             target: *block,
                         })
                     })
-                    .collect::<Vec<_>>();
-                targets.sort_by(|a, b| a.value.cmp(&b.value));
+                    .collect();
 
                 self.switch_to_block(start_block);
                 let disrciminant = self.assign_to_temp(
