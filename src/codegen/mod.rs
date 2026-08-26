@@ -711,7 +711,7 @@ impl<'a, 'ctxt, M: Module> FunctionCodegen<'a, 'ctxt, M> {
     fn store_immediate(&mut self, dst_place: NonZstPlace, value: ir::Value) {
         match dst_place {
             CodegenPlace::MemPlace(place) => self.store_immediate_mem(place, value),
-            CodegenPlace::Ssa(ty, var) => self.store_var_imm(var, value),
+            CodegenPlace::Ssa(_, var) => self.store_var_imm(var, value),
         }
     }
 
