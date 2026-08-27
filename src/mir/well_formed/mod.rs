@@ -398,24 +398,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     stmt.loc,
                 );
             }
-            StmtKind::StoreArrayElements { dst, elements } => {
-                let dst_ty = dst.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                let pointee = self.assert_with_some(
-                    dst_ty,
-                    |ty| ty.as_raw_ptr(),
-                    || format!("should be a raw pointer '{dst_ty}'"),
-                    stmt.loc,
-                );
-                for element in elements {
-                    let element_ty =
-                        element.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                    self.assert(
-                        pointee == element_ty,
-                        || "should have same type as pointee",
-                        stmt.loc,
-                    );
-                }
-            }
             StmtKind::Copy { dst, src, count } => {
                 let lhs_ty = dst.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 let rhs_ty = src.type_of(self.ctxt, &self.body.locals, self.body.return_type);

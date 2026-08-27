@@ -275,15 +275,6 @@ impl<'ctxt> MirDump<'ctxt> {
 
                     writeln!(self.output, ")")?;
                 }
-                StmtKind::StoreArrayElements { dst, elements } => {
-                    write!(self.output, "StoreArrayElements ")?;
-                    self.write_place(dst)?;
-                    write!(self.output, ", [")?;
-                    self.write_with_coma_sep(elements, |this, element| {
-                        this.write_operand(element)
-                    })?;
-                    writeln!(self.output, "]")?;
-                }
                 StmtKind::Copy { dst, src, count } => {
                     write!(self.output, "Copy(")?;
                     self.write_operand(dst)?;

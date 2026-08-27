@@ -233,8 +233,35 @@ impl<'ctxt> Builder<'_, 'ctxt> {
 
                 self.switch_to_block(merge_block);
             }
-            ExprKind::Array(_)
-            | ExprKind::Function(..)
+
+            ExprKind::Array(elements) => {
+                let count: u32 = elements
+                    .len()
+                    .try_into()
+                    .expect("too many elements in array");
+                let element_type = expr.ty.as_array().unwrap();
+                let count_operand =
+                    Operand::Constant(Constant::uint(self.ctxt, IntegerSize::Int64, count.into()));
+                let ptr_type = Type::new_raw_ptr(self.ctxt, element_type);
+                let ptr = self.assign_to_temp(
+                    expr.loc,
+                    ptr_type,
+                    Rvalue::GcAlloc(element_type, count_operand.clone()),
+                );
+                self.assign(
+                    expr.loc,
+                    dest.clone(),
+                    Rvalue::Aggregate(
+                        AggregateKind::Array(element_type),
+                        IndexVec::from_vec(vec![Operand::Load(Place::local(ptr)), count_operand]),
+                    ),
+                );
+                for (i, element) in elements.iter().enumerate() {
+                    let i: u32 = i.try_into().expect("too many array elements");
+                    self.expr_into_dest(dest.clone().with_constant_index(i), element);
+                }
+            }
+            ExprKind::Function(..)
             | ExprKind::Bool(_)
             | ExprKind::Int(_)
             | ExprKind::Unit
@@ -651,43 +678,14 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     Operand::Load(Place::local(checked_result).with_field(FieldId::new(0)));
                 Rvalue::Use(result)
             }
-            ExprKind::Array(elements) => {
-                let count: u32 = elements
-                    .len()
-                    .try_into()
-                    .expect("too many elements in array");
-                let element_type = expr.ty.as_array().unwrap();
-                let count_operand =
-                    Operand::Constant(Constant::uint(self.ctxt, IntegerSize::Int64, count.into()));
-                let ptr_type = Type::new_raw_ptr(self.ctxt, element_type);
-                let ptr = self.assign_to_temp(
-                    expr.loc,
-                    ptr_type,
-                    Rvalue::GcAlloc(element_type, count_operand.clone()),
-                );
-                let elements = elements
-                    .into_iter()
-                    .map(|element| self.operand(element))
-                    .collect();
-                self.push_stmt(
-                    expr.loc,
-                    mir::StmtKind::StoreArrayElements {
-                        dst: Place::local(ptr),
-                        elements,
-                    },
-                );
-                Rvalue::Aggregate(
-                    AggregateKind::Array(element_type),
-                    IndexVec::from_vec(vec![Operand::Load(Place::local(ptr)), count_operand]),
-                )
-            }
             ExprKind::Block(..)
             | ExprKind::Panic
             | ExprKind::Case(..)
             | ExprKind::NeverToAny(_)
             | ExprKind::Logic(..)
             | ExprKind::Return(_)
-            | ExprKind::Unsafe(_) => {
+            | ExprKind::Unsafe(_)
+            | ExprKind::Array(_) => {
                 let temp = self.expr_into_temp(expr);
                 Rvalue::Use(Operand::Load(Place::local(temp)))
             }

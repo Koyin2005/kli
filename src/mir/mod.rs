@@ -548,10 +548,6 @@ pub struct Stmt<'ctxt> {
 pub enum StmtKind<'ctxt> {
     Noop,
     Assign(Place, Box<Rvalue<'ctxt>>),
-    StoreArrayElements {
-        dst: Place,
-        elements: Box<[Operand<'ctxt>]>,
-    },
     Print {
         value: Operand<'ctxt>,
         err: bool,
