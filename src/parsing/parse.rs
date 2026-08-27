@@ -358,7 +358,6 @@ impl Parser {
     fn parse_case_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.advance();
         let matchee = self.parse_expr()?;
-        let _ = self.expect(&TokenKind::Of);
         let mut arms = Vec::new();
         while self.matches_token(&TokenKind::Pipe) {
             arms.push(self.parse_case_arm()?);

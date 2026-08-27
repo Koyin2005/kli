@@ -355,7 +355,6 @@ impl<'s> Lexer<'s> {
                 "true" => TokenKind::True,
                 "false" => TokenKind::False,
                 "end" => TokenKind::End,
-                "of" => TokenKind::Of,
                 "do" => TokenKind::Do,
                 "type" => TokenKind::Type,
                 "while" => TokenKind::While,
