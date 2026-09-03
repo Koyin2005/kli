@@ -1,14 +1,12 @@
 use std::{
     collections::HashMap,
-    io::{self, Write},
-    process::Command,
 };
 
 use kli::{
     Arenas,
     builtin_check::BuiltinCheck,
     config::{CommandArg, Feature, config},
-    files::{FileError, build_file_tree, kli_runtime_path},
+    files::{FileError, build_file_tree},
     literal_check::LiteralCheck,
     mir::{self, passes::passes},
     monomorph::collect::{Instance, InstanceCollector, InstanceKind},
