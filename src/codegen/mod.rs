@@ -214,14 +214,9 @@ impl<'ctxt> CodegenRoot<'ctxt> {
         mut self,
         mir_ctxt: &'mir_ctxt mir::Context<'ctxt>,
     ) -> cranelift_object::ObjectProduct {
+        let mut entrypoint = None;
         for (i, instance) in self.instances.iter().enumerate() {
-            let (name, linkage) = if self
-                .ctxt
-                .main_function()
-                .is_some_and(|(id, _)| id == instance.body_src().def_id())
-            {
-                ("main".to_string(), cranelift_module::Linkage::Export)
-            } else {
+            let (name, linkage) = {
                 (
                     format!("f_{}_{i}", self.ctxt.display(instance.body_src().def_id())),
                     cranelift_module::Linkage::Local,
@@ -235,14 +230,18 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                 .bind(self.ctxt, &instance.args);
                 let abi = call_abi(self.ctxt, &sig);
                 let sig = signature(&abi, self.module.target_config());
-                self.map.functions.insert(
-                    instance.clone(),
-                    FunctionInfo {
-                        id: self.module.declare_function(&name, linkage, &sig).unwrap(),
-                        sig,
-                        abi,
-                    },
-                );
+                let f_id = self.module.declare_function(&name, linkage, &sig).unwrap();
+
+                if self
+                    .ctxt
+                    .main_function()
+                    .is_some_and(|(id, _)| id == instance.body_src().def_id())
+                {
+                    entrypoint = Some((name.clone(), f_id));
+                }
+                self.map
+                    .functions
+                    .insert(instance.clone(), FunctionInfo { id: f_id, sig, abi });
             });
         }
         let mut ctxt = codegen::Context::new();
@@ -264,6 +263,29 @@ impl<'ctxt> CodegenRoot<'ctxt> {
                 sig
             });
 
+        self.make_function(
+            &mut ctxt,
+            &mut f_ctxt,
+            "main",
+            cranelift_module::Linkage::Export,
+            {
+                let mut sig = ir::Signature::new(self.module.target_config().default_call_conv);
+                sig.returns.push(AbiParam::new(ir::types::I32));
+                sig
+            },
+            |root, builder, entry| {
+                let &(_, id) = entrypoint.as_ref().unwrap();
+                let entry_point = root.module.declare_func_in_func(id, builder.func);
+                builder.ins().call(entry_point, &[]);
+                let zero_value = builder.ins().build_imm_const(
+                    ir::types::I32,
+                    ir::immediates::Imm64::new(0),
+                    false,
+                );
+                builder.ins().return_(&[zero_value]);
+                builder.seal_block(entry);
+            },
+        );
         //Declare panic function
         let panic_function = self.make_function(
             &mut ctxt,
