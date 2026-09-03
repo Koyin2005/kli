@@ -7,7 +7,6 @@ use std::{
 use kli::{
     Arenas,
     builtin_check::BuiltinCheck,
-    codegen::CodegenRoot,
     config::{CommandArg, Feature, config},
     files::{FileError, build_file_tree, kli_runtime_path},
     literal_check::LiteralCheck,
@@ -108,35 +107,6 @@ fn main() {
             for instance in &instances {
                 println!("{:?}", instance);
             }
-        }
-        let obj = CodegenRoot::new(ctxt, instances).codegen_functions(&mir_context);
-        {
-            std::fs::write("foo.o", obj.emit().unwrap()).unwrap();
-        }
-        let kli_rt_path = kli_runtime_path().unwrap();
-
-        let output = Command::new("gcc")
-            .arg(kli_rt_path.join("kli_pal.c"))
-            .arg(kli_rt_path.join("kli_rt.c"))
-            .arg("-o")
-            .arg("output")
-            .arg("foo.o")
-            .output()
-            .unwrap();
-
-        let success = output.status.success();
-        if !success {
-            println!("compilation exited with {}", output.status);
-            io::stdout().write_all(&output.stdout).unwrap();
-            io::stderr().write_all(&output.stderr).unwrap();
-        }
-        if success && matches!(ctxt.config().command(), CommandArg::Run) {
-            let status = Command::new(r".\output.exe")
-                .spawn()
-                .unwrap()
-                .wait()
-                .unwrap();
-            println!("Exited with {}", status);
         }
     }
 }
