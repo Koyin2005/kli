@@ -168,7 +168,7 @@ pub struct Constant<'ctxt> {
 impl<'ctxt> Constant<'ctxt> {
     pub fn zero(ctxt: CtxtRef<'ctxt>, kind: IntegerKind) -> Self {
         match kind {
-            IntegerKind::Signed(size) => Self::int(ctxt, size, 0),
+            IntegerKind::Signed => Self::int(ctxt, 0),
             IntegerKind::Unsigned(size) => Self::uint(ctxt, size, 0),
         }
     }
@@ -178,14 +178,14 @@ impl<'ctxt> Constant<'ctxt> {
             value: ConstValue::Scalar(value as i128),
         }
     }
-    pub fn integer(ctxt: CtxtRef<'ctxt>, kind: IntegerKind, value: i128) -> Self {
-        Self {
-            ty: Type::new_integer(ctxt, kind),
-            value: ConstValue::Scalar(value),
-        }
+    pub fn integer(_: CtxtRef<'ctxt>, _: IntegerKind, _: i128) -> Self {
+        todo!("get rid of me")
     }
-    pub fn int(ctxt: CtxtRef<'ctxt>, size: IntegerSize, value: i64) -> Self {
-        Self::integer(ctxt, IntegerKind::Signed(size), value.into())
+    pub fn int(ctxt: CtxtRef<'ctxt>, value: i64) -> Self {
+        Self {
+            ty: Type::new_int(ctxt),
+            value: ConstValue::Scalar(value as i128),
+        }
     }
     pub fn char(ctxt: CtxtRef<'ctxt>, value: char) -> Self {
         Self {

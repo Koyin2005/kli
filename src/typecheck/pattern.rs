@@ -27,7 +27,7 @@ impl<'ctxt> FunctionCtxt<'_, 'ctxt> {
                 }
             }
             PatternKind::Int(value) => {
-                let (ty, value) = self.root().check_int_lit(loc, Some(expected_type), value);
+                let (ty, value) = self.root().check_int_lit(loc, value);
                 let _ = root.unify(expected_type, ty, pattern.loc);
                 typed_ast::Pattern {
                     ty,

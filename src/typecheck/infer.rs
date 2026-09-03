@@ -1,7 +1,7 @@
 use crate::{
     CtxtRef,
     src_loc::SrcLoc,
-    types::{GenericArg, GenericArgs, IntegerKind, Type, TypeKind, TypeMap, visit::Visit},
+    types::{GenericArg, GenericArgs, Type, TypeKind, TypeMap, visit::Visit},
 };
 enum UnifyError {
     OccursCheck,
@@ -112,7 +112,8 @@ impl<'ctxt> TypeInfer<'ctxt> {
             | (TypeKind::Unknown, TypeKind::Unknown)
             | (TypeKind::Char, TypeKind::Char)
             | (TypeKind::Never, TypeKind::Never)
-            | (TypeKind::String, TypeKind::String) => Some(ty1),
+            | (TypeKind::String, TypeKind::String)
+            | (TypeKind::Int, TypeKind::Int) => Some(ty1),
             (&TypeKind::Param(name1, index1), &TypeKind::Param(name2, index2))
                 if index1 == index2 =>
             {
@@ -162,22 +163,8 @@ impl<'ctxt> TypeInfer<'ctxt> {
                 let args = self.unify_generic_args(args1.clone(), args2.clone())?;
                 Some(Type::named(self.ctxt, id1, name, args))
             }
-
-            (&TypeKind::Int(int_kind_1), &TypeKind::Int(int_kind_2)) => {
-                match (int_kind_1, int_kind_2) {
-                    (IntegerKind::Signed(size1), IntegerKind::Signed(size2))
-                    | (IntegerKind::Unsigned(size1), IntegerKind::Unsigned(size2))
-                        if size1 == size2 =>
-                    {
-                        Some(ty1)
-                    }
-
-                    (IntegerKind::Signed(_) | IntegerKind::Unsigned(_), _) => None,
-                }
-            }
-            (&TypeKind::IntVar(var), &TypeKind::Int(int))
-            | (&TypeKind::Int(int), &TypeKind::IntVar(var)) => {
-                let ty = Type::new_integer(self.ctxt, int);
+            (&TypeKind::IntVar(var), &TypeKind::Int) | (&TypeKind::Int, &TypeKind::IntVar(var)) => {
+                let ty = Type::new_int(self.ctxt);
                 match self.unify_var_ty(var, ty) {
                     Ok(ty) => Some(ty),
                     Err(UnifyError::OccursCheck) => Some(ty),
@@ -202,7 +189,7 @@ impl<'ctxt> TypeInfer<'ctxt> {
             (_, &TypeKind::Infer(var)) => self.unify_var_ty(var, ty1).ok(),
             //This will fail to compile if new variants are not matched
             (
-                TypeKind::Int(IntegerKind::Signed(_) | IntegerKind::Unsigned(_))
+                TypeKind::Int
                 | TypeKind::Bool
                 | TypeKind::Unknown
                 | TypeKind::Char

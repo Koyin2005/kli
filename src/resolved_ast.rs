@@ -147,13 +147,6 @@ pub struct PatternField {
 #[derive(Debug, Clone, Copy)]
 pub struct IntegerLiteral {
     pub value: u64,
-    pub kind: IntegerLiteralKind,
-}
-#[derive(Debug, Clone, Copy)]
-pub enum IntegerLiteralKind {
-    Signed(IntegerSize),
-    Unsigned(IntegerSize),
-    Implicit,
 }
 #[derive(Debug)]
 pub enum PatternKind {
@@ -214,7 +207,7 @@ pub enum IntegerSize {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TypeName {
-    Int(IntegerSize),
+    Int,
     UInt(IntegerSize),
     Bool,
     String,

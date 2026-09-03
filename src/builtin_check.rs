@@ -4,7 +4,7 @@ use crate::{
     src_loc::SrcLoc,
     typed_ast::{ExprKind, Function},
     typed_ast_visitor::{Visitor, walk_expr},
-    types::{GenericArg, GenericArgsRef, IntegerKind, IntegerSize, TypeKind},
+    types::{GenericArg, GenericArgsRef, TypeKind},
     unsafety,
 };
 
@@ -36,13 +36,7 @@ impl<'ctxt> BuiltinCheck<'ctxt> {
                 let [from, to] = generic_args.as_array().unwrap().map(GenericArg::expect_ty);
                 let is_valid_bitcast = matches!(
                     (from.kind(), to.kind()),
-                    (
-                        TypeKind::Bool,
-                        TypeKind::Int(
-                            IntegerKind::Signed(IntegerSize::Int8)
-                                | IntegerKind::Unsigned(IntegerSize::Int8),
-                        ),
-                    ) | (TypeKind::Char, TypeKind::Int(IntegerKind::UINT32))
+                    (TypeKind::Bool, TypeKind::Int,) | (TypeKind::Char, TypeKind::Int)
                 ) || from
                     .as_integer()
                     .and_then(|from| to.as_integer().map(|to| (from, to)))
@@ -73,44 +67,6 @@ impl<'ctxt> BuiltinCheck<'ctxt> {
                             ty
                         )
                     })
-                }
-                IntegerBuiltin::Widen => {
-                    let [from, to] = generic_args.as_array().unwrap().map(GenericArg::expect_ty);
-                    let from_int = from.as_integer();
-                    let to_int = to.as_integer();
-
-                    let can_widen = match (from_int, to_int) {
-                        (
-                            Some(IntegerKind::Signed(from_size)),
-                            Some(IntegerKind::Signed(to_size)),
-                        ) => from_size.bit_width() < to_size.bit_width(),
-                        (
-                            Some(IntegerKind::Unsigned(from_size)),
-                            Some(IntegerKind::Unsigned(to_size)),
-                        ) => from_size.bit_width() < to_size.bit_width(),
-                        (Some(IntegerKind::UINT8), None) => to.is_char(),
-                        _ => false,
-                    };
-
-                    (!can_widen).then(|| format!("cannot widen '{}' to '{}'", from, to))
-                }
-                IntegerBuiltin::Truncate => {
-                    let [from, to] = generic_args.as_array().unwrap().map(GenericArg::expect_ty);
-                    let from_int = from.as_integer();
-                    let to_int = to.as_integer();
-                    let valid_truncate = match (from_int, to_int) {
-                        (
-                            Some(IntegerKind::Signed(from_size)),
-                            Some(IntegerKind::Signed(to_size)),
-                        ) => from_size.bit_width() > to_size.bit_width(),
-                        (
-                            Some(IntegerKind::Unsigned(from_size)),
-                            Some(IntegerKind::Unsigned(to_size)),
-                        ) => from_size.bit_width() > to_size.bit_width(),
-                        (None, Some(IntegerKind::UINT8)) => from.is_char(),
-                        _ => false,
-                    };
-                    (!valid_truncate).then(|| format!("cannot truncate '{}' to '{}'", from, to))
                 }
             },
             _ => None,

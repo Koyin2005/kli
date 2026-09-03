@@ -8,7 +8,7 @@ pub trait Visit<'ctxt> {
         match ty.kind() {
             TypeKind::Infer(_)
             | TypeKind::Unknown
-            | TypeKind::Int(_)
+            | TypeKind::Int
             | TypeKind::Bool
             | TypeKind::Char
             | TypeKind::Never
@@ -51,7 +51,7 @@ pub trait VisitMut<'ctxt> {
         match ty.kind() {
             TypeKind::Infer(_)
             | TypeKind::Unknown
-            | TypeKind::Int(_)
+            | TypeKind::Int
             | TypeKind::Bool
             | TypeKind::Char
             | TypeKind::Never

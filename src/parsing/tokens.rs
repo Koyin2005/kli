@@ -51,7 +51,7 @@ pub enum TokenKind {
     LeftBracket,
     RightBracket,
     Pipe,
-    Number(u64, Option<NumberKind>),
+    Number(u64),
     Impl,
     Semi,
     Colon,
@@ -148,14 +148,7 @@ impl Display for TokenKind {
             Self::Impl => "impl",
             Self::Bor => "bor",
             Self::Band => "band",
-            Self::Number(number, sign) => {
-                write!(f, "{number}")?;
-                return match sign {
-                    None => Ok(()),
-                    Some(NumberKind::Signed(size)) => write!(f, "{}", size.size_str()),
-                    Some(NumberKind::Unsigned(size)) => write!(f, "{}", size.size_str()),
-                };
-            }
+            Self::Number(number) => return write!(f, "{number}"),
             Self::Mut => "mut",
             Self::Let => "let",
             Self::Case => "case",

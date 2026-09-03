@@ -35,7 +35,7 @@ pub fn constructors_of_ty<'ctxt>(
         TypeKind::Char
         | TypeKind::Unknown
         | TypeKind::Param(..)
-        | TypeKind::Int(_)
+        | TypeKind::Int
         | TypeKind::Function(..)
         | TypeKind::Array(_)
         | TypeKind::String

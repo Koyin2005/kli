@@ -5,15 +5,15 @@ use crate::{
         Annotation, AnnotationField, BinaryOp, BlockBody, CaseArm, CaseDef, CaseType, Expr,
         ExprKind, FieldInit, Function, FunctionType, GenericArg, GenericArgs, GenericParam,
         GenericParamKind, Generics, Import, ImportTree, ImportTreeTail, InstancePath, IntLit, Item,
-        ItemKind, Lambda, LetBinding, Method, Module, ModuleId, Mutable, NodeId, NumberKind, Param,
-        Path, Pattern, PatternField, PatternKind, RecordField, RecordType, Stmt, StmtKind, Type,
-        TypeDef, TypeDefKind, TypeImpl, TypeKind,
+        ItemKind, Lambda, LetBinding, Method, Module, ModuleId, Mutable, NodeId, Param, Path,
+        Pattern, PatternField, PatternKind, RecordField, RecordType, Stmt, StmtKind, Type, TypeDef,
+        TypeDefKind, TypeImpl, TypeKind,
     },
     diagnostics::DiagnosticReporter,
     ident::{Ident, Symbol},
     parsing::{
         lex::Lexer,
-        tokens::{self, Token, TokenKind},
+        tokens::{Token, TokenKind},
     },
     src_loc::SrcLoc,
 };
@@ -169,15 +169,9 @@ impl Parser {
             ))
         })
     }
-    fn parse_int_lit(&mut self, num: u64, kind: Option<tokens::NumberKind>) -> IntLit {
+    fn parse_int_lit(&mut self, num: u64) -> IntLit {
         self.advance();
-        IntLit {
-            value: num,
-            kind: kind.map(|kind| match kind {
-                tokens::NumberKind::Signed(size) => NumberKind::Signed(size),
-                tokens::NumberKind::Unsigned(size) => NumberKind::Unsigned(size),
-            }),
-        }
+        IntLit { value: num }
     }
     /// Returns the binding power of the current token and its respective op if its a valid binary operator
     /// otherwise returns `None`
@@ -235,8 +229,8 @@ impl Parser {
                     kind: PatternKind::Tuple(fields),
                 })
             }
-            TokenKind::Number(number, kind) => {
-                let lit = self.parse_int_lit(number, kind);
+            TokenKind::Number(number) => {
+                let lit = self.parse_int_lit(number);
                 Ok(Pattern {
                     loc,
                     kind: PatternKind::Int(lit),
@@ -478,8 +472,8 @@ impl Parser {
     fn parse_expr_prefix(&mut self) -> Result<Expr, ParseError> {
         let loc = self.current_loc();
         match self.peek_token().kind {
-            TokenKind::Number(num, kind) => {
-                let lit = self.parse_int_lit(num, kind);
+            TokenKind::Number(num) => {
+                let lit = self.parse_int_lit(num);
                 Ok(Expr {
                     loc,
                     kind: ExprKind::Number(lit),

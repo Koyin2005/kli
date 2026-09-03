@@ -322,13 +322,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
 
                         self.assert(
                             from.bit_width() <= to.bit_width(),
-                            || {
-                                format!(
-                                    "Cannot extend {} into {}",
-                                    from_ty,
-                                    IntegerKind::Signed(to)
-                                )
-                            },
+                            || format!("Cannot extend {} into {}", from_ty, IntegerKind::Signed),
                             loc,
                         );
                     }
@@ -348,13 +342,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                         let to = to.size();
                         self.assert(
                             from.bit_width() >= to.bit_width(),
-                            || {
-                                format!(
-                                    "Cannot truncate {} into {}",
-                                    from_ty,
-                                    IntegerKind::Signed(to)
-                                )
-                            },
+                            || format!("Cannot truncate {} into {}", from_ty, IntegerKind::Signed),
                             loc,
                         );
                     }

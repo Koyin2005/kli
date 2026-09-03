@@ -207,7 +207,7 @@ impl IntegerSize {
 }
 #[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
 pub enum IntegerKind {
-    Signed(IntegerSize),
+    Signed,
     Unsigned(IntegerSize),
 }
 impl IntegerKind {
@@ -216,9 +216,7 @@ impl IntegerKind {
 
     pub fn name_str(self) -> &'static str {
         match self {
-            IntegerKind::Signed(IntegerSize::Int8) => "Int8",
-            IntegerKind::Signed(IntegerSize::Int32) => "Int32",
-            IntegerKind::Signed(IntegerSize::Int64) => "Int64",
+            IntegerKind::Signed => "Int",
             IntegerKind::Unsigned(IntegerSize::Int8) => "UInt8",
             IntegerKind::Unsigned(IntegerSize::Int32) => "UInt32",
             IntegerKind::Unsigned(IntegerSize::Int64) => "UInt64",
@@ -226,21 +224,15 @@ impl IntegerKind {
     }
     pub const fn min_value_scalar(self) -> i128 {
         match self {
-            Self::Signed(IntegerSize::Int8) => i8::MIN as i128,
             Self::Unsigned(IntegerSize::Int8) => u8::MIN as i128,
-            Self::Signed(IntegerSize::Int32) => i32::MIN as i128,
             Self::Unsigned(IntegerSize::Int32) => u32::MIN as i128,
-            Self::Signed(IntegerSize::Int64) => i64::MIN as i128,
+            Self::Signed => i64::MIN as i128,
             Self::Unsigned(IntegerSize::Int64) => u64::MIN as i128,
         }
     }
     pub const fn max_value_scalar(self) -> i128 {
         match self {
-            Self::Signed(size) => match size {
-                IntegerSize::Int64 => i64::MAX as i128,
-                IntegerSize::Int8 => i8::MAX as i128,
-                IntegerSize::Int32 => i32::MAX as i128,
-            },
+            Self::Signed => i64::MAX as i128,
             Self::Unsigned(size) => match size {
                 IntegerSize::Int8 => u8::MAX as i128,
                 IntegerSize::Int64 => u64::MAX as i128,
@@ -249,15 +241,17 @@ impl IntegerKind {
         }
     }
     pub const fn size(self) -> IntegerSize {
-        let (Self::Signed(size) | Self::Unsigned(size)) = self;
-        size
+        match self {
+            Self::Signed => IntegerSize::Int64,
+            Self::Unsigned(size) => size,
+        }
     }
     pub const fn is_signed(self) -> bool {
-        matches!(self, Self::Signed(_))
+        matches!(self, Self::Signed)
     }
     pub const fn signed_and_size(self) -> (bool, IntegerSize) {
         match self {
-            Self::Signed(size) => (true, size),
+            Self::Signed => (true, IntegerSize::Int64),
             Self::Unsigned(size) => (false, size),
         }
     }
@@ -290,20 +284,17 @@ impl<'ctxt> Type<'ctxt> {
         };
         Some(ty)
     }
-    pub fn new_integer(ctxt: CtxtRef<'ctxt>, kind: IntegerKind) -> Self {
-        TypeKind::Int(kind).intern(ctxt)
-    }
     pub fn new_integer_var(ctxt: CtxtRef<'ctxt>, var: usize) -> Self {
         TypeKind::IntVar(var).intern(ctxt)
     }
-    pub fn new_int(ctxt: CtxtRef<'ctxt>, size: IntegerSize) -> Self {
-        Self::new_integer(ctxt, IntegerKind::Signed(size))
+    pub fn new_int(ctxt: CtxtRef<'ctxt>) -> Self {
+        TypeKind::Int.intern(ctxt)
     }
     pub fn new_bool(ctxt: CtxtRef<'ctxt>) -> Self {
         TypeKind::Bool.intern(ctxt)
     }
-    pub fn new_uint(ctxt: CtxtRef<'ctxt>, size: IntegerSize) -> Self {
-        Self::new_integer(ctxt, IntegerKind::Unsigned(size))
+    pub fn new_uint(_: CtxtRef<'ctxt>, _: IntegerSize) -> Self {
+        todo!("Get rid of me!!!")
     }
     pub fn new_char(ctxt: CtxtRef<'ctxt>) -> Self {
         TypeKind::Char.intern(ctxt)
@@ -391,16 +382,13 @@ impl<'ctxt> Type<'ctxt> {
         Ok(ty)
     }
     pub const fn as_integer(self) -> Option<IntegerKind> {
-        let &TypeKind::Int(kind) = self.0 else {
-            return None;
-        };
-        Some(kind)
+        None
     }
     pub const fn is_integer(self) -> bool {
-        matches!(self.0, TypeKind::Int(_))
+        matches!(self.0, TypeKind::Int)
     }
     pub const fn is_integer_or_int_var(self) -> bool {
-        matches!(self.0, TypeKind::Int(_) | TypeKind::IntVar(_))
+        matches!(self.0, TypeKind::Int | TypeKind::IntVar(_))
     }
     pub const fn is_int_var(self) -> bool {
         matches!(self.0, TypeKind::IntVar(_))
@@ -411,15 +399,12 @@ impl<'ctxt> Type<'ctxt> {
     pub fn is_signed_int(self) -> bool {
         self.as_integer().is_some_and(|num| num.is_signed())
     }
-    pub fn is_integer_kind(self, kind: IntegerKind) -> bool {
-        let &TypeKind::Int(int_kind) = self.0 else {
-            return false;
-        };
-        int_kind == kind
+    pub fn is_integer_kind(self, _: IntegerKind) -> bool {
+        false
     }
     pub const fn as_simple_scalar(self) -> Option<SimpleScalar> {
         match *self.kind() {
-            TypeKind::Int(int) => Some(SimpleScalar::Int(int)),
+            TypeKind::Int => Some(SimpleScalar::Int(IntegerKind::Signed)),
             TypeKind::Bool => Some(SimpleScalar::Bool),
             TypeKind::Char => Some(SimpleScalar::Char),
             _ => None,
@@ -452,7 +437,7 @@ impl std::fmt::Display for Type<'_> {
 pub enum TypeKind<'ctxt> {
     Infer(usize),
     Unknown,
-    Int(IntegerKind),
+    Int,
     IntVar(usize),
     Bool,
     Char,
@@ -481,18 +466,9 @@ impl<'ctxt> TypeKind<'ctxt> {
     pub fn is_bool(&self) -> bool {
         matches!(self, Self::Bool)
     }
-    pub fn is_integer(&self) -> bool {
-        matches!(self, Self::Int(_))
-    }
-    pub fn is_integer_kind(&self, kind: IntegerKind) -> bool {
-        matches!(self, Self::Int(int_kind) if kind == *int_kind)
-    }
 
     pub const fn is_builtin_scalar(&self) -> bool {
-        matches!(
-            self,
-            Self::Int(_) | Self::Bool | Self::Char | Self::RawPtr(_)
-        )
+        matches!(self, Self::Int | Self::Bool | Self::Char | Self::RawPtr(_))
     }
     pub fn array(element: Type<'ctxt>) -> Self {
         Self::Array(element)
@@ -532,7 +508,7 @@ impl<'ctxt> TypeKind<'ctxt> {
         match self {
             Self::Infer(_)
             | Self::Unknown
-            | Self::Int(_)
+            | Self::Int
             | Self::Bool
             | Self::Char
             | Self::Param(..)
@@ -593,7 +569,7 @@ impl Display for TypeKind<'_> {
             }
             TypeKind::Char => f.pad("char"),
             TypeKind::Bool => f.pad("bool"),
-            TypeKind::Int(kind) => write!(f, "{}", kind),
+            TypeKind::Int => write!(f, "{}", "Int"),
             TypeKind::Unknown => f.pad("{unknown}"),
             TypeKind::Infer(_) => f.pad("_"),
             TypeKind::IntVar(_) => f.pad("{integer}"),
@@ -629,7 +605,7 @@ pub trait TypeMap<'ctxt> {
             TypeKind::String
             | TypeKind::Bool
             | TypeKind::Char
-            | TypeKind::Int(_)
+            | TypeKind::Int
             | TypeKind::Unknown
             | TypeKind::Infer(_)
             | TypeKind::Param(..)

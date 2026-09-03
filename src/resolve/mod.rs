@@ -35,11 +35,9 @@ enum TypeAlias {
     Array,
     Never,
     Uninit,
-    Int64,
+    Int,
     UInt64,
-    Int8,
     UInt8,
-    Int32,
     UInt32,
     RawPtr,
 }
@@ -47,9 +45,7 @@ impl TypeAlias {
     fn into_type_name(self) -> res::TypeName {
         match self {
             TypeAlias::Box => res::TypeName::Box,
-            TypeAlias::Int8 => res::TypeName::Int(res::IntegerSize::Int8),
-            TypeAlias::Int32 => res::TypeName::Int(res::IntegerSize::Int32),
-            TypeAlias::Int64 => res::TypeName::Int(res::IntegerSize::Int64),
+            TypeAlias::Int => res::TypeName::Int,
             TypeAlias::UInt8 => res::TypeName::UInt(res::IntegerSize::Int8),
             TypeAlias::UInt32 => res::TypeName::UInt(res::IntegerSize::Int32),
             TypeAlias::UInt64 => res::TypeName::UInt(res::IntegerSize::Int64),
@@ -129,9 +125,7 @@ impl<'info> Resolve<'info> {
             (Symbol::intern("UInt8"), Res::TypeAlias(TypeAlias::UInt8)),
             (Symbol::intern("UInt32"), Res::TypeAlias(TypeAlias::UInt32)),
             (Symbol::intern("UInt64"), Res::TypeAlias(TypeAlias::UInt64)),
-            (Symbol::intern("Int8"), Res::TypeAlias(TypeAlias::Int8)),
-            (Symbol::intern("Int32"), Res::TypeAlias(TypeAlias::Int32)),
-            (Symbol::intern("Int64"), Res::TypeAlias(TypeAlias::Int64)),
+            (Symbol::intern("Int"), Res::TypeAlias(TypeAlias::Int)),
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),
             (Symbol::RAW_PTR, Res::TypeAlias(TypeAlias::RawPtr)),
@@ -368,25 +362,9 @@ impl<'info> Resolve<'info> {
     fn resolve_int_lit(
         &mut self,
         _: SrcLoc,
-        ast::IntLit { value, kind }: ast::IntLit,
+        ast::IntLit { value }: ast::IntLit,
     ) -> res::IntegerLiteral {
-        let convert_size = |size: ast::IntegerSize| match size {
-            ast::IntegerSize::Int32 => res::IntegerSize::Int32,
-            ast::IntegerSize::Int64 => res::IntegerSize::Int64,
-            ast::IntegerSize::Int8 => res::IntegerSize::Int8,
-        };
-        res::IntegerLiteral {
-            value,
-            kind: match kind {
-                Some(ast::NumberKind::Signed(size)) => {
-                    res::IntegerLiteralKind::Signed(convert_size(size))
-                }
-                Some(ast::NumberKind::Unsigned(size)) => {
-                    res::IntegerLiteralKind::Unsigned(convert_size(size))
-                }
-                None => res::IntegerLiteralKind::Implicit,
-            },
-        }
+        res::IntegerLiteral { value }
     }
     fn resolve_pattern(&mut self, pattern: ast::Pattern) -> res::Pattern {
         let loc = pattern.loc;
@@ -867,7 +845,6 @@ impl<'info> Resolve<'info> {
                                                 loc: body_loc,
                                                 kind: res::ExprKind::Int(res::IntegerLiteral {
                                                     value: 1,
-                                                    kind: res::IntegerLiteralKind::Implicit,
                                                 }),
                                             },
                                         ]

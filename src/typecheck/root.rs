@@ -13,7 +13,7 @@ use crate::{
     src_loc::SrcLoc,
     typecheck::{infer::TypeInfer, subst::TypeSubst},
     typed_ast::{self, Function, IteratorType, LetBinding},
-    types::{self, FieldName, FunctionSig, GenericArgs, Type, TypeKind, lower::Lower},
+    types::{FieldName, FunctionSig, GenericArgs, Type, TypeKind, lower::Lower},
 };
 pub struct RootCtxt<'ctxt> {
     id: DefId,
@@ -127,31 +127,11 @@ impl<'ctxt> RootCtxt<'ctxt> {
     pub(super) fn check_int_lit(
         &self,
         loc: SrcLoc,
-        hint: Option<Type<'ctxt>>,
         lit: res::IntegerLiteral,
     ) -> (Type<'ctxt>, u64) {
-        let convert_size = |size: res::IntegerSize| match size {
-            res::IntegerSize::Int32 => types::IntegerSize::Int32,
-            res::IntegerSize::Int64 => types::IntegerSize::Int64,
-            res::IntegerSize::Int8 => types::IntegerSize::Int8,
-        };
-        let integer_ty = match lit.kind {
-            res::IntegerLiteralKind::Implicit => {
-                if let Some(kind) = hint.and_then(|hint| hint.as_integer()) {
-                    Type::new_integer(self.ctxt(), kind)
-                } else {
-                    Type::new_integer_var(self.ctxt(), self.infer.borrow_mut().fresh_ty(loc))
-                }
-            }
-            res::IntegerLiteralKind::Signed(size) => Type::new_int(self.ctxt(), convert_size(size)),
-            res::IntegerLiteralKind::Unsigned(size) => {
-                Type::new_uint(self.ctxt(), convert_size(size))
-            }
-        };
+        let integer_ty = Type::new_int(self.ctxt());
         let value = lit.value;
-        if let TypeKind::Int(int) = integer_ty.kind()
-            && (value as i128) > int.max_value_scalar()
-        {
+        if (value as i128) > (i64::MAX as i128) {
             self.ctxt.diag().add_diagnostic(
                 format!("Integer literal '{value}' too large for '{}'", integer_ty),
                 loc,

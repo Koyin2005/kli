@@ -429,29 +429,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                         right,
                     ))
                 }
-                IntegerBuiltin::Truncate => {
-                    let [arg] = operands().try_into().unwrap();
-                    let kind = ty.as_integer().unwrap();
-                    BuiltinResult::Rvalue(Rvalue::Cast(
-                        mir::CastKind::IntegerCast(mir::IntegerCast::Truncate(kind)),
-                        arg,
-                        ty,
-                    ))
-                }
-                IntegerBuiltin::Widen => {
-                    let [operand] = operands().try_into().unwrap();
-                    let kind = ty.as_simple_scalar().unwrap();
-                    let (signed, size) = kind.as_integer().signed_and_size();
-                    BuiltinResult::Rvalue(Rvalue::Cast(
-                        mir::CastKind::IntegerCast(if signed {
-                            mir::IntegerCast::SignExtend(size)
-                        } else {
-                            mir::IntegerCast::ZeroExtend(size)
-                        }),
-                        operand,
-                        ty,
-                    ))
-                }
             },
             Builtin::ReadLine => BuiltinResult::Rvalue(Rvalue::ReadLine),
             Builtin::PrintString => {
@@ -569,7 +546,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                             mir::AssertKind::DivideByZero,
                         );
 
-                        if let IntegerKind::Signed(size) = kind {
+                        if let IntegerKind::Signed = kind {
                             let is_left_min = self.assign_equals(
                                 expr.loc,
                                 left_operand.clone(),
@@ -582,7 +559,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                             let is_right_neg_1 = self.assign_equals(
                                 expr.loc,
                                 left_operand.clone(),
-                                Operand::Constant(Constant::int(self.ctxt, size, -1)),
+                                Operand::Constant(Constant::int(self.ctxt, -1)),
                             );
                             let overflow = self.assign_binary_result(
                                 expr.loc,

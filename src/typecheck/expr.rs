@@ -622,7 +622,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 make_expr(Type::new_unit(ctxt), typed_ast::ExprKind::Unit, loc)
             }
             ExprKind::Int(value) => {
-                let (ty, value) = self.root().check_int_lit(loc, expected_ty, *value);
+                let (ty, value) = self.root().check_int_lit(loc, *value);
                 make_expr(ty, typed_ast::ExprKind::Int(value), loc)
             }
             ExprKind::String(value) => {

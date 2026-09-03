@@ -193,7 +193,7 @@ impl Layout {
         Self {
             size: POINTER_SIZE,
             alignment: POINTER_ALIGN,
-            kind: LayoutKind::Scalar(Scalar::Pointer { non_null }),
+            kind: LayoutKind::Scalar(Scalar::Pointer { gc: non_null }),
         }
     }
     pub const fn as_scalar(&self) -> Option<Scalar> {
@@ -239,7 +239,7 @@ impl Layout {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Scalar {
     Bool,
-    Pointer { non_null: bool },
+    Pointer { gc: bool },
     Int { signed: bool, size: IntegerSize },
 }
 impl Scalar {
@@ -261,7 +261,7 @@ impl Scalar {
     }
     pub const fn integer_kind(self) -> IntegerKind {
         if self.signed() {
-            IntegerKind::Signed(self.integer_size())
+            IntegerKind::Signed
         } else {
             IntegerKind::Unsigned(self.integer_size())
         }
@@ -269,14 +269,14 @@ impl Scalar {
     pub const fn integer_size(self) -> IntegerSize {
         match self {
             Self::Bool => IntegerSize::Int8,
-            Self::Pointer { non_null: _ } => IntegerSize::Int64,
+            Self::Pointer { gc: _ } => IntegerSize::Int64,
             Self::Int { signed: _, size } => size,
         }
     }
     pub const fn size(self) -> Size {
         match self {
             Scalar::Bool => Size::BYTE,
-            Scalar::Pointer { non_null: _ } => POINTER_SIZE,
+            Scalar::Pointer { gc: _ } => POINTER_SIZE,
             Scalar::Int { size, .. } => match size {
                 IntegerSize::Int64 => Size::BYTE.mul(8),
                 IntegerSize::Int32 => Size::BYTE.mul(4),
@@ -292,7 +292,7 @@ impl Scalar {
                 IntegerSize::Int32 => Align::FOUR_BYTE,
                 IntegerSize::Int64 => INT_ALIGN,
             },
-            Self::Pointer { non_null: _ } => POINTER_ALIGN,
+            Self::Pointer { gc: _ } => POINTER_ALIGN,
         }
     }
 }
@@ -361,7 +361,7 @@ fn variant_layout<'ctxt>(
             (!first.is_align_1_zst()).then_some((CaseId::new(0), first)),
             (!second.is_align_1_zst()).then_some((CaseId::new(1), second)),
         )
-        && let LayoutKind::Scalar(Scalar::Pointer { non_null: true }) = non_zero.kind
+        && let LayoutKind::Scalar(Scalar::Pointer { gc: true }) = non_zero.kind
     {
         let tagged_case = if untagged == CaseId::new(0) {
             CaseId::new(1)
@@ -374,7 +374,7 @@ fn variant_layout<'ctxt>(
             TagEncoding::Niche {
                 encoded: untagged,
                 direct: tagged_case,
-                untagged_scalar: Scalar::Pointer { non_null: false },
+                untagged_scalar: Scalar::Pointer { gc: false },
             },
         )
     } else {
@@ -461,10 +461,7 @@ pub fn calculate_layout<'ctxt>(
         TypeKind::Infer(_) | TypeKind::Unknown | TypeKind::IntVar(_) => {
             return Err(LayoutError::Unknown);
         }
-        TypeKind::Int(integer_kind) => {
-            let (signed, size) = integer_kind.signed_and_size();
-            Layout::from_scalar(Scalar::integer(signed, size))
-        }
+        TypeKind::Int => Layout::from_scalar(Scalar::integer(true, IntegerSize::Int64)),
         TypeKind::Bool => Layout {
             size: Size::BYTE,
             alignment: Align::BYTE,

@@ -11,8 +11,6 @@ pub enum IntegerBuiltin {
     OverflowingSub,
     WrappingMul,
     OverflowingMul,
-    Truncate,
-    Widen,
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
@@ -55,8 +53,6 @@ impl Builtin {
             Builtin::Bitcast => "bitcast",
             Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd) => "wrapping_add",
             Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingAdd) => "overflowing_add",
-            Builtin::IntegerBuiltin(IntegerBuiltin::Widen) => "widen",
-            Builtin::IntegerBuiltin(IntegerBuiltin::Truncate) => "trunc",
             Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub) => "overflowing_sub",
             Builtin::IntegerBuiltin(IntegerBuiltin::WrappingSub) => "wrapping_sub",
             Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingMul) => "overflowing_mul",
@@ -100,8 +96,6 @@ impl Builtin {
             Symbol::OVERFLOWING_MUL => {
                 Some(Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingMul))
             }
-            Symbol::WIDEN => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Widen)),
-            Symbol::TRUNCATE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::Truncate)),
             Symbol::BITCAST => Some(Builtin::Bitcast),
             Symbol::INT_MAX_VALUE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue)),
             Symbol::ARRAY_NEW => Some(Builtin::ArrayNew),
