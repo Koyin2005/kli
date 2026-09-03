@@ -5,7 +5,6 @@ use kli::{
     builtin_check::BuiltinCheck,
     config::{CommandArg, Feature, config},
     files::{FileError, build_file_tree},
-    literal_check::LiteralCheck,
     mir::{self, passes::passes},
     monomorph::collect::{Instance, InstanceCollector, InstanceKind},
     parsing,
@@ -48,7 +47,6 @@ fn main() {
         }
         had_error |= SafetyCheck::check(ctxt, id, function).is_err();
         had_error |= BuiltinCheck::check(ctxt, function);
-        had_error |= LiteralCheck::check(ctxt, function);
     }
     if had_error {
         return;

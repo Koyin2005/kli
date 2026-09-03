@@ -36,9 +36,6 @@ enum TypeAlias {
     Never,
     Uninit,
     Int,
-    UInt64,
-    UInt8,
-    UInt32,
     RawPtr,
 }
 impl TypeAlias {
@@ -46,9 +43,6 @@ impl TypeAlias {
         match self {
             TypeAlias::Box => res::TypeName::Box,
             TypeAlias::Int => res::TypeName::Int,
-            TypeAlias::UInt8 => res::TypeName::UInt(res::IntegerSize::Int8),
-            TypeAlias::UInt32 => res::TypeName::UInt(res::IntegerSize::Int32),
-            TypeAlias::UInt64 => res::TypeName::UInt(res::IntegerSize::Int64),
             TypeAlias::Array => res::TypeName::Array,
             TypeAlias::Never => res::TypeName::Never,
             TypeAlias::Uninit => res::TypeName::Uninit,
@@ -122,9 +116,6 @@ pub struct Resolve<'info> {
 impl<'info> Resolve<'info> {
     fn new(config: Config, results: &'info DeclareResults) -> Self {
         let env = Scope::from_iter([
-            (Symbol::intern("UInt8"), Res::TypeAlias(TypeAlias::UInt8)),
-            (Symbol::intern("UInt32"), Res::TypeAlias(TypeAlias::UInt32)),
-            (Symbol::intern("UInt64"), Res::TypeAlias(TypeAlias::UInt64)),
             (Symbol::intern("Int"), Res::TypeAlias(TypeAlias::Int)),
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),

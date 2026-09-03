@@ -7,26 +7,6 @@ pub struct Token {
     pub loc: SrcLoc,
     pub kind: TokenKind,
 }
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub enum IntegerSize {
-    Int64,
-    Int32,
-    Int8,
-}
-impl IntegerSize {
-    pub const fn size_str(self) -> &'static str {
-        match self {
-            Self::Int32 => "32",
-            Self::Int64 => "64",
-            Self::Int8 => "8",
-        }
-    }
-}
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub enum NumberKind {
-    Unsigned(IntegerSize),
-    Signed(IntegerSize),
-}
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TokenKind {
     Or,

@@ -96,14 +96,8 @@ pub struct TypeDefInfo {
     pub kind: TypeDefKind,
 }
 impl TypeDefInfo {
-    #[track_caller]
     pub fn tag_type(&self) -> TagType {
-        let cases = self.expect_cases();
-        if u8::try_from(cases.len()).is_ok() {
-            TagType::UInt8
-        } else {
-            TagType::Uint64
-        }
+        TagType::Int
     }
     #[track_caller]
     pub fn case_value(&self, case: CaseId) -> (TagType, u32) {

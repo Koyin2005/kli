@@ -13,32 +13,26 @@ pub mod visit;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SimpleScalar {
-    Int(IntegerKind),
+    Int,
     Bool,
     Char,
 }
 impl SimpleScalar {
-    pub fn as_integer(self) -> IntegerKind {
-        match self {
-            SimpleScalar::Int(integer_kind) => integer_kind,
-            SimpleScalar::Bool => IntegerKind::UINT8,
-            SimpleScalar::Char => IntegerKind::UINT32,
-        }
+    pub const fn is_int(self) -> bool {
+        matches!(self, Self::Int)
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TagType {
-    UInt8,
-    Uint64,
+    Int,
     Never,
 }
 impl TagType {
     pub fn into_type<'ctxt>(self, ctxt: CtxtRef<'ctxt>) -> Type<'ctxt> {
         match self {
             Self::Never => Type::new_never(ctxt),
-            Self::UInt8 => Type::new_uint(ctxt, IntegerSize::Int8),
-            Self::Uint64 => Type::new_uint(ctxt, IntegerSize::Int64),
+            Self::Int => Type::new_int(ctxt),
         }
     }
 }
@@ -205,62 +199,6 @@ impl IntegerSize {
         matches!(self, IntegerSize::Int64)
     }
 }
-#[derive(PartialEq, Eq, Clone, Debug, Hash, Copy)]
-pub enum IntegerKind {
-    Signed,
-    Unsigned(IntegerSize),
-}
-impl IntegerKind {
-    pub const UINT8: Self = IntegerKind::Unsigned(IntegerSize::Int8);
-    pub const UINT32: Self = IntegerKind::Unsigned(IntegerSize::Int32);
-
-    pub fn name_str(self) -> &'static str {
-        match self {
-            IntegerKind::Signed => "Int",
-            IntegerKind::Unsigned(IntegerSize::Int8) => "UInt8",
-            IntegerKind::Unsigned(IntegerSize::Int32) => "UInt32",
-            IntegerKind::Unsigned(IntegerSize::Int64) => "UInt64",
-        }
-    }
-    pub const fn min_value_scalar(self) -> i128 {
-        match self {
-            Self::Unsigned(IntegerSize::Int8) => u8::MIN as i128,
-            Self::Unsigned(IntegerSize::Int32) => u32::MIN as i128,
-            Self::Signed => i64::MIN as i128,
-            Self::Unsigned(IntegerSize::Int64) => u64::MIN as i128,
-        }
-    }
-    pub const fn max_value_scalar(self) -> i128 {
-        match self {
-            Self::Signed => i64::MAX as i128,
-            Self::Unsigned(size) => match size {
-                IntegerSize::Int8 => u8::MAX as i128,
-                IntegerSize::Int64 => u64::MAX as i128,
-                IntegerSize::Int32 => u32::MAX as i128,
-            },
-        }
-    }
-    pub const fn size(self) -> IntegerSize {
-        match self {
-            Self::Signed => IntegerSize::Int64,
-            Self::Unsigned(size) => size,
-        }
-    }
-    pub const fn is_signed(self) -> bool {
-        matches!(self, Self::Signed)
-    }
-    pub const fn signed_and_size(self) -> (bool, IntegerSize) {
-        match self {
-            Self::Signed => (true, IntegerSize::Int64),
-            Self::Unsigned(size) => (false, size),
-        }
-    }
-}
-impl Display for IntegerKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.pad(self.name_str())
-    }
-}
 #[derive(PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Type<'ctxt>(&'ctxt TypeKind<'ctxt>);
 impl<'ctxt> Type<'ctxt> {
@@ -292,9 +230,6 @@ impl<'ctxt> Type<'ctxt> {
     }
     pub fn new_bool(ctxt: CtxtRef<'ctxt>) -> Self {
         TypeKind::Bool.intern(ctxt)
-    }
-    pub fn new_uint(_: CtxtRef<'ctxt>, _: IntegerSize) -> Self {
-        todo!("Get rid of me!!!")
     }
     pub fn new_char(ctxt: CtxtRef<'ctxt>) -> Self {
         TypeKind::Char.intern(ctxt)
@@ -381,9 +316,6 @@ impl<'ctxt> Type<'ctxt> {
         };
         Ok(ty)
     }
-    pub const fn as_integer(self) -> Option<IntegerKind> {
-        None
-    }
     pub const fn is_integer(self) -> bool {
         matches!(self.0, TypeKind::Int)
     }
@@ -393,18 +325,9 @@ impl<'ctxt> Type<'ctxt> {
     pub const fn is_int_var(self) -> bool {
         matches!(self.0, TypeKind::IntVar(_))
     }
-    pub fn is_uint(self, size: IntegerSize) -> bool {
-        self.is_integer_kind(IntegerKind::Unsigned(size))
-    }
-    pub fn is_signed_int(self) -> bool {
-        self.as_integer().is_some_and(|num| num.is_signed())
-    }
-    pub fn is_integer_kind(self, _: IntegerKind) -> bool {
-        false
-    }
     pub const fn as_simple_scalar(self) -> Option<SimpleScalar> {
         match *self.kind() {
-            TypeKind::Int => Some(SimpleScalar::Int(IntegerKind::Signed)),
+            TypeKind::Int => Some(SimpleScalar::Int),
             TypeKind::Bool => Some(SimpleScalar::Bool),
             TypeKind::Char => Some(SimpleScalar::Char),
             _ => None,

@@ -4,11 +4,11 @@ use crate::{
     collect::{CtxtRef, TypeDefKind},
     diagnostics::emit_fatal_diagnostic,
     mir::{
-        BinaryOp, Body, CastKind, IntegerCast, Location, Stmt, StmtKind, TerminatorKind,
+        BinaryOp, Body, CastKind, Location, Stmt, StmtKind, TerminatorKind,
         visitor::{PlaceCtxt, Visit},
     },
     src_loc::SrcLoc,
-    types::{FunctionSig, IntegerKind, IntegerSize, SimpleScalar, Type, TypeKind},
+    types::{FunctionSig, Type, TypeKind},
     unsafety,
 };
 pub struct WellFormed<'ctxt, 'body> {
@@ -99,7 +99,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             super::Rvalue::GcAlloc(_, count) => {
                 let count_ty = count.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 self.assert(
-                    count_ty.is_integer_kind(IntegerKind::Unsigned(IntegerSize::Int64)),
+                    count_ty.is_integer(),
                     || format!("count should be a uint not '{}'", count_ty),
                     loc,
                 );
@@ -138,7 +138,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                         loc,
                     );
                     self.assert(
-                        len_ty.is_integer_kind(IntegerKind::Unsigned(IntegerSize::Int64)),
+                        len_ty.is_integer(),
                         || format!("len should be a uint not '{}'", pointee_ty),
                         loc,
                     );
@@ -264,9 +264,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                         loc,
                     ),
                     (BinaryOp::Offset, left, right)
-                        if left
-                            .as_raw_ptr()
-                            .is_some_and(|_| right.is_uint(IntegerSize::Int64)) => {}
+                        if left.as_raw_ptr().is_some_and(|_| right.is_integer()) => {}
                     (op, left, right) => self.assert(
                         false,
                         || format!("invalid '{op:?}' with operands {} and {}", left, right),
@@ -283,70 +281,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                         loc,
                     );
                 }
-                CastKind::IntegerCast(kind) => match kind {
-                    IntegerCast::ZeroExtend(to) => {
-                        let from_ty =
-                            operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-
-                        let from = self.assert_with_some(
-                            from_ty,
-                            |from| from.as_integer().map(IntegerKind::size),
-                            || "Should be an integer",
-                            loc,
-                        );
-
-                        self.assert(
-                            from.bit_width() < to.bit_width(),
-                            || {
-                                format!(
-                                    "Cannot extend {} into {}",
-                                    from_ty,
-                                    IntegerKind::Unsigned(to)
-                                )
-                            },
-                            loc,
-                        );
-                    }
-                    IntegerCast::SignExtend(to) => {
-                        let from_ty =
-                            operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-
-                        let from = self
-                            .assert_with_some(
-                                from_ty,
-                                |from| from.as_simple_scalar().map(SimpleScalar::as_integer),
-                                || "Should be an integer",
-                                loc,
-                            )
-                            .size();
-
-                        self.assert(
-                            from.bit_width() <= to.bit_width(),
-                            || format!("Cannot extend {} into {}", from_ty, IntegerKind::Signed),
-                            loc,
-                        );
-                    }
-                    IntegerCast::Truncate(to) => {
-                        let from_ty =
-                            operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-
-                        let from = self
-                            .assert_with_some(
-                                from_ty,
-                                |from| from.as_simple_scalar().map(SimpleScalar::as_integer),
-                                || "Should be an integer",
-                                loc,
-                            )
-                            .size();
-
-                        let to = to.size();
-                        self.assert(
-                            from.bit_width() >= to.bit_width(),
-                            || format!("Cannot truncate {} into {}", from_ty, IntegerKind::Signed),
-                            loc,
-                        );
-                    }
-                },
             },
             super::Rvalue::Len(place) => {
                 let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
@@ -407,7 +341,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 );
                 let count_ty = count.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 self.assert(
-                    count_ty.is_integer_kind(IntegerKind::Unsigned(IntegerSize::Int64)),
+                    count_ty.is_integer(),
                     || format!("count should be a uint not '{}'", count_ty),
                     stmt.loc,
                 );

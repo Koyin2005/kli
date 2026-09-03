@@ -12,7 +12,7 @@ use crate::{
         root::{FunctionCtxt, TypeCheck},
     },
     typed_ast::{self, Capture, FieldId, RecordFieldInit},
-    types::{FieldName, FunctionSig, GenericArgs, IntegerSize, Type, TypeKind},
+    types::{FieldName, FunctionSig, GenericArgs, Type, TypeKind},
 };
 
 impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
@@ -75,7 +75,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 let receiver = self.check_expr(reciever, None);
                 let index = self.check_expr_coerces_to(
                     index,
-                    Some(Type::new_uint(self.ctxt(), IntegerSize::Int64)),
+                    Some(Type::new_int(self.ctxt())),
                 );
                 let element_ty = receiver.ty.as_array().unwrap_or_else(|| {
                     self.ctxt().diag().add_diagnostic(

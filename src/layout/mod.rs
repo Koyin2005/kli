@@ -5,7 +5,7 @@ use crate::{
     collect::TypeDefKind,
     index_vec::IndexVec,
     typed_ast::FieldId,
-    types::{CaseId, IntegerKind, IntegerSize, TagType, Type, TypeKind},
+    types::{CaseId, IntegerSize, TagType, Type, TypeKind},
 };
 
 pub const BITS_IN_BYTE: u8 = 8;
@@ -259,13 +259,6 @@ impl Scalar {
     pub const fn uint(size: IntegerSize) -> Self {
         Self::integer(false, size)
     }
-    pub const fn integer_kind(self) -> IntegerKind {
-        if self.signed() {
-            IntegerKind::Signed
-        } else {
-            IntegerKind::Unsigned(self.integer_size())
-        }
-    }
     pub const fn integer_size(self) -> IntegerSize {
         match self {
             Self::Bool => IntegerSize::Int8,
@@ -346,7 +339,7 @@ fn variant_layout<'ctxt>(
             }
         })
         .collect::<Result<IndexVec<CaseId, _>, _>>()?;
-    let (tag_size, tag_scalar, tag_align) = if let TagType::UInt8 | TagType::Never = tag_type {
+    let (tag_size, tag_scalar, tag_align) = if let TagType::Never = tag_type {
         (Size::BYTE, Scalar::BYTE, Align::BYTE)
     } else {
         (

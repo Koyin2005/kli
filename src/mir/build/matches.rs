@@ -4,7 +4,7 @@ use crate::{
     mir::{BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind, build::Builder},
     src_loc::SrcLoc,
     typed_ast::{CaseArm, Expr, FieldId, Pattern, PatternKind},
-    types::{CaseId, IntegerSize, Type},
+    types::{CaseId, Type},
 };
 enum Test {
     VariantSwitch,
@@ -151,7 +151,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 self.switch_to_block(start_block);
                 let disrciminant = self.assign_to_temp(
                     head_test.loc,
-                    Type::new_uint(self.ctxt, IntegerSize::Int64),
+                    Type::new_int(self.ctxt),
                     Rvalue::Discriminant(head_test.place),
                 );
                 self.finish_block_with_switch_targets(

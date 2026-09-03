@@ -11,7 +11,7 @@ use crate::{
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
     typed_ast::FieldId,
-    types::{CaseId, GenericArgs, IntegerKind, IntegerSize, Type, TypeKind},
+    types::{CaseId, GenericArgs, Type, TypeKind},
 };
 pub mod basic_blocks;
 pub mod build;
@@ -166,20 +166,14 @@ pub struct Constant<'ctxt> {
     pub value: ConstValue<'ctxt>,
 }
 impl<'ctxt> Constant<'ctxt> {
-    pub fn zero(ctxt: CtxtRef<'ctxt>, kind: IntegerKind) -> Self {
-        match kind {
-            IntegerKind::Signed => Self::int(ctxt, 0),
-            IntegerKind::Unsigned(size) => Self::uint(ctxt, size, 0),
-        }
+    pub fn zero(ctxt: CtxtRef<'ctxt>) -> Self {
+        Self::int(ctxt, 0)
     }
     pub fn bool(ctxt: CtxtRef<'ctxt>, value: bool) -> Self {
         Self {
             ty: Type::new_bool(ctxt),
             value: ConstValue::Scalar(value as i128),
         }
-    }
-    pub fn integer(_: CtxtRef<'ctxt>, _: IntegerKind, _: i128) -> Self {
-        todo!("get rid of me")
     }
     pub fn int(ctxt: CtxtRef<'ctxt>, value: i64) -> Self {
         Self {
@@ -192,9 +186,6 @@ impl<'ctxt> Constant<'ctxt> {
             ty: Type::new_char(ctxt),
             value: ConstValue::Scalar(value as i128),
         }
-    }
-    pub fn uint(ctxt: CtxtRef<'ctxt>, size: IntegerSize, value: u64) -> Self {
-        Self::integer(ctxt, IntegerKind::Unsigned(size), value.into())
     }
     pub const fn zero_sized(ty: Type<'ctxt>) -> Self {
         Self {
@@ -253,15 +244,8 @@ pub enum BinaryOp {
     Offset,
 }
 #[derive(Clone, Debug, Copy)]
-pub enum IntegerCast {
-    SignExtend(IntegerSize),
-    ZeroExtend(IntegerSize),
-    Truncate(IntegerKind),
-}
-#[derive(Clone, Debug, Copy)]
 pub enum CastKind {
     Transmute,
-    IntegerCast(IntegerCast),
 }
 #[derive(Clone, Debug)]
 pub enum Rvalue<'ctxt> {
@@ -305,7 +289,7 @@ impl<'ctxt> Rvalue<'ctxt> {
             Rvalue::ReadLine => Type::new_string(ctxt),
             &Rvalue::UninitZeroed(ty) => ty,
             Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),
-            Rvalue::Len(_) => Type::new_uint(ctxt, IntegerSize::Int64),
+            Rvalue::Len(_) => Type::new_int(ctxt),
             Rvalue::Call(operand, _) => {
                 let Some(function) = operand.type_of(ctxt, locals, return_type).as_function()
                 else {
@@ -345,11 +329,11 @@ impl<'ctxt> Rvalue<'ctxt> {
                 ),
             },
             &Rvalue::Cast(.., ty) => ty,
-            Rvalue::Discriminant(_) => Type::new_uint(ctxt, IntegerSize::Int64),
+            Rvalue::Discriminant(_) => Type::new_int(ctxt),
             Rvalue::ArrayPtr(place) => match place.type_of(ctxt, locals, return_type).kind() {
                 &TypeKind::Array(ty) => Type::new_raw_ptr(ctxt, ty),
                 TypeKind::String => {
-                    Type::new_raw_ptr(ctxt, Type::new_uint(ctxt, IntegerSize::Int8))
+                    Type::new_raw_ptr(ctxt, Type::new_int(ctxt))
                 }
                 _ => unreachable!(),
             },

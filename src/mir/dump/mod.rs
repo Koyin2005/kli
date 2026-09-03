@@ -184,9 +184,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     CastKind::Transmute => {
                         write!(self.output, "Transmute({})", to)?;
                     }
-                    CastKind::IntegerCast(kind) => {
-                        write!(self.output, "IntegerCast({:?})", kind)?;
-                    }
                 }
                 write!(self.output, ")(")?;
                 self.write_operand(pointer)?;

@@ -3,7 +3,7 @@ use crate::def_ids::DefId;
 use crate::resolved_ast::{self as res, TypeName};
 use crate::src_loc::SrcLoc;
 use crate::typecheck::infer::TypeInfer;
-use crate::types::{GenericArg, GenericArgs, GenericKind, IntegerSize, Type};
+use crate::types::{GenericArg, GenericArgs, GenericKind, Type};
 use std::cell::RefCell;
 pub struct Lower<'a, 'ctxt> {
     ctxt: CtxtRef<'ctxt>,
@@ -119,15 +119,6 @@ impl<'a, 'ctxt> Lower<'a, 'ctxt> {
                     Type::new_unknown(self.ctxt)
                 };
                 Type::new_raw_ptr(self.ctxt, ty)
-            }
-            TypeName::UInt(size) => {
-                let size = match size {
-                    res::IntegerSize::Int64 => IntegerSize::Int64,
-                    res::IntegerSize::Int32 => IntegerSize::Int32,
-                    res::IntegerSize::Int8 => IntegerSize::Int8,
-                };
-                let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);
-                Type::new_uint(self.ctxt, size)
             }
             TypeName::Bool => {
                 let _ = self.lower_generic_args_with(Generics::default(), 0, loc, args);

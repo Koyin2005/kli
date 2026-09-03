@@ -10,7 +10,7 @@ use crate::{
     },
     src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
-    types::{IntegerKind, IntegerSize, Type},
+    types::Type,
 };
 pub(super) enum BuiltinResult<'ctxt> {
     Rvalue(Rvalue<'ctxt>),
@@ -89,7 +89,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let index = self.expr_into_temp(index);
                 let len = self.assign_to_temp(
                     place.loc,
-                    Type::new_uint(self.ctxt, IntegerSize::Int64),
+                    Type::new_int(self.ctxt),
                     Rvalue::Len(base.clone()),
                 );
                 let in_bounds = self.assign_to_temp(
@@ -241,7 +241,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .expect("too many elements in array");
                 let element_type = expr.ty.as_array().unwrap();
                 let count_operand =
-                    Operand::Constant(Constant::uint(self.ctxt, IntegerSize::Int64, count.into()));
+                    Operand::Constant(Constant::int(self.ctxt,count.into()));
                 let ptr_type = Type::new_raw_ptr(self.ctxt, element_type);
                 let ptr = self.assign_to_temp(
                     expr.loc,
@@ -353,16 +353,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 self.assign(loc, ptr.with_deref(), value);
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
             }
-            Builtin::Bitcast => {
-                let [arg] = operands().try_into().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Cast(mir::CastKind::Transmute, arg, ty))
-            }
             Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
                 IntegerBuiltin::IntMaxValue => {
-                    let kind = ty.as_integer().unwrap();
-                    let value = kind.max_value_scalar();
-                    BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::integer(
-                        self.ctxt, kind, value,
+                    let value = i64::MAX;
+                    BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::int(
+                        self.ctxt, value,
                     ))))
                 }
                 IntegerBuiltin::ShiftLeft => {
@@ -531,14 +526,13 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     BinaryOp::Divide => {
                         let left_operand = self.operand(left);
                         let right_operand = self.operand(right);
-                        let kind = left.ty.as_integer().unwrap();
                         //Division can fail in 2 ways
                         //Divide by zero
                         //Divide int min by -1
                         let is_zero = self.assign_equals(
                             expr.loc,
                             right_operand.clone(),
-                            Operand::Constant(Constant::integer(self.ctxt, kind, 0)),
+                            Operand::Constant(Constant::int(self.ctxt, 0)),
                         );
                         self.finish_assert_to_new_block(
                             expr.loc,
@@ -546,34 +540,32 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                             mir::AssertKind::DivideByZero,
                         );
 
-                        if let IntegerKind::Signed = kind {
-                            let is_left_min = self.assign_equals(
-                                expr.loc,
-                                left_operand.clone(),
-                                Operand::Constant(Constant::integer(
-                                    self.ctxt,
-                                    kind,
-                                    kind.min_value_scalar(),
-                                )),
-                            );
-                            let is_right_neg_1 = self.assign_equals(
-                                expr.loc,
-                                left_operand.clone(),
-                                Operand::Constant(Constant::int(self.ctxt, -1)),
-                            );
-                            let overflow = self.assign_binary_result(
-                                expr.loc,
-                                Type::new_bool(self.ctxt),
-                                mir::BinaryOp::BitwiseAnd,
-                                Operand::Load(Place::local(is_left_min)),
-                                Operand::Load(Place::local(is_right_neg_1)),
-                            );
-                            self.finish_assert_to_new_block(
-                                expr.loc,
-                                Operand::Load(Place::local(overflow)),
-                                mir::AssertKind::DivideOverflow,
-                            );
-                        }
+                        let is_left_min = self.assign_equals(
+                            expr.loc,
+                            left_operand.clone(),
+                            Operand::Constant(Constant::int(
+                                self.ctxt,
+                                i64::MIN as _,
+                            )),
+                        );
+                        let is_right_neg_1 = self.assign_equals(
+                            expr.loc,
+                            left_operand.clone(),
+                            Operand::Constant(Constant::int(self.ctxt, -1)),
+                        );
+                        let overflow = self.assign_binary_result(
+                            expr.loc,
+                            Type::new_bool(self.ctxt),
+                            mir::BinaryOp::BitwiseAnd,
+                            Operand::Load(Place::local(is_left_min)),
+                            Operand::Load(Place::local(is_right_neg_1)),
+                        );
+                        self.finish_assert_to_new_block(
+                            expr.loc,
+                            Operand::Load(Place::local(overflow)),
+                            mir::AssertKind::DivideOverflow,
+                        );
+
                         return Self::binary_op_rvalue(
                             mir::BinaryOp::Divide,
                             left_operand,

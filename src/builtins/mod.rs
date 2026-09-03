@@ -17,7 +17,6 @@ pub enum IntegerBuiltin {
 pub enum Builtin {
     // Reinterpretation
     Transmute,
-    Bitcast,
 
     // Allocation
     GcAlloc,
@@ -50,7 +49,6 @@ impl Builtin {
     pub const fn name(self) -> &'static str {
         match self {
             Builtin::Transmute => "transmute",
-            Builtin::Bitcast => "bitcast",
             Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd) => "wrapping_add",
             Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingAdd) => "overflowing_add",
             Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub) => "overflowing_sub",
@@ -96,7 +94,6 @@ impl Builtin {
             Symbol::OVERFLOWING_MUL => {
                 Some(Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingMul))
             }
-            Symbol::BITCAST => Some(Builtin::Bitcast),
             Symbol::INT_MAX_VALUE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue)),
             Symbol::ARRAY_NEW => Some(Builtin::ArrayNew),
             Symbol::PRINT_STRING => Some(Builtin::PrintString),
