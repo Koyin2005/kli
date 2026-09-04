@@ -107,6 +107,13 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(count)?;
                 write!(self.output, ")")?;
             }
+            Rvalue::AllocArray(ty, elements) => {
+                write!(self.output, "AllocArray[{}]{{", ty)?;
+                self.write_with_coma_sep(elements.iter(), |this, element| {
+                    this.write_operand(element)
+                })?;
+                write!(self.output, "}}")?;
+            }
             Rvalue::ReadLine => {
                 write!(self.output, "read_line")?;
             }

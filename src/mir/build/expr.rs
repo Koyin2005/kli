@@ -234,34 +234,8 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 self.switch_to_block(merge_block);
             }
 
-            ExprKind::Array(elements) => {
-                let count: u32 = elements
-                    .len()
-                    .try_into()
-                    .expect("too many elements in array");
-                let element_type = expr.ty.as_array().unwrap();
-                let count_operand =
-                    Operand::Constant(Constant::int(self.ctxt,count.into()));
-                let ptr_type = Type::new_raw_ptr(self.ctxt, element_type);
-                let ptr = self.assign_to_temp(
-                    expr.loc,
-                    ptr_type,
-                    Rvalue::GcAlloc(element_type, count_operand.clone()),
-                );
-                self.assign(
-                    expr.loc,
-                    dest.clone(),
-                    Rvalue::Aggregate(
-                        AggregateKind::Array(element_type),
-                        IndexVec::from_vec(vec![Operand::Load(Place::local(ptr)), count_operand]),
-                    ),
-                );
-                for (i, element) in elements.iter().enumerate() {
-                    let i: u32 = i.try_into().expect("too many array elements");
-                    self.expr_into_dest(dest.clone().with_constant_index(i), element);
-                }
-            }
             ExprKind::Function(..)
+            | ExprKind::Array(..)
             | ExprKind::Bool(_)
             | ExprKind::Int(_)
             | ExprKind::Unit
@@ -543,10 +517,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                         let is_left_min = self.assign_equals(
                             expr.loc,
                             left_operand.clone(),
-                            Operand::Constant(Constant::int(
-                                self.ctxt,
-                                i64::MIN as _,
-                            )),
+                            Operand::Constant(Constant::int(self.ctxt, i64::MIN as _)),
                         );
                         let is_right_neg_1 = self.assign_equals(
                             expr.loc,
@@ -653,10 +624,17 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             | ExprKind::NeverToAny(_)
             | ExprKind::Logic(..)
             | ExprKind::Return(_)
-            | ExprKind::Unsafe(_)
-            | ExprKind::Array(_) => {
+            | ExprKind::Unsafe(_) => {
                 let temp = self.expr_into_temp(expr);
                 Rvalue::Use(Operand::Load(Place::local(temp)))
+            }
+            ExprKind::Array(elements) => {
+                let element_type = expr.ty.as_array().unwrap();
+                let elements = elements
+                    .iter()
+                    .map(|element| self.operand(element))
+                    .collect();
+                Rvalue::AllocArray(element_type, elements)
             }
             ExprKind::For { .. } | ExprKind::Assign(..) | ExprKind::While(..) => {
                 self.expr_stmt(expr);

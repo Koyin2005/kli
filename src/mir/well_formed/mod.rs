@@ -96,6 +96,17 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         self.super_visit_rvalue(loc, rvalue);
         let loc = self.body.src_info(loc);
         match rvalue {
+            super::Rvalue::AllocArray(ty, elements) => {
+                for element in elements {
+                    let element =
+                        element.type_of(self.ctxt(), &self.body.locals, self.body.return_type);
+                    self.assert(
+                        element == *ty,
+                        || format!("Array elements should have type '{}'", ty),
+                        loc,
+                    );
+                }
+            }
             super::Rvalue::GcAlloc(_, count) => {
                 let count_ty = count.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 self.assert(

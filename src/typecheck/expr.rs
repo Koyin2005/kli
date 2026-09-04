@@ -73,10 +73,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             }
             ExprKind::Index(reciever, index) => {
                 let receiver = self.check_expr(reciever, None);
-                let index = self.check_expr_coerces_to(
-                    index,
-                    Some(Type::new_int(self.ctxt())),
-                );
+                let index = self.check_expr_coerces_to(index, Some(Type::new_int(self.ctxt())));
                 let element_ty = receiver.ty.as_array().unwrap_or_else(|| {
                     self.ctxt().diag().add_diagnostic(
                         format!("Expected an array type but got '{}'", receiver.ty),

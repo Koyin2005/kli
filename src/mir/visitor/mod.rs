@@ -69,6 +69,11 @@ pub trait Visit<'ctxt> {
             Rvalue::GcAlloc(_, operand) => {
                 self.visit_operand(loc, operand);
             }
+            Rvalue::AllocArray(_, elements) => {
+                for element in elements {
+                    self.visit_operand(loc, element);
+                }
+            }
             Rvalue::UninitZeroed(_) | Rvalue::ReadLine => (),
             Rvalue::Discriminant(place) => self.visit_place(PlaceCtxt::Read, loc, place),
             Rvalue::Len(place) => self.visit_place(PlaceCtxt::Read, loc, place),
@@ -213,6 +218,11 @@ pub trait MutVisit<'ctxt> {
         match rvalue {
             Rvalue::GcAlloc(_, operand) => {
                 self.visit_operand(loc, operand);
+            }
+            Rvalue::AllocArray(_, elements) => {
+                for element in elements {
+                    self.visit_operand(loc, element);
+                }
             }
             Rvalue::UninitZeroed(_) | Rvalue::ReadLine => (),
             Rvalue::Discriminant(place) => self.visit_place(loc, place),
