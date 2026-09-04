@@ -25,12 +25,10 @@ pub enum Builtin {
 
     // Arrays
     Len,
-    ArrayPtr,
 
     //Strings
     StringNew,
     StringLen,
-    StringPtr,
     // IO
     PrintString,
     EprintString,
@@ -51,7 +49,6 @@ impl Builtin {
             Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue) => "int_max_value",
             Builtin::IntegerBuiltin(IntegerBuiltin::ShiftLeft) => "shift_left",
             Builtin::IntegerBuiltin(IntegerBuiltin::ShiftRight) => "shift_right",
-            Builtin::ArrayPtr => "array_ptr",
             Builtin::Len => "array_len",
             Builtin::PrintString => "print_string",
             Builtin::ReadLine => "read_line",
@@ -63,13 +60,11 @@ impl Builtin {
             Builtin::WriteZeroes => "write_zeroes",
             Builtin::StringNew => "string_new",
             Builtin::StringLen => "string_len",
-            Builtin::StringPtr => "string_ptr",
         }
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
         match name {
             Symbol::ARRAY_LEN => Some(Builtin::Len),
-            Symbol::ARRAY_PTR => Some(Builtin::ArrayPtr),
             Symbol::WRAPPING_ADD => Some(Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd)),
             Symbol::OVERFLOWING_ADD => {
                 Some(Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingAdd))
@@ -94,7 +89,6 @@ impl Builtin {
             Symbol::EPRINT_STRING => Some(Builtin::EprintString),
             Symbol::WRITE_ZEROES => Some(Builtin::WriteZeroes),
             Symbol::STRING_NEW => Some(Builtin::StringNew),
-            Symbol::STRING_PTR => Some(Builtin::StringPtr),
             Symbol::STRING_LEN => Some(Builtin::StringLen),
             _ => None,
         }

@@ -189,14 +189,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 super::AggregateKind::Tuple => (),
             },
             super::Rvalue::Use(_) => (),
-            super::Rvalue::ArrayPtr(place) => {
-                let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                self.assert(
-                    ty.as_array().is_some() || matches!(ty.kind(), TypeKind::String),
-                    || "Expected an array or string".to_string(),
-                    loc,
-                );
-            }
             super::Rvalue::Call(operand, operands) => {
                 let callee = operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 let FunctionSig { params, .. } = self.assert_with_some(

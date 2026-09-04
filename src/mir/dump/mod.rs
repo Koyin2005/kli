@@ -188,11 +188,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_operand(pointer)?;
                 write!(self.output, ")")?;
             }
-            Rvalue::ArrayPtr(place) => {
-                write!(self.output, "ArrayPtr(")?;
-                self.write_place(place)?;
-                write!(self.output, ")")?;
-            }
         }
         Ok(())
     }

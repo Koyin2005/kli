@@ -285,10 +285,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let place = self.place(&args[0]);
                 BuiltinResult::Rvalue(Rvalue::Len(place))
             }
-            Builtin::StringPtr => {
-                let place = self.place(&args[0]);
-                BuiltinResult::Rvalue(Rvalue::ArrayPtr(place))
-            }
             Builtin::EprintString => {
                 let [arg] = operands().try_into().unwrap();
                 self.push_stmt(
@@ -408,10 +404,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             Builtin::Len => {
                 let place = self.place(&args[0]);
                 BuiltinResult::Rvalue(Rvalue::Len(place))
-            }
-            Builtin::ArrayPtr => {
-                let place = self.place(&args[0]);
-                BuiltinResult::Rvalue(Rvalue::ArrayPtr(place))
             }
             Builtin::WriteZeroes => {
                 let [ptr] = args.as_array().unwrap();

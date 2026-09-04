@@ -91,9 +91,6 @@ pub trait Visit<'ctxt> {
                 self.visit_operand(loc, left);
                 self.visit_operand(loc, right);
             }
-            Rvalue::ArrayPtr(place) => {
-                self.visit_place(PlaceCtxt::Write, loc, place);
-            }
             Rvalue::Cast(_, operand, _) => {
                 self.visit_operand(loc, operand);
             }
@@ -237,9 +234,6 @@ pub trait MutVisit<'ctxt> {
                 let (left, right) = operands.as_mut();
                 self.visit_operand(loc, left);
                 self.visit_operand(loc, right);
-            }
-            Rvalue::ArrayPtr(place) => {
-                self.visit_place(loc, place);
             }
             Rvalue::Cast(_, operand, _) => {
                 self.visit_operand(loc, operand);

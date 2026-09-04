@@ -255,7 +255,6 @@ pub enum Rvalue<'ctxt> {
     Use(Operand<'ctxt>),
     Call(Operand<'ctxt>, Vec<Operand<'ctxt>>),
     Binary(BinaryOp, Box<(Operand<'ctxt>, Operand<'ctxt>)>),
-    ArrayPtr(Place),
     Cast(CastKind, Operand<'ctxt>, Type<'ctxt>),
     Len(Place),
     Discriminant(Place),
@@ -268,7 +267,6 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::Binary(..)
             | Self::Cast(..)
             | Self::Use(_)
-            | Self::ArrayPtr(_)
             | Self::Len(_)
             | Self::Discriminant(_)
             | Self::UninitZeroed(_) => true,
@@ -328,11 +326,6 @@ impl<'ctxt> Rvalue<'ctxt> {
             },
             &Rvalue::Cast(.., ty) => ty,
             Rvalue::Discriminant(_) => Type::new_int(ctxt),
-            Rvalue::ArrayPtr(place) => match place.type_of(ctxt, locals, return_type).kind() {
-                &TypeKind::Array(ty) => Type::new_raw_ptr(ctxt, ty),
-                TypeKind::String => Type::new_raw_ptr(ctxt, Type::new_int(ctxt)),
-                _ => unreachable!(),
-            },
         }
     }
 }
