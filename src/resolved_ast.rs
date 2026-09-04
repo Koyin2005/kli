@@ -209,7 +209,6 @@ pub enum TypeName {
     Array,
     Param(Symbol, usize),
     Never,
-    RawPtr,
 }
 #[derive(Debug)]
 pub enum TypeKind {

@@ -204,14 +204,8 @@ pub struct Type<'ctxt>(&'ctxt TypeKind<'ctxt>);
 impl<'ctxt> Type<'ctxt> {
     pub const UNKNOWN: Self = Self(&TypeKind::Unknown);
     pub const BYTE: Self = Self(&TypeKind::Unknown);
-    pub fn new_raw_ptr(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
-        TypeKind::RawPtr(ty).intern(ctxt)
-    }
     pub fn as_raw_ptr(self) -> Option<Self> {
-        let TypeKind::RawPtr(ty) = *self.0 else {
-            return None;
-        };
-        Some(ty)
+        None
     }
     pub fn new_integer_var(ctxt: CtxtRef<'ctxt>, var: usize) -> Self {
         TypeKind::IntVar(var).intern(ctxt)
@@ -363,7 +357,6 @@ pub enum TypeKind<'ctxt> {
     Named(DefId, Symbol, GenericArgs<'ctxt>),
     String,
     Box(Type<'ctxt>),
-    RawPtr(Type<'ctxt>),
 }
 impl<'ctxt> TypeKind<'ctxt> {
     pub const UNIT: Self = Self::Tuple(Vec::new());
@@ -381,7 +374,7 @@ impl<'ctxt> TypeKind<'ctxt> {
     }
 
     pub const fn is_builtin_scalar(&self) -> bool {
-        matches!(self, Self::Int | Self::Bool | Self::Char | Self::RawPtr(_))
+        matches!(self, Self::Int | Self::Bool | Self::Char )
     }
     pub fn array(element: Type<'ctxt>) -> Self {
         Self::Array(element)
@@ -428,8 +421,7 @@ impl<'ctxt> TypeKind<'ctxt> {
             | Self::Function(..)
             | Self::String
             | Self::Array(_)
-            | Self::IntVar(_)
-            | Self::RawPtr(_) => false,
+            | Self::IntVar(_) => false,
             Self::Never => true,
             Self::Tuple(fields) => fields.iter().any(|field| field.is_uninhabited(ctxt)),
             Self::Box(ty) => ty.is_uninhabited(ctxt),
@@ -456,9 +448,6 @@ impl<'ctxt> TypeKind<'ctxt> {
 impl Display for TypeKind<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::RawPtr(ty) => {
-                write!(f, "{}[{}]", Symbol::RAW_PTR, ty)
-            }
             Self::Box(ty) => {
                 write!(f, "Box[{ty}]")
             }
@@ -522,7 +511,6 @@ pub trait TypeMap<'ctxt> {
             | TypeKind::Param(..)
             | TypeKind::IntVar(_)
             | TypeKind::Never => Ok(ty),
-            &TypeKind::RawPtr(ty) => Ok(Type::new_raw_ptr(self.ctxt(), self.map_type(ty)?)),
             TypeKind::Function(function_type) => Ok(self
                 .map_function_type(function_type.clone())?
                 .into_type(self.ctxt())),

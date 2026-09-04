@@ -35,7 +35,6 @@ enum TypeAlias {
     Array,
     Never,
     Int,
-    RawPtr,
 }
 impl TypeAlias {
     fn into_type_name(self) -> res::TypeName {
@@ -44,7 +43,6 @@ impl TypeAlias {
             TypeAlias::Int => res::TypeName::Int,
             TypeAlias::Array => res::TypeName::Array,
             TypeAlias::Never => res::TypeName::Never,
-            TypeAlias::RawPtr => res::TypeName::RawPtr,
         }
     }
 }
@@ -117,7 +115,6 @@ impl<'info> Resolve<'info> {
             (Symbol::intern("Int"), Res::TypeAlias(TypeAlias::Int)),
             (Symbol::intern("Box"), Res::TypeAlias(TypeAlias::Box)),
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),
-            (Symbol::RAW_PTR, Res::TypeAlias(TypeAlias::RawPtr)),
             (Symbol::intern("array"), Res::TypeAlias(TypeAlias::Array)),
         ]);
         Self {

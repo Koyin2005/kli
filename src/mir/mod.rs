@@ -51,8 +51,8 @@ impl PlaceProjection {
                 ty
             }
             PlaceProjection::Deref => {
-                let (TypeKind::Box(ty) | TypeKind::RawPtr(ty)) = ty.kind() else {
-                    unreachable!("Should be a box or raw ptr but got {}", ty)
+                let TypeKind::Box(ty) = ty.kind() else {
+                    unreachable!("Should be a box but got {}", ty)
                 };
                 *ty
             }

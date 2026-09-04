@@ -202,8 +202,7 @@ impl<'ctxt> MirDump<'ctxt> {
             types::TypeKind::Infer(_)
             | types::TypeKind::Param(..)
             | types::TypeKind::Unknown
-            | types::TypeKind::IntVar(_)
-            | types::TypeKind::RawPtr(_) => {
+            | types::TypeKind::IntVar(_) => {
                 write!(self.output, "unknown of '{}'", ty)
             }
             types::TypeKind::Char => {

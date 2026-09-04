@@ -27,7 +27,6 @@ pub trait Visit<'ctxt> {
                 }
             }
             &(TypeKind::Array(ty)
-            | TypeKind::RawPtr(ty)
             | TypeKind::Box(ty)) => self.visit_type(ty),
             TypeKind::Named(.., generic_args) => {
                 self.visit_generic_args(generic_args);
@@ -72,7 +71,6 @@ pub trait VisitMut<'ctxt> {
             ),
             &TypeKind::Array(ty) => Type::new_array(self.ctxt(), self.visit_type(ty)),
             &TypeKind::Box(ty) => Type::new_box(self.ctxt(), self.visit_type(ty)),
-            &TypeKind::RawPtr(ty) => Type::new_raw_ptr(self.ctxt(), self.visit_type(ty)),
             &TypeKind::Named(id, name, ref generic_args) => Type::named(
                 self.ctxt(),
                 id,
