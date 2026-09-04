@@ -107,14 +107,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     );
                 }
             }
-            super::Rvalue::GcAlloc(_, count) => {
-                let count_ty = count.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                self.assert(
-                    count_ty.is_integer(),
-                    || format!("count should be a uint not '{}'", count_ty),
-                    loc,
-                );
-            }
             super::Rvalue::UninitZeroed(_) | super::Rvalue::ReadLine => (),
             super::Rvalue::Discriminant(place) => {
                 self.assert(

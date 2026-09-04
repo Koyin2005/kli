@@ -102,11 +102,6 @@ impl<'ctxt> MirDump<'ctxt> {
     }
     fn write_rvalue(&mut self, rvalue: &Rvalue) -> std::io::Result<()> {
         match rvalue {
-            Rvalue::GcAlloc(ty, count) => {
-                write!(self.output, "gc_alloc[{}](", ty)?;
-                self.write_operand(count)?;
-                write!(self.output, ")")?;
-            }
             Rvalue::AllocArray(ty, elements) => {
                 write!(self.output, "AllocArray[{}]{{", ty)?;
                 self.write_with_coma_sep(elements.iter(), |this, element| {

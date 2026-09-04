@@ -259,7 +259,6 @@ pub enum Rvalue<'ctxt> {
     Cast(CastKind, Operand<'ctxt>, Type<'ctxt>),
     Len(Place),
     Discriminant(Place),
-    GcAlloc(Type<'ctxt>, Operand<'ctxt>),
     AllocArray(Type<'ctxt>, Vec<Operand<'ctxt>>),
 }
 impl<'ctxt> Rvalue<'ctxt> {
@@ -273,7 +272,7 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::Len(_)
             | Self::Discriminant(_)
             | Self::UninitZeroed(_) => true,
-            Self::GcAlloc(..) | Self::AllocArray(..) => false,
+            Self::AllocArray(..) => false,
             Self::Call(..) | Self::ReadLine => false,
         }
     }
@@ -286,7 +285,6 @@ impl<'ctxt> Rvalue<'ctxt> {
     ) -> Type<'ctxt> {
         match self {
             Rvalue::AllocArray(ty, _) => Type::new_array(ctxt, *ty),
-            Rvalue::GcAlloc(ty, _) => Type::new_raw_ptr(ctxt, *ty),
             Rvalue::ReadLine => Type::new_string(ctxt),
             &Rvalue::UninitZeroed(ty) => ty,
             Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),

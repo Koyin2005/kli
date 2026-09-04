@@ -18,9 +18,6 @@ pub enum Builtin {
     // Reinterpretation
     Transmute,
 
-    // Allocation
-    GcAlloc,
-
     //Pointers
     PtrWrite,
     Offset,
@@ -64,7 +61,6 @@ impl Builtin {
             Builtin::Offset => "offset",
             Builtin::PtrRead => "ptr_read",
             Builtin::PtrWrite => "ptr_write",
-            Builtin::GcAlloc => "gc_alloc",
             Builtin::PtrCopy => "ptr_copy",
             Builtin::EprintString => "eprint_string",
             Builtin::WriteZeroes => "write_zeroes",
@@ -98,7 +94,6 @@ impl Builtin {
             Symbol::PTR_READ => Some(Builtin::PtrRead),
             Symbol::PTR_WRITE => Some(Builtin::PtrWrite),
             Symbol::OFFSET => Some(Builtin::Offset),
-            Symbol::GC_ALLOC => Some(Builtin::GcAlloc),
             Symbol::PTR_COPY => Some(Builtin::PtrCopy),
             Symbol::EPRINT_STRING => Some(Builtin::EprintString),
             Symbol::WRITE_ZEROES => Some(Builtin::WriteZeroes),

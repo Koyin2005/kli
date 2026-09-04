@@ -66,9 +66,6 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue<'ctxt>) {
         match rvalue {
-            Rvalue::GcAlloc(_, operand) => {
-                self.visit_operand(loc, operand);
-            }
             Rvalue::AllocArray(_, elements) => {
                 for element in elements {
                     self.visit_operand(loc, element);
@@ -216,9 +213,6 @@ pub trait MutVisit<'ctxt> {
     }
     fn super_visit_rvalue(&mut self, loc: Location, rvalue: &mut Rvalue<'ctxt>) {
         match rvalue {
-            Rvalue::GcAlloc(_, operand) => {
-                self.visit_operand(loc, operand);
-            }
             Rvalue::AllocArray(_, elements) => {
                 for element in elements {
                     self.visit_operand(loc, element);
