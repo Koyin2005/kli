@@ -1,7 +1,0 @@
-type Phantom[T] = {
-    empty : ()
-}
-
-fun new[T]() -> Phantom[T] = 
-    Phantom[T] { empty = ()}
-
