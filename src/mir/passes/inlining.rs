@@ -202,7 +202,7 @@ impl<'ctxt> MutVisit<'ctxt> for Replacer {
         }
         place.base = self.return_place.base;
         let mut new_projections = self.return_place.projections.clone();
-        new_projections.extend(place.projections.drain(..));
+        new_projections.append(&mut place.projections);
         place.projections = new_projections;
     }
 }

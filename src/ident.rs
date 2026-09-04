@@ -139,7 +139,7 @@ impl Symbol {
     pub const PTR_WRITE: Self = Self::expect_symbol("ptr_write");
     pub const OFFSET: Self = Self::expect_symbol("offset");
     pub const BITWISE_OR: Self = Self::expect_symbol("bitwise_or");
-    pub const INT_FIRST_UPPER: Self = Self::expect_symbol("Int");
+    pub const INT_TYPE_NAME: Self = Self::expect_symbol("Int");
     pub const UINT_FIRST_UPPER: Self = Self::expect_symbol("UInt");
     pub const RAW_PTR: Self = Self::expect_symbol("RawPtr");
     pub const GC_ALLOC: Self = Self::expect_symbol("gc_alloc");

@@ -470,7 +470,7 @@ impl Display for TypeKind<'_> {
             }
             TypeKind::Char => f.pad("char"),
             TypeKind::Bool => f.pad("bool"),
-            TypeKind::Int => write!(f, "{}", "Int"),
+            TypeKind::Int => write!(f, "{}", Symbol::INT_TYPE_NAME),
             TypeKind::Unknown => f.pad("{unknown}"),
             TypeKind::Infer(_) => f.pad("_"),
             TypeKind::IntVar(_) => f.pad("{integer}"),
