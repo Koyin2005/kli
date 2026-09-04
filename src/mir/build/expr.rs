@@ -267,7 +267,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
     }
     pub(super) fn builtin_call(
         &mut self,
-        loc: SrcLoc,
+        _loc: SrcLoc,
         builtin: Builtin,
         args: &[Expr<'ctxt>],
     ) -> BuiltinResult<'ctxt> {
@@ -290,27 +290,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                         err: true,
                     },
                 );
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
-            }
-            Builtin::PtrCopy => {
-                let [dst, src, count] = operands().try_into().unwrap();
-                self.push_stmt(loc, mir::StmtKind::Copy { dst, src, count });
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
-            }
-            Builtin::Offset => {
-                let [ptr, offset] = operands().try_into().unwrap();
-                BuiltinResult::Rvalue(Self::binary_op_rvalue(mir::BinaryOp::Offset, ptr, offset))
-            }
-            Builtin::PtrRead => {
-                let [ptr] = args else { unreachable!() };
-                let ptr = self.place(ptr);
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Load(ptr.with_deref())))
-            }
-            Builtin::PtrWrite => {
-                let [ptr, value] = args else { unreachable!() };
-                let ptr = self.place(ptr);
-                let value = self.build_rvalue(value);
-                self.assign(loc, ptr.with_deref(), value);
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
             }
             Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
@@ -400,13 +379,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             Builtin::Len => {
                 let place = self.place(&args[0]);
                 BuiltinResult::Rvalue(Rvalue::Len(place))
-            }
-            Builtin::WriteZeroes => {
-                let [ptr] = args.as_array().unwrap();
-                let ty = ptr.ty.as_raw_ptr().unwrap();
-                let ptr = self.place(ptr);
-                self.assign(loc, ptr.with_deref(), Rvalue::UninitZeroed(ty));
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
             }
         }
     }

@@ -15,14 +15,6 @@ pub enum IntegerBuiltin {
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Builtin {
-
-    //Pointers
-    PtrWrite,
-    Offset,
-    PtrRead,
-    PtrCopy,
-    WriteZeroes,
-
     // Arrays
     Len,
 
@@ -51,12 +43,7 @@ impl Builtin {
             Builtin::Len => "array_len",
             Builtin::PrintString => "print_string",
             Builtin::ReadLine => "read_line",
-            Builtin::Offset => "offset",
-            Builtin::PtrRead => "ptr_read",
-            Builtin::PtrWrite => "ptr_write",
-            Builtin::PtrCopy => "ptr_copy",
             Builtin::EprintString => "eprint_string",
-            Builtin::WriteZeroes => "write_zeroes",
             Builtin::StringLen => "string_len",
         }
     }
@@ -80,12 +67,7 @@ impl Builtin {
             Symbol::INT_MAX_VALUE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue)),
             Symbol::PRINT_STRING => Some(Builtin::PrintString),
             Symbol::READ_LINE => Some(Builtin::ReadLine),
-            Symbol::PTR_READ => Some(Builtin::PtrRead),
-            Symbol::PTR_WRITE => Some(Builtin::PtrWrite),
-            Symbol::OFFSET => Some(Builtin::Offset),
-            Symbol::PTR_COPY => Some(Builtin::PtrCopy),
             Symbol::EPRINT_STRING => Some(Builtin::EprintString),
-            Symbol::WRITE_ZEROES => Some(Builtin::WriteZeroes),
             Symbol::STRING_LEN => Some(Builtin::StringLen),
             _ => None,
         }
