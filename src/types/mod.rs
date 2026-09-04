@@ -213,15 +213,6 @@ impl<'ctxt> Type<'ctxt> {
         };
         Some(ty)
     }
-    pub fn new_uninit(ctxt: CtxtRef<'ctxt>, ty: Self) -> Self {
-        TypeKind::Uninit(ty).intern(ctxt)
-    }
-    pub fn as_uninit(self) -> Option<Self> {
-        let &TypeKind::Uninit(ty) = self.0 else {
-            return None;
-        };
-        Some(ty)
-    }
     pub fn new_integer_var(ctxt: CtxtRef<'ctxt>, var: usize) -> Self {
         TypeKind::IntVar(var).intern(ctxt)
     }
@@ -372,7 +363,6 @@ pub enum TypeKind<'ctxt> {
     Named(DefId, Symbol, GenericArgs<'ctxt>),
     String,
     Box(Type<'ctxt>),
-    Uninit(Type<'ctxt>),
     RawPtr(Type<'ctxt>),
 }
 impl<'ctxt> TypeKind<'ctxt> {
@@ -438,7 +428,6 @@ impl<'ctxt> TypeKind<'ctxt> {
             | Self::Function(..)
             | Self::String
             | Self::Array(_)
-            | Self::Uninit(_)
             | Self::IntVar(_)
             | Self::RawPtr(_) => false,
             Self::Never => true,
@@ -516,7 +505,6 @@ impl Display for TypeKind<'_> {
                 write!(f, "{}{}", name, display_generic_args(args))
             }
             TypeKind::Array(ty) => write!(f, "array[{}]", ty),
-            TypeKind::Uninit(ty) => write!(f, "uninit[{}]", ty),
         }
     }
 }
@@ -555,7 +543,6 @@ pub trait TypeMap<'ctxt> {
             )),
             TypeKind::Array(ty) => Ok(Type::new_array(self.ctxt(), self.map_type(*ty)?)),
             TypeKind::Box(ty) => Ok(Type::new_box(self.ctxt(), self.map_type(*ty)?)),
-            TypeKind::Uninit(ty) => Ok(Type::new_uninit(self.ctxt(), self.map_type(*ty)?)),
         }
     }
     fn super_map_function_type(

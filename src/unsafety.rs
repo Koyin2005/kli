@@ -10,13 +10,6 @@ use crate::{
 pub fn transmutable<'ctxt>(ctxt: CtxtRef<'ctxt>, from: Type<'ctxt>, to: Type<'ctxt>) -> bool {
     match (from, to) {
         (from, to) if from == to => true,
-        (from, to)
-            if let (Ok(inner), Err(ty)) | (Err(ty), Ok(inner)) =
-                (from.as_uninit().ok_or(from), to.as_uninit().ok_or(to))
-                && inner == ty =>
-        {
-            true
-        }
         _ => match (ctxt.layout_of(from), ctxt.layout_of(to)) {
             (Ok(from_layout), Ok(to_layout)) => from_layout.size == to_layout.size,
             _ => false,

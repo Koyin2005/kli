@@ -442,15 +442,6 @@ pub fn calculate_layout<'ctxt>(
 ) -> Result<Layout, LayoutError> {
     Ok(match ty.kind() {
         TypeKind::RawPtr(_) => Layout::pointer(false),
-        &TypeKind::Uninit(ty) => {
-            let layout = calculate_layout(ctxt, ty)?;
-
-            Layout {
-                size: layout.size,
-                alignment: layout.alignment,
-                kind: LayoutKind::Uninit(Box::new(layout)),
-            }
-        }
         TypeKind::Infer(_) | TypeKind::Unknown | TypeKind::IntVar(_) => {
             return Err(LayoutError::Unknown);
         }

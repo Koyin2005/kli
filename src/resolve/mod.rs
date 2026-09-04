@@ -34,7 +34,6 @@ enum TypeAlias {
     Box,
     Array,
     Never,
-    Uninit,
     Int,
     RawPtr,
 }
@@ -45,7 +44,6 @@ impl TypeAlias {
             TypeAlias::Int => res::TypeName::Int,
             TypeAlias::Array => res::TypeName::Array,
             TypeAlias::Never => res::TypeName::Never,
-            TypeAlias::Uninit => res::TypeName::Uninit,
             TypeAlias::RawPtr => res::TypeName::RawPtr,
         }
     }
@@ -121,7 +119,6 @@ impl<'info> Resolve<'info> {
             (Symbol::intern("never"), Res::TypeAlias(TypeAlias::Never)),
             (Symbol::RAW_PTR, Res::TypeAlias(TypeAlias::RawPtr)),
             (Symbol::intern("array"), Res::TypeAlias(TypeAlias::Array)),
-            (Symbol::intern("uninit"), Res::TypeAlias(TypeAlias::Uninit)),
         ]);
         Self {
             config,
