@@ -268,7 +268,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
     pub(super) fn builtin_call(
         &mut self,
         loc: SrcLoc,
-        ty: Type<'ctxt>,
         builtin: Builtin,
         args: &[Expr<'ctxt>],
     ) -> BuiltinResult<'ctxt> {
@@ -414,11 +413,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let place = self.place(&args[0]);
                 BuiltinResult::Rvalue(Rvalue::ArrayPtr(place))
             }
-            Builtin::Transmute => BuiltinResult::Rvalue(Rvalue::Cast(
-                mir::CastKind::Transmute,
-                { operands() }.swap_remove(0),
-                ty,
-            )),
             Builtin::WriteZeroes => {
                 let [ptr] = args.as_array().unwrap();
                 let ty = ptr.ty.as_raw_ptr().unwrap();
@@ -628,7 +622,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt)))
             }
             &ExprKind::BuiltinCall(_, builtin, _, ref args) => {
-                self.builtin_call(expr.loc, expr.ty, builtin, args).into()
+                self.builtin_call(expr.loc, builtin, args).into()
             }
         }
     }

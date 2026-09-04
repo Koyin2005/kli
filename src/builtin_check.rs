@@ -4,8 +4,7 @@ use crate::{
     src_loc::SrcLoc,
     typed_ast::{ExprKind, Function},
     typed_ast_visitor::{Visitor, walk_expr},
-    types::{GenericArg, GenericArgsRef},
-    unsafety,
+    types::GenericArgsRef,
 };
 
 pub struct BuiltinCheck<'ctxt> {
@@ -32,11 +31,6 @@ impl<'ctxt> BuiltinCheck<'ctxt> {
         generic_args: GenericArgsRef<'_, 'ctxt>,
     ) {
         let error = match builtin {
-            Builtin::Transmute => {
-                let [from, to] = generic_args.as_array().unwrap().map(GenericArg::expect_ty);
-                let valid_transmute = unsafety::transmutable(self.ctxt, from, to);
-                (!valid_transmute).then(|| format!("cannot transmute from '{}' to '{}'", from, to))
-            }
             Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
                 IntegerBuiltin::IntMaxValue
                 | IntegerBuiltin::ShiftLeft

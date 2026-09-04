@@ -15,8 +15,6 @@ pub enum IntegerBuiltin {
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Builtin {
-    // Reinterpretation
-    Transmute,
 
     //Pointers
     PtrWrite,
@@ -44,7 +42,6 @@ pub enum Builtin {
 impl Builtin {
     pub const fn name(self) -> &'static str {
         match self {
-            Builtin::Transmute => "transmute",
             Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd) => "wrapping_add",
             Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingAdd) => "overflowing_add",
             Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingSub) => "overflowing_sub",
@@ -71,7 +68,6 @@ impl Builtin {
     }
     pub fn find(name: Symbol) -> Option<Builtin> {
         match name {
-            Symbol::TRANSMUTE => Some(Builtin::Transmute),
             Symbol::ARRAY_LEN => Some(Builtin::Len),
             Symbol::ARRAY_PTR => Some(Builtin::ArrayPtr),
             Symbol::WRAPPING_ADD => Some(Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd)),
