@@ -124,7 +124,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 );
             }
             super::Rvalue::Aggregate(aggregate_kind, fields) => match aggregate_kind {
-                super::AggregateKind::String => (),
                 super::AggregateKind::NamedRecord(id, args) => {
                     let type_def = self.ctxt.type_def(*id);
                     let field_info = type_def.fields();

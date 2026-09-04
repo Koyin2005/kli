@@ -220,7 +220,6 @@ pub enum AggregateKind<'ctxt> {
     Tuple,
     NamedRecord(DefId, GenericArgs<'ctxt>),
     Variant(DefId, CaseId, GenericArgs<'ctxt>),
-    String,
 }
 #[derive(Debug, Clone, Copy)]
 pub enum OverflowOp {
@@ -311,7 +310,6 @@ impl<'ctxt> Rvalue<'ctxt> {
                 BinaryOp::Offset => left_and_right.0.type_of(ctxt, locals, return_type),
             },
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
-                AggregateKind::String => Type::new_string(ctxt),
                 &AggregateKind::Variant(id, _, ref args)
                 | &AggregateKind::NamedRecord(id, ref args) => {
                     let name = ctxt.type_def(id).name;

@@ -27,7 +27,6 @@ pub enum Builtin {
     Len,
 
     //Strings
-    StringNew,
     StringLen,
     // IO
     PrintString,
@@ -58,7 +57,6 @@ impl Builtin {
             Builtin::PtrCopy => "ptr_copy",
             Builtin::EprintString => "eprint_string",
             Builtin::WriteZeroes => "write_zeroes",
-            Builtin::StringNew => "string_new",
             Builtin::StringLen => "string_len",
         }
     }
@@ -88,7 +86,6 @@ impl Builtin {
             Symbol::PTR_COPY => Some(Builtin::PtrCopy),
             Symbol::EPRINT_STRING => Some(Builtin::EprintString),
             Symbol::WRITE_ZEROES => Some(Builtin::WriteZeroes),
-            Symbol::STRING_NEW => Some(Builtin::StringNew),
             Symbol::STRING_LEN => Some(Builtin::StringLen),
             _ => None,
         }

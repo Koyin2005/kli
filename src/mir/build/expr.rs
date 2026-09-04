@@ -277,10 +277,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 .collect::<Vec<_>>()
         };
         match builtin {
-            Builtin::StringNew => BuiltinResult::Rvalue(Rvalue::Aggregate(
-                AggregateKind::String,
-                operands().into_iter().collect(),
-            )),
             Builtin::StringLen => {
                 let place = self.place(&args[0]);
                 BuiltinResult::Rvalue(Rvalue::Len(place))
