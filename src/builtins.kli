@@ -1,9 +1,9 @@
 @builtin
-fun gc_alloc[T](cap : UInt64) -> RawPtr[T];
+fun gc_alloc[T](cap : Int) -> RawPtr[T];
 
 @unsafe
 @builtin
-fun ptr_copy[T](dst : RawPtr[T], src : RawPtr[T], count : UInt64) -> ();
+fun ptr_copy[T](dst : RawPtr[T], src : RawPtr[T], count : Int) -> ();
 
 # Safety:
 # The current representation of `x` must be a valid value of `U`
@@ -12,7 +12,7 @@ fun ptr_copy[T](dst : RawPtr[T], src : RawPtr[T], count : UInt64) -> ();
 fun transmute[T,U](x : T) -> U;
 
 @builtin
-fun offset[T](p : RawPtr[T], offset : UInt64) -> RawPtr[T];
+fun offset[T](p : RawPtr[T], offset : Int) -> RawPtr[T];
 
 # Safety
 # p must be aligned, non-null and not dangling
@@ -36,7 +36,7 @@ fun ptr_read[T](p : RawPtr[T]) -> T;
 fun write_zeroes[T](p : RawPtr[T]) -> ();
 
 @builtin
-fun array_len[T](a : array[T]) -> UInt64;
+fun array_len[T](a : array[T]) -> Int;
 
 @builtin
 fun array_ptr[T](a : array[T]) -> RawPtr[T];
@@ -60,25 +60,10 @@ fun wrapping_mul[T](x : T, y : T) -> T;
 fun overflowing_mul[T](x : T, y : T) -> (T, bool);
 
 @builtin
-fun widen[T,U](x : T) -> U;
+fun array_new[T](p : RawPtr[T], c : Int) -> array[T];
 
 @builtin
-fun truncate[T,U](x : T) -> U;
-
-@builtin
-fun bitcast[T,U](x : T) -> U;
-
-@builtin
-fun array_new[T](p : RawPtr[T], c : UInt64) -> array[T];
-
-@builtin
-fun string_new(p : RawPtr[UInt8], c : UInt64) -> string;
-
-@builtin
-fun string_len(s : string) -> UInt64;
-
-@builtin
-fun string_ptr(s : string) -> RawPtr[UInt8];
+fun string_len(s : string) -> Int;
 
 
 @builtin
