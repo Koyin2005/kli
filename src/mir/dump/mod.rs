@@ -146,9 +146,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     AggregateKind::String => {
                         write!(self.output, "String")?;
                     }
-                    AggregateKind::Array(ty) => {
-                        write!(self.output, "Array[{}]", ty)?;
-                    }
                     AggregateKind::Tuple => (),
                     AggregateKind::Variant(id, index, args) => {
                         let name = self.ctxt.type_def(*id).case(*index).name;

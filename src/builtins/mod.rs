@@ -29,7 +29,6 @@ pub enum Builtin {
     WriteZeroes,
 
     // Arrays
-    ArrayNew,
     Len,
     ArrayPtr,
 
@@ -60,7 +59,6 @@ impl Builtin {
             Builtin::IntegerBuiltin(IntegerBuiltin::ShiftRight) => "shift_right",
             Builtin::ArrayPtr => "array_ptr",
             Builtin::Len => "array_len",
-            Builtin::ArrayNew => "array_new",
             Builtin::PrintString => "print_string",
             Builtin::ReadLine => "read_line",
             Builtin::Offset => "offset",
@@ -95,7 +93,6 @@ impl Builtin {
                 Some(Builtin::IntegerBuiltin(IntegerBuiltin::OverflowingMul))
             }
             Symbol::INT_MAX_VALUE => Some(Builtin::IntegerBuiltin(IntegerBuiltin::IntMaxValue)),
-            Symbol::ARRAY_NEW => Some(Builtin::ArrayNew),
             Symbol::PRINT_STRING => Some(Builtin::PrintString),
             Symbol::READ_LINE => Some(Builtin::ReadLine),
             Symbol::PTR_READ => Some(Builtin::PtrRead),

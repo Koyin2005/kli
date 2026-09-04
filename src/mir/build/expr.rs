@@ -411,14 +411,6 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 );
                 BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
             }
-            Builtin::ArrayNew => {
-                let [ptr, count] = operands().try_into().unwrap();
-                let element_type = ty.as_array().unwrap();
-                BuiltinResult::Rvalue(Rvalue::Aggregate(
-                    AggregateKind::Array(element_type),
-                    IndexVec::from([ptr, count]),
-                ))
-            }
             Builtin::Len => {
                 let place = self.place(&args[0]);
                 BuiltinResult::Rvalue(Rvalue::Len(place))

@@ -60,9 +60,6 @@ fun wrapping_mul[T](x : T, y : T) -> T;
 fun overflowing_mul[T](x : T, y : T) -> (T, bool);
 
 @builtin
-fun array_new[T](p : RawPtr[T], c : Int) -> array[T];
-
-@builtin
 fun string_len(s : string) -> Int;
 
 

@@ -220,7 +220,6 @@ pub enum AggregateKind<'ctxt> {
     Tuple,
     NamedRecord(DefId, GenericArgs<'ctxt>),
     Variant(DefId, CaseId, GenericArgs<'ctxt>),
-    Array(Type<'ctxt>),
     String,
 }
 #[derive(Debug, Clone, Copy)]
@@ -317,7 +316,6 @@ impl<'ctxt> Rvalue<'ctxt> {
             },
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 AggregateKind::String => Type::new_string(ctxt),
-                &AggregateKind::Array(ty) => Type::new_array(ctxt, ty),
                 &AggregateKind::Variant(id, _, ref args)
                 | &AggregateKind::NamedRecord(id, ref args) => {
                     let name = ctxt.type_def(id).name;
