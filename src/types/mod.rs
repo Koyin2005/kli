@@ -374,7 +374,7 @@ impl<'ctxt> TypeKind<'ctxt> {
     }
 
     pub const fn is_builtin_scalar(&self) -> bool {
-        matches!(self, Self::Int | Self::Bool | Self::Char )
+        matches!(self, Self::Int | Self::Bool | Self::Char)
     }
     pub fn array(element: Type<'ctxt>) -> Self {
         Self::Array(element)

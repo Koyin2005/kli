@@ -26,8 +26,7 @@ pub trait Visit<'ctxt> {
                     self.visit_type(ty);
                 }
             }
-            &(TypeKind::Array(ty)
-            | TypeKind::Box(ty)) => self.visit_type(ty),
+            &(TypeKind::Array(ty) | TypeKind::Box(ty)) => self.visit_type(ty),
             TypeKind::Named(.., generic_args) => {
                 self.visit_generic_args(generic_args);
             }

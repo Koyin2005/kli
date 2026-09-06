@@ -508,7 +508,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
         expr: &Expr,
         expected_ty: Option<Type<'ctxt>>,
     ) -> typed_ast::Expr<'ctxt> {
-        let &Expr { loc, ref kind } = expr;
+        let &Expr { id, loc, ref kind } = expr;
         let make_expr =
             |ty, kind: typed_ast::ExprKind<'ctxt>, loc| typed_ast::Expr::<'ctxt> { ty, kind, loc };
         match kind {

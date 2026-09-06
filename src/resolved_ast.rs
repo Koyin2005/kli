@@ -164,8 +164,10 @@ pub struct Pattern {
     pub loc: SrcLoc,
     pub kind: PatternKind,
 }
+define_id!(ExprId);
 #[derive(Debug)]
 pub struct Expr {
+    pub id: ExprId,
     pub loc: SrcLoc,
     pub kind: ExprKind,
 }
