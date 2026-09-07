@@ -108,7 +108,7 @@ pub struct Resolve<'info> {
     diag: DiagnosticReporter,
     nodes: IndexVec<DefId, Option<res::Node>>,
     decl_info: &'info DeclareResults,
-    exprs: usize,
+    node_count: usize,
 }
 impl<'info> Resolve<'info> {
     fn new(config: Config, results: &'info DeclareResults) -> Self {
@@ -124,7 +124,7 @@ impl<'info> Resolve<'info> {
             env,
             vars: 0,
             generics: 0,
-            exprs: 0,
+            node_count: 0,
             diag: DiagnosticReporter::new(),
             generic_kinds: HashMap::new(),
             nodes: IndexVec::from_function(results.def_ids, |_| None),
@@ -303,10 +303,10 @@ impl<'info> Resolve<'info> {
         };
         res::Type { loc: ty.loc, kind }
     }
-    fn next_expr_id(&mut self) -> res::ExprId {
-        let expr_id = res::ExprId::new(self.exprs);
-        self.exprs += 1;
-        expr_id
+    fn next_node_id(&mut self) -> res::NodeId {
+        let node_id = res::NodeId::new(self.node_count);
+        self.node_count += 1;
+        node_id
     }
     fn fresh_var(&mut self) -> VarId {
         let var_id = VarId::new(self.vars);
@@ -536,14 +536,14 @@ impl<'info> Resolve<'info> {
                     }
                     NameResolutionError::VariableField(loc, var, fields) => {
                         let expr = res::Expr {
-                            id: self.next_expr_id(),
+                            id: self.next_node_id(),
                             loc,
                             kind: res::ExprKind::Var(var),
                         };
                         return fields
                             .into_iter()
                             .fold(expr, |expr, field| res::Expr {
-                                id: self.next_expr_id(),
+                                id: self.next_node_id(),
                                 loc: expr.loc,
                                 kind: res::ExprKind::Field(Box::new(expr), field),
                             })
@@ -696,7 +696,7 @@ impl<'info> Resolve<'info> {
                     .collect::<Vec<_>>();
                 let Some(type_name) = ty_def else {
                     return res::Expr {
-                        id: self.next_expr_id(),
+                        id: self.next_node_id(),
                         loc,
                         kind: res::ExprKind::Err,
                     };
@@ -742,7 +742,7 @@ impl<'info> Resolve<'info> {
                         loc: start.loc,
                     };
                     let iter_var_value = |this:&mut Resolve<'_>,loc| res::Expr {
-                        id: this.next_expr_id(),
+                        id: this.next_node_id(),
                         loc,
                         kind: res::ExprKind::Var(res::Var(var_ident.symbol, iter_var)),
                     };
@@ -752,7 +752,7 @@ impl<'info> Resolve<'info> {
                     } else {
                         (
                             res::Expr {
-                                id: this.next_expr_id(),
+                                id: this.next_node_id(),
                                 loc: start.loc,
                                 kind: res::ExprKind::Bool(true),
                             },
@@ -779,7 +779,7 @@ impl<'info> Resolve<'info> {
                     let range_iter = end.is_some();
                     let condition = if let Some(end) = end {
                         res::Expr {
-                            id: this.next_expr_id(),
+                            id: this.next_node_id(),
                             loc: var_ident.loc,
                             kind: res::ExprKind::Binary(
                                 ast::BinaryOp::Lesser,
@@ -818,7 +818,7 @@ impl<'info> Resolve<'info> {
                         .into_boxed_slice();
 
                         let wrapping_add_function = res::Expr {
-                            id: this.next_expr_id(),
+                            id: this.next_node_id(),
                             loc: body_loc,
                             kind: this.resolve_path_as_expr(
                                 body_loc,
@@ -831,19 +831,19 @@ impl<'info> Resolve<'info> {
                         };
 
                         let increment = res::Expr {
-                            id: this.next_expr_id(),
+                            id: this.next_node_id(),
                             loc: body_loc,
                             kind: res::ExprKind::Assign(
                                 Box::new(iter_var_value(this,body_loc)),
                                 Box::new(res::Expr {
-                                    id: this.next_expr_id(),
+                                    id: this.next_node_id(),
                                     loc: body_loc,
                                     kind: res::ExprKind::Call(
                                         Box::new(wrapping_add_function),
                                         vec![
                                             iter_var_value(this,body_loc),
                                             res::Expr {
-                                                id: this.next_expr_id(),
+                                                id: this.next_node_id(),
                                                 loc: body_loc,
                                                 kind: res::ExprKind::Int(res::IntegerLiteral {
                                                     value: 1,
@@ -856,7 +856,7 @@ impl<'info> Resolve<'info> {
                             ),
                         };
                         res::Expr {
-                            id: this.next_expr_id(),
+                            id: this.next_node_id(),
                             loc: body_loc,
                             kind: res::ExprKind::Block(Box::new(res::BlockBody {
                                 stmts: inner_body_stmts,
@@ -866,7 +866,7 @@ impl<'info> Resolve<'info> {
                     } else {
                         body_loc = body.loc;
                         res::Expr {
-                            id: this.next_expr_id(),
+                            id: this.next_node_id(),
                             loc: body_loc,
                             kind: res::ExprKind::Case(
                                 Box::new(iter_value.unwrap()),
@@ -890,12 +890,12 @@ impl<'info> Resolve<'info> {
                                             ),
                                         },
                                         body: res::Expr {
-                                            id: this.next_expr_id(),
+                                            id: this.next_node_id(),
                                             loc,
                                             kind: res::ExprKind::Assign(
                                                 Box::new(iter_var_value(this,body_loc)),
                                                 Box::new(res::Expr {
-                                                    id: this.next_expr_id(),
+                                                    id: this.next_node_id(),
                                                     loc,
                                                     kind: res::ExprKind::Bool(false),
                                                 }),
@@ -910,7 +910,7 @@ impl<'info> Resolve<'info> {
                     res::ExprKind::Block(Box::new(res::BlockBody {
                         stmts: setup_stmts,
                         expr: Box::new(res::Expr {
-                            id: this.next_expr_id(),
+                            id: this.next_node_id(),
                             kind: res::ExprKind::While(Box::new(condition), Box::new(body)),
                             loc,
                         }),
@@ -930,7 +930,7 @@ impl<'info> Resolve<'info> {
             ),
         };
         res::Expr {
-            id: self.next_expr_id(),
+            id: self.next_node_id(),
             loc,
             kind,
         }

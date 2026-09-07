@@ -164,10 +164,10 @@ pub struct Pattern {
     pub loc: SrcLoc,
     pub kind: PatternKind,
 }
-define_id!(ExprId);
+define_id!(NodeId);
 #[derive(Debug)]
 pub struct Expr {
-    pub id: ExprId,
+    pub id: NodeId,
     pub loc: SrcLoc,
     pub kind: ExprKind,
 }
