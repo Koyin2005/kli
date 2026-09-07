@@ -13,7 +13,8 @@ use crate::{
 };
 #[derive(Debug, PartialEq, Eq)]
 pub struct FunctionDefId(pub DefId);
-define_id!(VarId);
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct VarId(pub NodeId);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Var(pub Symbol, pub VarId);
 impl Var {
@@ -103,7 +104,8 @@ impl GenericArgs {
 #[derive(Debug)]
 pub struct ForExpr {
     pub pattern: Pattern,
-    pub iterator: Expr,
+    pub start: Expr,
+    pub end: Expr,
     pub body: Expr,
 }
 #[derive(Debug)]

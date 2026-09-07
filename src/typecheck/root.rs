@@ -139,7 +139,7 @@ impl<'ctxt> RootCtxt<'ctxt> {
         }
         (integer_ty, value)
     }
-    pub(super) fn iterator_element(
+    pub(super) fn _iterator_element(
         &self,
         ty: Type<'ctxt>,
     ) -> Result<(IteratorType, Type<'ctxt>), Type<'ctxt>> {
@@ -148,7 +148,7 @@ impl<'ctxt> RootCtxt<'ctxt> {
                 let ty = self.simplify_type(ty);
                 match ty.kind() {
                     TypeKind::Infer(_) => Err(ty),
-                    _ => self.iterator_element(ty),
+                    _ => self._iterator_element(ty),
                 }
             }
             _ => Err(ty),

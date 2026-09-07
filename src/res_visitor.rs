@@ -105,7 +105,8 @@ pub trait Visitor {
                 self.visit_expr(expr);
             }
             ExprKind::For(for_expr) => {
-                self.visit_expr(&for_expr.iterator);
+                self.visit_expr(&for_expr.start);
+                self.visit_expr(&for_expr.end);
                 self.visit_pattern(&for_expr.pattern);
                 self.visit_expr(&for_expr.body);
             }

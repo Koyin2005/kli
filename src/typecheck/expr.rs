@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ast::BinaryOp,
+    Symbol,
+    ast::{BinaryOp, Mutable},
     collect::TypeDefKind,
     def_ids::DefId,
     index_vec::IndexVec,
@@ -147,40 +148,112 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
         for_expr: &resolved_ast::ForExpr,
     ) -> typed_ast::Expr<'ctxt> {
         let resolved_ast::ForExpr {
-            iterator,
+            start,
+            end,
             pattern,
             body,
         } = for_expr;
-        let iterator = self.check_expr(iterator, None);
-        let element = self.root().iterator_element(iterator.ty);
-        let (iterator_type, element) = match element {
-            Ok((iterator_type, ty)) => (Some(iterator_type), ty),
-            Err(_) => {
-                self.root().ctxt().diag().add_diagnostic(
-                    format!("Cannot use '{}' as an iterator", iterator.ty),
-                    iterator.loc,
-                );
-                (None, Type::new_unknown(self.ctxt()))
-            }
+
+        let iter_var_id = start.id;
+        let start = self.check_expr(start, Some(Type::new_int(self.ctxt())));
+        let end = self.check_expr(end, Some(Type::new_int(self.ctxt())));
+
+        let element_ty = self.root().unify(start.ty, end.ty, loc);
+        let pattern = self.check_pattern(pattern, element_ty);
+
+        let body = self.check_expr(body, Some(Type::new_unit(self.ctxt())));
+
+        let iter_var = Var(Symbol::ITER, resolved_ast::VarId(iter_var_id));
+        let iter_var_pattern = typed_ast::Pattern {
+            ty: element_ty,
+            loc,
+            kind: typed_ast::PatternKind::Binding(Mutable::Mutable, iter_var, element_ty),
         };
-        let pattern = self.check_pattern(pattern, element);
-        let body = self.check_expr_coerces_to(body, Some(Type::new_unit(self.ctxt())));
-        let Some(iterator_type) = iterator_type else {
-            return typed_ast::Expr {
-                ty: Type::new_unit(self.ctxt()),
-                loc,
-                kind: typed_ast::ExprKind::Err,
-            };
+
+        let iter_var_ty = iter_var_pattern.ty;
+        let iter_var_decl = typed_ast::Stmt {
+            loc,
+            kind: typed_ast::StmtKind::Let(typed_ast::LetBinding {
+                pattern: iter_var_pattern,
+                value: start,
+            }),
         };
+
+        let iter_var_place = move |loc| typed_ast::Place {
+            ty: iter_var_ty,
+            loc,
+            kind: typed_ast::PlaceKind::Var(iter_var),
+        };
+
+        let iter_var_value = move |loc| typed_ast::Expr {
+            ty: iter_var_ty,
+            loc,
+            kind: typed_ast::ExprKind::Load(iter_var_place(loc)),
+        };
+        let loop_condition = typed_ast::Expr {
+            ty: Type::new_bool(self.ctxt()),
+            loc,
+            kind: typed_ast::ExprKind::Binary(
+                typed_ast::BinaryOp::Lesser,
+                Box::new(iter_var_value(loc)),
+                Box::new(end),
+            ),
+        };
+
+        let increment = typed_ast::Expr {
+            ty: Type::new_unit(self.ctxt()),
+            loc,
+            kind: typed_ast::ExprKind::Assign(
+                Box::new(iter_var_place(loc)),
+                Box::new(typed_ast::Expr {
+                    ty: iter_var_ty,
+                    loc,
+                    kind: typed_ast::ExprKind::Binary(
+                        typed_ast::BinaryOp::Add,
+                        Box::new(iter_var_value(loc)),
+                        Box::new(typed_ast::Expr {
+                            ty: Type::new_int(self.ctxt()),
+                            loc,
+                            kind: typed_ast::ExprKind::Int(1),
+                        }),
+                    ),
+                }),
+            ),
+        };
+        let loop_body = typed_ast::Expr {
+            ty: Type::new_unit(self.ctxt()),
+            loc,
+            kind: typed_ast::ExprKind::Block(typed_ast::BlockBody {
+                stmts: vec![
+                    typed_ast::Stmt {
+                        loc,
+                        kind: typed_ast::StmtKind::Let(typed_ast::LetBinding {
+                            pattern,
+                            value: iter_var_value(loc),
+                        }),
+                    },
+                    typed_ast::Stmt {
+                        loc,
+                        kind: typed_ast::StmtKind::Expr(body),
+                    },
+                ],
+                expr: Box::new(increment),
+            }),
+        };
+
+        let loop_ = typed_ast::Expr {
+            ty: Type::new_unit(self.ctxt()),
+            loc,
+            kind: typed_ast::ExprKind::While(Box::new(loop_condition), Box::new(loop_body)),
+        };
+
         typed_ast::Expr {
             ty: Type::new_unit(self.ctxt()),
             loc,
-            kind: typed_ast::ExprKind::For {
-                pattern: Box::new(pattern),
-                iterator: Box::new(iterator),
-                iterator_type,
-                body: Box::new(body),
-            },
+            kind: typed_ast::ExprKind::Block(typed_ast::BlockBody {
+                stmts: vec![iter_var_decl],
+                expr: Box::new(loop_),
+            }),
         }
     }
     fn check_lambda(
@@ -508,7 +581,11 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
         expr: &Expr,
         expected_ty: Option<Type<'ctxt>>,
     ) -> typed_ast::Expr<'ctxt> {
-        let &Expr { id, loc, ref kind } = expr;
+        let &Expr {
+            id: _,
+            loc,
+            ref kind,
+        } = expr;
         let make_expr =
             |ty, kind: typed_ast::ExprKind<'ctxt>, loc| typed_ast::Expr::<'ctxt> { ty, kind, loc };
         match kind {
