@@ -62,7 +62,7 @@ impl<'ctxt> BuiltinCheck<'ctxt> {
 
 impl<'ctxt> Visitor<'ctxt> for BuiltinCheck<'ctxt> {
     fn visit_expr(&mut self, expr: &crate::typed_ast::Expr<'ctxt>) {
-        if let &ExprKind::BuiltinCall(_, builtin, ref generic_args, _) = &expr.kind {
+        if let &ExprKind::BuiltinCall(builtin, ref generic_args, _) = &expr.kind {
             self.check_builtin(expr.loc, builtin, generic_args);
         }
         walk_expr(self, expr);

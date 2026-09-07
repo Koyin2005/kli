@@ -400,7 +400,6 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 ty,
                 loc,
                 kind: typed_ast::ExprKind::BuiltinCall(
-                    id.0,
                     builtin,
                     generic_args,
                     args.into_boxed_slice(),
