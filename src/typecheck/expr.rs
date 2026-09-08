@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     Symbol,
     ast::{BinaryOp, Mutable},
+    builtins::{Builtin, IntegerBuiltin},
     collect::TypeDefKind,
     def_ids::DefId,
     index_vec::IndexVec,
@@ -13,7 +14,7 @@ use crate::{
         root::{FunctionCtxt, TypeCheck},
     },
     typed_ast::{self, Capture, FieldId, RecordFieldInit},
-    types::{FieldName, FunctionSig, GenericArgs, Type, TypeKind},
+    types::{FieldName, FunctionSig, GenericArg, GenericArgs, Type, TypeKind},
 };
 
 impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
@@ -208,14 +209,17 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 Box::new(typed_ast::Expr {
                     ty: iter_var_ty,
                     loc,
-                    kind: typed_ast::ExprKind::Binary(
-                        typed_ast::BinaryOp::Add,
-                        Box::new(iter_var_value(loc)),
-                        Box::new(typed_ast::Expr {
-                            ty: Type::new_int(self.ctxt()),
-                            loc,
-                            kind: typed_ast::ExprKind::Int(1),
-                        }),
+                    kind: typed_ast::ExprKind::BuiltinCall(
+                        Builtin::IntegerBuiltin(IntegerBuiltin::WrappingAdd),
+                        GenericArgs::from_single(GenericArg::from_type(Type::new_int(self.ctxt()))),
+                        Box::new([
+                            iter_var_value(loc),
+                            typed_ast::Expr {
+                                ty: Type::new_int(self.ctxt()),
+                                loc,
+                                kind: typed_ast::ExprKind::Int(1),
+                            },
+                        ]),
                     ),
                 }),
             ),
