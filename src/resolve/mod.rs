@@ -708,13 +708,20 @@ impl<'info> Resolve<'info> {
                 )
             }
             ast::ExprKind::For(pattern, start, end, body) => {
-                let end = end.expect("non-ranged loops aren't supported yet");
-                res::ExprKind::For(Box::new(res::ForExpr {
-                    pattern: self.resolve_pattern(*pattern),
-                    start: self.resolve_expr(*start),
-                    end: self.resolve_expr(*end),
-                    body: self.resolve_expr(*body),
-                }))
+                let start = self.resolve_expr(*start);
+                let end = if let Some(end) = end {
+                    self.resolve_expr(*end)
+                } else {
+                    todo!("for loops with iterators are not yet supported")
+                };
+                self.in_scope(|this| {
+                    res::ExprKind::For(Box::new(res::ForExpr {
+                        pattern: this.resolve_pattern(*pattern),
+                        start,
+                        end,
+                        body: this.resolve_expr(*body),
+                    }))
+                })
             }
             ast::ExprKind::MethodCall(rcvr, method, args) => res::ExprKind::MethodCall(
                 Box::new(self.resolve_expr(*rcvr)),
