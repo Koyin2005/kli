@@ -6,7 +6,7 @@ use crate::{
     mir::{
         BasicBlock, BasicBlockId, ConstValue, Constant, Local, Location, Operand, Place, PlaceBase,
         Rvalue, StmtKind, TerminatorKind,
-        passes::{MirPass, optimisation_enabled, should_dump},
+        passes::{MirPass, optimisation_enabled},
         visitor::{MutVisit, Visit},
     },
 };
@@ -21,12 +21,12 @@ impl<'ctxt> MirPass<'ctxt> for Inline {
     }
     fn run_with_ctxt(
         &self,
-        ctxt: CtxtRef<'ctxt>,
+        _: CtxtRef<'ctxt>,
         body: &'_ mut crate::mir::Body<'ctxt>,
         mir_ctxt: &crate::mir::Context<'ctxt>,
     ) {
         let mut inline_budget = 10usize;
-        let mut inline_sites = InlineSiteFinder { site: None, ctxt };
+        let mut inline_sites = InlineSiteFinder { site: None };
         loop {
             let Some(new_budget) = inline_budget.checked_sub(1) else {
                 break;
@@ -36,9 +36,6 @@ impl<'ctxt> MirPass<'ctxt> for Inline {
             let Some(site) = inline_sites.site.take() else {
                 break;
             };
-            if should_dump(ctxt, body.src) {
-                println!("Inlining {}", ctxt.display_path_for(site.call));
-            }
             let InlineSite {
                 location,
                 place,
@@ -126,8 +123,7 @@ struct InlineSite<'ctxt> {
     args: Vec<Operand<'ctxt>>,
 }
 struct InlineSiteFinder<'ctxt> {
-    site: Option<InlineSite<'ctxt>>,
-    ctxt: CtxtRef<'ctxt>,
+    site: Option<InlineSite<'ctxt>>
 }
 impl<'ctxt> Visit<'ctxt> for InlineSiteFinder<'ctxt> {
     fn visit_assign(&mut self, loc: Location, place: &Place, rvalue: &Rvalue<'ctxt>) {
@@ -145,9 +141,6 @@ impl<'ctxt> Visit<'ctxt> for InlineSiteFinder<'ctxt> {
             return;
         }
         let id = *id;
-        if should_dump(self.ctxt, crate::mir::BodySource::Function(id)) {
-            println!("{:?} {:?}", generic_args, self.ctxt.display_path_for(id));
-        }
         self.site.get_or_insert(InlineSite {
             location: loc,
             place: place.clone(),
