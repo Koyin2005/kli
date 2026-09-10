@@ -96,6 +96,7 @@ pub fn run_passes<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
     simple_pass(ctxt, mir, RemoveUnreachable);
     simple_pass(ctxt, mir, DeadStoreElim);
     inlining::run_pass(ctxt, mir);
+    simple_pass(ctxt, mir, SimplifyCfg);
     simple_pass(ctxt, mir, RemoveUnreachable);
     simple_pass(ctxt, mir, RemoveUnusedLocals);
     simple_pass(ctxt, mir, DumpMir);
