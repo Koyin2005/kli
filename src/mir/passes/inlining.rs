@@ -2,8 +2,8 @@ use crate::{
     CtxtRef,
     mir::{
         self, BasicBlock, BasicBlockId, Body, BodySource, ConstValue, Constant, Local, Location,
-        Operand, Place, PlaceBase, Rvalue, StmtKind, Terminator, TerminatorKind,
-        passes::optimisation_enabled, visitor::MutVisit,
+        Operand, Place, Rvalue, StmtKind, Terminator, TerminatorKind, passes::optimisation_enabled,
+        visitor::MutVisit,
     },
     monomorph::instantiate_body,
     src_loc::SrcLoc,
@@ -186,26 +186,38 @@ impl<'ctxt> MutVisit<'ctxt> for Updater {
     fn visit_local(&mut self, _: Location, local: &mut mir::Local) {
         *local = mir::Local(local.0 + self.local_count);
     }
-    fn visit_place(&mut self, loc: Location, place: &mut Place) {
-        self.super_visit_place(loc, place);
-        if place.base != PlaceBase::ReturnPlace {
-            return;
+    fn visit_block(&mut self, id: BasicBlockId, block: &mut BasicBlock<'ctxt>) {
+        for (stmt_id, stmt) in block.stmts.iter_mut_enumerated() {
+            self.visit_stmt(mir::Location::stmt(id, stmt_id), stmt);
         }
-        let old_projections = std::mem::take(&mut place.projections);
-        *place = self.return_place.clone();
-        place.projections.extend(old_projections);
-    }
-    fn visit_terminator(&mut self, loc: Location, terminator: &mut Terminator<'ctxt>) {
-        self.super_visit_terminator(loc, terminator);
-        match &mut terminator.kind {
-            mir::TerminatorKind::Return => {
-                terminator.kind = mir::TerminatorKind::Goto(self.return_target);
+        let terminator = block.expect_terminator_mut();
+        self.visit_terminator(mir::Location::terminator(id), terminator);
+        let src_info = terminator.src_info;
+        let value = match &mut terminator.kind {
+            mir::TerminatorKind::Return(_) => {
+                let mir::TerminatorKind::Return(value) = std::mem::replace(
+                    &mut terminator.kind,
+                    mir::TerminatorKind::Goto(self.return_target),
+                ) else {
+                    unreachable!()
+                };
+                Some(value)
             }
             _ => {
                 for succ in terminator.successors_mut() {
                     *succ = BasicBlockId(succ.0 + self.block_count);
                 }
+                None
             }
+        };
+        if let Some(value) = value {
+            block.stmts.push(mir::Stmt {
+                loc: src_info,
+                kind: StmtKind::Assign(
+                    self.return_place.clone(),
+                    Box::new(mir::Rvalue::Use(value)),
+                ),
+            });
         }
     }
 }
@@ -228,7 +240,7 @@ fn inline_budget_used_by(body: &Body<'_>) -> u32 {
                             (2 + switch_targets.targets.iter().len()) as u32 * INSTR_BUDGET
                         }
                         TerminatorKind::Unreachable => INSTR_BUDGET,
-                        TerminatorKind::Return => 0,
+                        TerminatorKind::Return(_) => 0,
                         TerminatorKind::Goto(_) => INSTR_BUDGET,
                         TerminatorKind::Panic => 2 * INSTR_BUDGET,
                     }

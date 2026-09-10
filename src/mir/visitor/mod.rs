@@ -37,13 +37,10 @@ pub trait Visit<'ctxt> {
     fn super_visit_constant(&mut self, _loc: Location, _constant: &Constant<'ctxt>) {}
     fn super_visit_terminator(&mut self, loc: Location, terminator: &Terminator<'ctxt>) {
         match &terminator.kind {
-            TerminatorKind::Goto(_)
-            | TerminatorKind::Panic
-            | TerminatorKind::Return
-            | TerminatorKind::Unreachable => (),
-            TerminatorKind::Switch(operand, _) | TerminatorKind::Assert(operand, ..) => {
-                self.visit_operand(loc, operand)
-            }
+            TerminatorKind::Goto(_) | TerminatorKind::Panic | TerminatorKind::Unreachable => (),
+            TerminatorKind::Switch(operand, _)
+            | TerminatorKind::Assert(operand, ..)
+            | TerminatorKind::Return(operand) => self.visit_operand(loc, operand),
         }
     }
     fn super_visit_block(&mut self, id: BasicBlockId, info: &BasicBlock<'ctxt>) {
@@ -106,9 +103,9 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_local(&mut self, _: PlaceCtxt, _loc: Location, _local: Local) {}
     fn super_visit_place(&mut self, ctxt: PlaceCtxt, loc: Location, place: &Place) {
-        if let PlaceBase::Local(local) = place.base {
-            self.visit_local(ctxt, loc, local);
-        }
+        let PlaceBase::Local(local) = place.base;
+        self.visit_local(ctxt, loc, local);
+
         for projection in place.projections.iter() {
             self.visit_projection(loc, *projection);
         }
@@ -181,13 +178,10 @@ pub trait MutVisit<'ctxt> {
     fn super_visit_constant(&mut self, _loc: Location, _constant: &mut Constant<'ctxt>) {}
     fn super_visit_terminator(&mut self, loc: Location, terminator: &mut Terminator<'ctxt>) {
         match &mut terminator.kind {
-            TerminatorKind::Goto(_)
-            | TerminatorKind::Panic
-            | TerminatorKind::Return
-            | TerminatorKind::Unreachable => (),
-            TerminatorKind::Switch(operand, _) | TerminatorKind::Assert(operand, ..) => {
-                self.visit_operand(loc, operand)
-            }
+            TerminatorKind::Goto(_) | TerminatorKind::Panic | TerminatorKind::Unreachable => (),
+            TerminatorKind::Switch(operand, _)
+            | TerminatorKind::Assert(operand, ..)
+            | TerminatorKind::Return(operand) => self.visit_operand(loc, operand),
         }
     }
     fn super_visit_block(&mut self, id: BasicBlockId, info: &mut BasicBlock<'ctxt>) {
@@ -250,9 +244,8 @@ pub trait MutVisit<'ctxt> {
     }
     fn super_visit_local(&mut self, _loc: Location, _local: &mut Local) {}
     fn super_visit_place(&mut self, loc: Location, place: &mut Place) {
-        if let PlaceBase::Local(local) = &mut place.base {
-            self.visit_local(loc, local);
-        }
+        let PlaceBase::Local(local) = &mut place.base;
+        self.visit_local(loc, local);
         for projection in place.projections.iter_mut() {
             self.visit_projection(loc, projection);
         }

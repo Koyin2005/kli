@@ -1,6 +1,6 @@
 use crate::{
     mir::{
-        Place, TerminatorKind,
+        TerminatorKind,
         build::{Builder, expr::BuiltinResult},
     },
     typed_ast::{Expr, ExprKind},
@@ -19,8 +19,8 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
                 self.panic(expr.loc);
             }
             ExprKind::Return(value) => {
-                self.expr_into_dest(Place::return_place(), value);
-                self.finish_block(expr.loc, TerminatorKind::Return);
+                let return_value = self.operand(value);
+                self.finish_block(expr.loc, TerminatorKind::Return(return_value));
                 self.switch_to_new_block();
             }
             ExprKind::Block(block_body, ..) => {

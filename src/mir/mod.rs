@@ -68,13 +68,11 @@ impl PlaceProjection {
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Copy, PartialOrd, Ord)]
 pub enum PlaceBase {
     Local(Local),
-    ReturnPlace,
 }
 impl PlaceBase {
-    pub fn type_of<'ctxt>(self, locals: &Locals<'ctxt>, return_type: Type<'ctxt>) -> Type<'ctxt> {
+    pub fn type_of<'ctxt>(self, locals: &Locals<'ctxt>, _: Type<'ctxt>) -> Type<'ctxt> {
         match self {
             PlaceBase::Local(local) => locals[local].ty,
-            PlaceBase::ReturnPlace => return_type,
         }
     }
 }
@@ -82,7 +80,6 @@ impl Display for PlaceBase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Local(local) => write!(f, "_{}", local.0),
-            Self::ReturnPlace => write!(f, "ret"),
         }
     }
 }
@@ -98,12 +95,6 @@ impl Place {
     pub fn local(local: Local) -> Self {
         Self {
             base: PlaceBase::Local(local),
-            projections: Vec::new(),
-        }
-    }
-    pub fn return_place() -> Self {
-        Self {
-            base: PlaceBase::ReturnPlace,
             projections: Vec::new(),
         }
     }
@@ -441,7 +432,7 @@ impl<'ctxt> Terminator<'ctxt> {
             TerminatorKind::Assert(.., block) | TerminatorKind::Goto(block) => {
                 SuccessorsIter::Single(Some(block))
             }
-            TerminatorKind::Return | TerminatorKind::Panic | TerminatorKind::Unreachable => {
+            TerminatorKind::Return(_) | TerminatorKind::Panic | TerminatorKind::Unreachable => {
                 SuccessorsIter::Leaf
             }
             TerminatorKind::Switch(_, ref targets) => {
@@ -463,7 +454,7 @@ impl<'ctxt> Terminator<'ctxt> {
                 ),
             ),
             TerminatorKind::Unreachable => None.unzip(),
-            TerminatorKind::Return => None.unzip(),
+            TerminatorKind::Return(_) => None.unzip(),
             TerminatorKind::Panic => None.unzip(),
         };
         single.into_iter().chain(multiple.into_iter().flatten())
@@ -474,7 +465,7 @@ pub enum TerminatorKind<'ctxt> {
     Assert(Operand<'ctxt>, AssertKind, BasicBlockId),
     Switch(Operand<'ctxt>, SwitchTargets),
     Unreachable,
-    Return,
+    Return(Operand<'ctxt>),
     Goto(BasicBlockId),
     Panic,
 }
