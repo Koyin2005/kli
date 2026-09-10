@@ -1,9 +1,8 @@
 use crate::{
     CtxtRef,
-    index_vec::IndexVec,
     mir::{
         self, BasicBlock, BasicBlockId, Body, BodySource, ConstValue, Constant, Local, LocalKind,
-        Location, Operand, Place, PlaceBase, Rvalue, StmtId, StmtKind, Terminator, TerminatorKind,
+        Location, Operand, Place, PlaceBase, Rvalue, StmtKind, Terminator, TerminatorKind,
         passes::optimisation_enabled, visitor::MutVisit,
     },
     monomorph::instantiate_body,
@@ -89,8 +88,6 @@ pub fn run_pass<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
                         info
                     }));
             }
-
-            split_calls(current_body);
         }
     }
     *mir = updated_mir;
@@ -104,7 +101,7 @@ struct InlininingSite<'ctxt> {
 }
 fn find_inlining_site<'ctxt>(body: &Body<'ctxt>) -> Option<InlininingSite<'ctxt>> {
     for (block_id, block) in body.block_info.blocks().iter_enumerated() {
-        for (stmt_id, stmt) in block.stmts.iter_enumerated() {
+        for stmt in block.stmts.iter() {
             let StmtKind::Assign(place, value) = &stmt.kind else {
                 continue;
             };
