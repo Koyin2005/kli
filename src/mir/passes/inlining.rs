@@ -1,8 +1,10 @@
+use std::usize;
+
 use crate::{
     CtxtRef,
     mir::{
-        self, BasicBlock, BasicBlockId, Body, BodySource, ConstValue, Constant, Local, LocalKind,
-        Location, Operand, Place, PlaceBase, Rvalue, StmtKind, Terminator, TerminatorKind,
+        self, BasicBlock, BasicBlockId, Body, BodySource, ConstValue, Constant, Local, Location,
+        Operand, Place, PlaceBase, Rvalue, StmtKind, Terminator, TerminatorKind,
         passes::optimisation_enabled, visitor::MutVisit,
     },
     monomorph::instantiate_body,
@@ -14,20 +16,24 @@ pub fn run_pass<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
     if !optimisation_enabled(ctxt) {
         return;
     }
-    for current_body in mir.bodies.iter_mut() {
-        split_calls(current_body);
-    }
-    let mut updated_mir = mir.clone();
-    for current_body in updated_mir.bodies.iter_mut() {
-        let mut budget: u32 = 20;
 
+    let budgets = mir
+        .bodies
+        .iter_mut()
+        .map(|current_body| {
+            let budget = inline_budget_for_body(current_body);
+            split_calls(current_body);
+            budget
+        })
+        .collect::<Vec<_>>();
+    let mut updated_mir = mir.clone();
+    for (current_body, mut budget) in updated_mir.bodies.iter_mut().zip(budgets) {
         loop {
-            let site = if let Some(site) = find_inlining_site(current_body) {
+            let site = if let Some(site) = find_inlining_site(mir, current_body) {
                 site
             } else {
                 break;
             };
-
             let InlininingSite {
                 return_place,
                 src,
@@ -81,12 +87,7 @@ pub fn run_pass<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
                     .block_info
                     .blocks_mut()
                     .extend(body.block_info.into_blocks());
-                current_body
-                    .locals
-                    .extend(body.locals.into_iter().map(|mut info| {
-                        info.kind = LocalKind::Temp;
-                        info
-                    }));
+                current_body.locals.extend(body.locals);
             }
         }
     }
@@ -99,7 +100,11 @@ struct InlininingSite<'ctxt> {
     return_place: Place,
     args: Vec<Operand<'ctxt>>,
 }
-fn find_inlining_site<'ctxt>(body: &Body<'ctxt>) -> Option<InlininingSite<'ctxt>> {
+fn find_inlining_site<'ctxt>(
+    mir: &mir::Context<'ctxt>,
+    body: &Body<'ctxt>,
+) -> Option<InlininingSite<'ctxt>> {
+    let mut site = None;
     for (block_id, block) in body.block_info.blocks().iter_enumerated() {
         for stmt in block.stmts.iter() {
             let StmtKind::Assign(place, value) = &stmt.kind else {
@@ -115,16 +120,25 @@ fn find_inlining_site<'ctxt>(body: &Body<'ctxt>) -> Option<InlininingSite<'ctxt>
             else {
                 continue;
             };
-            return Some(InlininingSite {
+            let call_site = InlininingSite {
                 src: BodySource::Function(id),
                 return_place: place.clone(),
                 generic_args: generic_args.clone(),
                 block: block_id,
                 args: args.clone(),
-            });
+            };
+
+            let body_id = mir.get_bodies_with_src(call_site.src)[0];
+            let call_site_budget = inline_budget_used_by(mir.get_body(body_id));
+            if let Some((current_budget, _)) = site
+                && current_budget <= call_site_budget
+            {
+                continue;
+            }
+            site = Some((call_site_budget, call_site));
         }
     }
-    None
+    site.map(|(_, site)| site)
 }
 
 fn split_calls<'ctxt>(body: &mut Body<'ctxt>) {
@@ -205,6 +219,20 @@ impl<'ctxt> MutVisit<'ctxt> for Updater {
 }
 
 fn inline_budget_used_by(body: &Body<'_>) -> u32 {
-    let total_cost = body.block_info.blocks().len() + body.locals.len();
-    total_cost.try_into().unwrap_or(u32::MAX)
+    let total_cost = body
+        .block_info
+        .blocks()
+        .iter()
+        .map(|block| block.stmts.len())
+        .sum::<usize>()
+        + body.locals.len();
+    total_cost.try_into().unwrap_or(100)
+}
+
+fn inline_budget_for_body(body: &Body<'_>) -> u32 {
+    let mut total_budget = 15;
+    if body.block_info.blocks().len() < 4 {
+        total_budget += 10;
+    }
+    total_budget
 }
