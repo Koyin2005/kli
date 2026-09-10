@@ -1,7 +1,7 @@
 use crate::{
     CtxtRef,
     layout::{Layout, calculate_layout},
-    mir::{Constant, Locals, Location, Operand, StmtKind, passes::MirPass, visitor::MutVisit},
+    mir::{Constant, Locals, Location, Operand, StmtKind, passes::BodyPass, visitor::MutVisit},
     types::Type,
 };
 
@@ -13,7 +13,7 @@ impl RemoveZst {
             .is_ok_and(Layout::is_align_1_zst)
     }
 }
-impl<'ctxt> MirPass<'ctxt> for RemoveZst {
+impl<'ctxt> BodyPass<'ctxt> for RemoveZst {
     fn name(&self) -> &'static str {
         "remove-zst"
     }

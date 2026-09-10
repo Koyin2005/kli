@@ -4,17 +4,17 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         Local, LocalKind,
-        passes::{MirPass, optimisation_enabled},
+        passes::{BodyPass, optimisation_enabled},
         visitor::{MutVisit, PlaceCtxt, Visit},
     },
 };
 
 pub struct RemoveUnusedLocals;
-impl MirPass<'_> for RemoveUnusedLocals {
+impl BodyPass<'_> for RemoveUnusedLocals {
     fn name(&self) -> &'static str {
         "remove-unused-locals"
     }
-    fn run(&self, ctxt: crate::CtxtRef<'_>, body: &mut crate::mir::Body) {
+    fn run(&self, _: crate::CtxtRef<'_>, body: &mut crate::mir::Body) {
         let mut finder = LocalFinder {
             locals: HashSet::from_iter(body.locals.iter_enumerated().filter_map(
                 |(local, info)| {
@@ -48,10 +48,6 @@ impl MirPass<'_> for RemoveUnusedLocals {
         LocalReplacer { locals: &local_map }.visit_body(body);
 
         body.locals.truncate(next_local.next().into_usize());
-        if super::should_dump(ctxt, body.src) {
-            println!("{:?}", local_map);
-            println!("{:?}", body.locals.indices().collect::<Vec<_>>());
-        }
     }
     fn enabled(&self, ctxt: crate::CtxtRef<'_>) -> bool {
         optimisation_enabled(ctxt)

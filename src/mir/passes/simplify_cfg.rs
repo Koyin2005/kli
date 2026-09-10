@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 
 use crate::{
     index_vec::IndexVec,
-    mir::{BasicBlock, BasicBlockId, Operand, StmtKind, TerminatorKind, passes::MirPass},
+    mir::{BasicBlock, BasicBlockId, Operand, StmtKind, TerminatorKind, passes::BodyPass},
 };
 
 pub struct SimplifyCfg;
 
-impl<'ctxt> MirPass<'ctxt> for SimplifyCfg {
+impl<'ctxt> BodyPass<'ctxt> for SimplifyCfg {
     fn name(&self) -> &'static str {
         "simplify-cfg"
     }

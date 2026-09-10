@@ -2,12 +2,12 @@ use std::collections::HashSet;
 
 use crate::mir::{
     Local, LocalKind, PlaceBase, StmtKind,
-    passes::{MirPass, optimisation_enabled},
+    passes::{BodyPass, optimisation_enabled},
     visitor::{MutVisit, PlaceCtxt, Visit},
 };
 
 pub struct DeadStoreElim;
-impl MirPass<'_> for DeadStoreElim {
+impl BodyPass<'_> for DeadStoreElim {
     fn name(&self) -> &'static str {
         "dead-store-elim"
     }

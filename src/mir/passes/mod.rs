@@ -5,14 +5,15 @@ use crate::{
     config::Feature,
     index_vec::IndexVec,
     mir::{
-        BasicBlock, BasicBlockId, Body, BodySource,
+        self, BasicBlock, BasicBlockId, Body, BodySource,
         dump::MirDump,
         passes::{
-            dead_store::DeadStoreElim, inlining::Inline, remove_unreachable::RemoveUnreachable,
+            dead_store::DeadStoreElim, remove_unreachable::RemoveUnreachable,
             remove_unused_locals::RemoveUnusedLocals, remove_zst::RemoveZst,
             simplify_cfg::SimplifyCfg,
         },
     },
+    monomorph,
 };
 mod dead_store;
 mod inlining;
@@ -23,18 +24,9 @@ mod simplify_cfg;
 pub(super) fn optimisation_enabled(ctxt: CtxtRef<'_>) -> bool {
     ctxt.config().has_feature(Feature::Optimise)
 }
-pub trait MirPass<'ctxt> {
+pub trait BodyPass<'ctxt> {
     fn name(&self) -> &'static str;
     fn run(&self, ctxt: CtxtRef<'ctxt>, body: &'_ mut Body<'ctxt>);
-    fn run_with_ctxt(
-        &self,
-        ctxt: CtxtRef<'ctxt>,
-        body: &'_ mut Body<'ctxt>,
-        mir_ctxt: &super::Context<'ctxt>,
-    ) {
-        _ = mir_ctxt;
-        self.run(ctxt, body);
-    }
     fn enabled(&self, ctxt: CtxtRef<'ctxt>) -> bool {
         _ = ctxt;
         true
@@ -54,7 +46,7 @@ pub(super) fn should_dump(ctxt: CtxtRef<'_>, src: BodySource) -> bool {
     })
 }
 pub struct DumpMir;
-impl MirPass<'_> for DumpMir {
+impl BodyPass<'_> for DumpMir {
     fn name(&self) -> &'static str {
         "dump-mir"
     }
@@ -67,21 +59,6 @@ impl MirPass<'_> for DumpMir {
         ctxt.config().has_feature(Feature::OutputMir)
     }
 }
-pub fn passes<'a>() -> &'a [&'a dyn MirPass<'a>] {
-    &[
-        &RemoveZst,
-        &SimplifyCfg,
-        &SimplifyCfg,
-        &Inline,
-        &RemoveUnreachable,
-        &DeadStoreElim,
-        &RemoveUnusedLocals,
-        &SimplifyCfg,
-        &RemoveUnreachable,
-        &DumpMir,
-    ]
-}
-
 pub fn preorder(
     blocks: &IndexVec<BasicBlockId, BasicBlock>,
 ) -> Vec<(Option<BasicBlockId>, BasicBlockId)> {
@@ -98,4 +75,29 @@ pub fn preorder(
         }
     }
     bbs
+}
+
+fn simple_pass<'ctxt>(
+    ctxt: CtxtRef<'ctxt>,
+    mir: &mut mir::Context<'ctxt>,
+    pass: impl BodyPass<'ctxt>,
+) {
+    if !pass.enabled(ctxt) {
+        return;
+    }
+    for body in mir.bodies.iter_mut() {
+        pass.run(ctxt, body);
+    }
+}
+
+pub fn run_passes<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
+    simple_pass(ctxt, mir, RemoveZst);
+    simple_pass(ctxt, mir, SimplifyCfg);
+    simple_pass(ctxt, mir, RemoveUnreachable);
+    simple_pass(ctxt, mir, DeadStoreElim);
+    inlining::run_pass(mir);
+    simple_pass(ctxt, mir, RemoveUnreachable);
+    simple_pass(ctxt, mir, RemoveUnusedLocals);
+    simple_pass(ctxt, mir, DumpMir);
+    monomorph::monomorphise(ctxt,mir);
 }

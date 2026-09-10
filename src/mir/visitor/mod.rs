@@ -71,7 +71,7 @@ pub trait Visit<'ctxt> {
                     self.visit_operand(loc, element);
                 }
             }
-            Rvalue::UninitZeroed(_) | Rvalue::ReadLine => (),
+            Rvalue::ReadLine => (),
             Rvalue::Discriminant(place) => self.visit_place(PlaceCtxt::Read, loc, place),
             Rvalue::Len(place) => self.visit_place(PlaceCtxt::Read, loc, place),
             Rvalue::Use(operand) => self.visit_operand(loc, operand),
@@ -215,7 +215,7 @@ pub trait MutVisit<'ctxt> {
                     self.visit_operand(loc, element);
                 }
             }
-            Rvalue::UninitZeroed(_) | Rvalue::ReadLine => (),
+            Rvalue::ReadLine => (),
             Rvalue::Discriminant(place) => self.visit_place(loc, place),
             Rvalue::Len(place) => self.visit_place(loc, place),
             Rvalue::Use(operand) => self.visit_operand(loc, operand),

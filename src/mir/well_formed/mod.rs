@@ -107,7 +107,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     );
                 }
             }
-            super::Rvalue::UninitZeroed(_) | super::Rvalue::ReadLine => (),
+            super::Rvalue::ReadLine => (),
             super::Rvalue::Discriminant(place) => {
                 self.assert(
                     if let Some((id, _, _)) = place

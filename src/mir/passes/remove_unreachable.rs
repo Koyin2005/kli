@@ -1,10 +1,10 @@
 use crate::{
     index_vec::IndexVec,
-    mir::{BasicBlockId, passes::MirPass, traversal::reachable},
+    mir::{BasicBlockId, passes::BodyPass, traversal::reachable},
 };
 
 pub struct RemoveUnreachable;
-impl MirPass<'_> for RemoveUnreachable {
+impl BodyPass<'_> for RemoveUnreachable {
     fn name(&self) -> &'static str {
         "remove-unreachable"
     }

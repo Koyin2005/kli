@@ -112,9 +112,6 @@ impl<'ctxt> MirDump<'ctxt> {
             Rvalue::ReadLine => {
                 write!(self.output, "read_line")?;
             }
-            Rvalue::UninitZeroed(ty) => {
-                write!(self.output, "uninit[{}]", ty)?;
-            }
             Rvalue::Use(operand) => {
                 self.write_operand(operand)?;
             }

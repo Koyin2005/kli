@@ -1,13 +1,9 @@
-use std::collections::HashMap;
-
 use kli::{
     Arenas,
     builtin_check::BuiltinCheck,
-    config::{CommandArg, Feature, config},
+    config::{CommandArg, config},
     files::{FileError, build_file_tree},
-    mir::{self, passes::passes},
-    monomorph::collect::{Instance, InstanceCollector, InstanceKind},
-    parsing,
+    mir, parsing,
     patterns::visit::PatternCheck,
     resolve::Resolve,
     typecheck::root::TypeCheck,
@@ -63,44 +59,8 @@ fn main() {
             mir::BodySource::Function(id),
         );
     }
-    let pass_args = ctxt
-        .config()
-        .arguments_for(Feature::WithMirPass)
-        .map(|args| args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>())
-        .unwrap_or_default();
-    let run_pass = pass_args
-        .iter()
-        .map(|name| {
-            let name_no_negate = name.strip_prefix("!");
-            (
-                name_no_negate.unwrap_or(name.as_str()),
-                name.strip_prefix("!").is_none(),
-            )
-        })
-        .collect::<HashMap<_, _>>();
-
-    {
-        let mir_context_ref = &mir_context;
-        mir_context_ref.for_each_body_mut(move |body| {
-            for pass in passes() {
-                let overidde = run_pass.get(pass.name()).copied();
-                let should_run = overidde.unwrap_or_else(|| pass.enabled(ctxt));
-                if !should_run {
-                    continue;
-                }
-                pass.run_with_ctxt(ctxt, body, mir_context_ref);
-            }
-        })
-    };
-    if let Some((main, _)) = ctxt.main_function()
+    mir::passes::run_passes(ctxt, &mut mir_context);
+    if let Some((_main, _)) = ctxt.main_function()
         && !matches!(ctxt.config().command(), CommandArg::Check)
-    {
-        let instances = InstanceCollector::new(&mir_context)
-            .collect(ctxt, Instance::non_generic(InstanceKind::Function(main)));
-        if ctxt.config().has_feature(Feature::OutputInstances) {
-            for instance in &instances {
-                println!("{:?}", instance);
-            }
-        }
-    }
+    {}
 }

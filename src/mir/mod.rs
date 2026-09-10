@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display};
 
 use crate::{
     Symbol,
@@ -7,7 +7,6 @@ use crate::{
     define_id,
     index_vec::IndexVec,
     mir::basic_blocks::BasicBlocks,
-    monomorph::collect::InstanceKind,
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
     typed_ast::FieldId,
@@ -248,8 +247,6 @@ pub enum CastKind {
 #[derive(Clone, Debug)]
 pub enum Rvalue<'ctxt> {
     ReadLine,
-    /// Produces a value of type T with a bit pattern of all zeroes
-    UninitZeroed(Type<'ctxt>),
     Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Operand<'ctxt>>),
     Use(Operand<'ctxt>),
     Call(Operand<'ctxt>, Vec<Operand<'ctxt>>),
@@ -267,8 +264,7 @@ impl<'ctxt> Rvalue<'ctxt> {
             | Self::Cast(..)
             | Self::Use(_)
             | Self::Len(_)
-            | Self::Discriminant(_)
-            | Self::UninitZeroed(_) => true,
+            | Self::Discriminant(_) => true,
             Self::AllocArray(..) => false,
             Self::Call(..) | Self::ReadLine => false,
         }
@@ -283,7 +279,6 @@ impl<'ctxt> Rvalue<'ctxt> {
         match self {
             Rvalue::AllocArray(ty, _) => Type::new_array(ctxt, *ty),
             Rvalue::ReadLine => Type::new_string(ctxt),
-            &Rvalue::UninitZeroed(ty) => ty,
             Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),
             Rvalue::Len(_) => Type::new_int(ctxt),
             Rvalue::Call(operand, _) => {
@@ -563,11 +558,6 @@ impl BodySource {
             Self::Function(id) => id,
         }
     }
-    pub fn as_instance(self) -> InstanceKind {
-        match self {
-            Self::Function(id) => InstanceKind::Function(id),
-        }
-    }
     pub fn is_child_of(self, name: Symbol, ctxt: CtxtRef) -> bool {
         ctxt.self_with_anecstors(self.def_id())
             .any(|id| ctxt.ident(id).map(|ident| ident.symbol) == Some(name))
@@ -625,11 +615,13 @@ impl<'ctxt> Body<'ctxt> {
 }
 pub type Locals<'ctxt> = IndexVec<Local, LocalInfo<'ctxt>>;
 
+define_id!(BodyId);
+
 #[derive(Default)]
 pub struct Context<'ctxt> {
     pub check_well_formed: bool,
-    bodies: HashMap<BodySource, RefCell<Body<'ctxt>>>,
-    body_sources: Vec<BodySource>,
+    bodies: IndexVec<BodyId, Body<'ctxt>>,
+    bodies_with_src: HashMap<BodySource, Vec<BodyId>>,
 }
 impl<'ctxt> Context<'ctxt> {
     pub fn new(well_formed: bool) -> Self {
@@ -638,18 +630,15 @@ impl<'ctxt> Context<'ctxt> {
             ..Default::default()
         }
     }
-    pub fn for_each_body_mut<'a>(&self, mut f: impl FnMut(&mut Body<'ctxt>) + 'a) {
-        for src in self.body_sources.iter() {
-            f(&mut self.bodies[src].borrow_mut());
-        }
-    }
     pub fn add_body(&mut self, body: Body<'ctxt>) {
         let src = body.src;
-        self.bodies.insert(src, RefCell::new(body));
-        self.body_sources.push(src);
+        let id = self.bodies.push(body);
+        self.bodies_with_src.entry(src).or_default().push(id);
     }
-    #[track_caller]
-    pub fn with_body<T>(&self, src: BodySource, f: impl FnOnce(&Body<'ctxt>) -> T) -> T {
-        f(&self.bodies.get(&src).expect("Expected a body").borrow())
+    pub fn get_body(&self, id: BodyId) -> &Body<'ctxt> {
+        &self.bodies[id]
+    }
+    pub fn get_bodies_with_src(&self, src: BodySource) -> &[BodyId] {
+        &self.bodies_with_src[&src]
     }
 }

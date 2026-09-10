@@ -13,7 +13,6 @@ pub enum Feature {
     OutputMir,
     OutputInstances,
     Optimise,
-    WithMirPass,
     OutputBackendIr,
 }
 impl Display for Feature {
@@ -23,7 +22,6 @@ impl Display for Feature {
             Self::Optimise => "optimise",
             Self::OutputInstances => "output-instances",
             Self::OutputMir => "output-mir",
-            Self::WithMirPass => "with-mir-pass",
             Self::OutputBackendIr => "output-backend-ir",
         })
     }
@@ -103,7 +101,6 @@ pub fn config() -> Result<Config, ConfigError> {
                 "output-mir" => Feature::OutputMir,
                 "output-instances" => Feature::OutputInstances,
                 "optimise" => Feature::Optimise,
-                "with-mir-pass" => Feature::WithMirPass,
                 "output-backend-ir" => Feature::OutputBackendIr,
                 _ => return None,
             };
