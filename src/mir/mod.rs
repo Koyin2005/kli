@@ -588,7 +588,7 @@ impl<'ctxt> Body<'ctxt> {
         self.params_iter().map(|param| self.locals[param].ty)
     }
     pub fn params_iter(&self) -> impl Iterator<Item = Local> {
-        (0..self.param_count).map(|local| Local(local))
+        (0..self.param_count).map(Local)
     }
     pub fn local_for_var(&self, var_id: VarId) -> Option<Local> {
         self.locals

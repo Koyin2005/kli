@@ -1,5 +1,3 @@
-use std::usize;
-
 use crate::{
     CtxtRef,
     mir::{
@@ -28,12 +26,7 @@ pub fn run_pass<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
         .collect::<Vec<_>>();
     let mut updated_mir = mir.clone();
     for (current_body, mut budget) in updated_mir.bodies.iter_mut().zip(budgets) {
-        loop {
-            let site = if let Some(site) = find_inlining_site(mir, current_body) {
-                site
-            } else {
-                break;
-            };
+        while let Some(site) = find_inlining_site(mir, current_body) {
             let InlininingSite {
                 return_place,
                 src,
@@ -80,7 +73,7 @@ pub fn run_pass<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
                     block_count: current_body.block_info.blocks().len() as _,
                     local_count: current_body.locals.len() as _,
                     return_target: target,
-                    return_place: return_place,
+                    return_place,
                 };
                 updater.visit_body(&mut body);
                 current_body
@@ -160,10 +153,9 @@ fn split_calls<'ctxt>(body: &mut Body<'ctxt>) {
             else {
                 continue;
             };
-            if stmt_id != block.stmts.last() {
-                call_stmt = Some(stmt_id);
-                break;
-            } else if !matches!(block.expect_terminator().kind, TerminatorKind::Goto(_)) {
+            if stmt_id != block.stmts.last()
+                || !matches!(block.expect_terminator().kind, TerminatorKind::Goto(_))
+            {
                 call_stmt = Some(stmt_id);
                 break;
             }
@@ -230,7 +222,7 @@ fn inline_budget_used_by(body: &Body<'_>) -> u32 {
 }
 
 fn inline_budget_for_body(body: &Body<'_>) -> u32 {
-    let mut total_budget = 15;
+    let mut total_budget = 50;
     if body.block_info.blocks().len() < 4 {
         total_budget += 10;
     }
