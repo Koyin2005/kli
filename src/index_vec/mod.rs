@@ -108,7 +108,7 @@ impl<I: Id, V> IndexVec<I, V> {
         self.0.iter_mut()
     }
     pub fn last(&self) -> I {
-        I::new(self.len())
+        I::new(self.len() - 1)
     }
     pub const fn len(&self) -> usize {
         self.0.len()

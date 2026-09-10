@@ -51,7 +51,14 @@ impl<'ctxt> MirDump<'ctxt> {
                 }
             }
         }
-        writeln!(self.output, "() -> {}", body.return_type)?;
+        write!(self.output, "(")?;
+
+        self.write_with_coma_sep(body.params_iter(), |this, param| {
+            let index = param.into_usize();
+            write!(this.output, "_{}", index)
+        })?;
+
+        writeln!(self.output, ") -> {}", body.return_type)?;
         for (local, info) in body.locals.iter_enumerated() {
             write!(self.output, " {:?}", local)?;
             match &info.kind {

@@ -579,6 +579,7 @@ pub struct LocalInfo<'ctxt> {
 pub struct Body<'ctxt> {
     pub src: BodySource,
     pub return_type: Type<'ctxt>,
+    param_count: u32,
     pub locals: Locals<'ctxt>,
     pub block_info: BasicBlocks<'ctxt>,
 }
@@ -587,9 +588,7 @@ impl<'ctxt> Body<'ctxt> {
         self.params_iter().map(|param| self.locals[param].ty)
     }
     pub fn params_iter(&self) -> impl Iterator<Item = Local> {
-        self.locals
-            .iter_enumerated()
-            .filter_map(|(local, info)| matches!(info.kind, LocalKind::Param(_)).then_some(local))
+        (0..self.param_count).map(|local| Local(local))
     }
     pub fn local_for_var(&self, var_id: VarId) -> Option<Local> {
         self.locals

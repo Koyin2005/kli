@@ -5,11 +5,17 @@ use crate::{
     mir::{BasicBlock, BasicBlockId, Operand, StmtKind, TerminatorKind, passes::BodyPass},
 };
 
-pub struct SimplifyCfg;
+pub enum SimplifyCfg {
+    Initial,
+    AfterInlining,
+}
 
 impl<'ctxt> BodyPass<'ctxt> for SimplifyCfg {
     fn name(&self) -> &'static str {
-        "simplify-cfg"
+        match *self {
+            Self::AfterInlining => "simplify-cfg-after-inlining",
+            Self::Initial => "simplify-cfg-initial",
+        }
     }
     fn run(&self, _: crate::CtxtRef<'ctxt>, body: &mut crate::mir::Body<'ctxt>) {
         for block in body.block_info.blocks_mut() {

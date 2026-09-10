@@ -19,23 +19,21 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         }
         context.add_body(body);
     }
-    fn add_param_locals(&mut self, params: impl Iterator<Item = (LocalKind, Type<'ctxt>)>) {
-        for (kind, ty) in params {
-            self.new_local(ty, kind);
-        }
-    }
     pub fn build_from_function<'b>(
         ctxt: CtxtRef<'ctxt>,
         mir_context: &'b mut Context<'ctxt>,
         function: &typed_ast::Function<'ctxt>,
         src: BodySource,
     ) {
-        let mut builder = Builder::new(mir_context, src, function.return_type, ctxt);
-        builder.add_param_locals(
+        let mut builder = Builder::new(
+            mir_context,
+            src,
+            function.return_type,
             function
                 .params
                 .iter()
                 .map(|param| (LocalKind::Param(param.var()), param.ty)),
+            ctxt,
         );
         if let Some(body) = function.body.as_ref() {
             builder.expr_into_dest(Place::return_place(), body);

@@ -26,22 +26,26 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         mir_context: &'mir mut Context<'ctxt>,
         source: BodySource,
         return_type: Type<'ctxt>,
+        params: impl IntoIterator<Item = (LocalKind, Type<'ctxt>)>,
         ctxt: CtxtRef<'ctxt>,
     ) -> Self {
+        let locals = params
+            .into_iter()
+            .map(|(kind, ty)| LocalInfo { kind, ty })
+            .collect::<Locals>();
+        let param_count = locals.len().try_into().expect("too many params");
         Self {
             mir_context,
             body: Body {
                 src: source,
-                locals: Locals::default(),
+                param_count,
+                locals,
                 block_info: BasicBlocks::new(IndexVec::from_value(1, BasicBlock::default())),
                 return_type,
             },
             current_block: BasicBlockId::ENTRY,
             ctxt,
         }
-    }
-    pub(super) fn new_local(&mut self, ty: Type<'ctxt>, kind: LocalKind) -> Local {
-        self.body.locals.push(LocalInfo { ty, kind })
     }
     pub(super) fn new_local_from_info(&mut self, info: LocalInfo<'ctxt>) -> Local {
         self.body.locals.push(info)
