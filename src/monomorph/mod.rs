@@ -2,7 +2,7 @@ use crate::{
     CtxtRef,
     mir::{self, Body, BodyId, visitor::MutVisit},
     scheme::Scheme,
-    types::{GenericArg, GenericArgsRef, TypeMappable},
+    types::{GenericArgs, GenericArgsRef, TypeMappable},
 };
 
 pub fn monomorphise<'ctxt>(_ctxt: CtxtRef<'ctxt>, _mir: &mut mir::Context<'ctxt>) {}
@@ -11,7 +11,7 @@ pub fn instantiate_body<'ctxt>(
     ctxt: CtxtRef<'ctxt>,
     mir: &mir::Context<'ctxt>,
     id: BodyId,
-    args: Vec<GenericArg<'ctxt>>,
+    args: GenericArgs<'ctxt>,
 ) -> Body<'ctxt> {
     let mut new_instance = mir.get_body(id).clone();
     if args.is_empty() {

@@ -617,7 +617,7 @@ pub type Locals<'ctxt> = IndexVec<Local, LocalInfo<'ctxt>>;
 
 define_id!(BodyId);
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Context<'ctxt> {
     pub check_well_formed: bool,
     bodies: IndexVec<BodyId, Body<'ctxt>>,
@@ -630,10 +630,11 @@ impl<'ctxt> Context<'ctxt> {
             ..Default::default()
         }
     }
-    pub fn add_body(&mut self, body: Body<'ctxt>) {
+    pub fn add_body(&mut self, body: Body<'ctxt>) -> BodyId {
         let src = body.src;
         let id = self.bodies.push(body);
         self.bodies_with_src.entry(src).or_default().push(id);
+        id
     }
     pub fn get_body(&self, id: BodyId) -> &Body<'ctxt> {
         &self.bodies[id]

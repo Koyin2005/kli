@@ -84,6 +84,9 @@ impl<I: Id, V> IndexVec<I, V> {
         self.0.push(value);
         index
     }
+    pub fn pop(&mut self) -> Option<V> {
+        self.0.pop()
+    }
     pub fn get(&self, i: I) -> Option<&V> {
         self.0.get(i.into_usize())
     }
@@ -103,6 +106,9 @@ impl<I: Id, V> IndexVec<I, V> {
     }
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut V> {
         self.0.iter_mut()
+    }
+    pub fn last(&self) -> I {
+        I::new(self.len())
     }
     pub const fn len(&self) -> usize {
         self.0.len()
