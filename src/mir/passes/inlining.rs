@@ -210,19 +210,37 @@ impl<'ctxt> MutVisit<'ctxt> for Updater {
     }
 }
 
+const INSTR_BUDGET: u32 = 1;
 fn inline_budget_used_by(body: &Body<'_>) -> u32 {
     let total_cost = body
         .block_info
         .blocks()
         .iter()
-        .map(|block| block.stmts.len())
+        .map(|block| {
+            block.stmts.len()
+                + 'a: {
+                    let Some(term) = &block.terminator else {
+                        break 'a INSTR_BUDGET;
+                    };
+                    match term.kind {
+                        TerminatorKind::Assert(..) => INSTR_BUDGET,
+                        TerminatorKind::Switch(_, ref switch_targets) => {
+                            (2 + switch_targets.targets.iter().len()) as u32 * INSTR_BUDGET
+                        }
+                        TerminatorKind::Unreachable => INSTR_BUDGET,
+                        TerminatorKind::Return => 0,
+                        TerminatorKind::Goto(_) => INSTR_BUDGET,
+                        TerminatorKind::Panic => 2 * INSTR_BUDGET,
+                    }
+                } as usize
+        })
         .sum::<usize>()
         + body.locals.len();
     total_cost.try_into().unwrap_or(100)
 }
 
 fn inline_budget_for_body(body: &Body<'_>) -> u32 {
-    let mut total_budget = 50;
+    let mut total_budget = 40;
     if body.block_info.blocks().len() < 4 {
         total_budget += 10;
     }
