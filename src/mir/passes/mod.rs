@@ -8,13 +8,14 @@ use crate::{
         self, BasicBlock, BasicBlockId, Body, BodySource,
         dump::MirDump,
         passes::{
-            dead_store::DeadStoreElim, remove_unreachable::RemoveUnreachable,
-            remove_unused_locals::RemoveUnusedLocals, remove_zst::RemoveZst,
-            simplify_cfg::SimplifyCfg,
+            const_prop::ConstProp, dead_store::DeadStoreElim,
+            remove_unreachable::RemoveUnreachable, remove_unused_locals::RemoveUnusedLocals,
+            remove_zst::RemoveZst, simplify_cfg::SimplifyCfg,
         },
     },
     monomorph,
 };
+mod const_prop;
 mod dead_store;
 mod inlining;
 mod remove_unreachable;
@@ -32,7 +33,6 @@ pub trait BodyPass<'ctxt> {
         true
     }
 }
-
 pub(super) fn should_dump(ctxt: CtxtRef<'_>, src: BodySource) -> bool {
     let Some(paths) = ctxt.config().arguments_for(Feature::OutputMir) else {
         return false;
@@ -94,9 +94,11 @@ pub fn run_passes<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
     simple_pass(ctxt, mir, RemoveZst);
     simple_pass(ctxt, mir, SimplifyCfg::Initial);
     simple_pass(ctxt, mir, RemoveUnreachable);
-    simple_pass(ctxt, mir, DeadStoreElim);
     inlining::run_pass(ctxt, mir);
     simple_pass(ctxt, mir, SimplifyCfg::AfterInlining);
+    simple_pass(ctxt, mir, ConstProp);
+    simple_pass(ctxt, mir, SimplifyCfg::AfterInlining);
+    simple_pass(ctxt, mir, DeadStoreElim);
     simple_pass(ctxt, mir, RemoveUnreachable);
     simple_pass(ctxt, mir, RemoveUnusedLocals);
     simple_pass(ctxt, mir, DumpMir);
