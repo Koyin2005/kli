@@ -3,7 +3,9 @@ use kli::{
     builtin_check::BuiltinCheck,
     config::{CommandArg, config},
     files::{FileError, build_file_tree},
-    mir, parsing,
+    mir,
+    mutability_check::MutabilityCheck,
+    parsing,
     patterns::visit::PatternCheck,
     resolve::Resolve,
     typecheck::root::TypeCheck,
@@ -43,6 +45,7 @@ fn main() {
         }
         had_error |= SafetyCheck::check(ctxt, id, function).is_err();
         had_error |= BuiltinCheck::check(ctxt, function);
+        had_error |= MutabilityCheck::check(ctxt, function);
     }
     if had_error {
         return;
