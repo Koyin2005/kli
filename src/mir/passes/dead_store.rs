@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::mir::{
     Local, LocalKind, PlaceBase, StmtKind,
-    passes::{BodyPass, optimisation_enabled},
+    passes::{BodyPass, optimisation_enabled, remove_noops::remove_noops},
     visitor::{MutVisit, PlaceCtxt, Visit},
 };
 
@@ -24,10 +24,14 @@ impl BodyPass<'_> for DeadStoreElim {
             )),
         };
         finder.visit_body(body);
-        LocalReplacer {
+        let mut replacer = LocalReplacer {
             locals: &finder.locals,
+            changed: false,
+        };
+        replacer.visit_body(body);
+        if replacer.changed {
+            remove_noops(body);
         }
-        .visit_body(body);
     }
     fn enabled(&self, ctxt: crate::CtxtRef<'_>) -> bool {
         optimisation_enabled(ctxt)
@@ -47,6 +51,7 @@ impl Visit<'_> for LocalFinder {
 
 struct LocalReplacer<'a> {
     locals: &'a HashSet<Local>,
+    changed: bool,
 }
 impl<'ctxt> MutVisit<'ctxt> for LocalReplacer<'_> {
     fn visit_stmt(&mut self, loc: crate::mir::Location, stmt: &mut crate::mir::Stmt) {
@@ -57,6 +62,7 @@ impl<'ctxt> MutVisit<'ctxt> for LocalReplacer<'_> {
             && !self.locals.contains(&local)
         {
             stmt.kind = StmtKind::Noop;
+            self.changed = true;
         }
         self.super_visit_stmt(loc, stmt);
     }

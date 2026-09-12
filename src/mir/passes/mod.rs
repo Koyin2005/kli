@@ -15,9 +15,11 @@ use crate::{
     },
     monomorph,
 };
+mod assignments;
 mod const_prop;
 mod dead_store;
 mod inlining;
+mod remove_noops;
 mod remove_unreachable;
 mod remove_unused_locals;
 mod remove_zst;
@@ -93,7 +95,6 @@ fn simple_pass<'ctxt>(
 pub fn run_passes<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
     simple_pass(ctxt, mir, RemoveZst);
     simple_pass(ctxt, mir, SimplifyCfg::Initial);
-    simple_pass(ctxt, mir, RemoveUnreachable);
     inlining::run_pass(ctxt, mir);
     simple_pass(ctxt, mir, SimplifyCfg::AfterInlining);
     simple_pass(ctxt, mir, ConstProp);
@@ -101,6 +102,8 @@ pub fn run_passes<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
     simple_pass(ctxt, mir, DeadStoreElim);
     simple_pass(ctxt, mir, RemoveUnreachable);
     simple_pass(ctxt, mir, RemoveUnusedLocals);
+    simple_pass(ctxt, mir, SimplifyCfg::AfterInlining);
+    simple_pass(ctxt, mir, RemoveUnreachable);
     simple_pass(ctxt, mir, DumpMir);
     monomorph::monomorphise(ctxt, mir);
 }
