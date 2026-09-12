@@ -5,8 +5,8 @@ use crate::{
     def_ids::DefId,
     index_vec::IndexVec,
     mir::{
-        self, BasicBlockId, BinaryOp, ConstValue, Constant, Local, Operand, Place, PlaceBase,
-        PlaceProjection, Rvalue, Stmt, StmtKind, TerminatorKind,
+        self, BasicBlockId, BinaryOp, ConstValue, Constant, Local, Operand, OverflowOp, Place,
+        PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind, TerminatorKind,
         passes::{BodyPass, optimisation_enabled},
         visitor::MutVisit,
     },
@@ -172,6 +172,24 @@ fn eval_rvalue<'ctxt>(
             let right = eval_operand(values, right)?;
             match op {
                 BinaryOp::Equals => Some(LocalValue::Simple(Constant::bool(ctxt, left == right))),
+                BinaryOp::Overflow(op) => {
+                    let LocalValue::Simple(left) = left else {
+                        return None;
+                    };
+                    let LocalValue::Simple(right) = right else {
+                        return None;
+                    };
+                    let left = left.value.as_scalar()? as i64;
+                    let right = right.value.as_scalar()? as i64;
+                    let (left, right) = match op {
+                        OverflowOp::Add => left.overflowing_add(right),
+                        OverflowOp::Multiply => left.overflowing_mul(right),
+                        OverflowOp::Subtract => left.overflowing_sub(right),
+                    };
+                    let left_value = Constant::int(ctxt, left);
+                    let right_value = Constant::bool(ctxt, right);
+                    Some(LocalValue::Tuple(IndexVec::from([left_value, right_value])))
+                }
                 _ => None,
             }
         }
