@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use crate::mir::{
     Local, PlaceBase, StmtKind,
     passes::{BodyPass, optimisation_enabled, remove_noops::remove_noops},
+    traversal::reachable,
     visitor::{MutVisit, PlaceCtxt, Visit},
 };
 
@@ -21,7 +22,9 @@ impl BodyPass<'_> for DeadStoreElim {
                 }
             })),
         };
-        finder.visit_body(body);
+        for block in reachable(&body.block_info) {
+            finder.visit_block(block, &body.block_info.blocks()[block]);
+        }
         let mut replacer = LocalReplacer {
             locals: &finder.locals,
             changed: false,

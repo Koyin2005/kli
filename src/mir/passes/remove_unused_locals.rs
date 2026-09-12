@@ -5,6 +5,7 @@ use crate::{
     mir::{
         Local,
         passes::{BodyPass, optimisation_enabled},
+        traversal::reachable,
         visitor::{MutVisit, PlaceCtxt, Visit},
     },
 };
@@ -24,7 +25,9 @@ impl BodyPass<'_> for RemoveUnusedLocals {
                 }
             })),
         };
-        finder.visit_body(body);
+        for block in reachable(&body.block_info) {
+            finder.visit_block(block, &body.block_info.blocks()[block]);
+        }
         let mut next_local = Local::new(0);
         let local_map = body
             .locals
@@ -45,7 +48,7 @@ impl BodyPass<'_> for RemoveUnusedLocals {
             .collect::<IndexVec<Local, _>>();
         LocalReplacer { locals: &local_map }.visit_body(body);
 
-        body.locals.truncate(next_local.next().into_usize());
+        body.locals.truncate(next_local.into_usize());
     }
     fn enabled(&self, ctxt: crate::CtxtRef<'_>) -> bool {
         optimisation_enabled(ctxt)
