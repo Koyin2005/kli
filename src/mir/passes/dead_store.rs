@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::mir::{
-    Local, LocalKind, PlaceBase, StmtKind,
+    Local, PlaceBase, StmtKind,
     passes::{BodyPass, optimisation_enabled, remove_noops::remove_noops},
     visitor::{MutVisit, PlaceCtxt, Visit},
 };
@@ -13,15 +13,13 @@ impl BodyPass<'_> for DeadStoreElim {
     }
     fn run(&self, _: crate::CtxtRef<'_>, body: &mut crate::mir::Body) {
         let mut finder = LocalFinder {
-            locals: HashSet::from_iter(body.locals.iter_enumerated().filter_map(
-                |(local, info)| {
-                    if matches!(info.kind, LocalKind::Param(..)) {
-                        Some(local)
-                    } else {
-                        None
-                    }
-                },
-            )),
+            locals: HashSet::from_iter(body.locals.indices().filter_map(|local| {
+                if local.0 < body.param_count {
+                    Some(local)
+                } else {
+                    None
+                }
+            })),
         };
         finder.visit_body(body);
         let mut replacer = LocalReplacer {
