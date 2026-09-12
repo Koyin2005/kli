@@ -35,6 +35,20 @@ impl<'ctxt> BodyPass<'ctxt> for SimplifyCfg {
                         modified = true;
                         continue;
                     }
+                    TerminatorKind::Assert(Operand::Constant(ref constant), ref kind, target) => {
+                        if body.block_info.predecessors()[target].len() != 1 {
+                            continue;
+                        }
+                        let Some(value) = constant.value.as_scalar() else {
+                            continue;
+                        };
+                        if (kind.assert_false() && value == 0) || value != 0 {
+                            continue;
+                        }
+                        Self::steal(body.block_info.blocks_mut(), target, block);
+                        modified = true;
+                        continue;
+                    }
                     TerminatorKind::Switch(ref operand, ref targets) => {
                         if let Operand::Constant(constant) = operand
                             && let Some(value) = constant.value.as_scalar()

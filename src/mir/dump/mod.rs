@@ -308,7 +308,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     write!(
                         self.output,
                         "assert({}",
-                        if kind.negate() { "!" } else { "" }
+                        if kind.assert_false() { "!" } else { "" }
                     )?;
                     self.write_operand(operand)?;
                     write!(self.output, ", ")?;

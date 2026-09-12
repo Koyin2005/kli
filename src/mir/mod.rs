@@ -381,7 +381,7 @@ pub enum AssertKind {
     DivideByZero,
 }
 impl AssertKind {
-    pub fn negate(&self) -> bool {
+    pub fn assert_false(&self) -> bool {
         !matches!(self, Self::InBounds)
     }
 }
