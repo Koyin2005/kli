@@ -2,6 +2,7 @@ use std::collections::{HashSet, VecDeque};
 
 use crate::{
     CtxtRef,
+    def_ids::DefId,
     index_vec::IndexVec,
     mir::{
         self, BasicBlockId, BinaryOp, ConstValue, Constant, Local, Operand, Place, PlaceBase,
@@ -10,9 +11,11 @@ use crate::{
         visitor::MutVisit,
     },
     typed_ast::FieldId,
+    types::{CaseId, GenericArgs},
 };
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum LocalValue<'ctxt> {
+    Variant(DefId, CaseId, GenericArgs<'ctxt>, Option<Constant<'ctxt>>),
     Tuple(IndexVec<FieldId, Constant<'ctxt>>),
     Simple(Constant<'ctxt>),
 }
@@ -91,10 +94,17 @@ impl<'ctxt> BodyPass<'ctxt> for ConstProp {
 
             for (id, stmt) in &mut block.stmts.iter_mut_enumerated() {
                 apply_stmt_effect(ctxt, state, stmt);
-                OperandUpdater { values: &state }
-                    .visit_stmt(mir::Location::stmt(block_id, id), stmt);
+                OperandUpdater {
+                    values: &state,
+                    ctxt,
+                }
+                .visit_stmt(mir::Location::stmt(block_id, id), stmt);
             }
-            OperandUpdater { values: &state }.visit_terminator(
+            OperandUpdater {
+                values: &state,
+                ctxt,
+            }
+            .visit_terminator(
                 mir::Location::terminator(block_id),
                 block.expect_terminator_mut(),
             );
@@ -142,7 +152,19 @@ fn eval_rvalue<'ctxt>(
                     .collect::<Option<IndexVec<FieldId, _>>>()?,
             )),
             mir::AggregateKind::NamedRecord(..) => None,
-            mir::AggregateKind::Variant(..) => None,
+            mir::AggregateKind::Variant(id, case, args) => Some(LocalValue::Variant(
+                *id,
+                *case,
+                args.clone(),
+                if let Some(field) = fields.iter().next() {
+                    let LocalValue::Simple(constant) = eval_operand(values, field)? else {
+                        return None;
+                    };
+                    Some(constant)
+                } else {
+                    None
+                },
+            )),
         },
         Rvalue::Binary(op, operands) => {
             let (left, right) = &**operands;
@@ -152,6 +174,13 @@ fn eval_rvalue<'ctxt>(
                 BinaryOp::Equals => Some(LocalValue::Simple(Constant::bool(ctxt, left == right))),
                 _ => None,
             }
+        }
+        Rvalue::Discriminant(place) => {
+            let LocalValue::Variant(def_id, case, _, _) = load_value(values, place)? else {
+                unreachable!("Should be a variant")
+            };
+            let value = ctxt.type_def(def_id).case_value(case).1;
+            Some(LocalValue::Simple(Constant::int(ctxt, value.into())))
         }
         _ => None,
     }
@@ -168,6 +197,15 @@ fn load_value<'ctxt>(values: &Values<'ctxt>, place: &Place) -> Option<LocalValue
                 };
                 LocalValue::Simple(fields[*field].clone())
             }
+            PlaceProjection::CaseDowncast(case, _) => {
+                let LocalValue::Variant(_, current_case, _, value) = value else {
+                    return None;
+                };
+                if *case != current_case {
+                    return None;
+                }
+                LocalValue::Tuple(value.into_iter().collect())
+            }
             _ => return None,
         }
     }
@@ -182,6 +220,10 @@ fn as_rvalue<'ctxt>(value: LocalValue<'ctxt>) -> Rvalue<'ctxt> {
             fields.into_iter().map(Operand::Constant).collect(),
         ),
         LocalValue::Simple(constant) => Rvalue::Use(Operand::Constant(constant)),
+        LocalValue::Variant(id, case, args, value) => Rvalue::Aggregate(
+            mir::AggregateKind::Variant(id, case, args),
+            value.into_iter().map(Operand::Constant).collect(),
+        ),
     }
 }
 
@@ -189,6 +231,7 @@ type Values<'ctxt> = IndexVec<Local, Option<LocalValue<'ctxt>>>;
 
 struct OperandUpdater<'a, 'ctxt> {
     values: &'a Values<'ctxt>,
+    ctxt: CtxtRef<'ctxt>,
 }
 impl<'ctxt> MutVisit<'ctxt> for OperandUpdater<'_, 'ctxt> {
     fn visit_operand(&mut self, _: crate::mir::Location, operand: &mut Operand<'ctxt>) {
@@ -200,10 +243,7 @@ impl<'ctxt> MutVisit<'ctxt> for OperandUpdater<'_, 'ctxt> {
     }
     fn visit_rvalue(&mut self, loc: mir::Location, rvalue: &mut Rvalue<'ctxt>) {
         self.super_visit_rvalue(loc, rvalue);
-        if let Rvalue::Use(value) = rvalue
-            && let Operand::Load(place) = value
-            && let Some(value) = load_value(self.values, place)
-        {
+        if let Some(value) = eval_rvalue(self.ctxt, self.values, rvalue) {
             *rvalue = as_rvalue(value);
         }
     }
