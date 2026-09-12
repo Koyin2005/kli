@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use crate::{
     index_vec::IndexVec,
     mir::{
-        Local, LocalKind,
+        Local,
         passes::{BodyPass, optimisation_enabled},
         visitor::{MutVisit, PlaceCtxt, Visit},
     },
@@ -16,15 +16,13 @@ impl BodyPass<'_> for RemoveUnusedLocals {
     }
     fn run(&self, _: crate::CtxtRef<'_>, body: &mut crate::mir::Body) {
         let mut finder = LocalFinder {
-            locals: HashSet::from_iter(body.locals.iter_enumerated().filter_map(
-                |(local, info)| {
-                    if matches!(info.kind, LocalKind::Param(..)) {
-                        Some(local)
-                    } else {
-                        None
-                    }
-                },
-            )),
+            locals: HashSet::from_iter(body.locals.indices().filter_map(|local| {
+                if local.0 < body.param_count {
+                    Some(local)
+                } else {
+                    None
+                }
+            })),
         };
         finder.visit_body(body);
         let mut next_local = Local::new(0);
