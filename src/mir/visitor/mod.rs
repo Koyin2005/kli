@@ -168,9 +168,9 @@ pub trait Visit<'ctxt> {
             Operation::ExtractField(value, _) => {
                 self.visit_value(loc, value);
             }
-            Operation::Call(callee,args) => {
+            Operation::Call(callee, args) => {
                 self.visit_value(loc, callee);
-                for arg in args{
+                for arg in args {
                     self.visit_value(loc, arg);
                 }
             }
@@ -210,9 +210,9 @@ pub trait MutVisit<'ctxt> {
             Operation::ExtractField(value, _) => {
                 self.visit_value(loc, value);
             }
-            Operation::Call(callee,args) => {
+            Operation::Call(callee, args) => {
                 self.visit_value(loc, callee);
-                for arg in args{
+                for arg in args {
                     self.visit_value(loc, arg);
                 }
             }
