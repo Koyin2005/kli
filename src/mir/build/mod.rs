@@ -151,7 +151,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     }
     pub(super) fn push_operation(&mut self, loc: SrcLoc, operation: Operation) -> Reg {
         let reg = self.body.registers.push(RegInfo {
-            ty: operation.result_type(self.ctxt),
+            ty: operation.result_type(self.ctxt, &self.body.registers),
         });
         self.push_stmt(loc, StmtKind::Assign(reg, operation));
         reg

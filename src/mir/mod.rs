@@ -530,10 +530,11 @@ pub enum ArithOp {
 pub enum Operation {
     Cmp(Comparison, Value, Value),
     Arith(ArithOp, Value, Value),
+    ExtractField(Value, FieldId),
 }
 impl Operation {
-    pub fn result_type<'ctxt>(&self, ctxt: CtxtRef<'ctxt>) -> Type<'ctxt> {
-        match *self {
+    pub fn result_type<'ctxt>(&self, ctxt: CtxtRef<'ctxt>, regs: &Regs<'ctxt>) -> Type<'ctxt> {
+        match self {
             Operation::Cmp(..) => Type::new_bool(ctxt),
             Operation::Arith(op, ..) => match op {
                 ArithOp::AddOverflow | ArithOp::SubOverflow => {
@@ -541,6 +542,13 @@ impl Operation {
                 }
                 _ => Type::new_int(ctxt),
             },
+            Operation::ExtractField(value, field) => {
+                let ty = value.type_of(ctxt, regs);
+                let Some((ty, _)) = ty.field_info(*field, ctxt) else {
+                    unreachable!("Should be a type with fields")
+                };
+                ty
+            }
         }
     }
 }

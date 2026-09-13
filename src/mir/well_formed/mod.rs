@@ -281,6 +281,14 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     self.body.src_info(loc),
                 );
             }
+            Operation::ExtractField(value, field) => {
+                let ty = value.type_of(self.ctxt, &self.body.registers);
+                self.assert(
+                    ty.field_info(*field, self.ctxt()).is_some(),
+                    || format!("{ty} does not have a field {field:?}"),
+                    self.body.src_info(loc),
+                );
+            }
         }
     }
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
@@ -288,7 +296,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         match &stmt.kind {
             StmtKind::Assign(dst, operation) => {
                 let lhs_ty = self.body.registers[*dst].ty;
-                let rhs_ty = operation.result_type(self.ctxt);
+                let rhs_ty = operation.result_type(self.ctxt, &self.body.registers);
                 self.assert(
                     lhs_ty == rhs_ty,
                     || format!("Cannot assign non equal types {} and {}", lhs_ty, rhs_ty),

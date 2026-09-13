@@ -167,6 +167,9 @@ pub trait Visit<'ctxt> {
                 self.visit_value(loc, left);
                 self.visit_value(loc, right);
             }
+            Operation::ExtractField(value, _) => {
+                self.visit_value(loc, value);
+            }
         }
     }
     fn visit_operation(&mut self, loc: Location, operation: &Operation) {
@@ -199,6 +202,9 @@ pub trait MutVisit<'ctxt> {
             Operation::Arith(_, left, right) => {
                 self.visit_value(loc, left);
                 self.visit_value(loc, right);
+            }
+            Operation::ExtractField(value, _) => {
+                self.visit_value(loc, value);
             }
         }
     }

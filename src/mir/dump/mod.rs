@@ -260,7 +260,7 @@ impl<'ctxt> MirDump<'ctxt> {
     fn write_operation(&mut self, operation: &Operation) -> std::io::Result<()> {
         match operation {
             Operation::Cmp(cmp, left, right) => {
-                write!(self.output, "Cmp({:?})(", cmp)?;
+                write!(self.output, "cmp({:?})(", cmp)?;
                 self.write_value(left)?;
                 write!(self.output, ",")?;
                 self.write_value(right)?;
@@ -271,6 +271,12 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_value(left)?;
                 write!(self.output, ",")?;
                 self.write_value(right)?;
+                write!(self.output, ")")
+            }
+            Operation::ExtractField(value, field) => {
+                write!(self.output, "extract_field(")?;
+                self.write_value(value)?;
+                write!(self.output, ".{}", field.into_usize())?;
                 write!(self.output, ")")
             }
         }
