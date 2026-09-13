@@ -248,9 +248,12 @@ impl<'ctxt> MirDump<'ctxt> {
         match value {
             Value::Reg(reg) => {
                 write!(self.output, "%{}", reg.0)
-            },
+            }
             Value::Unit => {
-                write!(self.output,"()")
+                write!(self.output, "()")
+            }
+            Value::Int(value) => {
+                write!(self.output, "{}", value)
             }
         }
     }

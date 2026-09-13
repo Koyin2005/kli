@@ -387,14 +387,14 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             ExprKind::Unsafe(expr) => todo!(),
             ExprKind::Return(expr) => todo!(),
             ExprKind::Block(block) => {
-                for stmt in block.stmts.iter(){
+                for stmt in block.stmts.iter() {
                     self.stmt(stmt);
                 }
                 self.expr_value(&block.expr)
-            },
+            }
             ExprKind::String(_) => todo!(),
             ExprKind::Bool(_) => todo!(),
-            ExprKind::Int(_) => todo!(),
+            &ExprKind::Int(value) => Value::Int(value.try_into().expect("should be in range")),
             ExprKind::Char(_) => todo!(),
             ExprKind::Unit => Value::Unit,
             ExprKind::Err => todo!(),
@@ -406,7 +406,30 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             ExprKind::Const(def_id, generic_args) => todo!(),
             ExprKind::Call(expr, exprs) => todo!(),
             ExprKind::Load(place) => todo!(),
-            ExprKind::Binary(binary_op, expr, expr1) => todo!(),
+            ExprKind::Binary(binary_op, left, right) => {
+                let left = self.expr_value(left);
+                let right = self.expr_value(right);
+                Value::Reg(self.push_operation(
+                    expr.loc,
+                    match binary_op {
+                        BinaryOp::Lesser => {
+                            mir::Operation::Cmp(mir::Comparison::Lesser, left, right)
+                        }
+                        BinaryOp::Greater => {
+                            mir::Operation::Cmp(mir::Comparison::Greater, left, right)
+                        }
+                        BinaryOp::Equals => {
+                            mir::Operation::Cmp(mir::Comparison::Equals, left, right)
+                        }
+                        BinaryOp::Add => todo!(),
+                        BinaryOp::Subtract => todo!(),
+                        BinaryOp::Multiply => todo!(),
+                        BinaryOp::Divide => todo!(),
+                        BinaryOp::BitwiseOr => todo!(),
+                        BinaryOp::BitwiseAnd => todo!(),
+                    },
+                ))
+            }
             ExprKind::Logic(logical_op, expr, expr1) => todo!(),
             ExprKind::For {
                 pattern,

@@ -154,7 +154,7 @@ pub trait Visit<'ctxt> {
     fn visit_value(&mut self, loc: Location, value: &Value) {
         match value {
             Value::Reg(reg) => self.visit_reg(loc, *reg, PlaceCtxt::Read),
-            Value::Unit => ()
+            Value::Unit | Value::Int(_) => (),
         }
     }
     fn super_visit_operation(&mut self, loc: Location, operation: &Operation) {
@@ -184,7 +184,7 @@ pub trait MutVisit<'ctxt> {
     fn visit_value(&mut self, loc: Location, value: &mut Value) {
         match value {
             Value::Reg(reg) => self.visit_reg(loc, reg),
-            Value::Unit => ()
+            Value::Unit | Value::Int(_) => (),
         }
     }
     fn visit_operation(&mut self, loc: Location, operation: &mut Operation) {

@@ -264,8 +264,8 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         self.super_visit_operation(loc, operation);
         match operation {
             Operation::Cmp(_, left, right) => {
-                let lhs_ty = left.type_of(self.ctxt,&self.body.registers);
-                let rhs_ty = right.type_of(self.ctxt,&self.body.registers);
+                let lhs_ty = left.type_of(self.ctxt, &self.body.registers);
+                let rhs_ty = right.type_of(self.ctxt, &self.body.registers);
                 self.assert(
                     lhs_ty == rhs_ty && lhs_ty.is_builtin_scalar(),
                     || format!("{} and {} should be scalars", lhs_ty, rhs_ty),

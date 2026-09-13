@@ -501,13 +501,15 @@ pub struct Stmt<'ctxt> {
 #[derive(Clone, Debug)]
 pub enum Value {
     Reg(Reg),
-    Unit
+    Int(i64),
+    Unit,
 }
 impl Value {
     pub fn type_of<'ctxt>(&self, ctxt: CtxtRef<'ctxt>, regs: &Regs<'ctxt>) -> Type<'ctxt> {
         match self {
             Self::Reg(reg) => regs[*reg].ty,
-            Self::Unit => Type::new_unit(ctxt)
+            Self::Unit => Type::new_unit(ctxt),
+            Self::Int(_) => Type::new_int(ctxt),
         }
     }
 }
