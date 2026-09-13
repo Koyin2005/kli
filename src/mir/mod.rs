@@ -567,6 +567,13 @@ pub struct LocalInfo<'ctxt> {
     pub kind: LocalKind,
 }
 
+define_id!(Reg);
+#[derive(Clone)]
+pub struct RegInfo<'ctxt>{
+    pub ty : Type<'ctxt>
+}
+pub type Regs<'ctxt> = IndexVec<Reg,RegInfo<'ctxt>>;
+
 #[derive(Clone)]
 pub struct Body<'ctxt> {
     pub src: BodySource,
@@ -574,6 +581,7 @@ pub struct Body<'ctxt> {
     param_count: u32,
     pub locals: Locals<'ctxt>,
     pub block_info: BasicBlocks<'ctxt>,
+    pub registers : Regs<'ctxt>
 }
 impl<'ctxt> Body<'ctxt> {
     pub fn param_types(&self) -> impl Iterator<Item = Type<'ctxt>> {
