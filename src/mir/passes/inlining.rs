@@ -62,7 +62,7 @@ pub fn run_pass<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
                     panic!("should be a goto")
                 };
                 let target = std::mem::replace(target, callee_entry);
-                for (local, arg) in body.params_iter().zip(args) {
+                for (local, arg) in body.param_locals_iter().zip(args) {
                     let local = Local::new(local.into_usize() + current_body.locals.len());
                     current_block.stmts.push(mir::Stmt {
                         loc: SrcLoc::dummy(),

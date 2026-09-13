@@ -646,10 +646,13 @@ pub struct Body<'ctxt> {
     pub registers: Regs<'ctxt>,
 }
 impl<'ctxt> Body<'ctxt> {
-    pub fn param_types(&self) -> impl Iterator<Item = Type<'ctxt>> {
-        self.params_iter().map(|param| self.locals[param].ty)
+    pub fn params_iter(&self) -> impl Iterator<Item = Reg> {
+        (0..self.param_count).map(Reg)
     }
-    pub fn params_iter(&self) -> impl Iterator<Item = Local> {
+    pub fn param_local_types(&self) -> impl Iterator<Item = Type<'ctxt>> {
+        self.param_locals_iter().map(|param| self.locals[param].ty)
+    }
+    pub fn param_locals_iter(&self) -> impl Iterator<Item = Local> {
         (0..self.param_count).map(Local)
     }
     pub fn local_for_var(&self, var_id: VarId) -> Option<Local> {

@@ -5,7 +5,7 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         AssertKind, BasicBlock, BasicBlockId, BinaryOp, Body, BodySource, Context, Local,
-        LocalInfo, LocalKind, Locals, Operand, Operation, Place, Reg, RegInfo, Rvalue, Stmt,
+        LocalInfo, LocalKind, Locals, Operand, Operation, Place, Reg, RegInfo, Regs, Rvalue, Stmt,
         StmtKind, SwitchTarget, SwitchTargets, Terminator, TerminatorKind, Value,
         basic_blocks::BasicBlocks,
     },
@@ -34,25 +34,33 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         mir_context: &'mir mut Context<'ctxt>,
         source: BodySource,
         return_type: Type<'ctxt>,
-        params: impl IntoIterator<Item = (LocalKind, Type<'ctxt>)>,
+        params: impl IntoIterator<Item = (Var, Type<'ctxt>)>,
         ctxt: CtxtRef<'ctxt>,
     ) -> Self {
-        let locals = params
+        let mut variables = HashMap::new();
+        let registers = params
             .into_iter()
-            .map(|(kind, ty)| LocalInfo { kind, ty })
-            .collect::<Locals>();
-        let param_count = locals.len().try_into().expect("too many params");
+            .enumerate()
+            .map(|(i, (var, ty))| {
+                variables.insert(
+                    var.1,
+                    VarKind::Value(Value::Reg(Reg(i.try_into().expect("too many variables")))),
+                );
+                RegInfo { ty }
+            })
+            .collect::<Regs>();
+        let param_count = registers.len().try_into().expect("too many params");
         Self {
             mir_context,
             body: Body {
                 src: source,
                 param_count,
-                locals,
+                locals: IndexVec::new(),
                 block_info: BasicBlocks::new(IndexVec::from_value(1, BasicBlock::default())),
                 return_type,
-                registers: IndexVec::new(),
+                registers,
             },
-            variables: HashMap::new(),
+            variables,
             current_block: BasicBlockId::ENTRY,
             ctxt,
         }

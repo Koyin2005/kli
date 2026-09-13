@@ -1,7 +1,7 @@
 use crate::{
     collect::CtxtRef,
     mir::{
-        BodySource, Constant, Context, LocalKind, TerminatorKind, build::Builder, visitor::Visit,
+        BodySource, Constant, Context, TerminatorKind, build::Builder, visitor::Visit,
         well_formed::WellFormed,
     },
     src_loc::SrcLoc,
@@ -32,7 +32,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             function
                 .params
                 .iter()
-                .map(|param| (LocalKind::Param(param.var()), param.ty)),
+                .map(|param| (param.var().expect("should have a variable"), param.ty)),
             ctxt,
         );
         if let Some(body) = function.body.as_ref() {
