@@ -22,7 +22,7 @@ impl<'ctxt> From<BuiltinResult<'ctxt>> for Rvalue<'ctxt> {
         }
     }
 }
-impl<'mir,'ctxt> Builder<'mir, 'ctxt> {
+impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     fn as_constant(&mut self, expr: &Expr<'ctxt>) -> Option<Constant<'ctxt>> {
         match expr.kind {
             ExprKind::Bool(value) => Some(Constant::bool(self.ctxt, value)),
@@ -401,8 +401,8 @@ impl<'mir,'ctxt> Builder<'mir, 'ctxt> {
             ExprKind::Panic => todo!(),
             ExprKind::NeverToAny(expr) => {
                 self.expr_stmt(expr);
-                todo!()
-            },
+                Value::Unknown(expr.ty)
+            }
             ExprKind::BuiltinCall(builtin, generic_args, exprs) => todo!(),
             ExprKind::VariantInit(def_id, case_id, generic_args, expr) => todo!(),
             ExprKind::Function(def_id, generic_args) => todo!(),

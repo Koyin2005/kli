@@ -505,7 +505,7 @@ pub enum Value<'ctxt> {
     Reg(Reg),
     Int(i64),
     Unit,
-    Unknown(Type<'ctxt>)
+    Unknown(Type<'ctxt>),
 }
 impl<'ctxt> Value<'ctxt> {
     pub fn type_of(&self, ctxt: CtxtRef<'ctxt>, regs: &Regs<'ctxt>) -> Type<'ctxt> {
@@ -513,7 +513,7 @@ impl<'ctxt> Value<'ctxt> {
             Self::Reg(reg) => regs[*reg].ty,
             Self::Unit => Type::new_unit(ctxt),
             Self::Int(_) => Type::new_int(ctxt),
-            Self::Unknown(ty) => *ty
+            Self::Unknown(ty) => *ty,
         }
     }
 }

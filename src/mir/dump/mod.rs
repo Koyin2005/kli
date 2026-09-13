@@ -256,7 +256,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, "{}", value)
             }
             Value::Unknown(ty) => {
-                write!(self.output,"unknown[{}]",ty)
+                write!(self.output, "unknown[{}]", ty)
             }
         }
     }
