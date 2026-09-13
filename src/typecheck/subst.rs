@@ -84,9 +84,6 @@ impl<'a, 'ctxt> TypeSubst<'a, 'ctxt> {
                 }
                 self.subst_expr(&mut block.expr);
             }
-            ExprKind::Const(_, args) => {
-                self.subst_generic_args(args);
-            }
             ExprKind::NeverToAny(expr) => {
                 self.subst_expr(expr);
             }

@@ -45,13 +45,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 })
             }
             ExprKind::Lambda(ref lambda) => Some(Self::lambda_code_constant(self.ctxt, lambda)),
-            ExprKind::Const(id, ref args) => {
-                let ty = expr.ty;
-                Some(Constant {
-                    ty,
-                    value: ConstValue::Named(id, args.clone()),
-                })
-            }
             ExprKind::Char(char) => Some(Constant::char(self.ctxt, char)),
             _ => None,
         }
@@ -253,7 +246,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             | ExprKind::String(_)
             | ExprKind::Lambda(_)
             | ExprKind::BuiltinCall(..)
-            | ExprKind::Const(..)
             | ExprKind::NamedRecord(..)
             | ExprKind::While(..)
             | ExprKind::Tuple(..)
@@ -423,7 +415,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             ExprKind::Function(def_id, generic_args) => {
                 Value::Function(*def_id, generic_args.clone())
             }
-            ExprKind::Const(def_id, generic_args) => todo!(),
             ExprKind::Call(callee, args) => {
                 let callee = self.expr_value(callee);
                 let args = args.iter().map(|arg| self.expr_value(arg)).collect();
@@ -510,7 +501,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             ExprKind::BuiltinCall(builtin, generic_args, exprs) => todo!(),
             ExprKind::VariantInit(def_id, case_id, generic_args, expr) => todo!(),
             ExprKind::Function(def_id, generic_args) => todo!(),
-            ExprKind::Const(def_id, generic_args) => todo!(),
             ExprKind::Call(expr, exprs) => todo!(),
             ExprKind::Load(place) => todo!(),
             ExprKind::Binary(binary_op, expr, expr1) => todo!(),
@@ -538,7 +528,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             | ExprKind::Bool(_)
             | ExprKind::Load(_)
             | ExprKind::Function(..)
-            | ExprKind::Const(..)
             | ExprKind::String(..)
             | ExprKind::Lambda(_)
             | ExprKind::Char(_) => {

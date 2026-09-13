@@ -86,7 +86,6 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
             | ExprKind::Binary(..)
             | ExprKind::Function(..)
             | ExprKind::Lambda(..)
-            | ExprKind::Const(..)
             | ExprKind::VariantInit(..)
             | ExprKind::NamedRecord(..)
             | ExprKind::Logic(..)

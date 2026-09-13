@@ -97,7 +97,6 @@ where
         }
         ExprKind::Err
         | ExprKind::Char(_)
-        | ExprKind::Const(..)
         | ExprKind::Bool(_)
         | ExprKind::String(_)
         | ExprKind::Function(..)

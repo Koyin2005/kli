@@ -673,7 +673,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                 let ctxt = self.root().ctxt();
                 let ty = self.root().ctxt().type_of(case_id).bind(ctxt, &args);
                 let kind = if matches!(ty.kind(), TypeKind::Function(..)) {
-                    typed_ast::ExprKind::Const(case_id, args)
+                    typed_ast::ExprKind::Function(case_id, args)
                 } else {
                     let ty_id = self.ctxt().expect_parent(case_id);
                     let (case_id, _) = self.ctxt().type_def(ty_id).case_with_id(case_id);
