@@ -17,6 +17,7 @@ use crate::{
 };
 mod assignments;
 mod const_prop;
+mod dataflow;
 mod dead_store;
 mod inlining;
 mod remove_noops;

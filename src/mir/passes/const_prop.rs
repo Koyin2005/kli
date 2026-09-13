@@ -1,18 +1,21 @@
-use std::collections::{HashSet, VecDeque};
-
 use crate::{
     CtxtRef,
     def_ids::DefId,
     index_vec::IndexVec,
     mir::{
-        self, BasicBlockId, BinaryOp, ConstValue, Constant, Local, Operand, OverflowOp, Place,
-        PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind, TerminatorKind,
-        passes::{BodyPass, optimisation_enabled},
+        self, BasicBlockId, BinaryOp, Body, ConstValue, Constant, Local, Operand, OverflowOp,
+        Place, PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind, TerminatorKind,
+        passes::{
+            BodyPass,
+            dataflow::{self, Analysis, Domain},
+            optimisation_enabled,
+        },
         visitor::MutVisit,
     },
     typed_ast::FieldId,
     types::{CaseId, GenericArgs},
 };
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum LocalValue<'ctxt> {
     Variant(DefId, CaseId, GenericArgs<'ctxt>, Option<Constant<'ctxt>>),
@@ -20,27 +23,68 @@ enum LocalValue<'ctxt> {
     Simple(Constant<'ctxt>),
 }
 
-fn join_values<'ctxt>(dst: &mut Values<'ctxt>, src: &Values<'ctxt>) -> bool {
-    let mut changed = false;
-    for (dst, src) in dst.iter_mut().zip(src) {
-        changed |= match (&mut *dst, src) {
-            (None, None) => false,
-            (Some(_), None) | (None, Some(_)) => {
-                dst.clone_from(src);
-                true
-            }
-            (Some(dst_value), Some(src)) => {
-                if dst_value != src {
-                    dst.clone_from(&None);
-                    true
-                } else {
-                    false
-                }
-            }
-        };
+impl<'ctxt> Domain for Values<'ctxt> {
+    fn initial<'b>(body: &Body<'b>) -> Self {
+        Values::from_value(body.locals.len(), None)
     }
-    changed
+    fn join(&mut self, other: &Self) -> bool {
+        let mut changed = false;
+        for (dst, src) in self.iter_mut().zip(other) {
+            changed |= match (&mut *dst, src) {
+                (None, None) => false,
+                (Some(_), None) | (None, Some(_)) => {
+                    dst.clone_from(src);
+                    true
+                }
+                (Some(dst_value), Some(src)) => {
+                    if dst_value != src {
+                        dst.clone_from(&None);
+                        true
+                    } else {
+                        false
+                    }
+                }
+            };
+        }
+        changed
+    }
 }
+struct ConstAnalysis<'ctxt> {
+    ctxt: CtxtRef<'ctxt>,
+}
+
+impl<'ctxt> Analysis<'ctxt> for ConstAnalysis<'ctxt> {
+    type Domain = Values<'ctxt>;
+    fn apply_stmt_effect(&mut self, state: &mut Self::Domain, stmt: &Stmt<'ctxt>) {
+        let StmtKind::Assign(place, rvalue) = &stmt.kind else {
+            return;
+        };
+        let PlaceBase::Local(local) = place.base;
+        if !place.projections.is_empty() {
+            state[local] = None;
+            return;
+        }
+        state[local] = eval_rvalue(self.ctxt, &state, rvalue);
+    }
+
+    fn propagate_to_basic_blocks(
+        &self,
+        state: &Self::Domain,
+        terminator: &mir::Terminator<'ctxt>,
+        mut f: impl FnMut(BasicBlockId),
+    ) {
+        if let TerminatorKind::Switch(condition, targets) = &terminator.kind
+            && let Some(LocalValue::Simple(constant)) = eval_operand(&state, condition)
+            && let ConstValue::Scalar(value) = constant.value
+        {
+            let succ = targets.branch_for_value(value);
+            f(succ);
+        } else {
+            dataflow::prop_uniform(self, state, terminator, f);
+        }
+    }
+}
+
 pub struct ConstProp;
 impl<'ctxt> BodyPass<'ctxt> for ConstProp {
     fn name(&self) -> &'static str {
@@ -50,41 +94,7 @@ impl<'ctxt> BodyPass<'ctxt> for ConstProp {
         optimisation_enabled(ctxt)
     }
     fn run(&self, ctxt: crate::CtxtRef<'ctxt>, body: &'_ mut crate::mir::Body<'ctxt>) {
-        let mut state = IndexVec::new();
-        let mut states =
-            IndexVec::<BasicBlockId, _>::from_function(body.block_info.blocks().len(), |_| {
-                Values::from_value(body.locals.len(), None)
-            });
-        let mut in_queue = HashSet::new();
-        let mut queue = VecDeque::new();
-        queue.push_front(BasicBlockId::ENTRY);
-        in_queue.insert(BasicBlockId::ENTRY);
-        while let Some(block) = queue.pop_back() {
-            state.clone_from(&states[block]);
-            for stmt in body.block_info.blocks()[block].stmts.iter() {
-                apply_stmt_effect(ctxt, &mut state, stmt);
-            }
-            let terminator = body.block_info.blocks()[block].expect_terminator();
-
-            if let TerminatorKind::Switch(condition, targets) = &terminator.kind
-                && let Some(LocalValue::Simple(constant)) = eval_operand(&state, condition)
-                && let ConstValue::Scalar(value) = constant.value
-            {
-                let succ = targets.branch_for_value(value);
-                let new_state = &mut states[succ];
-                if join_values(new_state, &state) {
-                    queue.push_front(succ);
-                }
-            } else {
-                for succ in terminator.successors() {
-                    let new_state = &mut states[succ];
-                    if join_values(new_state, &state) {
-                        queue.push_front(succ);
-                    }
-                }
-            }
-        }
-
+        let mut states = ConstAnalysis { ctxt }.iterate_to_fixpoint(body);
         for (block_id, block) in body
             .block_info
             .blocks_mut_dont_dirty()
