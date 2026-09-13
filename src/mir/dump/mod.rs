@@ -265,11 +265,10 @@ impl<'ctxt> MirDump<'ctxt> {
                     mir::Comparison::Greater => "gt",
                     mir::Comparison::Lesser => "lt",
                 };
-                write!(self.output, "cmp({name})(")?;
+                write!(self.output, "cmp.{name} ")?;
                 self.write_value(left)?;
-                write!(self.output, ",")?;
-                self.write_value(right)?;
-                write!(self.output, ")")
+                write!(self.output, ", ")?;
+                self.write_value(right)
             }
             Operation::Arith(op, left, right) => {
                 let name = match op {
@@ -278,17 +277,15 @@ impl<'ctxt> MirDump<'ctxt> {
                     mir::ArithOp::Sub => "sub",
                     mir::ArithOp::SubOverflow => "sub_overflow",
                 };
-                write!(self.output, "{}(", name)?;
+                write!(self.output, "{} ", name)?;
                 self.write_value(left)?;
-                write!(self.output, ",")?;
-                self.write_value(right)?;
-                write!(self.output, ")")
+                write!(self.output, ", ")?;
+                self.write_value(right)
             }
             Operation::ExtractField(value, field) => {
-                write!(self.output, "extract_field(")?;
+                write!(self.output, "extract_field ")?;
                 self.write_value(value)?;
-                write!(self.output, ",{}", field.into_usize())?;
-                write!(self.output, ")")
+                write!(self.output, ", {}", field.into_usize())
             }
         }
     }
@@ -303,9 +300,9 @@ impl<'ctxt> MirDump<'ctxt> {
                     writeln!(self.output)?;
                 }
                 StmtKind::Print { value, err } => {
-                    write!(self.output, "{}print(", if *err { "e" } else { "" })?;
+                    write!(self.output, "{}print ", if *err { "e" } else { "" })?;
                     self.write_operand(value)?;
-                    writeln!(self.output, ")")?;
+                    writeln!(self.output)?;
                 }
                 StmtKind::Noop => writeln!(self.output, "noop")?,
                 StmtKind::PanicIf(value) => {

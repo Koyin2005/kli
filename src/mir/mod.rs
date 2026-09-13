@@ -560,10 +560,7 @@ pub enum StmtKind<'ctxt> {
     PanicIf(Value),
     Assign(Reg, Operation),
     Store(Place, Box<Rvalue<'ctxt>>),
-    Print {
-        value: Operand<'ctxt>,
-        err: bool,
-    },
+    Print { value: Operand<'ctxt>, err: bool },
 }
 define_id!(BasicBlockId);
 impl BasicBlockId {
