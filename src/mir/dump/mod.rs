@@ -282,6 +282,8 @@ impl<'ctxt> MirDump<'ctxt> {
                     mir::ArithOp::AddOverflow => "add_overflow",
                     mir::ArithOp::Sub => "sub",
                     mir::ArithOp::SubOverflow => "sub_overflow",
+                    mir::ArithOp::Mul => "mul",
+                    mir::ArithOp::MulOverflow => "mul_overflow",
                 };
                 write!(self.output, "{} ", name)?;
                 self.write_value(left)?;

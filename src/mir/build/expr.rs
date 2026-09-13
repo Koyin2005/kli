@@ -454,7 +454,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                     }
                     BinaryOp::Add => mir::ArithOp::AddOverflow,
                     BinaryOp::Subtract => mir::ArithOp::SubOverflow,
-                    BinaryOp::Multiply => todo!(),
+                    BinaryOp::Multiply => mir::ArithOp::MulOverflow,
                     BinaryOp::Divide => todo!(),
                     BinaryOp::BitwiseOr => todo!(),
                     BinaryOp::BitwiseAnd => todo!(),

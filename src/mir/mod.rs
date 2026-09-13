@@ -529,8 +529,10 @@ pub enum Comparison {
 pub enum ArithOp {
     Add,
     Sub,
+    Mul,
     AddOverflow,
     SubOverflow,
+    MulOverflow,
 }
 #[derive(Clone, Debug)]
 pub enum Operation<'ctxt> {
@@ -544,7 +546,7 @@ impl<'ctxt> Operation<'ctxt> {
         match self {
             Operation::Cmp(..) => Type::new_bool(ctxt),
             Operation::Arith(op, ..) => match op {
-                ArithOp::AddOverflow | ArithOp::SubOverflow => {
+                ArithOp::AddOverflow | ArithOp::SubOverflow | ArithOp::MulOverflow => {
                     Type::pair(ctxt, Type::new_int(ctxt), Type::new_bool(ctxt))
                 }
                 _ => Type::new_int(ctxt),
