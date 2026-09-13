@@ -2,14 +2,16 @@ use std::collections::HashMap;
 
 use crate::{
     Symbol,
+    ast::Mutable,
     builtins::{Builtin, IntegerBuiltin},
     index_vec::IndexVec,
     mir::{
         self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Reg, Rvalue,
-        Value, build::Builder,
+        Value,
+        build::{Builder, VarKind},
     },
     src_loc::SrcLoc,
-    typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
+    typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern, PlaceKind},
     types::Type,
 };
 pub(super) enum BuiltinResult<'ctxt> {
@@ -133,9 +135,12 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     }
     fn assign_to_pattern(&mut self, pattern: &Pattern<'ctxt>, value: &Expr<'ctxt>) {
         match pattern.kind {
-            typed_ast::PatternKind::Binding(_, var, ty) => {
-                let place = Place::local(self.new_var(var, ty));
-                self.expr_into_dest(place, value);
+            typed_ast::PatternKind::Binding(mutable, var, _) => {
+                let value = self.expr_value(value);
+                if matches!(mutable, Mutable::Mutable) {
+                    todo!("Handle mutable variables")
+                }
+                self.declare_var(var.1, VarKind::Value(value));
             }
             _ => {
                 let local = self.expr_into_temp(value);
@@ -382,6 +387,18 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             }
         }
     }
+    fn load_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Value<'ctxt> {
+        match place.kind {
+            PlaceKind::Var(var) => {
+                let var = self.resolve_var(var.1).unwrap();
+                match var {
+                    VarKind::Local(_) => todo!("Handle mutable variables"),
+                    VarKind::Value(value) => value.clone(),
+                }
+            }
+            _ => todo!("other kinds {:?}", place),
+        }
+    }
     pub(super) fn expr_value(&mut self, expr: &Expr<'ctxt>) -> Value<'ctxt> {
         match &expr.kind {
             ExprKind::Unsafe(expr) => todo!(),
@@ -406,7 +423,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             ExprKind::Function(def_id, generic_args) => todo!(),
             ExprKind::Const(def_id, generic_args) => todo!(),
             ExprKind::Call(expr, exprs) => todo!(),
-            ExprKind::Load(place) => todo!(),
+            ExprKind::Load(place) => self.load_place(place),
             ExprKind::Binary(binary_op, left, right) => {
                 let left = self.expr_value(left);
                 let right = self.expr_value(right);

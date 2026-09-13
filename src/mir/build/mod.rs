@@ -1,13 +1,15 @@
+use std::collections::HashMap;
+
 use crate::{
     collect::CtxtRef,
     index_vec::IndexVec,
     mir::{
         AssertKind, BasicBlock, BasicBlockId, BinaryOp, Body, BodySource, Context, Local,
         LocalInfo, LocalKind, Locals, Operand, Operation, Place, Reg, RegInfo, Rvalue, Stmt,
-        StmtKind, SwitchTarget, SwitchTargets, Terminator, TerminatorKind,
+        StmtKind, SwitchTarget, SwitchTargets, Terminator, TerminatorKind, Value,
         basic_blocks::BasicBlocks,
     },
-    resolved_ast::Var,
+    resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
     types::Type,
 };
@@ -16,11 +18,16 @@ mod function;
 mod loops;
 mod matches;
 mod stmt;
+pub(super) enum VarKind<'ctxt> {
+    Local(Local),
+    Value(Value<'ctxt>),
+}
 pub struct Builder<'mir, 'ctxt> {
     pub mir_context: &'mir mut Context<'ctxt>,
     body: Body<'ctxt>,
     current_block: BasicBlockId,
     pub ctxt: CtxtRef<'ctxt>,
+    variables: HashMap<VarId, VarKind<'ctxt>>,
 }
 impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     pub fn new(
@@ -45,9 +52,16 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 return_type,
                 registers: IndexVec::new(),
             },
+            variables: HashMap::new(),
             current_block: BasicBlockId::ENTRY,
             ctxt,
         }
+    }
+    pub(super) fn declare_var(&mut self, var: VarId, kind: VarKind<'ctxt>) {
+        self.variables.insert(var, kind);
+    }
+    pub(super) fn resolve_var(&mut self, var: VarId) -> Option<&VarKind<'ctxt>> {
+        self.variables.get(&var)
     }
     pub(super) fn new_local_from_info(&mut self, info: LocalInfo<'ctxt>) -> Local {
         self.body.locals.push(info)
