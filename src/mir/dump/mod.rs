@@ -255,9 +255,12 @@ impl<'ctxt> MirDump<'ctxt> {
             Value::Int(value) => {
                 write!(self.output, "{}", value)
             }
+            Value::Unknown(ty) => {
+                write!(self.output,"unknown[{}]",ty)
+            }
         }
     }
-    fn write_operation(&mut self, operation: &Operation) -> std::io::Result<()> {
+    fn write_operation(&mut self, operation: &Operation<'ctxt>) -> std::io::Result<()> {
         match operation {
             Operation::Cmp(cmp, left, right) => {
                 let name = match cmp {
@@ -289,7 +292,7 @@ impl<'ctxt> MirDump<'ctxt> {
             }
         }
     }
-    fn write_block(&mut self, id: BasicBlockId, block: &BasicBlock) -> std::io::Result<()> {
+    fn write_block(&mut self, id: BasicBlockId, block: &BasicBlock<'ctxt>) -> std::io::Result<()> {
         writeln!(self.output, " bb{}", id.into_usize())?;
         for stmt in &block.stmts {
             write!(self.output, "  ")?;
@@ -367,7 +370,7 @@ impl<'ctxt> MirDump<'ctxt> {
         }
         writeln!(self.output)
     }
-    pub fn write_body(mut self, body: &Body) -> std::io::Result<()> {
+    pub fn write_body(mut self, body: &Body<'ctxt>) -> std::io::Result<()> {
         self.write_header(body)?;
         for (id, block) in body.block_info.blocks().iter_enumerated() {
             self.write_block(id, block)?;

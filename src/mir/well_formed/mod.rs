@@ -260,7 +260,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             );
         }
     }
-    fn visit_operation(&mut self, loc: Location, operation: &super::Operation) {
+    fn visit_operation(&mut self, loc: Location, operation: &super::Operation<'ctxt>) {
         self.super_visit_operation(loc, operation);
         match operation {
             Operation::Cmp(_, left, right) => {

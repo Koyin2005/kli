@@ -22,7 +22,7 @@ impl<'ctxt> From<BuiltinResult<'ctxt>> for Rvalue<'ctxt> {
         }
     }
 }
-impl<'ctxt> Builder<'_, 'ctxt> {
+impl<'mir,'ctxt> Builder<'mir, 'ctxt> {
     fn as_constant(&mut self, expr: &Expr<'ctxt>) -> Option<Constant<'ctxt>> {
         match expr.kind {
             ExprKind::Bool(value) => Some(Constant::bool(self.ctxt, value)),
@@ -382,7 +382,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
         }
     }
-    pub(super) fn expr_value(&mut self, expr: &Expr<'ctxt>) -> Value {
+    pub(super) fn expr_value(&mut self, expr: &Expr<'ctxt>) -> Value<'ctxt> {
         match &expr.kind {
             ExprKind::Unsafe(expr) => todo!(),
             ExprKind::Return(expr) => todo!(),
@@ -399,7 +399,10 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             ExprKind::Unit => Value::Unit,
             ExprKind::Err => todo!(),
             ExprKind::Panic => todo!(),
-            ExprKind::NeverToAny(expr) => todo!(),
+            ExprKind::NeverToAny(expr) => {
+                self.expr_stmt(expr);
+                todo!()
+            },
             ExprKind::BuiltinCall(builtin, generic_args, exprs) => todo!(),
             ExprKind::VariantInit(def_id, case_id, generic_args, expr) => todo!(),
             ExprKind::Function(def_id, generic_args) => todo!(),

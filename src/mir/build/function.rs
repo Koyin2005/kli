@@ -9,7 +9,7 @@ use crate::{
     types::{GenericArgs, Type},
 };
 
-impl<'ctxt> Builder<'_, 'ctxt> {
+impl<'mir,'ctxt> Builder<'mir, 'ctxt> {
     fn add_finished_body(self) {
         let body = self.body;
         let context = self.mir_context;

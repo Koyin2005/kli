@@ -49,11 +49,11 @@ pub(super) fn should_dump(ctxt: CtxtRef<'_>, src: BodySource) -> bool {
     })
 }
 pub struct DumpMir;
-impl BodyPass<'_> for DumpMir {
+impl<'ctxt> BodyPass<'ctxt> for DumpMir {
     fn name(&self) -> &'static str {
         "dump-mir"
     }
-    fn run(&self, ctxt: CtxtRef<'_>, body: &mut Body) {
+    fn run(&self, ctxt: CtxtRef<'ctxt>, body: &mut Body<'ctxt>) {
         if should_dump(ctxt, body.src) {
             let _ = MirDump::new(Box::new(std::io::stdout()), ctxt).write_body(body);
         }

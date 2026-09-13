@@ -152,7 +152,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             .stmts
             .push(Stmt { loc, kind });
     }
-    pub(super) fn push_operation(&mut self, loc: SrcLoc, operation: Operation) -> Reg {
+    pub(super) fn push_operation(&mut self, loc: SrcLoc, operation: Operation<'ctxt>) -> Reg {
         let reg = self.body.registers.push(RegInfo {
             ty: operation.result_type(self.ctxt, &self.body.registers),
         });

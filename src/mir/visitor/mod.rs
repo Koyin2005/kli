@@ -152,10 +152,10 @@ pub trait Visit<'ctxt> {
     fn visit_value(&mut self, loc: Location, value: &Value) {
         match value {
             Value::Reg(reg) => self.visit_reg(loc, *reg, PlaceCtxt::Read),
-            Value::Unit | Value::Int(_) => (),
+            Value::Unit | Value::Int(_) | Value::Unknown(_) => (),
         }
     }
-    fn super_visit_operation(&mut self, loc: Location, operation: &Operation) {
+    fn super_visit_operation(&mut self, loc: Location, operation: &Operation<'ctxt>) {
         match operation {
             Operation::Cmp(_, left, right) => {
                 self.visit_value(loc, left);
@@ -170,7 +170,7 @@ pub trait Visit<'ctxt> {
             }
         }
     }
-    fn visit_operation(&mut self, loc: Location, operation: &Operation) {
+    fn visit_operation(&mut self, loc: Location, operation: &Operation<'ctxt>) {
         self.super_visit_operation(loc, operation);
     }
     fn visit_body(&mut self, body: &Body<'ctxt>) {
@@ -188,10 +188,10 @@ pub trait MutVisit<'ctxt> {
     fn visit_value(&mut self, loc: Location, value: &mut Value) {
         match value {
             Value::Reg(reg) => self.visit_reg(loc, reg),
-            Value::Unit | Value::Int(_) => (),
+            Value::Unit | Value::Int(_) | Value::Unknown(_) => (),
         }
     }
-    fn visit_operation(&mut self, loc: Location, operation: &mut Operation) {
+    fn visit_operation(&mut self, loc: Location, operation: &mut Operation<'ctxt>) {
         match operation {
             Operation::Cmp(_, left, right) => {
                 self.visit_value(loc, left);

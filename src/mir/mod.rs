@@ -464,7 +464,7 @@ pub enum TerminatorKind<'ctxt> {
     Switch(Operand<'ctxt>, SwitchTargets),
     Unreachable,
     OldReturn(Operand<'ctxt>),
-    Return(Value),
+    Return(Value<'ctxt>),
     Goto(BasicBlockId),
     Panic,
 }
@@ -501,17 +501,19 @@ pub struct Stmt<'ctxt> {
     pub kind: StmtKind<'ctxt>,
 }
 #[derive(Clone, Debug)]
-pub enum Value {
+pub enum Value<'ctxt> {
     Reg(Reg),
     Int(i64),
     Unit,
+    Unknown(Type<'ctxt>)
 }
-impl Value {
-    pub fn type_of<'ctxt>(&self, ctxt: CtxtRef<'ctxt>, regs: &Regs<'ctxt>) -> Type<'ctxt> {
+impl<'ctxt> Value<'ctxt> {
+    pub fn type_of(&self, ctxt: CtxtRef<'ctxt>, regs: &Regs<'ctxt>) -> Type<'ctxt> {
         match self {
             Self::Reg(reg) => regs[*reg].ty,
             Self::Unit => Type::new_unit(ctxt),
             Self::Int(_) => Type::new_int(ctxt),
+            Self::Unknown(ty) => *ty
         }
     }
 }
@@ -529,13 +531,13 @@ pub enum ArithOp {
     SubOverflow,
 }
 #[derive(Clone, Debug)]
-pub enum Operation {
-    Cmp(Comparison, Value, Value),
-    Arith(ArithOp, Value, Value),
-    ExtractField(Value, FieldId),
+pub enum Operation<'ctxt> {
+    Cmp(Comparison, Value<'ctxt>, Value<'ctxt>),
+    Arith(ArithOp, Value<'ctxt>, Value<'ctxt>),
+    ExtractField(Value<'ctxt>, FieldId),
 }
-impl Operation {
-    pub fn result_type<'ctxt>(&self, ctxt: CtxtRef<'ctxt>, regs: &Regs<'ctxt>) -> Type<'ctxt> {
+impl<'ctxt> Operation<'ctxt> {
+    pub fn result_type(&self, ctxt: CtxtRef<'ctxt>, regs: &Regs<'ctxt>) -> Type<'ctxt> {
         match self {
             Operation::Cmp(..) => Type::new_bool(ctxt),
             Operation::Arith(op, ..) => match op {
@@ -557,8 +559,8 @@ impl Operation {
 #[derive(Clone, Debug)]
 pub enum StmtKind<'ctxt> {
     Noop,
-    PanicIf(Value),
-    Assign(Reg, Operation),
+    PanicIf(Value<'ctxt>),
+    Assign(Reg, Operation<'ctxt>),
     Store(Place, Box<Rvalue<'ctxt>>),
     Print { value: Operand<'ctxt>, err: bool },
 }
