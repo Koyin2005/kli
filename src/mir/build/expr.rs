@@ -420,9 +420,15 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             }
             ExprKind::BuiltinCall(builtin, generic_args, exprs) => todo!(),
             ExprKind::VariantInit(def_id, case_id, generic_args, expr) => todo!(),
-            ExprKind::Function(def_id, generic_args) => todo!(),
+            ExprKind::Function(def_id, generic_args) => {
+                Value::Function(*def_id, generic_args.clone())
+            }
             ExprKind::Const(def_id, generic_args) => todo!(),
-            ExprKind::Call(expr, exprs) => todo!(),
+            ExprKind::Call(callee, args) => {
+                let callee = self.expr_value(callee);
+                let args = args.iter().map(|arg| self.expr_value(arg)).collect();
+                Value::Reg(self.push_operation(expr.loc, mir::Operation::Call(callee, args)))
+            }
             ExprKind::Load(place) => self.load_place(place),
             ExprKind::Binary(binary_op, left, right) => {
                 let left = self.expr_value(left);
