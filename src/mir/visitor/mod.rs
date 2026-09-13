@@ -21,7 +21,7 @@ pub trait Visit<'ctxt> {
     fn super_visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         match &stmt.kind {
             StmtKind::Noop => (),
-            StmtKind::Assign(place, rvalue) => {
+            StmtKind::Store(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
             }
             StmtKind::Print { value: operand, .. } => {
@@ -164,7 +164,7 @@ pub trait MutVisit<'ctxt> {
                 self.visit_operand(loc, src);
                 self.visit_operand(loc, count);
             }
-            StmtKind::Assign(place, rvalue) => {
+            StmtKind::Store(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
             }
             StmtKind::Print {

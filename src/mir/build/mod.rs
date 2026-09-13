@@ -187,6 +187,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         self.switch_to_block(block);
     }
     pub(super) fn assign(&mut self, loc: SrcLoc, place: Place, value: Rvalue<'ctxt>) {
-        self.push_stmt(loc, StmtKind::Assign(place, Box::new(value)));
+        self.push_stmt(loc, StmtKind::Store(place, Box::new(value)));
     }
 }

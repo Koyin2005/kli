@@ -275,7 +275,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     writeln!(self.output, ")")?;
                 }
                 StmtKind::Noop => writeln!(self.output, "noop")?,
-                StmtKind::Assign(place, value) => {
+                StmtKind::Store(place, value) => {
                     self.write_place(place)?;
                     write!(self.output, " = ")?;
                     self.write_rvalue(value)?;

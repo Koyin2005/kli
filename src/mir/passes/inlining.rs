@@ -48,7 +48,7 @@ pub fn run_pass<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
                 let callee_entry = current_body.block_info.blocks().last().next();
                 let current_block = &mut current_body.block_info.blocks_mut()[block];
                 assert!(current_block.stmts.pop().is_some_and(|stmt| {
-                    if let StmtKind::Assign(_, rvalue) = stmt.kind
+                    if let StmtKind::Store(_, rvalue) = stmt.kind
                         && let Rvalue::Call(..) = *rvalue
                     {
                         true
@@ -66,7 +66,7 @@ pub fn run_pass<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
                     let local = Local::new(local.into_usize() + current_body.locals.len());
                     current_block.stmts.push(mir::Stmt {
                         loc: SrcLoc::dummy(),
-                        kind: StmtKind::Assign(Place::local(local), Box::new(Rvalue::Use(arg))),
+                        kind: StmtKind::Store(Place::local(local), Box::new(Rvalue::Use(arg))),
                     });
                 }
                 let mut updater = Updater {
@@ -100,7 +100,7 @@ fn find_inlining_site<'ctxt>(
     let mut site = None;
     for (block_id, block) in body.block_info.blocks().iter_enumerated() {
         for stmt in block.stmts.iter() {
-            let StmtKind::Assign(place, value) = &stmt.kind else {
+            let StmtKind::Store(place, value) = &stmt.kind else {
                 continue;
             };
             let Rvalue::Call(
@@ -140,7 +140,7 @@ fn split_calls<'ctxt>(body: &mut Body<'ctxt>) {
     while let Some(block) = blocks.get_mut(block_id) {
         let mut call_stmt = None;
         for (stmt_id, stmt) in block.stmts.iter_enumerated() {
-            let StmtKind::Assign(_, value) = &stmt.kind else {
+            let StmtKind::Store(_, value) = &stmt.kind else {
                 continue;
             };
             let Rvalue::Call(
@@ -213,7 +213,7 @@ impl<'ctxt> MutVisit<'ctxt> for Updater {
         if let Some(value) = value {
             block.stmts.push(mir::Stmt {
                 loc: src_info,
-                kind: StmtKind::Assign(
+                kind: StmtKind::Store(
                     self.return_place.clone(),
                     Box::new(mir::Rvalue::Use(value)),
                 ),

@@ -504,7 +504,7 @@ pub struct Stmt<'ctxt> {
 #[derive(Clone, Debug)]
 pub enum StmtKind<'ctxt> {
     Noop,
-    Assign(Place, Box<Rvalue<'ctxt>>),
+    Store(Place, Box<Rvalue<'ctxt>>),
     Print {
         value: Operand<'ctxt>,
         err: bool,
@@ -566,6 +566,7 @@ pub struct LocalInfo<'ctxt> {
     pub ty: Type<'ctxt>,
     pub kind: LocalKind,
 }
+
 #[derive(Clone)]
 pub struct Body<'ctxt> {
     pub src: BodySource,

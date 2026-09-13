@@ -274,7 +274,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
-            StmtKind::Assign(lhs, rhs) => {
+            StmtKind::Store(lhs, rhs) => {
                 let lhs_ty = lhs.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 let rhs_ty = rhs.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 self.assert(
