@@ -513,20 +513,34 @@ impl Value {
         }
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum Comparison {
     Lesser,
     Greater,
     Equals,
 }
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
+pub enum ArithOp {
+    Add,
+    Sub,
+    AddOverflow,
+    SubOverflow,
+}
 #[derive(Clone, Debug)]
 pub enum Operation {
     Cmp(Comparison, Value, Value),
+    Arith(ArithOp, Value, Value),
 }
 impl Operation {
     pub fn result_type<'ctxt>(&self, ctxt: CtxtRef<'ctxt>) -> Type<'ctxt> {
         match *self {
             Operation::Cmp(..) => Type::new_bool(ctxt),
+            Operation::Arith(op, ..) => match op {
+                ArithOp::AddOverflow | ArithOp::SubOverflow => {
+                    Type::pair(ctxt, Type::new_int(ctxt), Type::new_bool(ctxt))
+                }
+                _ => Type::new_int(ctxt),
+            },
         }
     }
 }

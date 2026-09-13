@@ -272,6 +272,15 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     self.body.src_info(loc),
                 );
             }
+            Operation::Arith(_, left, right) => {
+                let lhs_ty = left.type_of(self.ctxt, &self.body.registers);
+                let rhs_ty = right.type_of(self.ctxt, &self.body.registers);
+                self.assert(
+                    lhs_ty == rhs_ty && lhs_ty.is_builtin_scalar(),
+                    || format!("{} and {} should be scalars", lhs_ty, rhs_ty),
+                    self.body.src_info(loc),
+                );
+            }
         }
     }
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {

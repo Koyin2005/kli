@@ -409,26 +409,35 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             ExprKind::Binary(binary_op, left, right) => {
                 let left = self.expr_value(left);
                 let right = self.expr_value(right);
-                Value::Reg(self.push_operation(
-                    expr.loc,
-                    match binary_op {
-                        BinaryOp::Lesser => {
-                            mir::Operation::Cmp(mir::Comparison::Lesser, left, right)
-                        }
-                        BinaryOp::Greater => {
-                            mir::Operation::Cmp(mir::Comparison::Greater, left, right)
-                        }
-                        BinaryOp::Equals => {
-                            mir::Operation::Cmp(mir::Comparison::Equals, left, right)
-                        }
-                        BinaryOp::Add => todo!(),
-                        BinaryOp::Subtract => todo!(),
-                        BinaryOp::Multiply => todo!(),
-                        BinaryOp::Divide => todo!(),
-                        BinaryOp::BitwiseOr => todo!(),
-                        BinaryOp::BitwiseAnd => todo!(),
-                    },
-                ))
+                let op = match binary_op {
+                    BinaryOp::Lesser => {
+                        return Value::Reg(self.push_operation(
+                            expr.loc,
+                            mir::Operation::Cmp(mir::Comparison::Lesser, left, right),
+                        ));
+                    }
+                    BinaryOp::Greater => {
+                        return Value::Reg(self.push_operation(
+                            expr.loc,
+                            mir::Operation::Cmp(mir::Comparison::Greater, left, right),
+                        ));
+                    }
+                    BinaryOp::Equals => {
+                        return Value::Reg(self.push_operation(
+                            expr.loc,
+                            mir::Operation::Cmp(mir::Comparison::Equals, left, right),
+                        ));
+                    }
+                    BinaryOp::Add => mir::ArithOp::AddOverflow,
+                    BinaryOp::Subtract => mir::ArithOp::SubOverflow,
+                    BinaryOp::Multiply => todo!(),
+                    BinaryOp::Divide => todo!(),
+                    BinaryOp::BitwiseOr => todo!(),
+                    BinaryOp::BitwiseAnd => todo!(),
+                };
+
+                let tuple = self.push_operation(expr.loc, mir::Operation::Arith(op, left, right));
+                todo!()
             }
             ExprKind::Logic(logical_op, expr, expr1) => todo!(),
             ExprKind::For {

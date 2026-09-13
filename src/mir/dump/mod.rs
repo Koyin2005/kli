@@ -266,6 +266,13 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_value(right)?;
                 write!(self.output, ")")
             }
+            Operation::Arith(op, left, right) => {
+                write!(self.output, "{:?}(", op)?;
+                self.write_value(left)?;
+                write!(self.output, ",")?;
+                self.write_value(right)?;
+                write!(self.output, ")")
+            }
         }
     }
     fn write_block(&mut self, id: BasicBlockId, block: &BasicBlock) -> std::io::Result<()> {

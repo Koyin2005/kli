@@ -161,7 +161,10 @@ pub trait Visit<'ctxt> {
         match operation {
             Operation::Cmp(_, left, right) => {
                 self.visit_value(loc, left);
-
+                self.visit_value(loc, right);
+            }
+            Operation::Arith(_, left, right) => {
+                self.visit_value(loc, left);
                 self.visit_value(loc, right);
             }
         }
@@ -190,6 +193,10 @@ pub trait MutVisit<'ctxt> {
     fn visit_operation(&mut self, loc: Location, operation: &mut Operation) {
         match operation {
             Operation::Cmp(_, left, right) => {
+                self.visit_value(loc, left);
+                self.visit_value(loc, right);
+            }
+            Operation::Arith(_, left, right) => {
                 self.visit_value(loc, left);
                 self.visit_value(loc, right);
             }
