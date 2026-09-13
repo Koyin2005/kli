@@ -36,8 +36,8 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             ctxt,
         );
         if let Some(body) = function.body.as_ref() {
-            let return_value = builder.operand(body);
-            builder.finish_block(body.loc, TerminatorKind::OldReturn(return_value));
+            let return_value = builder.expr_value(body);
+            builder.finish_block(body.loc, TerminatorKind::Return(return_value));
         } else {
             builder.finish_block(SrcLoc::dummy(), TerminatorKind::Unreachable);
         }

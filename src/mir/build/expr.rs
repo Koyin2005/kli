@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     Symbol, builtins::{Builtin, IntegerBuiltin}, index_vec::IndexVec, mir::{
-        self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Reg, Rvalue, build::Builder,
+        self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Reg, Rvalue, Value, build::Builder,
     }, src_loc::SrcLoc, typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern}, types::Type,
 };
 pub(super) enum BuiltinResult<'ctxt> {
@@ -373,6 +373,37 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 let place = self.place(&args[0]);
                 BuiltinResult::Rvalue(Rvalue::Len(place))
             }
+        }
+    }
+    pub(super) fn expr_value(&mut self, expr: &Expr<'ctxt>) -> Value{
+        match &expr.kind {
+            ExprKind::Unsafe(expr) => todo!(),
+            ExprKind::Return(expr) => todo!(),
+            ExprKind::Block(block_body) => todo!(),
+            ExprKind::String(_) => todo!(),
+            ExprKind::Bool(_) => todo!(),
+            ExprKind::Int(_) => todo!(),
+            ExprKind::Char(_) => todo!(),
+            ExprKind::Unit => todo!(),
+            ExprKind::Err => todo!(),
+            ExprKind::Panic => todo!(),
+            ExprKind::NeverToAny(expr) => todo!(),
+            ExprKind::BuiltinCall(builtin, generic_args, exprs) => todo!(),
+            ExprKind::VariantInit(def_id, case_id, generic_args, expr) => todo!(),
+            ExprKind::Function(def_id, generic_args) => todo!(),
+            ExprKind::Const(def_id, generic_args) => todo!(),
+            ExprKind::Call(expr, exprs) => todo!(),
+            ExprKind::Load(place) => todo!(),
+            ExprKind::Binary(binary_op, expr, expr1) => todo!(),
+            ExprKind::Logic(logical_op, expr, expr1) => todo!(),
+            ExprKind::For { pattern, iterator, iterator_type, body } => todo!(),
+            ExprKind::Case(expr, case_arms) => todo!(),
+            ExprKind::Assign(place, expr) => todo!(),
+            ExprKind::Lambda(lambda) => todo!(),
+            ExprKind::Tuple(exprs) => todo!(),
+            ExprKind::Array(exprs) => todo!(),
+            ExprKind::NamedRecord(def_id, generic_args, record_field_inits) => todo!(),
+            ExprKind::While(expr, expr1) => todo!(),
         }
     }
     pub(super) fn expr_into_reg(&mut self, expr: &Expr<'ctxt>) -> Reg{
