@@ -1,13 +1,7 @@
 use crate::{
-    Symbol,
-    collect::{CtxtRef, TypeDefKind},
-    mir::{
-        AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstValue,
-        LocalKind, Operand, Operation, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
-        Value,
-    },
-    typed_ast::FieldId,
-    types,
+    Symbol, collect::{CtxtRef, TypeDefKind}, mir::{
+        self, AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstValue, LocalKind, Operand, Operation, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind, Value,
+    }, typed_ast::FieldId, types,
 };
 
 pub struct MirDump<'ctxt> {
@@ -260,14 +254,25 @@ impl<'ctxt> MirDump<'ctxt> {
     fn write_operation(&mut self, operation: &Operation) -> std::io::Result<()> {
         match operation {
             Operation::Cmp(cmp, left, right) => {
-                write!(self.output, "cmp({:?})(", cmp)?;
+                let name = match cmp{
+                    mir::Comparison::Equals => "eq",
+                    mir::Comparison::Greater => "gt",
+                    mir::Comparison::Lesser => "lt",
+                };
+                write!(self.output, "cmp({name})(")?;
                 self.write_value(left)?;
                 write!(self.output, ",")?;
                 self.write_value(right)?;
                 write!(self.output, ")")
             }
             Operation::Arith(op, left, right) => {
-                write!(self.output, "{:?}(", op)?;
+                let name = match op{
+                    mir::ArithOp::Add => "add",
+                    mir::ArithOp::AddOverflow => "add_overflow",
+                    mir::ArithOp::Sub => "sub",
+                    mir::ArithOp::SubOverflow => "sub_overflow",
+                };
+                write!(self.output, "{}(", name)?;
                 self.write_value(left)?;
                 write!(self.output, ",")?;
                 self.write_value(right)?;
@@ -276,7 +281,7 @@ impl<'ctxt> MirDump<'ctxt> {
             Operation::ExtractField(value, field) => {
                 write!(self.output, "extract_field(")?;
                 self.write_value(value)?;
-                write!(self.output, ".{}", field.into_usize())?;
+                write!(self.output, ",{}", field.into_usize())?;
                 write!(self.output, ")")
             }
         }

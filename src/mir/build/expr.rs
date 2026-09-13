@@ -409,7 +409,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             ExprKind::Binary(binary_op, left, right) => {
                 let left = self.expr_value(left);
                 let right = self.expr_value(right);
-                let op = match binary_op {
+                let overflow_op = match binary_op {
                     BinaryOp::Lesser => {
                         return Value::Reg(self.push_operation(
                             expr.loc,
@@ -436,8 +436,12 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     BinaryOp::BitwiseAnd => todo!(),
                 };
 
-                let tuple = self.push_operation(expr.loc, mir::Operation::Arith(op, left, right));
-                todo!()
+                let tuple =
+                    self.push_operation(expr.loc, mir::Operation::Arith(overflow_op, left, right));
+                Value::Reg(self.push_operation(
+                    expr.loc,
+                    mir::Operation::ExtractField(Value::Reg(tuple), FieldId::new(0)),
+                ))
             }
             ExprKind::Logic(logical_op, expr, expr1) => todo!(),
             ExprKind::For {
