@@ -307,15 +307,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     self.write_operand(value)?;
                     writeln!(self.output, ")")?;
                 }
-                StmtKind::Copy { dst, src, count } => {
-                    write!(self.output, "Copy(")?;
-                    self.write_operand(dst)?;
-                    write!(self.output, ",")?;
-                    self.write_operand(src)?;
-                    write!(self.output, ",")?;
-                    self.write_operand(count)?;
-                    writeln!(self.output, ")")?;
-                }
                 StmtKind::Noop => writeln!(self.output, "noop")?,
                 StmtKind::PanicIf(value) => {
                     write!(self.output, "panic_if ")?;

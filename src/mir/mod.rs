@@ -564,11 +564,6 @@ pub enum StmtKind<'ctxt> {
         value: Operand<'ctxt>,
         err: bool,
     },
-    Copy {
-        dst: Operand<'ctxt>,
-        src: Operand<'ctxt>,
-        count: Operand<'ctxt>,
-    },
 }
 define_id!(BasicBlockId);
 impl BasicBlockId {

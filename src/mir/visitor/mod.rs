@@ -35,11 +35,6 @@ pub trait Visit<'ctxt> {
             StmtKind::Print { value: operand, .. } => {
                 self.visit_operand(loc, operand);
             }
-            StmtKind::Copy { dst, src, count } => {
-                self.visit_operand(loc, dst);
-                self.visit_operand(loc, src);
-                self.visit_operand(loc, count);
-            }
             StmtKind::Assign(dst, operation) => {
                 self.visit_reg(loc, *dst, PlaceCtxt::Write);
                 self.visit_operation(loc, operation);
@@ -220,11 +215,6 @@ pub trait MutVisit<'ctxt> {
             StmtKind::Noop => (),
             StmtKind::PanicIf(value) => {
                 self.visit_value(loc, value);
-            }
-            StmtKind::Copy { dst, src, count } => {
-                self.visit_operand(loc, dst);
-                self.visit_operand(loc, src);
-                self.visit_operand(loc, count);
             }
             StmtKind::Store(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
