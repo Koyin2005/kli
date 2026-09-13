@@ -2,7 +2,7 @@ use crate::{
     CtxtRef,
     mir::{
         BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Operation, Place,
-        PlaceBase, PlaceProjection, Reg, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
+        PlaceBase, PlaceProjection, Reg, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind, Value,
     },
 };
 pub enum PlaceCtxt {
@@ -39,7 +39,7 @@ pub trait Visit<'ctxt> {
             }
             StmtKind::Assign(dst, operation) => {
                 self.visit_reg(loc, *dst, PlaceCtxt::Write);
-                self.visit_operation(operation);
+                self.visit_operation(loc, operation);
             }
         }
     }
@@ -97,9 +97,6 @@ pub trait Visit<'ctxt> {
                 self.visit_operand(loc, left);
                 self.visit_operand(loc, right);
             }
-            Rvalue::Cast(_, operand, _) => {
-                self.visit_operand(loc, operand);
-            }
         }
     }
     fn super_visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
@@ -153,8 +150,22 @@ pub trait Visit<'ctxt> {
     fn visit_block(&mut self, id: BasicBlockId, block: &BasicBlock<'ctxt>) {
         self.super_visit_block(id, block)
     }
-    fn visit_operation(&mut self, operation: &Operation) {
-        _ = operation;
+    fn visit_value(&mut self, loc: Location, value: &Value) {
+        match value {
+            Value::Reg(reg) => self.visit_reg(loc, *reg, PlaceCtxt::Read),
+        }
+    }
+    fn super_visit_operation(&mut self, loc: Location, operation: &Operation) {
+        match operation {
+            Operation::Cmp(_, left, right) => {
+                self.visit_value(loc, left);
+
+                self.visit_value(loc, right);
+            }
+        }
+    }
+    fn visit_operation(&mut self, loc: Location, operation: &Operation) {
+        self.super_visit_operation(loc, operation);
     }
     fn visit_body(&mut self, body: &Body<'ctxt>) {
         for (id, block) in body.block_info.blocks().iter_enumerated() {
@@ -168,9 +179,18 @@ pub trait MutVisit<'ctxt> {
         self.visit_place(loc, place);
         self.visit_rvalue(loc, rvalue);
     }
+    fn visit_value(&mut self, loc: Location, value: &mut Value) {
+        match value {
+            Value::Reg(reg) => self.visit_reg(loc, reg),
+        }
+    }
     fn visit_operation(&mut self, loc: Location, operation: &mut Operation) {
-        _ = loc;
-        _ = operation;
+        match operation {
+            Operation::Cmp(_, left, right) => {
+                self.visit_value(loc, left);
+                self.visit_value(loc, right);
+            }
+        }
     }
     fn visit_reg(&mut self, loc: Location, reg: &mut Reg) {
         _ = loc;
@@ -252,9 +272,6 @@ pub trait MutVisit<'ctxt> {
                 let (left, right) = operands.as_mut();
                 self.visit_operand(loc, left);
                 self.visit_operand(loc, right);
-            }
-            Rvalue::Cast(_, operand, _) => {
-                self.visit_operand(loc, operand);
             }
         }
     }

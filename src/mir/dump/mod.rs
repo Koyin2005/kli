@@ -2,9 +2,9 @@ use crate::{
     Symbol,
     collect::{CtxtRef, TypeDefKind},
     mir::{
-        AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, CastKind,
-        ConstValue, LocalKind, Operand, Operation, Place, PlaceProjection, Rvalue, StmtKind,
-        TerminatorKind,
+        AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstValue,
+        LocalKind, Operand, Operation, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
+        Value,
     },
     typed_ast::FieldId,
     types,
@@ -179,17 +179,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_with_coma_sep(args, |this, arg| this.write_operand(arg))?;
                 write!(self.output, ")")?;
             }
-            Rvalue::Cast(cast, pointer, to) => {
-                write!(self.output, "cast(")?;
-                match cast {
-                    CastKind::Transmute => {
-                        write!(self.output, "Transmute({})", to)?;
-                    }
-                }
-                write!(self.output, ")(")?;
-                self.write_operand(pointer)?;
-                write!(self.output, ")")?;
-            }
         }
         Ok(())
     }
@@ -255,8 +244,23 @@ impl<'ctxt> MirDump<'ctxt> {
             }
         }
     }
+    fn write_value(&mut self, value: &Value) -> std::io::Result<()> {
+        match value {
+            Value::Reg(reg) => {
+                write!(self.output, "%{}", reg.0)
+            }
+        }
+    }
     fn write_operation(&mut self, operation: &Operation) -> std::io::Result<()> {
-        match *operation {}
+        match operation {
+            Operation::Cmp(cmp, left, right) => {
+                write!(self.output, "Cmp({:?})(", cmp)?;
+                self.write_value(left)?;
+                write!(self.output, ",")?;
+                self.write_value(right)?;
+                write!(self.output, ")")
+            }
+        }
     }
     fn write_block(&mut self, id: BasicBlockId, block: &BasicBlock) -> std::io::Result<()> {
         writeln!(self.output, " bb{}", id.into_usize())?;

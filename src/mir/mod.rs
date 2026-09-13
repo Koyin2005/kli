@@ -232,9 +232,7 @@ pub enum BinaryOp {
     Offset,
 }
 #[derive(Clone, Debug, Copy)]
-pub enum CastKind {
-    Transmute,
-}
+pub enum CastKind {}
 #[derive(Clone, Debug)]
 pub enum Rvalue<'ctxt> {
     ReadLine,
@@ -242,7 +240,6 @@ pub enum Rvalue<'ctxt> {
     Use(Operand<'ctxt>),
     Call(Operand<'ctxt>, Vec<Operand<'ctxt>>),
     Binary(BinaryOp, Box<(Operand<'ctxt>, Operand<'ctxt>)>),
-    Cast(CastKind, Operand<'ctxt>, Type<'ctxt>),
     Len(Place),
     Discriminant(Place),
     AllocArray(Type<'ctxt>, Vec<Operand<'ctxt>>),
@@ -252,7 +249,6 @@ impl<'ctxt> Rvalue<'ctxt> {
         match self {
             Self::Aggregate(..)
             | Self::Binary(..)
-            | Self::Cast(..)
             | Self::Use(_)
             | Self::Len(_)
             | Self::Discriminant(_) => true,
@@ -308,7 +304,6 @@ impl<'ctxt> Rvalue<'ctxt> {
                         .map(|operand| operand.type_of(ctxt, locals, return_type)),
                 ),
             },
-            &Rvalue::Cast(.., ty) => ty,
             Rvalue::Discriminant(_) => Type::new_int(ctxt),
         }
     }
@@ -501,12 +496,32 @@ pub struct Stmt<'ctxt> {
     pub loc: SrcLoc,
     pub kind: StmtKind<'ctxt>,
 }
-
 #[derive(Clone, Debug)]
-pub enum Operation {}
+pub enum Value {
+    Reg(Reg),
+}
+impl Value {
+    pub fn type_of<'ctxt>(&self, regs: &Regs<'ctxt>) -> Type<'ctxt> {
+        match self {
+            Self::Reg(reg) => regs[*reg].ty,
+        }
+    }
+}
+#[derive(Clone, Debug)]
+pub enum Comparison {
+    Lesser,
+    Greater,
+    Equals,
+}
+#[derive(Clone, Debug)]
+pub enum Operation {
+    Cmp(Comparison, Value, Value),
+}
 impl Operation {
-    pub fn result_type<'ctxt>(&self) -> Type<'ctxt> {
-        match *self {}
+    pub fn result_type<'ctxt>(&self, ctxt: CtxtRef<'ctxt>) -> Type<'ctxt> {
+        match *self {
+            Operation::Cmp(..) => Type::new_bool(ctxt),
+        }
     }
 }
 #[derive(Clone, Debug)]

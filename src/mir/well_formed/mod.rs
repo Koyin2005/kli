@@ -4,12 +4,11 @@ use crate::{
     collect::{CtxtRef, TypeDefKind},
     diagnostics::emit_fatal_diagnostic,
     mir::{
-        BinaryOp, Body, CastKind, Location, Stmt, StmtKind, TerminatorKind,
+        BinaryOp, Body, Location, Operation, Stmt, StmtKind, TerminatorKind,
         visitor::{PlaceCtxt, Visit},
     },
     src_loc::SrcLoc,
     types::{FunctionSig, Type, TypeKind},
-    unsafety,
 };
 pub struct WellFormed<'ctxt, 'body> {
     ctxt: CtxtRef<'ctxt>,
@@ -240,16 +239,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     ),
                 }
             }
-            &super::Rvalue::Cast(cast_kind, ref operand, to_ty) => match cast_kind {
-                CastKind::Transmute => {
-                    let from = operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
-                    self.assert(
-                        unsafety::transmutable(self.ctxt, from, to_ty),
-                        || format!("Cannot transmute {} into {}", from, to_ty),
-                        loc,
-                    );
-                }
-            },
             super::Rvalue::Len(place) => {
                 let ty = place.type_of(self.ctxt, &self.body.locals, self.body.return_type);
                 self.assert(
@@ -271,12 +260,26 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             );
         }
     }
+    fn visit_operation(&mut self, loc: Location, operation: &super::Operation) {
+        self.super_visit_operation(loc, operation);
+        match operation {
+            Operation::Cmp(_, left, right) => {
+                let lhs_ty = left.type_of(&self.body.registers);
+                let rhs_ty = right.type_of(&self.body.registers);
+                self.assert(
+                    lhs_ty == rhs_ty && lhs_ty.is_integer(),
+                    || format!("{} and {} should be ints", lhs_ty, rhs_ty),
+                    self.body.src_info(loc),
+                );
+            }
+        }
+    }
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
             StmtKind::Assign(dst, operation) => {
                 let lhs_ty = self.body.registers[*dst].ty;
-                let rhs_ty = operation.result_type();
+                let rhs_ty = operation.result_type(self.ctxt);
                 self.assert(
                     lhs_ty == rhs_ty,
                     || format!("Cannot assign non equal types {} and {}", lhs_ty, rhs_ty),
