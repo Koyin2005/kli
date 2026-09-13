@@ -427,9 +427,10 @@ impl<'ctxt> Terminator<'ctxt> {
             TerminatorKind::Assert(.., block) | TerminatorKind::Goto(block) => {
                 SuccessorsIter::Single(Some(block))
             }
-            TerminatorKind::OldReturn(_) | TerminatorKind::Panic | TerminatorKind::Unreachable | TerminatorKind::Return(_) => {
-                SuccessorsIter::Leaf
-            }
+            TerminatorKind::OldReturn(_)
+            | TerminatorKind::Panic
+            | TerminatorKind::Unreachable
+            | TerminatorKind::Return(_) => SuccessorsIter::Leaf,
             TerminatorKind::Switch(_, ref targets) => {
                 SuccessorsIter::Switch(targets.succesors_iter())
             }
@@ -500,11 +501,13 @@ pub struct Stmt<'ctxt> {
 #[derive(Clone, Debug)]
 pub enum Value {
     Reg(Reg),
+    Unit
 }
 impl Value {
-    pub fn type_of<'ctxt>(&self, regs: &Regs<'ctxt>) -> Type<'ctxt> {
+    pub fn type_of<'ctxt>(&self, ctxt: CtxtRef<'ctxt>, regs: &Regs<'ctxt>) -> Type<'ctxt> {
         match self {
             Self::Reg(reg) => regs[*reg].ty,
+            Self::Unit => Type::new_unit(ctxt)
         }
     }
 }

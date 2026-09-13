@@ -1,9 +1,16 @@
 use std::collections::HashMap;
 
 use crate::{
-    Symbol, builtins::{Builtin, IntegerBuiltin}, index_vec::IndexVec, mir::{
-        self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Reg, Rvalue, Value, build::Builder,
-    }, src_loc::SrcLoc, typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern}, types::Type,
+    Symbol,
+    builtins::{Builtin, IntegerBuiltin},
+    index_vec::IndexVec,
+    mir::{
+        self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Reg, Rvalue,
+        Value, build::Builder,
+    },
+    src_loc::SrcLoc,
+    typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern},
+    types::Type,
 };
 pub(super) enum BuiltinResult<'ctxt> {
     Rvalue(Rvalue<'ctxt>),
@@ -375,11 +382,16 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
         }
     }
-    pub(super) fn expr_value(&mut self, expr: &Expr<'ctxt>) -> Value{
+    pub(super) fn expr_value(&mut self, expr: &Expr<'ctxt>) -> Value {
         match &expr.kind {
             ExprKind::Unsafe(expr) => todo!(),
             ExprKind::Return(expr) => todo!(),
-            ExprKind::Block(block_body) => todo!(),
+            ExprKind::Block(block) => {
+                for stmt in block.stmts.iter(){
+                    self.stmt(stmt);
+                }
+                self.expr_value(&block.expr)
+            },
             ExprKind::String(_) => todo!(),
             ExprKind::Bool(_) => todo!(),
             ExprKind::Int(_) => todo!(),
@@ -396,7 +408,12 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             ExprKind::Load(place) => todo!(),
             ExprKind::Binary(binary_op, expr, expr1) => todo!(),
             ExprKind::Logic(logical_op, expr, expr1) => todo!(),
-            ExprKind::For { pattern, iterator, iterator_type, body } => todo!(),
+            ExprKind::For {
+                pattern,
+                iterator,
+                iterator_type,
+                body,
+            } => todo!(),
             ExprKind::Case(expr, case_arms) => todo!(),
             ExprKind::Assign(place, expr) => todo!(),
             ExprKind::Lambda(lambda) => todo!(),
@@ -406,11 +423,16 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             ExprKind::While(expr, expr1) => todo!(),
         }
     }
-    pub(super) fn expr_into_reg(&mut self, expr: &Expr<'ctxt>) -> Reg{
-        match &expr.kind{
+    pub(super) fn expr_into_reg(&mut self, expr: &Expr<'ctxt>) -> Reg {
+        match &expr.kind {
             ExprKind::Unsafe(_) => todo!(),
             ExprKind::Return(_) => todo!(),
-            ExprKind::Block(block_body) => todo!(),
+            ExprKind::Block(block_body) => {
+                for stmt in block_body.stmts.iter() {
+                    self.stmt(stmt);
+                }
+                self.expr_into_reg(&block_body.expr)
+            }
             ExprKind::String(_) => todo!(),
             ExprKind::Bool(_) => todo!(),
             ExprKind::Int(_) => todo!(),
@@ -427,7 +449,12 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             ExprKind::Load(place) => todo!(),
             ExprKind::Binary(binary_op, expr, expr1) => todo!(),
             ExprKind::Logic(logical_op, expr, expr1) => todo!(),
-            ExprKind::For { pattern, iterator, iterator_type, body } => todo!(),
+            ExprKind::For {
+                pattern,
+                iterator,
+                iterator_type,
+                body,
+            } => todo!(),
             ExprKind::Case(expr, case_arms) => todo!(),
             ExprKind::Assign(place, expr) => todo!(),
             ExprKind::Lambda(lambda) => todo!(),

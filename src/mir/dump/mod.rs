@@ -248,6 +248,9 @@ impl<'ctxt> MirDump<'ctxt> {
         match value {
             Value::Reg(reg) => {
                 write!(self.output, "%{}", reg.0)
+            },
+            Value::Unit => {
+                write!(self.output,"()")
             }
         }
     }
@@ -306,7 +309,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     self.write_operand(value)?;
                 }
                 TerminatorKind::Return(value) => {
-                    write!(self.output,"return ")?;
+                    write!(self.output, "return ")?;
                     self.write_value(value)?;
                 }
                 TerminatorKind::Switch(operand, targets) => {

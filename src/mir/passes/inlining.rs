@@ -240,7 +240,6 @@ fn inline_budget_used_by(body: &Body<'_>) -> u32 {
                         TerminatorKind::OldReturn(_) | TerminatorKind::Return(_) => 0,
                         TerminatorKind::Goto(_) => INSTR_BUDGET,
                         TerminatorKind::Panic => 2 * INSTR_BUDGET,
-
                     }
                 } as usize
         })
