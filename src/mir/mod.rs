@@ -542,6 +542,7 @@ pub enum Operation<'ctxt> {
     Arith(ArithOp, Value<'ctxt>, Value<'ctxt>),
     ExtractField(Value<'ctxt>, FieldId),
     Call(Value<'ctxt>, Vec<Value<'ctxt>>),
+    Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Value<'ctxt>>),
 }
 impl<'ctxt> Operation<'ctxt> {
     pub fn result_type(&self, ctxt: CtxtRef<'ctxt>, regs: &Regs<'ctxt>) -> Type<'ctxt> {
@@ -566,6 +567,17 @@ impl<'ctxt> Operation<'ctxt> {
                 };
                 sig.return_type
             }
+            Operation::Aggregate(kind, fields) => match kind {
+                &AggregateKind::Variant(id, _, ref args)
+                | &AggregateKind::NamedRecord(id, ref args) => {
+                    let name = ctxt.type_def(id).name;
+                    Type::named(ctxt, id, name, args.clone())
+                }
+                AggregateKind::Tuple => Type::tuple_from_iter(
+                    ctxt,
+                    fields.iter().map(|value| value.type_of(ctxt, regs)),
+                ),
+            },
         }
     }
 }

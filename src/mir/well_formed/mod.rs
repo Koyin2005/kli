@@ -308,6 +308,72 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     loc,
                 );
             }
+            Operation::Aggregate(kind, fields) => {
+                let loc = self.body.src_info(loc);
+                match kind {
+                    super::AggregateKind::NamedRecord(id, args) => {
+                        let type_def = self.ctxt.type_def(*id);
+                        let field_info = type_def.fields();
+                        self.assert(
+                            fields.len() == field_info.len(),
+                            || "should have fields for each field def",
+                            loc,
+                        );
+                        for (field, operand) in field_info.iter().zip(fields) {
+                            let field_ty = field.type_of(args, self.ctxt);
+                            self.assert(
+                                field_ty == operand.type_of(self.ctxt, &self.body.registers),
+                                || {
+                                    format!(
+                                        "Field of '{}' should have type '{}'",
+                                        field.name, field_ty
+                                    )
+                                },
+                                loc,
+                            );
+                        }
+                    }
+                    super::AggregateKind::Variant(id, index, args) => {
+                        let type_def = self.ctxt.type_def(*id);
+                        let case_def = type_def.case(*index);
+
+                        let field = case_def.field;
+                        let field_ty = field.map(|field| field.type_of(args, self.ctxt));
+                        if let Some(field_ty) = field_ty {
+                            let field = self.assert_with_some(
+                                fields.as_slice(),
+                                |fields| {
+                                    if let [field] = fields {
+                                        Some(field)
+                                    } else {
+                                        None
+                                    }
+                                },
+                                || {
+                                    format!(
+                                        "Variants can only have at most 1 inner field not {}",
+                                        fields.len()
+                                    )
+                                },
+                                loc,
+                            );
+                            let operand_ty = field.type_of(self.ctxt, &self.body.registers);
+                            self.assert(
+                                field_ty == operand_ty,
+                                || format!("{field_ty} and {operand_ty} should be same types"),
+                                loc,
+                            );
+                        } else {
+                            self.assert(
+                                fields.is_empty(),
+                                || format!("{} should have no fields", case_def.name),
+                                loc,
+                            );
+                        }
+                    }
+                    super::AggregateKind::Tuple => (),
+                }
+            }
         }
     }
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {

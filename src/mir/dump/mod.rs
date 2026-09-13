@@ -305,6 +305,37 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_with_coma_sep(args, |this, arg| this.write_value(arg))?;
                 write!(self.output, ")")
             }
+            Operation::Aggregate(kind, fields) => {
+                match kind {
+                    AggregateKind::Tuple => (),
+                    AggregateKind::Variant(id, index, args) => {
+                        let name = self.ctxt.type_def(*id).case(*index).name;
+                        write!(self.output, "{}{}", name, args)?;
+                    }
+                    AggregateKind::NamedRecord(id, args) => {
+                        let name = self.ctxt.type_def(*id).name;
+                        write!(self.output, "{}{}", name, args)?;
+                    }
+                };
+                let (open_bracket, close_bracket) = match kind {
+                    AggregateKind::Variant(..) | AggregateKind::Tuple => ('(', ')'),
+                    _ => ('{', '}'),
+                };
+                let ctxt = self.ctxt;
+                let write_field_name = move |this: &mut MirDump<'_>, i: FieldId| match kind {
+                    AggregateKind::Variant(_, _, _) => write!(this.output, "{} = ", i.into_usize()),
+                    AggregateKind::NamedRecord(id, ..) => {
+                        write!(this.output, "{} = ", ctxt.type_def(*id).fields()[i].name)
+                    }
+                    _ => Ok(()),
+                };
+                write!(self.output, "{open_bracket}")?;
+                self.write_with_coma_sep(fields.iter_enumerated(), |this, (i, operand)| {
+                    write_field_name(this, i)?;
+                    this.write_value(operand)
+                })?;
+                write!(self.output, "{}", close_bracket)
+            }
         }
     }
     fn write_block(&mut self, id: BasicBlockId, block: &BasicBlock<'ctxt>) -> std::io::Result<()> {

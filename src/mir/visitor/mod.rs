@@ -178,6 +178,11 @@ pub trait Visit<'ctxt> {
                     self.visit_value(loc, arg);
                 }
             }
+            Operation::Aggregate(_, fields) => {
+                for field in fields {
+                    self.visit_value(loc, field);
+                }
+            }
         }
     }
     fn visit_operation(&mut self, loc: Location, operation: &Operation<'ctxt>) {
@@ -222,6 +227,11 @@ pub trait MutVisit<'ctxt> {
                 self.visit_value(loc, callee);
                 for arg in args {
                     self.visit_value(loc, arg);
+                }
+            }
+            Operation::Aggregate(_, fields) => {
+                for field in fields {
+                    self.visit_value(loc, field);
                 }
             }
         }

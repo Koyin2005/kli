@@ -405,8 +405,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             &ExprKind::Int(value) => Value::Int(value.try_into().expect("should be in range")),
             ExprKind::Char(_) => todo!(),
             ExprKind::Unit => Value::Unit,
-            ExprKind::Err => todo!(),
-            ExprKind::Panic | ExprKind::NeverToAny(_) | ExprKind::Return(_) => {
+            ExprKind::Panic | ExprKind::NeverToAny(_) | ExprKind::Return(_) | ExprKind::Err => {
                 self.expr_stmt(expr);
                 Value::Unknown(expr.ty)
             }
@@ -464,7 +463,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                     mir::Operation::ExtractField(Value::Reg(tuple), FieldId::new(0)),
                 ))
             }
-            ExprKind::Logic(logical_op, expr, expr1) => todo!(),
+            ExprKind::Logic(logical_op, left, right) => todo!(),
             ExprKind::For {
                 pattern,
                 iterator,
@@ -474,7 +473,14 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             ExprKind::Case(expr, case_arms) => todo!(),
             ExprKind::Assign(place, expr) => todo!(),
             ExprKind::Lambda(lambda) => todo!(),
-            ExprKind::Tuple(exprs) => todo!(),
+            ExprKind::Tuple(fields) => {
+                let fields = fields.iter().map(|field| self.expr_value(field)).collect();
+                let tuple = self.push_operation(
+                    expr.loc,
+                    mir::Operation::Aggregate(AggregateKind::Tuple, fields),
+                );
+                Value::Reg(tuple)
+            }
             ExprKind::Array(exprs) => todo!(),
             ExprKind::NamedRecord(def_id, generic_args, record_field_inits) => todo!(),
             ExprKind::While(expr, expr1) => todo!(),
