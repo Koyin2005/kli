@@ -49,7 +49,8 @@ pub trait Visit<'ctxt> {
             TerminatorKind::Goto(_) | TerminatorKind::Panic | TerminatorKind::Unreachable => (),
             TerminatorKind::Switch(operand, _)
             | TerminatorKind::Assert(operand, ..)
-            | TerminatorKind::Return(operand) => self.visit_operand(loc, operand),
+            | TerminatorKind::OldReturn(operand) => self.visit_operand(loc, operand),
+            TerminatorKind::Return(value) => self.visit_value(loc, value),
         }
     }
     fn super_visit_block(&mut self, id: BasicBlockId, info: &BasicBlock<'ctxt>) {
@@ -225,7 +226,8 @@ pub trait MutVisit<'ctxt> {
             TerminatorKind::Goto(_) | TerminatorKind::Panic | TerminatorKind::Unreachable => (),
             TerminatorKind::Switch(operand, _)
             | TerminatorKind::Assert(operand, ..)
-            | TerminatorKind::Return(operand) => self.visit_operand(loc, operand),
+            | TerminatorKind::OldReturn(operand) => self.visit_operand(loc, operand),
+            TerminatorKind::Return(value) => self.visit_value(loc, value),
         }
     }
     fn super_visit_block(&mut self, id: BasicBlockId, info: &mut BasicBlock<'ctxt>) {

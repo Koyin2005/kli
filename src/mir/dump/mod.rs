@@ -301,9 +301,13 @@ impl<'ctxt> MirDump<'ctxt> {
                 TerminatorKind::Unreachable => {
                     write!(self.output, "unreachable")?;
                 }
-                TerminatorKind::Return(value) => {
+                TerminatorKind::OldReturn(value) => {
                     write!(self.output, "return ")?;
                     self.write_operand(value)?;
+                }
+                TerminatorKind::Return(value) => {
+                    write!(self.output,"return ")?;
+                    self.write_value(value)?;
                 }
                 TerminatorKind::Switch(operand, targets) => {
                     write!(self.output, "switch ")?;

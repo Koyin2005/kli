@@ -194,8 +194,8 @@ impl<'ctxt> MutVisit<'ctxt> for Updater {
         self.visit_terminator(mir::Location::terminator(id), terminator);
         let src_info = terminator.src_info;
         let value = match &mut terminator.kind {
-            mir::TerminatorKind::Return(_) => {
-                let mir::TerminatorKind::Return(value) = std::mem::replace(
+            mir::TerminatorKind::OldReturn(_) => {
+                let mir::TerminatorKind::OldReturn(value) = std::mem::replace(
                     &mut terminator.kind,
                     mir::TerminatorKind::Goto(self.return_target),
                 ) else {
@@ -237,9 +237,10 @@ fn inline_budget_used_by(body: &Body<'_>) -> u32 {
                             (2 + switch_targets.targets.iter().len()) as u32 * INSTR_BUDGET
                         }
                         TerminatorKind::Unreachable => INSTR_BUDGET,
-                        TerminatorKind::Return(_) => 0,
+                        TerminatorKind::OldReturn(_) | TerminatorKind::Return(_) => 0,
                         TerminatorKind::Goto(_) => INSTR_BUDGET,
                         TerminatorKind::Panic => 2 * INSTR_BUDGET,
+
                     }
                 } as usize
         })

@@ -20,7 +20,7 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
             }
             ExprKind::Return(value) => {
                 let return_value = self.operand(value);
-                self.finish_block(expr.loc, TerminatorKind::Return(return_value));
+                self.finish_block(expr.loc, TerminatorKind::OldReturn(return_value));
                 self.switch_to_new_block();
             }
             ExprKind::Block(block_body, ..) => {
