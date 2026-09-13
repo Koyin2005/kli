@@ -3,8 +3,9 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         AssertKind, BasicBlock, BasicBlockId, BinaryOp, Body, BodySource, Context, Local,
-        LocalInfo, LocalKind, Locals, Operand, Place, Rvalue, Stmt, StmtKind, SwitchTarget,
-        SwitchTargets, Terminator, TerminatorKind, basic_blocks::BasicBlocks,
+        LocalInfo, LocalKind, Locals, Operand, Operation, Place, Reg, RegInfo, Rvalue, Stmt,
+        StmtKind, SwitchTarget, SwitchTargets, Terminator, TerminatorKind,
+        basic_blocks::BasicBlocks,
     },
     resolved_ast::Var,
     src_loc::SrcLoc,
@@ -147,6 +148,13 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         self.body.block_info.blocks_mut()[self.current_block]
             .stmts
             .push(Stmt { loc, kind });
+    }
+    pub(super) fn push_operation(&mut self, loc: SrcLoc, operation: Operation) -> Reg {
+        let reg = self.body.registers.push(RegInfo {
+            ty: operation.result_type(self.ctxt),
+        });
+        self.push_stmt(loc, StmtKind::Assign(reg, operation));
+        reg
     }
     pub(super) fn assign_to_temp(
         &mut self,

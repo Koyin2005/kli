@@ -57,9 +57,7 @@ pub fn instantiate_body<'ctxt>(
                     }
                     mir::AggregateKind::Tuple => (),
                 },
-                mir::Rvalue::AllocArray(ty, _)  => {
-                    *ty = self.instantiate(*ty)
-                }
+                mir::Rvalue::AllocArray(ty, _) => *ty = self.instantiate(*ty),
                 mir::Rvalue::ReadLine
                 | mir::Rvalue::Use(..)
                 | mir::Rvalue::Call(..)
