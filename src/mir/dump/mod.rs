@@ -252,6 +252,9 @@ impl<'ctxt> MirDump<'ctxt> {
             Value::Unit => {
                 write!(self.output, "()")
             }
+            Value::Bool(value) => {
+                write!(self.output, "{}", value)
+            }
             Value::Int(value) => {
                 write!(self.output, "{}", value)
             }

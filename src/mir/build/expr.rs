@@ -401,7 +401,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     }
     pub(super) fn expr_value(&mut self, expr: &Expr<'ctxt>) -> Value<'ctxt> {
         match &expr.kind {
-            ExprKind::Unsafe(expr) => todo!(),
+            ExprKind::Unsafe(expr) => self.expr_value(expr),
             ExprKind::Block(block) => {
                 for stmt in block.stmts.iter() {
                     self.stmt(stmt);
@@ -409,7 +409,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 self.expr_value(&block.expr)
             }
             ExprKind::String(_) => todo!(),
-            ExprKind::Bool(_) => todo!(),
+            &ExprKind::Bool(value) => Value::Bool(value),
             &ExprKind::Int(value) => Value::Int(value.try_into().expect("should be in range")),
             ExprKind::Char(_) => todo!(),
             ExprKind::Unit => Value::Unit,
