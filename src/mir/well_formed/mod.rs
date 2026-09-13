@@ -289,6 +289,25 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     self.body.src_info(loc),
                 );
             }
+            Operation::Call(callee, args) => {
+                let loc = self.body.src_info(loc);
+                let callee = callee.type_of(self.ctxt, &self.body.registers);
+                let FunctionSig { params, .. } = self.assert_with_some(
+                    &callee,
+                    |ty| ty.as_function(),
+                    || "Can only call function types",
+                    loc,
+                );
+                let operand_tys = args
+                    .iter()
+                    .map(|operand| operand.type_of(self.ctxt, &self.body.registers))
+                    .collect::<Vec<_>>();
+                self.assert(
+                    operand_tys == *params,
+                    || format!("Expected '{:?}' but got '{:?}'", params, operand_tys),
+                    loc,
+                );
+            }
         }
     }
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {

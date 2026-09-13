@@ -535,6 +535,7 @@ pub enum Operation<'ctxt> {
     Cmp(Comparison, Value<'ctxt>, Value<'ctxt>),
     Arith(ArithOp, Value<'ctxt>, Value<'ctxt>),
     ExtractField(Value<'ctxt>, FieldId),
+    Call(Value<'ctxt>, Vec<Value<'ctxt>>),
 }
 impl<'ctxt> Operation<'ctxt> {
     pub fn result_type(&self, ctxt: CtxtRef<'ctxt>, regs: &Regs<'ctxt>) -> Type<'ctxt> {
@@ -552,6 +553,12 @@ impl<'ctxt> Operation<'ctxt> {
                     unreachable!("Should be a type with fields")
                 };
                 ty
+            }
+            Operation::Call(value, _) => {
+                let Some(sig) = value.type_of(ctxt, regs).as_function() else {
+                    unreachable!("Should be a function type")
+                };
+                sig.return_type
             }
         }
     }

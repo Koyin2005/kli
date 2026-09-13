@@ -290,6 +290,13 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_value(value)?;
                 write!(self.output, ", {}", field.into_usize())
             }
+            Operation::Call(callee, args) => {
+                write!(self.output, "call ")?;
+                self.write_value(callee)?;
+                write!(self.output, "(")?;
+                self.write_with_coma_sep(args, |this, arg| this.write_value(arg))?;
+                write!(self.output, ")")
+            }
         }
     }
     fn write_block(&mut self, id: BasicBlockId, block: &BasicBlock<'ctxt>) -> std::io::Result<()> {
