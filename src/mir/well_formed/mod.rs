@@ -251,7 +251,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     }
     fn visit_terminator(&mut self, loc: Location, terminator: &super::Terminator<'ctxt>) {
         self.super_visit_terminator(loc, terminator);
-        if let TerminatorKind::Assert(operand, ..) = &terminator.kind {
+        if let TerminatorKind::OldAssert(operand, ..) = &terminator.kind {
             let condition_ty = operand.type_of(self.ctxt, &self.body.locals, self.body.return_type);
             self.assert(
                 condition_ty.is_bool(),

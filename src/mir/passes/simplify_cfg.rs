@@ -35,7 +35,7 @@ impl<'ctxt> BodyPass<'ctxt> for SimplifyCfg {
                         modified = true;
                         continue;
                     }
-                    TerminatorKind::Assert(Operand::Constant(ref constant), ref kind, target) => {
+                    TerminatorKind::OldAssert(Operand::Constant(ref constant), ref kind, target) => {
                         if body.block_info.predecessors()[target].len() != 1 {
                             continue;
                         }

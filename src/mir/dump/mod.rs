@@ -344,7 +344,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 }
                 TerminatorKind::Goto(block) => write!(self.output, "goto -> bb{}", block.0)?,
                 TerminatorKind::Panic => write!(self.output, "panic")?,
-                TerminatorKind::Assert(operand, kind, block) => {
+                TerminatorKind::OldAssert(operand, kind, block) => {
                     write!(
                         self.output,
                         "assert({}",

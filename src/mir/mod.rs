@@ -424,7 +424,7 @@ pub struct Terminator<'ctxt> {
 impl<'ctxt> Terminator<'ctxt> {
     pub fn successors(&self) -> Successors<'_> {
         Successors(match self.kind {
-            TerminatorKind::Assert(.., block) | TerminatorKind::Goto(block) => {
+            TerminatorKind::OldAssert(.., block) | TerminatorKind::Goto(block) => {
                 SuccessorsIter::Single(Some(block))
             }
             TerminatorKind::OldReturn(_)
@@ -438,7 +438,7 @@ impl<'ctxt> Terminator<'ctxt> {
     }
     pub fn successors_mut(&mut self) -> impl Iterator<Item = &mut BasicBlockId> {
         let (single, multiple) = match &mut self.kind {
-            TerminatorKind::Goto(block) | TerminatorKind::Assert(.., block) => (Some(block), None),
+            TerminatorKind::Goto(block) | TerminatorKind::OldAssert(.., block) => (Some(block), None),
             TerminatorKind::Switch(_, switch_targets) => (
                 None,
                 Some(
@@ -458,7 +458,7 @@ impl<'ctxt> Terminator<'ctxt> {
 }
 #[derive(Clone, Debug)]
 pub enum TerminatorKind<'ctxt> {
-    Assert(Operand<'ctxt>, AssertKind, BasicBlockId),
+    OldAssert(Operand<'ctxt>, AssertKind, BasicBlockId),
     Switch(Operand<'ctxt>, SwitchTargets),
     Unreachable,
     OldReturn(Operand<'ctxt>),
