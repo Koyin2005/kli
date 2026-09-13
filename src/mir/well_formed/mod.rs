@@ -294,6 +294,14 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
+            StmtKind::PanicIf(value) => {
+                let ty = value.type_of(self.ctxt, &self.body.registers);
+                self.assert(
+                    ty.is_bool(),
+                    || format!("PanicIf requires a bool '{}'",ty),
+                    stmt.loc,
+                );
+            }
             StmtKind::Assign(dst, operation) => {
                 let lhs_ty = self.body.registers[*dst].ty;
                 let rhs_ty = operation.result_type(self.ctxt, &self.body.registers);

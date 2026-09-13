@@ -311,6 +311,11 @@ impl<'ctxt> MirDump<'ctxt> {
                     writeln!(self.output, ")")?;
                 }
                 StmtKind::Noop => writeln!(self.output, "noop")?,
+                StmtKind::PanicIf(value) => {
+                    write!(self.output,"panic_if ")?;
+                    self.write_value(value)?;
+                    writeln!(self.output);
+                },
                 StmtKind::Store(place, value) => {
                     self.write_place(place)?;
                     write!(self.output, " = ")?;

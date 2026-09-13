@@ -555,6 +555,7 @@ impl Operation {
 #[derive(Clone, Debug)]
 pub enum StmtKind<'ctxt> {
     Noop,
+    PanicIf(Value),
     Assign(Reg, Operation),
     Store(Place, Box<Rvalue<'ctxt>>),
     Print {
