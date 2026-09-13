@@ -501,9 +501,18 @@ pub struct Stmt<'ctxt> {
     pub loc: SrcLoc,
     pub kind: StmtKind<'ctxt>,
 }
+
+#[derive(Clone, Debug)]
+pub enum Operation {}
+impl Operation {
+    pub fn result_type<'ctxt>(&self) -> Type<'ctxt> {
+        match *self {}
+    }
+}
 #[derive(Clone, Debug)]
 pub enum StmtKind<'ctxt> {
     Noop,
+    Assign(Reg, Operation),
     Store(Place, Box<Rvalue<'ctxt>>),
     Print {
         value: Operand<'ctxt>,
@@ -569,10 +578,10 @@ pub struct LocalInfo<'ctxt> {
 
 define_id!(Reg);
 #[derive(Clone)]
-pub struct RegInfo<'ctxt>{
-    pub ty : Type<'ctxt>
+pub struct RegInfo<'ctxt> {
+    pub ty: Type<'ctxt>,
 }
-pub type Regs<'ctxt> = IndexVec<Reg,RegInfo<'ctxt>>;
+pub type Regs<'ctxt> = IndexVec<Reg, RegInfo<'ctxt>>;
 
 #[derive(Clone)]
 pub struct Body<'ctxt> {
@@ -581,7 +590,7 @@ pub struct Body<'ctxt> {
     param_count: u32,
     pub locals: Locals<'ctxt>,
     pub block_info: BasicBlocks<'ctxt>,
-    pub registers : Regs<'ctxt>
+    pub registers: Regs<'ctxt>,
 }
 impl<'ctxt> Body<'ctxt> {
     pub fn param_types(&self) -> impl Iterator<Item = Type<'ctxt>> {

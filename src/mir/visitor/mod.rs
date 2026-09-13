@@ -1,8 +1,8 @@
 use crate::{
     CtxtRef,
     mir::{
-        BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Place, PlaceBase,
-        PlaceProjection, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
+        BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Operation, Place,
+        PlaceBase, PlaceProjection, Reg, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind,
     },
 };
 pub enum PlaceCtxt {
@@ -18,6 +18,11 @@ pub trait Visit<'ctxt> {
         self.visit_place(PlaceCtxt::Write, loc, place);
         self.visit_rvalue(loc, rvalue);
     }
+    fn visit_reg(&mut self, loc: Location, reg: Reg, ctxt: PlaceCtxt) {
+        _ = loc;
+        _ = reg;
+        _ = ctxt;
+    }
     fn super_visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         match &stmt.kind {
             StmtKind::Noop => (),
@@ -31,6 +36,10 @@ pub trait Visit<'ctxt> {
                 self.visit_operand(loc, dst);
                 self.visit_operand(loc, src);
                 self.visit_operand(loc, count);
+            }
+            StmtKind::Assign(dst, operation) => {
+                self.visit_reg(loc, *dst, PlaceCtxt::Write);
+                self.visit_operation(operation);
             }
         }
     }
@@ -144,6 +153,9 @@ pub trait Visit<'ctxt> {
     fn visit_block(&mut self, id: BasicBlockId, block: &BasicBlock<'ctxt>) {
         self.super_visit_block(id, block)
     }
+    fn visit_operation(&mut self, operation: &Operation) {
+        _ = operation;
+    }
     fn visit_body(&mut self, body: &Body<'ctxt>) {
         for (id, block) in body.block_info.blocks().iter_enumerated() {
             self.visit_block(id, block);
@@ -156,6 +168,14 @@ pub trait MutVisit<'ctxt> {
         self.visit_place(loc, place);
         self.visit_rvalue(loc, rvalue);
     }
+    fn visit_operation(&mut self, loc: Location, operation: &mut Operation) {
+        _ = loc;
+        _ = operation;
+    }
+    fn visit_reg(&mut self, loc: Location, reg: &mut Reg) {
+        _ = loc;
+        _ = reg;
+    }
     fn super_visit_stmt(&mut self, loc: Location, stmt: &mut Stmt<'ctxt>) {
         match &mut stmt.kind {
             StmtKind::Noop => (),
@@ -166,6 +186,10 @@ pub trait MutVisit<'ctxt> {
             }
             StmtKind::Store(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
+            }
+            StmtKind::Assign(dst, operation) => {
+                self.visit_reg(loc, dst);
+                self.visit_operation(loc, operation);
             }
             StmtKind::Print {
                 value: operand,

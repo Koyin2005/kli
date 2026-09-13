@@ -3,7 +3,8 @@ use crate::{
     collect::{CtxtRef, TypeDefKind},
     mir::{
         AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, CastKind,
-        ConstValue, LocalKind, Operand, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
+        ConstValue, LocalKind, Operand, Operation, Place, PlaceProjection, Rvalue, StmtKind,
+        TerminatorKind,
     },
     typed_ast::FieldId,
     types,
@@ -254,15 +255,22 @@ impl<'ctxt> MirDump<'ctxt> {
             }
         }
     }
+    fn write_operation(&mut self, operation: &Operation) -> std::io::Result<()> {
+        match *operation {}
+    }
     fn write_block(&mut self, id: BasicBlockId, block: &BasicBlock) -> std::io::Result<()> {
         writeln!(self.output, " bb{}", id.into_usize())?;
         for stmt in &block.stmts {
             write!(self.output, "  ")?;
             match &stmt.kind {
+                StmtKind::Assign(reg, operation) => {
+                    write!(self.output, "%{} = ", reg.0)?;
+                    self.write_operation(operation)?;
+                    writeln!(self.output)?;
+                }
                 StmtKind::Print { value, err } => {
                     write!(self.output, "{}print(", if *err { "e" } else { "" })?;
                     self.write_operand(value)?;
-
                     writeln!(self.output, ")")?;
                 }
                 StmtKind::Copy { dst, src, count } => {

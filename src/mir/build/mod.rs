@@ -42,7 +42,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 locals,
                 block_info: BasicBlocks::new(IndexVec::from_value(1, BasicBlock::default())),
                 return_type,
-                registers: IndexVec::new()
+                registers: IndexVec::new(),
             },
             current_block: BasicBlockId::ENTRY,
             ctxt,

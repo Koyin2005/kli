@@ -213,10 +213,7 @@ impl<'ctxt> MutVisit<'ctxt> for Updater {
         if let Some(value) = value {
             block.stmts.push(mir::Stmt {
                 loc: src_info,
-                kind: StmtKind::Store(
-                    self.return_place.clone(),
-                    Box::new(mir::Rvalue::Use(value)),
-                ),
+                kind: StmtKind::Store(self.return_place.clone(), Box::new(mir::Rvalue::Use(value))),
             });
         }
     }
