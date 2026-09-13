@@ -298,7 +298,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 let ty = value.type_of(self.ctxt, &self.body.registers);
                 self.assert(
                     ty.is_bool(),
-                    || format!("PanicIf requires a bool '{}'",ty),
+                    || format!("PanicIf requires a bool '{}'", ty),
                     stmt.loc,
                 );
             }

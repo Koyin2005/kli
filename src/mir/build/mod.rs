@@ -59,7 +59,10 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         assert_kind: AssertKind,
     ) {
         let new_block = self.new_block();
-        self.finish_block(loc, TerminatorKind::OldAssert(operand, assert_kind, new_block));
+        self.finish_block(
+            loc,
+            TerminatorKind::OldAssert(operand, assert_kind, new_block),
+        );
         self.switch_to_block(new_block);
     }
     pub(super) fn new_temp(&mut self, ty: Type<'ctxt>) -> Local {

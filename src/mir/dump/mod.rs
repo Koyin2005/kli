@@ -1,7 +1,13 @@
 use crate::{
-    Symbol, collect::{CtxtRef, TypeDefKind}, mir::{
-        self, AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstValue, LocalKind, Operand, Operation, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind, Value,
-    }, typed_ast::FieldId, types,
+    Symbol,
+    collect::{CtxtRef, TypeDefKind},
+    mir::{
+        self, AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstValue,
+        LocalKind, Operand, Operation, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
+        Value,
+    },
+    typed_ast::FieldId,
+    types,
 };
 
 pub struct MirDump<'ctxt> {
@@ -254,7 +260,7 @@ impl<'ctxt> MirDump<'ctxt> {
     fn write_operation(&mut self, operation: &Operation) -> std::io::Result<()> {
         match operation {
             Operation::Cmp(cmp, left, right) => {
-                let name = match cmp{
+                let name = match cmp {
                     mir::Comparison::Equals => "eq",
                     mir::Comparison::Greater => "gt",
                     mir::Comparison::Lesser => "lt",
@@ -266,7 +272,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 write!(self.output, ")")
             }
             Operation::Arith(op, left, right) => {
-                let name = match op{
+                let name = match op {
                     mir::ArithOp::Add => "add",
                     mir::ArithOp::AddOverflow => "add_overflow",
                     mir::ArithOp::Sub => "sub",
@@ -312,10 +318,10 @@ impl<'ctxt> MirDump<'ctxt> {
                 }
                 StmtKind::Noop => writeln!(self.output, "noop")?,
                 StmtKind::PanicIf(value) => {
-                    write!(self.output,"panic_if ")?;
+                    write!(self.output, "panic_if ")?;
                     self.write_value(value)?;
-                    writeln!(self.output);
-                },
+                    writeln!(self.output)?;
+                }
                 StmtKind::Store(place, value) => {
                     self.write_place(place)?;
                     write!(self.output, " = ")?;

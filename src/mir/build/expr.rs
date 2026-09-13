@@ -438,6 +438,12 @@ impl<'ctxt> Builder<'_, 'ctxt> {
 
                 let tuple =
                     self.push_operation(expr.loc, mir::Operation::Arith(overflow_op, left, right));
+
+                let overflowed = self.push_operation(
+                    expr.loc,
+                    mir::Operation::ExtractField(Value::Reg(tuple), FieldId::new(1)),
+                );
+                self.push_stmt(expr.loc, mir::StmtKind::PanicIf(Value::Reg(overflowed)));
                 Value::Reg(self.push_operation(
                     expr.loc,
                     mir::Operation::ExtractField(Value::Reg(tuple), FieldId::new(0)),

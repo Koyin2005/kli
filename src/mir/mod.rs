@@ -438,7 +438,9 @@ impl<'ctxt> Terminator<'ctxt> {
     }
     pub fn successors_mut(&mut self) -> impl Iterator<Item = &mut BasicBlockId> {
         let (single, multiple) = match &mut self.kind {
-            TerminatorKind::Goto(block) | TerminatorKind::OldAssert(.., block) => (Some(block), None),
+            TerminatorKind::Goto(block) | TerminatorKind::OldAssert(.., block) => {
+                (Some(block), None)
+            }
             TerminatorKind::Switch(_, switch_targets) => (
                 None,
                 Some(
