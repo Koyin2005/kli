@@ -396,7 +396,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             ExprKind::Bool(_) => todo!(),
             ExprKind::Int(_) => todo!(),
             ExprKind::Char(_) => todo!(),
-            ExprKind::Unit => todo!(),
+            ExprKind::Unit => Value::Unit,
             ExprKind::Err => todo!(),
             ExprKind::Panic => todo!(),
             ExprKind::NeverToAny(expr) => todo!(),
