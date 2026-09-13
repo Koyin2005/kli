@@ -385,7 +385,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     pub(super) fn expr_value(&mut self, expr: &Expr<'ctxt>) -> Value<'ctxt> {
         match &expr.kind {
             ExprKind::Unsafe(expr) => todo!(),
-            ExprKind::Return(expr) => todo!(),
             ExprKind::Block(block) => {
                 for stmt in block.stmts.iter() {
                     self.stmt(stmt);
@@ -398,8 +397,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             ExprKind::Char(_) => todo!(),
             ExprKind::Unit => Value::Unit,
             ExprKind::Err => todo!(),
-            ExprKind::Panic => todo!(),
-            ExprKind::NeverToAny(expr) => {
+            ExprKind::Panic | ExprKind::NeverToAny(_) | ExprKind::Return(_) => {
                 self.expr_stmt(expr);
                 Value::Unknown(expr.ty)
             }
