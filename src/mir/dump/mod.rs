@@ -258,6 +258,9 @@ impl<'ctxt> MirDump<'ctxt> {
             Value::Unknown(ty) => {
                 write!(self.output, "unknown[{}]", ty)
             }
+            Value::Function(id, args) => {
+                write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args)
+            }
         }
     }
     fn write_operation(&mut self, operation: &Operation<'ctxt>) -> std::io::Result<()> {
