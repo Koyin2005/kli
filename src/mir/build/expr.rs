@@ -126,17 +126,13 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         self.expr_into_dest(Place::local(temp), expr);
         temp
     }
-    fn assign_to_pattern(&mut self, pattern: &Pattern<'ctxt>, value_expr: &Expr<'ctxt>) {
-        let value = self.expr_value(value_expr);
+    fn assign_to_pattern(&mut self, loc: SrcLoc, pattern: &Pattern<'ctxt>, value: Value<'ctxt>) {
         match pattern.kind {
             typed_ast::PatternKind::Binding(mutable, var, ty) => {
                 if matches!(mutable, Mutable::Mutable) {
                     let local = self.new_var(var, ty);
                     self.declare_var(var.1, VarKind::Local(local));
-                    self.push_stmt(
-                        value_expr.loc,
-                        mir::StmtKind::Store(Place::local(local), value),
-                    );
+                    self.push_stmt(loc, mir::StmtKind::Store(Place::local(local), value));
                 } else {
                     self.declare_var(var.1, VarKind::Value(value));
                 }
@@ -147,9 +143,19 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             | typed_ast::PatternKind::Int(_)
             | typed_ast::PatternKind::Char(_) => (),
             typed_ast::PatternKind::Case(def_id, ref generic_args, case_id, ref pattern) => {
-                todo!("Case")
+                if let Some(pattern) = pattern {
+                    todo!("Match pattern")
+                }
             }
-            typed_ast::PatternKind::Record(ref pattern_fields) => todo!(),
+            typed_ast::PatternKind::Record(ref pattern_fields) => {
+                for field in pattern_fields {
+                    let value = Value::Reg(self.push_operation(
+                        loc,
+                        mir::Operation::ExtractField(value.clone(), field.index),
+                    ));
+                    self.assign_to_pattern(loc, &field.pattern, value);
+                }
+            }
         }
     }
     pub(super) fn assign_place_to_pattern(&mut self, pattern: &Pattern<'ctxt>, place: Place) {
@@ -189,7 +195,8 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 self.expr_stmt(expr);
             }
             typed_ast::StmtKind::Let(binding) => {
-                self.assign_to_pattern(&binding.pattern, &binding.value);
+                let value = self.expr_value(&binding.value);
+                self.assign_to_pattern(binding.value.loc, &binding.pattern, value);
             }
         }
     }
