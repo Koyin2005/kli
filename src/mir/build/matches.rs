@@ -305,12 +305,20 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         self.build_tree(tests, &mut end_blocks);
         self.finish_block(expr.loc, TerminatorKind::Unreachable);
 
+        let results = end_blocks
+            .into_iter()
+            .map(|(loc, i, block)| {
+                self.switch_to_block(block);
+                self.assign_to_pattern(arms[i].pattern.loc, &arms[i].pattern, value.clone());
+                let result = self.expr_value(&arms[i].body);
+                (loc, result, self.current_block)
+            })
+            .collect::<Vec<_>>();
+
         let (end_block, [result]) = self.new_block_with_args([result_ty]);
-        for (loc, i, block) in end_blocks.into_iter() {
+        for (loc, value, block) in results {
             self.switch_to_block(block);
-            self.assign_to_pattern(arms[i].pattern.loc, &arms[i].pattern, value.clone());
-            let result = self.expr_value(&arms[i].body);
-            self.finish_block_with_goto_args(loc, end_block, [result]);
+            self.finish_block_with_goto_args(loc, end_block, [value]);
         }
         self.switch_to_block(end_block);
         Value::Reg(result)
