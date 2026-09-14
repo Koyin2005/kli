@@ -454,7 +454,15 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                     IntegerBuiltin::IntMaxValue => todo!(),
                     IntegerBuiltin::ShiftLeft => todo!(),
                     IntegerBuiltin::ShiftRight => todo!(),
-                    IntegerBuiltin::WrappingAdd => todo!(),
+                    IntegerBuiltin::WrappingAdd => {
+                        let [left, right] = exprs.as_array().expect("should have 2 elements");
+                        let left = self.expr_value(left);
+                        let right = self.expr_value(right);
+                        Value::Reg(self.push_operation(
+                            expr.loc,
+                            mir::Operation::Arith(mir::ArithOp::Add, left, right),
+                        ))
+                    }
                     IntegerBuiltin::OverflowingAdd => todo!(),
                     IntegerBuiltin::WrappingSub => todo!(),
                     IntegerBuiltin::OverflowingSub => todo!(),
