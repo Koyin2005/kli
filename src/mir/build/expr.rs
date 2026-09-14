@@ -122,37 +122,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             }
         }
     }
-    pub(super) fn assign_place_to_pattern(&mut self, pattern: &Pattern<'ctxt>, place: Place) {
-        match pattern.kind {
-            typed_ast::PatternKind::Binding(_, var, ty) => {
-                let var_place = Place::local(self.new_var(var, ty));
-                self.assign(pattern.loc, var_place, Rvalue::Use(Operand::Load(place)));
-            }
-            typed_ast::PatternKind::Bool(_)
-            | typed_ast::PatternKind::Int(_)
-            | typed_ast::PatternKind::Unit
-            | typed_ast::PatternKind::Char(_) => (),
-            typed_ast::PatternKind::Record(ref fields) => {
-                for field in fields {
-                    self.assign_place_to_pattern(
-                        &field.pattern,
-                        place.clone().with_field(field.index),
-                    );
-                }
-            }
-            typed_ast::PatternKind::Err => unreachable!(),
-            typed_ast::PatternKind::Case(id, _, index, ref inner) => {
-                if let Some(inner) = inner {
-                    self.assign_place_to_pattern(
-                        inner,
-                        place
-                            .with_case_downcast(index, self.ctxt.expect_ident(id).symbol)
-                            .with_field(FieldId::new(0)),
-                    );
-                }
-            }
-        }
-    }
     pub fn stmt(&mut self, stmt: &typed_ast::Stmt<'ctxt>) {
         match &stmt.kind {
             typed_ast::StmtKind::Expr(expr) => {
@@ -199,8 +168,8 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                     self.push_operation(place.loc, mir::Operation::ExtractElement(base, index)),
                 )
             }
-            PlaceKind::Upvar(def_id, var) => todo!(),
-            PlaceKind::Deref(ref expr) => todo!(),
+            PlaceKind::Upvar(..) => todo!("handle upvars"),
+            PlaceKind::Deref(..) => todo!("loading from boxes"),
             PlaceKind::Invalid => unreachable!("Cannot load from unknown place"),
         }
     }
@@ -389,7 +358,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 Value::Reg(result)
             }
             ExprKind::Case(scrutinee, case_arms) => self.build_match(expr.ty, scrutinee, case_arms),
-            ExprKind::Lambda(lambda) => todo!(),
+            ExprKind::Lambda(lambda) => Self::lambda_code_constant(self.ctxt, lambda),
             ExprKind::Tuple(fields) => {
                 let fields = fields.iter().map(|field| self.expr_value(field)).collect();
                 let tuple = self.push_operation(

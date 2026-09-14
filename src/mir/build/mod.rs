@@ -138,18 +138,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             kind: terminator,
         });
     }
-    pub(super) fn finish_block_with_old_switch_targets(
-        &mut self,
-        loc: SrcLoc,
-        operand: Operand<'ctxt>,
-        targets: Vec<SwitchTarget>,
-        otherwise: BasicBlockId,
-    ) {
-        self.finish_block(
-            loc,
-            TerminatorKind::OldSwitch(operand, SwitchTargets { targets, otherwise }),
-        );
-    }
     pub(super) fn finish_block_with_switch(
         &mut self,
         loc: SrcLoc,

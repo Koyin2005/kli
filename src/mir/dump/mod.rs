@@ -264,6 +264,9 @@ impl<'ctxt> MirDump<'ctxt> {
             Value::Function(id, args) => {
                 write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args)
             }
+            Value::Lambda(_, id, args) => {
+                write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args)
+            }
             Value::Char(char) => {
                 write!(self.output, "{}", char)
             }

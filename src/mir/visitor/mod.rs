@@ -169,7 +169,8 @@ pub trait Visit<'ctxt> {
             | Value::Function(..)
             | Value::Bool(_)
             | Value::Char(_)
-            | Value::String(_) => (),
+            | Value::String(_)
+            | Value::Lambda(..) => (),
         }
     }
     fn super_visit_operation(&mut self, loc: Location, operation: &Operation<'ctxt>) {
@@ -231,7 +232,8 @@ pub trait MutVisit<'ctxt> {
             | Value::Function(..)
             | Value::Bool(_)
             | Value::Char(_)
-            | Value::String(_) => (),
+            | Value::String(_)
+            | Value::Lambda(..) => (),
         }
     }
     fn visit_operation(&mut self, loc: Location, operation: &mut Operation<'ctxt>) {

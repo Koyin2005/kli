@@ -492,6 +492,7 @@ pub enum Value<'ctxt> {
     Char(char),
     String(Symbol),
     Function(DefId, GenericArgs<'ctxt>),
+    Lambda(Type<'ctxt>, DefId, GenericArgs<'ctxt>),
     Unit,
     Unknown(Type<'ctxt>),
 }
@@ -506,6 +507,7 @@ impl<'ctxt> Value<'ctxt> {
             Self::String(_) => Type::new_string(ctxt),
             Self::Unknown(ty) => *ty,
             Self::Function(id, args) => ctxt.type_of(*id).bind(ctxt, args),
+            Self::Lambda(ty, ..) => *ty,
         }
     }
 }

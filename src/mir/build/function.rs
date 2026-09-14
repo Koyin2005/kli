@@ -1,7 +1,7 @@
 use crate::{
     collect::CtxtRef,
     mir::{
-        BodySource, Constant, Context, TerminatorKind, build::Builder, visitor::Visit,
+        BodySource, Context, TerminatorKind, Value, build::Builder, visitor::Visit,
         well_formed::WellFormed,
     },
     src_loc::SrcLoc,
@@ -46,7 +46,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     pub(super) fn lambda_code_constant(
         ctxt: CtxtRef<'ctxt>,
         lambda: &Lambda<'ctxt>,
-    ) -> Constant<'ctxt> {
+    ) -> Value<'ctxt> {
         let ty = Type::function_type(ctxt, lambda.param_tys.clone(), lambda.return_type);
         let generics = ctxt.generics(lambda.id);
         let args = if !generics.is_empty() {
@@ -54,9 +54,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         } else {
             GenericArgs::new()
         };
-        Constant {
-            ty,
-            value: crate::mir::ConstValue::Named(lambda.id, args),
-        }
+        Value::Lambda(ty, lambda.id, args)
     }
 }

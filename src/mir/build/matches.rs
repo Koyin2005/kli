@@ -2,10 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     def_ids::DefId,
-    mir::{
-        self, BasicBlockId, Operand, Place, PlaceProjection, Rvalue, SwitchTarget, SwitchTargets,
-        TerminatorKind, Value, build::Builder,
-    },
+    mir::{self, BasicBlockId, SwitchTarget, SwitchTargets, TerminatorKind, Value, build::Builder},
     src_loc::SrcLoc,
     typed_ast::{CaseArm, Expr, FieldId, Pattern, PatternKind},
     types::{CaseId, Type},
