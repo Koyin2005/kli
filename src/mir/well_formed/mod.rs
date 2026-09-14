@@ -252,6 +252,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_operation(&mut self, loc: Location, operation: &super::Operation<'ctxt>) {
         self.super_visit_operation(loc, operation);
         match operation {
+            Operation::Load(_) => (),
             Operation::AllocArray(ty, elements) => {
                 let loc = self.body.src_info(loc);
                 for element in elements {
@@ -419,7 +420,8 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             }
             StmtKind::Assign(dst, operation) => {
                 let lhs_ty = self.body.registers[*dst].ty;
-                let rhs_ty = operation.result_type(self.ctxt, &self.body.registers);
+                let rhs_ty =
+                    operation.result_type(self.ctxt, &self.body.registers, &self.body.locals);
                 self.assert(
                     lhs_ty == rhs_ty,
                     || format!("Cannot assign non equal types {} and {}", lhs_ty, rhs_ty),

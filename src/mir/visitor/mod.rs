@@ -174,6 +174,9 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_operation(&mut self, loc: Location, operation: &Operation<'ctxt>) {
         match operation {
+            Operation::Load(place) => {
+                self.visit_place(PlaceCtxt::Read, loc, place);
+            }
             Operation::Cmp(_, left, right)
             | Operation::Arith(_, left, right)
             | Operation::ExtractElement(left, right) => {
@@ -230,6 +233,9 @@ pub trait MutVisit<'ctxt> {
     }
     fn visit_operation(&mut self, loc: Location, operation: &mut Operation<'ctxt>) {
         match operation {
+            Operation::Load(place) => {
+                self.visit_place(loc, place);
+            }
             Operation::Cmp(_, left, right)
             | Operation::Arith(_, left, right)
             | Operation::ExtractElement(left, right) => {

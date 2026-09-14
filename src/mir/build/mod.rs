@@ -5,9 +5,8 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         AssertKind, BasicBlock, BasicBlockId, BinaryOp, Body, BodySource, Context, Local,
-        LocalInfo, LocalKind, Locals, Operand, Operation, Place, Reg, RegInfo, Regs, Rvalue, Stmt,
-        StmtKind, SwitchTarget, SwitchTargets, Terminator, TerminatorKind, Value,
-        basic_blocks::BasicBlocks,
+        LocalInfo, Operand, Operation, Place, Reg, RegInfo, Regs, Rvalue, Stmt, StmtKind,
+        SwitchTarget, SwitchTargets, Terminator, TerminatorKind, Value, basic_blocks::BasicBlocks,
     },
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
@@ -215,7 +214,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     }
     pub(super) fn push_operation(&mut self, loc: SrcLoc, operation: Operation<'ctxt>) -> Reg {
         let reg = self.body.registers.push(RegInfo {
-            ty: operation.result_type(self.ctxt, &self.body.registers),
+            ty: operation.result_type(self.ctxt, &self.body.registers, &self.body.locals),
         });
         self.push_stmt(loc, StmtKind::Assign(reg, operation));
         reg

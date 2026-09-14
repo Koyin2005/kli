@@ -533,10 +533,17 @@ pub enum Operation<'ctxt> {
     Call(Value<'ctxt>, Vec<Value<'ctxt>>),
     Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Value<'ctxt>>),
     AllocArray(Type<'ctxt>, Vec<Value<'ctxt>>),
+    Load(Place),
 }
 impl<'ctxt> Operation<'ctxt> {
-    pub fn result_type(&self, ctxt: CtxtRef<'ctxt>, regs: &Regs<'ctxt>) -> Type<'ctxt> {
+    pub fn result_type(
+        &self,
+        ctxt: CtxtRef<'ctxt>,
+        regs: &Regs<'ctxt>,
+        locals: &Locals<'ctxt>,
+    ) -> Type<'ctxt> {
         match self {
+            Operation::Load(place) => place.type_of(ctxt, locals),
             Operation::AllocArray(ty, _) => Type::new_array(ctxt, *ty),
             Operation::Cmp(..) => Type::new_bool(ctxt),
             Operation::Arith(op, ..) => match op {
