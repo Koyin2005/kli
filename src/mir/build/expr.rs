@@ -402,7 +402,9 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             PlaceKind::Var(var) => {
                 let var = self.resolve_var(var.1).unwrap();
                 match var {
-                    VarKind::Local(_) => todo!("Handle mutable variables"),
+                    &VarKind::Local(local) => Value::Reg(
+                        self.push_operation(place.loc, mir::Operation::Load(Place::local(local))),
+                    ),
                     VarKind::Value(value) => value.clone(),
                 }
             }
