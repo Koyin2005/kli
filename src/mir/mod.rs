@@ -584,6 +584,7 @@ pub enum StmtKind<'ctxt> {
     Noop,
     PanicIf(Value<'ctxt>),
     Assign(Reg, Operation<'ctxt>),
+    Store(Place, Value<'ctxt>),
     OldStore(Place, Box<Rvalue<'ctxt>>),
     Print { value: Operand<'ctxt>, err: bool },
 }

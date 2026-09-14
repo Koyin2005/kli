@@ -395,6 +395,20 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
+            StmtKind::Store(place, value) => {
+                let lhs_ty = place.type_of(self.ctxt, &self.body.locals);
+                let rhs_ty = value.type_of(self.ctxt, &self.body.registers);
+                self.assert(
+                    lhs_ty == rhs_ty,
+                    || {
+                        format!(
+                            "Cannot assign non equal types {} and {} for {:?} {:?}",
+                            lhs_ty, rhs_ty, place, value
+                        )
+                    },
+                    stmt.loc,
+                );
+            }
             StmtKind::PanicIf(value) => {
                 let ty = value.type_of(self.ctxt, &self.body.registers);
                 self.assert(

@@ -367,6 +367,13 @@ impl<'ctxt> MirDump<'ctxt> {
         for stmt in &block.stmts {
             write!(self.output, "  ")?;
             match &stmt.kind {
+                StmtKind::Store(place, value) => {
+                    write!(self.output, "store ")?;
+                    self.write_place(place)?;
+                    write!(self.output, " = ")?;
+                    self.write_value(value)?;
+                    writeln!(self.output)?;
+                }
                 StmtKind::Assign(reg, operation) => {
                     write!(self.output, "%{} = ", reg.0)?;
                     self.write_operation(operation)?;

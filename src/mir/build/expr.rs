@@ -127,21 +127,29 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         temp
     }
     fn assign_to_pattern(&mut self, pattern: &Pattern<'ctxt>, value_expr: &Expr<'ctxt>) {
+        let value = self.expr_value(value_expr);
         match pattern.kind {
             typed_ast::PatternKind::Binding(mutable, var, ty) => {
-                let value = self.expr_value(value_expr);
                 if matches!(mutable, Mutable::Mutable) {
                     let local = self.new_var(var, ty);
                     self.declare_var(var.1, VarKind::Local(local));
-                    //self.assign(value_expr.loc, Place::local(local), value);
+                    self.push_stmt(
+                        value_expr.loc,
+                        mir::StmtKind::Store(Place::local(local), value),
+                    );
                 } else {
                     self.declare_var(var.1, VarKind::Value(value));
                 }
             }
-            _ => {
-                let local = self.expr_into_temp(value_expr);
-                self.assign_place_to_pattern(pattern, Place::local(local));
+            typed_ast::PatternKind::Bool(_)
+            | typed_ast::PatternKind::Unit
+            | typed_ast::PatternKind::Err
+            | typed_ast::PatternKind::Int(_)
+            | typed_ast::PatternKind::Char(_) => (),
+            typed_ast::PatternKind::Case(def_id, ref generic_args, case_id, ref pattern) => {
+                todo!("Case")
             }
+            typed_ast::PatternKind::Record(ref pattern_fields) => todo!(),
         }
     }
     pub(super) fn assign_place_to_pattern(&mut self, pattern: &Pattern<'ctxt>, place: Place) {
