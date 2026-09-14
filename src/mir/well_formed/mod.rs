@@ -47,8 +47,8 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn ctxt(&self) -> CtxtRef<'ctxt> {
         self.ctxt
     }
-    fn visit_place(&mut self, _: PlaceCtxt, loc: Location, place: &super::Place) {
-        let mut ty = place.base.type_of(&self.body.locals);
+    fn visit_place(&mut self, _: PlaceCtxt, loc: Location, place: &super::Place<'ctxt>) {
+        let mut ty = place.base.type_of(&self.body.locals, &self.body.registers);
         for proj in &place.projections {
             let loc = self.body.src_info(loc);
             match proj {
@@ -97,7 +97,8 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         match rvalue {
             super::Rvalue::AllocArray(ty, elements) => {
                 for element in elements {
-                    let element = element.type_of(self.ctxt(), &self.body.locals);
+                    let element =
+                        element.type_of(self.ctxt(), &self.body.locals, &self.body.registers);
                     self.assert(
                         element == *ty,
                         || format!("Array elements should have type '{}'", ty),
@@ -108,7 +109,9 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             super::Rvalue::ReadLine => (),
             super::Rvalue::Discriminant(place) => {
                 self.assert(
-                    if let Some((id, _, _)) = place.type_of(self.ctxt, &self.body.locals).as_named()
+                    if let Some((id, _, _)) = place
+                        .type_of(self.ctxt, &self.body.locals, &self.body.registers)
+                        .as_named()
                         && let TypeDefKind::Variant(_) = self.ctxt.type_def(id).kind
                     {
                         true
@@ -131,7 +134,12 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     for (field, operand) in field_info.iter().zip(fields) {
                         let field_ty = field.type_of(args, self.ctxt);
                         self.assert(
-                            field_ty == operand.type_of(self.ctxt, &self.body.locals),
+                            field_ty
+                                == operand.type_of(
+                                    self.ctxt,
+                                    &self.body.locals,
+                                    &self.body.registers,
+                                ),
                             || format!("Field of '{}' should have type '{}'", field.name, field_ty),
                             loc,
                         );
@@ -161,7 +169,8 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                             },
                             loc,
                         );
-                        let operand_ty = field.type_of(self.ctxt, &self.body.locals);
+                        let operand_ty =
+                            field.type_of(self.ctxt, &self.body.locals, &self.body.registers);
                         self.assert(
                             field_ty == operand_ty,
                             || format!("{field_ty} and {operand_ty} should be same types"),
@@ -179,7 +188,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             },
             super::Rvalue::Use(_) => (),
             super::Rvalue::Call(operand, operands) => {
-                let callee = operand.type_of(self.ctxt, &self.body.locals);
+                let callee = operand.type_of(self.ctxt, &self.body.locals, &self.body.registers);
                 let FunctionSig { params, .. } = self.assert_with_some(
                     &callee,
                     |ty| ty.as_function(),
@@ -188,7 +197,9 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 );
                 let operand_tys = operands
                     .iter()
-                    .map(|operand| operand.type_of(self.ctxt, &self.body.locals))
+                    .map(|operand| {
+                        operand.type_of(self.ctxt, &self.body.locals, &self.body.registers)
+                    })
                     .collect::<Vec<_>>();
                 self.assert(
                     operand_tys == *params,
@@ -200,8 +211,8 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 let (left, right) = left_and_right.as_ref();
                 match (
                     binary_op,
-                    left.type_of(self.ctxt, &self.body.locals),
-                    right.type_of(self.ctxt, &self.body.locals),
+                    left.type_of(self.ctxt, &self.body.locals, &self.body.registers),
+                    right.type_of(self.ctxt, &self.body.locals, &self.body.registers),
                 ) {
                     (
                         BinaryOp::Divide | BinaryOp::Overflow(_) | BinaryOp::Wrapping(_),
@@ -229,7 +240,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 }
             }
             super::Rvalue::Len(place) => {
-                let ty = place.type_of(self.ctxt, &self.body.locals);
+                let ty = place.type_of(self.ctxt, &self.body.locals, &self.body.registers);
                 self.assert(
                     ty.as_array().is_some() || matches!(ty.kind(), TypeKind::String),
                     || "Expected an array or string type",
@@ -240,13 +251,60 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     }
     fn visit_terminator(&mut self, loc: Location, terminator: &super::Terminator<'ctxt>) {
         self.super_visit_terminator(loc, terminator);
-        if let TerminatorKind::OldAssert(operand, ..) = &terminator.kind {
-            let condition_ty = operand.type_of(self.ctxt, &self.body.locals);
-            self.assert(
-                condition_ty.is_bool(),
-                || format!("Can only assert on bools not {}", condition_ty),
-                terminator.src_info,
-            );
+        match &terminator.kind {
+            TerminatorKind::Goto(block, args) => {
+                let block_regs = &self.body.block_info.blocks()[*block].args;
+                self.assert(
+                    args.len() == block_regs.len(),
+                    || {
+                        format!(
+                            "expected {} args for bb{} but got {}",
+                            block_regs.len(),
+                            block.into_usize(),
+                            args.len()
+                        )
+                    },
+                    terminator.src_info,
+                );
+                for (arg, block_reg) in args.iter().zip(block_regs) {
+                    let arg_ty = arg.type_of(self.ctxt, &self.body.registers);
+                    let block_reg_ty = self.body.registers[*block_reg].ty;
+                    self.assert(
+                        arg_ty == block_reg_ty,
+                        || format!("Expected {} but got {}", block_reg_ty, arg_ty),
+                        terminator.src_info,
+                    );
+                }
+            }
+            TerminatorKind::Switch(value, targets) => {
+                let value_ty = value.type_of(self.ctxt, &self.body.registers);
+                self.assert(
+                    value_ty.is_builtin_scalar(),
+                    || format!("should be a scalar ty but got '{}'", value_ty),
+                    terminator.src_info,
+                );
+                for target in targets.succesors_iter() {
+                    self.assert(
+                        self.body.block_info.blocks()[target].args.is_empty(),
+                        || format!("bb{} should have no args", target.into_usize()),
+                        terminator.src_info,
+                    );
+                }
+            }
+            TerminatorKind::Return(value) => {
+                let value_ty = value.type_of(self.ctxt, &self.body.registers);
+                self.assert(
+                    value_ty == self.body.return_type,
+                    || {
+                        format!(
+                            "return value should have type '{}' not '{}'",
+                            self.body.return_type, value_ty
+                        )
+                    },
+                    terminator.src_info,
+                );
+            }
+            _ => (),
         }
     }
     fn visit_operation(&mut self, loc: Location, operation: &super::Operation<'ctxt>) {
@@ -444,7 +502,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         self.super_visit_stmt(loc, stmt);
         match &stmt.kind {
             StmtKind::Store(place, value) => {
-                let lhs_ty = place.type_of(self.ctxt, &self.body.locals);
+                let lhs_ty = place.type_of(self.ctxt, &self.body.locals, &self.body.registers);
                 let rhs_ty = value.type_of(self.ctxt, &self.body.registers);
                 self.assert(
                     lhs_ty == rhs_ty,
@@ -476,8 +534,8 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 );
             }
             StmtKind::OldStore(lhs, rhs) => {
-                let lhs_ty = lhs.type_of(self.ctxt, &self.body.locals);
-                let rhs_ty = rhs.type_of(self.ctxt, &self.body.locals);
+                let lhs_ty = lhs.type_of(self.ctxt, &self.body.locals, &self.body.registers);
+                let rhs_ty = rhs.type_of(self.ctxt, &self.body.locals, &self.body.registers);
                 self.assert(
                     lhs_ty == rhs_ty,
                     || {
@@ -492,7 +550,8 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             StmtKind::Noop => (),
             StmtKind::Print { value, err: _ } => {
                 self.assert(
-                    value.type_of(self.ctxt, &self.body.locals) == Type::new_string(self.ctxt),
+                    value.type_of(self.ctxt, &self.body.locals, &self.body.registers)
+                        == Type::new_string(self.ctxt),
                     || "cannot print non string",
                     stmt.loc,
                 );

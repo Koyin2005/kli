@@ -59,7 +59,9 @@ impl<'ctxt> Analysis<'ctxt> for ConstAnalysis<'ctxt> {
         let StmtKind::OldStore(place, rvalue) = &stmt.kind else {
             return;
         };
-        let PlaceBase::Local(local) = place.base;
+        let PlaceBase::Local(local) = place.base else {
+            unreachable!();
+        };
         if !place.projections.is_empty() {
             state[local] = None;
             return;
@@ -125,7 +127,9 @@ fn apply_stmt_effect<'ctxt>(ctxt: CtxtRef<'ctxt>, values: &mut Values<'ctxt>, st
     let StmtKind::OldStore(place, rvalue) = &stmt.kind else {
         return;
     };
-    let PlaceBase::Local(local) = place.base;
+    let PlaceBase::Local(local) = place.base else {
+        unreachable!()
+    };
     if !place.projections.is_empty() {
         values[local] = None;
         return;
@@ -214,8 +218,10 @@ fn eval_rvalue<'ctxt>(
     }
 }
 
-fn load_value<'ctxt>(values: &Values<'ctxt>, place: &Place) -> Option<LocalValue<'ctxt>> {
-    let PlaceBase::Local(local) = place.base;
+fn load_value<'ctxt>(values: &Values<'ctxt>, place: &Place<'ctxt>) -> Option<LocalValue<'ctxt>> {
+    let PlaceBase::Local(local) = place.base else {
+        unreachable!()
+    };
     let mut value = values[local].clone()?;
     for projection in place.projections.iter() {
         value = match projection {

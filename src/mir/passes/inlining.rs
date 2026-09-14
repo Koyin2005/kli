@@ -90,7 +90,7 @@ struct InlininingSite<'ctxt> {
     src: BodySource,
     generic_args: GenericArgs<'ctxt>,
     block: BasicBlockId,
-    return_place: Place,
+    return_place: Place<'ctxt>,
     args: Vec<Operand<'ctxt>>,
 }
 fn find_inlining_site<'ctxt>(
@@ -179,14 +179,14 @@ fn split_calls<'ctxt>(body: &mut Body<'ctxt>) {
     }
 }
 
-struct Updater {
+struct Updater<'ctxt> {
     local_count: u32,
     block_count: u32,
     return_target: BasicBlockId,
-    return_place: Place,
+    return_place: Place<'ctxt>,
 }
 
-impl<'ctxt> MutVisit<'ctxt> for Updater {
+impl<'ctxt> MutVisit<'ctxt> for Updater<'ctxt> {
     fn visit_local(&mut self, _: Location, local: &mut mir::Local) {
         *local = mir::Local(local.0 + self.local_count);
     }

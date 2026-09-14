@@ -20,7 +20,9 @@ pub fn _classify_locals<'ctxt>(body: &Body<'ctxt>) -> IndexVec<Local, _LocalClas
             place: &crate::mir::Place,
             _: &crate::mir::Rvalue<'ctxt>,
         ) {
-            let PlaceBase::Local(local) = place.base;
+            let PlaceBase::Local(local) = place.base else {
+                unreachable!();
+            };
             if !place.projections.is_empty() {
                 self.classes[local] = Some(_LocalClass::Memory);
                 return;

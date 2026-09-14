@@ -14,21 +14,21 @@ use crate::{
     types::Type,
 };
 impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
-    fn as_place(&mut self, expr: &Expr<'ctxt>) -> Option<Place> {
+    fn as_place(&mut self, expr: &Expr<'ctxt>) -> Option<Place<'ctxt>> {
         if let ExprKind::Load(place) = &expr.kind {
             Some(self.lower_place(place))
         } else {
             None
         }
     }
-    pub(super) fn place(&mut self, expr: &Expr<'ctxt>) -> Place {
+    pub(super) fn place(&mut self, expr: &Expr<'ctxt>) -> Place<'ctxt> {
         if let Some(place) = self.as_place(expr) {
             place
         } else {
             Place::local(self.expr_into_temp(expr))
         }
     }
-    pub(super) fn lower_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Place {
+    pub(super) fn lower_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Place<'ctxt> {
         match &place.kind {
             typed_ast::PlaceKind::Index(base, index) => {
                 let base = self.place(base);
@@ -133,7 +133,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             }
         }
     }
-    pub fn expr_into_dest(&mut self, dest: Place, expr: &Expr<'ctxt>) {
+    pub fn expr_into_dest(&mut self, dest: Place<'ctxt>, expr: &Expr<'ctxt>) {
         let value = self.expr_value(expr);
         self.push_stmt(expr.loc, mir::StmtKind::Store(dest, value));
     }

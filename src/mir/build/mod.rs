@@ -204,7 +204,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         self.finish_block(loc, TerminatorKind::Panic);
         self.switch_to_block(block);
     }
-    pub(super) fn assign(&mut self, loc: SrcLoc, place: Place, value: Rvalue<'ctxt>) {
+    pub(super) fn assign(&mut self, loc: SrcLoc, place: Place<'ctxt>, value: Rvalue<'ctxt>) {
         self.push_stmt(loc, StmtKind::OldStore(place, Box::new(value)));
     }
 }

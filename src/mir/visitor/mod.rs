@@ -14,7 +14,7 @@ pub trait Visit<'ctxt> {
     fn ctxt(&self) -> CtxtRef<'ctxt> {
         unimplemented!("not implemented")
     }
-    fn visit_assign(&mut self, loc: Location, place: &Place, rvalue: &Rvalue<'ctxt>) {
+    fn visit_assign(&mut self, loc: Location, place: &Place<'ctxt>, rvalue: &Rvalue<'ctxt>) {
         self.visit_place(PlaceCtxt::Write, loc, place);
         self.visit_rvalue(loc, rvalue);
     }
@@ -118,10 +118,16 @@ pub trait Visit<'ctxt> {
         }
     }
     fn super_visit_local(&mut self, _: PlaceCtxt, _loc: Location, _local: Local) {}
-    fn super_visit_place(&mut self, ctxt: PlaceCtxt, loc: Location, place: &Place) {
-        let PlaceBase::Local(local) = place.base;
-        self.visit_local(ctxt, loc, local);
-
+    fn super_visit_place(&mut self, ctxt: PlaceCtxt, loc: Location, place: &Place<'ctxt>) {
+        match &place.base {
+            &PlaceBase::Local(local) => {
+                self.visit_local(ctxt, loc, local);
+            }
+            PlaceBase::ArrayElement(array_element) => {
+                self.visit_reg(loc, array_element.base, ctxt);
+                self.visit_value(loc, &array_element.index);
+            }
+        }
         for projection in place.projections.iter() {
             self.visit_projection(loc, *projection);
         }
@@ -142,7 +148,7 @@ pub trait Visit<'ctxt> {
     fn visit_local(&mut self, ctxt: PlaceCtxt, loc: Location, local: Local) {
         self.super_visit_local(ctxt, loc, local);
     }
-    fn visit_place(&mut self, ctxt: PlaceCtxt, loc: Location, place: &Place) {
+    fn visit_place(&mut self, ctxt: PlaceCtxt, loc: Location, place: &Place<'ctxt>) {
         self.super_visit_place(ctxt, loc, place);
     }
     fn visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
@@ -219,11 +225,16 @@ pub trait Visit<'ctxt> {
 }
 
 pub trait MutVisit<'ctxt> {
-    fn visit_assign(&mut self, loc: Location, place: &mut Place, rvalue: &mut Rvalue<'ctxt>) {
+    fn visit_assign(
+        &mut self,
+        loc: Location,
+        place: &mut Place<'ctxt>,
+        rvalue: &mut Rvalue<'ctxt>,
+    ) {
         self.visit_place(loc, place);
         self.visit_rvalue(loc, rvalue);
     }
-    fn visit_value(&mut self, loc: Location, value: &mut Value) {
+    fn visit_value(&mut self, loc: Location, value: &mut Value<'ctxt>) {
         match value {
             Value::Reg(reg) => self.visit_reg(loc, reg),
             Value::Unit
@@ -373,9 +384,16 @@ pub trait MutVisit<'ctxt> {
         }
     }
     fn super_visit_local(&mut self, _loc: Location, _local: &mut Local) {}
-    fn super_visit_place(&mut self, loc: Location, place: &mut Place) {
-        let PlaceBase::Local(local) = &mut place.base;
-        self.visit_local(loc, local);
+    fn super_visit_place(&mut self, loc: Location, place: &mut Place<'ctxt>) {
+        match &mut place.base {
+            PlaceBase::Local(local) => {
+                self.visit_local(loc, local);
+            }
+            PlaceBase::ArrayElement(array_element) => {
+                self.visit_reg(loc, &mut array_element.base);
+                self.visit_value(loc, &mut array_element.index);
+            }
+        }
         for projection in place.projections.iter_mut() {
             self.visit_projection(loc, projection);
         }
@@ -396,7 +414,7 @@ pub trait MutVisit<'ctxt> {
     fn visit_local(&mut self, loc: Location, local: &mut Local) {
         self.super_visit_local(loc, local);
     }
-    fn visit_place(&mut self, loc: Location, place: &mut Place) {
+    fn visit_place(&mut self, loc: Location, place: &mut Place<'ctxt>) {
         self.super_visit_place(loc, place);
     }
     fn visit_projection(&mut self, loc: Location, projection: &mut PlaceProjection) {

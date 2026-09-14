@@ -65,32 +65,48 @@ impl PlaceProjection {
         }
     }
 }
-#[derive(Clone, PartialEq, Eq, Hash, Debug, Copy, PartialOrd, Ord)]
-pub enum PlaceBase {
-    Local(Local),
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ArrayElement<'ctxt> {
+    pub base: Reg,
+    pub index: Value<'ctxt>,
 }
-impl PlaceBase {
-    pub fn type_of<'ctxt>(self, locals: &Locals<'ctxt>) -> Type<'ctxt> {
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum PlaceBase<'ctxt> {
+    Local(Local),
+    ArrayElement(ArrayElement<'ctxt>),
+}
+impl<'ctxt> PlaceBase<'ctxt> {
+    pub fn type_of(&self, locals: &Locals<'ctxt>, registers: &Regs<'ctxt>) -> Type<'ctxt> {
         match self {
-            PlaceBase::Local(local) => locals[local].ty,
+            &PlaceBase::Local(local) => locals[local].ty,
+            PlaceBase::ArrayElement(array_element) => registers[array_element.base]
+                .ty
+                .as_array()
+                .expect("should be an array"),
         }
     }
 }
-impl Display for PlaceBase {
+impl<'ctxt> Display for PlaceBase<'ctxt> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Local(local) => write!(f, "_{}", local.0),
+            Self::ArrayElement(array_element) => write!(
+                f,
+                "%{}.[{:?}]",
+                array_element.base.into_usize(),
+                array_element.index
+            ),
         }
     }
 }
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct Place {
-    pub base: PlaceBase,
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Place<'ctxt> {
+    pub base: PlaceBase<'ctxt>,
     pub projections: Vec<PlaceProjection>,
 }
-impl Place {
-    pub fn as_base_only(&self) -> Option<PlaceBase> {
-        self.projections.is_empty().then_some(self.base)
+impl<'ctxt> Place<'ctxt> {
+    pub fn as_base_only(&self) -> Option<&PlaceBase<'ctxt>> {
+        self.projections.is_empty().then_some(&self.base)
     }
     pub fn local(local: Local) -> Self {
         Self {
@@ -120,8 +136,13 @@ impl Place {
         self
     }
 
-    pub fn type_of<'ctxt>(&self, ctxt: CtxtRef<'ctxt>, locals: &Locals<'ctxt>) -> Type<'ctxt> {
-        let mut ty = self.base.type_of(locals);
+    pub fn type_of(
+        &self,
+        ctxt: CtxtRef<'ctxt>,
+        locals: &Locals<'ctxt>,
+        registers: &Regs<'ctxt>,
+    ) -> Type<'ctxt> {
+        let mut ty = self.base.type_of(locals, registers);
         for projection in self.projections.iter() {
             ty = projection.apply_projection_to_type(ty, ctxt);
         }
@@ -184,14 +205,19 @@ impl<'ctxt> Constant<'ctxt> {
 }
 #[derive(Clone, Debug)]
 pub enum Operand<'ctxt> {
-    Load(Place),
+    Load(Place<'ctxt>),
     Constant(Constant<'ctxt>),
 }
 impl<'ctxt> Operand<'ctxt> {
-    pub fn type_of(&self, ctxt: CtxtRef<'ctxt>, locals: &Locals<'ctxt>) -> Type<'ctxt> {
+    pub fn type_of(
+        &self,
+        ctxt: CtxtRef<'ctxt>,
+        locals: &Locals<'ctxt>,
+        registers: &Regs<'ctxt>,
+    ) -> Type<'ctxt> {
         match self {
             Operand::Constant(constant) => constant.ty,
-            Operand::Load(place) => place.type_of(ctxt, locals),
+            Operand::Load(place) => place.type_of(ctxt, locals, registers),
         }
     }
 }
@@ -230,8 +256,8 @@ pub enum Rvalue<'ctxt> {
     Use(Operand<'ctxt>),
     Call(Operand<'ctxt>, Vec<Operand<'ctxt>>),
     Binary(BinaryOp, Box<(Operand<'ctxt>, Operand<'ctxt>)>),
-    Len(Place),
-    Discriminant(Place),
+    Len(Place<'ctxt>),
+    Discriminant(Place<'ctxt>),
     AllocArray(Type<'ctxt>, Vec<Operand<'ctxt>>),
 }
 impl<'ctxt> Rvalue<'ctxt> {
@@ -247,14 +273,19 @@ impl<'ctxt> Rvalue<'ctxt> {
         }
     }
 
-    pub fn type_of(&self, ctxt: CtxtRef<'ctxt>, locals: &Locals<'ctxt>) -> Type<'ctxt> {
+    pub fn type_of(
+        &self,
+        ctxt: CtxtRef<'ctxt>,
+        locals: &Locals<'ctxt>,
+        registers: &Regs<'ctxt>,
+    ) -> Type<'ctxt> {
         match self {
             Rvalue::AllocArray(ty, _) => Type::new_array(ctxt, *ty),
             Rvalue::ReadLine => Type::new_string(ctxt),
-            Rvalue::Use(operand) => operand.type_of(ctxt, locals),
+            Rvalue::Use(operand) => operand.type_of(ctxt, locals, registers),
             Rvalue::Len(_) => Type::new_int(ctxt),
             Rvalue::Call(operand, _) => {
-                let Some(function) = operand.type_of(ctxt, locals).as_function() else {
+                let Some(function) = operand.type_of(ctxt, locals, registers).as_function() else {
                     unreachable!("Should be a function type")
                 };
                 function.return_type
@@ -262,18 +293,18 @@ impl<'ctxt> Rvalue<'ctxt> {
             Rvalue::Binary(op, left_and_right) => match op {
                 BinaryOp::Overflow(_) => Type::pair(
                     ctxt,
-                    left_and_right.0.type_of(ctxt, locals),
+                    left_and_right.0.type_of(ctxt, locals, registers),
                     Type::new_bool(ctxt),
                 ),
                 BinaryOp::Wrapping(_)
                 | BinaryOp::BitwiseAnd
                 | BinaryOp::BitwiseOr
                 | BinaryOp::ShiftLeft
-                | BinaryOp::ShiftRight => left_and_right.0.type_of(ctxt, locals),
-                BinaryOp::Divide => left_and_right.0.type_of(ctxt, locals),
+                | BinaryOp::ShiftRight => left_and_right.0.type_of(ctxt, locals, registers),
+                BinaryOp::Divide => left_and_right.0.type_of(ctxt, locals, registers),
                 BinaryOp::Equals => Type::new_bool(ctxt),
                 BinaryOp::Lesser | BinaryOp::Greater => Type::new_bool(ctxt),
-                BinaryOp::Offset => left_and_right.0.type_of(ctxt, locals),
+                BinaryOp::Offset => left_and_right.0.type_of(ctxt, locals, registers),
             },
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 &AggregateKind::Variant(id, _, ref args)
@@ -283,7 +314,9 @@ impl<'ctxt> Rvalue<'ctxt> {
                 }
                 AggregateKind::Tuple => Type::tuple_from_iter(
                     ctxt,
-                    operands.iter().map(|operand| operand.type_of(ctxt, locals)),
+                    operands
+                        .iter()
+                        .map(|operand| operand.type_of(ctxt, locals, registers)),
                 ),
             },
             Rvalue::Discriminant(_) => Type::new_int(ctxt),
@@ -538,7 +571,7 @@ pub enum Operation<'ctxt> {
     AllocArray(Type<'ctxt>, Vec<Value<'ctxt>>),
     Len(Value<'ctxt>),
     Discriminant(Value<'ctxt>),
-    Load(Place),
+    Load(Place<'ctxt>),
 }
 impl<'ctxt> Operation<'ctxt> {
     pub fn result_type(
@@ -550,7 +583,7 @@ impl<'ctxt> Operation<'ctxt> {
         match self {
             Operation::Discriminant(_) => Type::new_int(ctxt),
             Operation::Len(_) => Type::new_int(ctxt),
-            Operation::Load(place) => place.type_of(ctxt, locals),
+            Operation::Load(place) => place.type_of(ctxt, locals, regs),
             Operation::AllocArray(ty, _) => Type::new_array(ctxt, *ty),
             Operation::Cmp(..) => Type::new_bool(ctxt),
             Operation::Arith(op, ..) => match op {
@@ -606,8 +639,8 @@ pub enum StmtKind<'ctxt> {
     Noop,
     PanicIf(Value<'ctxt>),
     Assign(Reg, Operation<'ctxt>),
-    Store(Place, Value<'ctxt>),
-    OldStore(Place, Box<Rvalue<'ctxt>>),
+    Store(Place<'ctxt>, Value<'ctxt>),
+    OldStore(Place<'ctxt>, Box<Rvalue<'ctxt>>),
     Print { value: Operand<'ctxt>, err: bool },
 }
 define_id!(BasicBlockId);
