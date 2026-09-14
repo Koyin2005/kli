@@ -6,7 +6,7 @@ use crate::{
     builtins::{Builtin, IntegerBuiltin},
     index_vec::IndexVec,
     mir::{
-        self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Reg, Rvalue,
+        self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Rvalue,
         Value,
         build::{Builder, VarKind},
     },
@@ -406,10 +406,10 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 }
                 self.expr_value(&block.expr)
             }
-            ExprKind::String(_) => todo!(),
+            ExprKind::String(string) => Value::String(Symbol::intern(string)),
             &ExprKind::Bool(value) => Value::Bool(value),
             &ExprKind::Int(value) => Value::Int(value.try_into().expect("should be in range")),
-            ExprKind::Char(_) => todo!(),
+            &ExprKind::Char(value) => Value::Char(value),
             ExprKind::Unit => Value::Unit,
             ExprKind::Panic | ExprKind::NeverToAny(_) | ExprKind::Return(_) | ExprKind::Err => {
                 self.expr_stmt(expr);
@@ -470,12 +470,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 ))
             }
             ExprKind::Logic(logical_op, left, right) => todo!(),
-            ExprKind::For {
-                pattern,
-                iterator,
-                iterator_type,
-                body,
-            } => todo!(),
             ExprKind::Case(expr, case_arms) => todo!(),
             ExprKind::Assign(place, expr) => todo!(),
             ExprKind::Lambda(lambda) => todo!(),
@@ -506,7 +500,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 );
                 Value::Reg(record)
             }
-            ExprKind::While(..) => {
+            ExprKind::While(..) | ExprKind::For { .. } => {
                 self.expr_stmt(expr);
                 Value::Unit
             }

@@ -158,7 +158,9 @@ pub trait Visit<'ctxt> {
             | Value::Int(_)
             | Value::Unknown(_)
             | Value::Function(..)
-            | Value::Bool(_) => (),
+            | Value::Bool(_)
+            | Value::Char(_)
+            | Value::String(_) => (),
         }
     }
     fn super_visit_operation(&mut self, loc: Location, operation: &Operation<'ctxt>) {
@@ -209,7 +211,9 @@ pub trait MutVisit<'ctxt> {
             | Value::Int(_)
             | Value::Unknown(_)
             | Value::Function(..)
-            | Value::Bool(_) => (),
+            | Value::Bool(_)
+            | Value::Char(_)
+            | Value::String(_) => (),
         }
     }
     fn visit_operation(&mut self, loc: Location, operation: &mut Operation<'ctxt>) {

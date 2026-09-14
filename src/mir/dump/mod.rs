@@ -264,6 +264,12 @@ impl<'ctxt> MirDump<'ctxt> {
             Value::Function(id, args) => {
                 write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args)
             }
+            Value::Char(char) => {
+                write!(self.output, "{}", char)
+            }
+            Value::String(string) => {
+                write!(self.output, "\"{}\"", string)
+            }
         }
     }
     fn write_operation(&mut self, operation: &Operation<'ctxt>) -> std::io::Result<()> {
@@ -373,7 +379,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 TerminatorKind::Switch(value, targets) => {
                     write!(self.output, "switch ")?;
                     self.write_value(value)?;
-                    writeln!(self.output,"")?;
+                    writeln!(self.output, "")?;
                     for target in &targets.targets {
                         writeln!(self.output, "   {} -> bb{}", target.value, target.target.0)?;
                     }

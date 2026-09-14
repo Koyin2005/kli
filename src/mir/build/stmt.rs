@@ -92,7 +92,7 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
             | ExprKind::Tuple(..)
             | ExprKind::Array(..)
             | ExprKind::Char(_) => {
-                self.expr_into_temp(expr);
+                self.expr_value(expr);
             }
         }
     }

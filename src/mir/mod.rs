@@ -507,6 +507,8 @@ pub enum Value<'ctxt> {
     Reg(Reg),
     Int(i64),
     Bool(bool),
+    Char(char),
+    String(Symbol),
     Function(DefId, GenericArgs<'ctxt>),
     Unit,
     Unknown(Type<'ctxt>),
@@ -518,6 +520,8 @@ impl<'ctxt> Value<'ctxt> {
             Self::Unit => Type::new_unit(ctxt),
             Self::Int(_) => Type::new_int(ctxt),
             Self::Bool(_) => Type::new_bool(ctxt),
+            Self::Char(_) => Type::new_char(ctxt),
+            Self::String(_) => Type::new_string(ctxt),
             Self::Unknown(ty) => *ty,
             Self::Function(id, args) => ctxt.type_of(*id).bind(ctxt, args),
         }
