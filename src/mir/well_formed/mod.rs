@@ -252,6 +252,14 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_operation(&mut self, loc: Location, operation: &super::Operation<'ctxt>) {
         self.super_visit_operation(loc, operation);
         match operation {
+            Operation::Len(value) => {
+                let ty = value.type_of(self.ctxt, &self.body.registers);
+                self.assert(
+                    ty.as_array().is_some(),
+                    || format!("Should be an array '{}'", ty),
+                    self.body.src_info(loc),
+                );
+            }
             Operation::Load(_) => (),
             Operation::AllocArray(ty, elements) => {
                 let loc = self.body.src_info(loc);

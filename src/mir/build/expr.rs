@@ -444,33 +444,90 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 self.expr_stmt(expr);
                 Value::Unknown(expr.ty)
             }
-            ExprKind::BuiltinCall(builtin, generic_args, exprs) => match *builtin {
-                Builtin::Len => todo!(),
-                Builtin::StringLen => todo!(),
-                Builtin::PrintString => todo!(),
-                Builtin::EprintString => todo!(),
-                Builtin::ReadLine => todo!(),
-                Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
-                    IntegerBuiltin::IntMaxValue => todo!(),
-                    IntegerBuiltin::ShiftLeft => todo!(),
-                    IntegerBuiltin::ShiftRight => todo!(),
-                    IntegerBuiltin::WrappingAdd => {
-                        let [left, right] = exprs.as_array().expect("should have 2 elements");
-                        let left = self.expr_value(left);
-                        let right = self.expr_value(right);
-                        Value::Reg(self.push_operation(
-                            expr.loc,
-                            mir::Operation::Arith(mir::ArithOp::Add, left, right),
-                        ))
+            ExprKind::BuiltinCall(builtin, generic_args, exprs) => {
+                fn get_values<'ctxt, const N: usize>(
+                    this: &mut Builder<'_, 'ctxt>,
+                    exprs: &[Expr<'ctxt>],
+                ) -> [Value<'ctxt>; N] {
+                    let elements = exprs
+                        .as_array()
+                        .expect("wrong amount of elements")
+                        .each_ref();
+                    elements.map(|element| this.expr_value(&element))
+                }
+                match *builtin {
+                    Builtin::Len => {
+                        let [array] = get_values(self, exprs);
+                        Value::Reg(self.push_operation(expr.loc, mir::Operation::Len(array)))
                     }
-                    IntegerBuiltin::OverflowingAdd => todo!(),
-                    IntegerBuiltin::WrappingSub => todo!(),
-                    IntegerBuiltin::OverflowingSub => todo!(),
-                    IntegerBuiltin::WrappingMul => todo!(),
-                    IntegerBuiltin::OverflowingMul => todo!(),
-                },
-            },
-            ExprKind::VariantInit(def_id, case_id, generic_args, expr) => todo!(),
+                    Builtin::StringLen => todo!(),
+                    Builtin::PrintString => todo!(),
+                    Builtin::EprintString => todo!(),
+                    Builtin::ReadLine => todo!(),
+                    Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
+                        IntegerBuiltin::IntMaxValue => Value::Int(i64::MAX),
+                        IntegerBuiltin::ShiftLeft => todo!(),
+                        IntegerBuiltin::ShiftRight => todo!(),
+                        IntegerBuiltin::WrappingAdd => {
+                            let [left, right] = get_values(self, exprs);
+                            Value::Reg(self.push_operation(
+                                expr.loc,
+                                mir::Operation::Arith(mir::ArithOp::Add, left, right),
+                            ))
+                        }
+                        IntegerBuiltin::OverflowingAdd => {
+                            let [left, right] = get_values(self, exprs);
+                            Value::Reg(self.push_operation(
+                                expr.loc,
+                                mir::Operation::Arith(mir::ArithOp::AddOverflow, left, right),
+                            ))
+                        }
+                        IntegerBuiltin::WrappingSub => {
+                            let [left, right] = get_values(self, exprs);
+                            Value::Reg(self.push_operation(
+                                expr.loc,
+                                mir::Operation::Arith(mir::ArithOp::Sub, left, right),
+                            ))
+                        }
+                        IntegerBuiltin::OverflowingSub => {
+                            let [left, right] = get_values(self, exprs);
+                            Value::Reg(self.push_operation(
+                                expr.loc,
+                                mir::Operation::Arith(mir::ArithOp::SubOverflow, left, right),
+                            ))
+                        }
+                        IntegerBuiltin::WrappingMul => {
+                            let [left, right] = get_values(self, exprs);
+                            Value::Reg(self.push_operation(
+                                expr.loc,
+                                mir::Operation::Arith(mir::ArithOp::Mul, left, right),
+                            ))
+                        }
+                        IntegerBuiltin::OverflowingMul => {
+                            let [left, right] = get_values(self, exprs);
+                            Value::Reg(self.push_operation(
+                                expr.loc,
+                                mir::Operation::Arith(mir::ArithOp::MulOverflow, left, right),
+                            ))
+                        }
+                    },
+                }
+            }
+            ExprKind::VariantInit(def_id, case_id, generic_args, field) => {
+                let fields = field
+                    .as_ref()
+                    .into_iter()
+                    .map(|arg| self.expr_value(arg))
+                    .collect();
+                let variant = self.push_operation(
+                    expr.loc,
+                    mir::Operation::Aggregate(
+                        mir::AggregateKind::Variant(*def_id, *case_id, generic_args.clone()),
+                        fields,
+                    ),
+                );
+                Value::Reg(variant)
+            }
             ExprKind::Function(def_id, generic_args) => {
                 Value::Function(*def_id, generic_args.clone())
             }
@@ -559,7 +616,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 Value::Reg(result)
             }
             ExprKind::Case(expr, case_arms) => todo!(),
-            ExprKind::Assign(place, expr) => todo!(),
             ExprKind::Lambda(lambda) => todo!(),
             ExprKind::Tuple(fields) => {
                 let fields = fields.iter().map(|field| self.expr_value(field)).collect();
@@ -596,7 +652,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 );
                 Value::Reg(record)
             }
-            ExprKind::While(..) | ExprKind::For { .. } => {
+            ExprKind::While(..) | ExprKind::For { .. } | ExprKind::Assign(..) => {
                 self.expr_stmt(expr);
                 Value::Unit
             }

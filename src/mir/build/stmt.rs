@@ -1,6 +1,6 @@
 use crate::{
     mir::{
-        TerminatorKind,
+        TerminatorKind, Value,
         build::{Builder, expr::BuiltinResult},
     },
     typed_ast::{Expr, ExprKind},
@@ -58,13 +58,6 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
 
                 self.switch_to_block(end);
             }
-            ExprKind::BuiltinCall(builtin, _, args) => {
-                match self.builtin_call(expr.loc, *builtin, args) {
-                    BuiltinResult::Rvalue(value) => {
-                        self.assign_to_temp(expr.loc, expr.ty, value);
-                    }
-                }
-            }
             ExprKind::NeverToAny(value) => {
                 self.expr_stmt(value);
                 self.finish_block(expr.loc, TerminatorKind::Unreachable);
@@ -86,7 +79,8 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
             | ExprKind::Logic(..)
             | ExprKind::Tuple(..)
             | ExprKind::Array(..)
-            | ExprKind::Char(_) => {
+            | ExprKind::Char(_)
+            | ExprKind::BuiltinCall(..) => {
                 self.expr_value(expr);
             }
         }
