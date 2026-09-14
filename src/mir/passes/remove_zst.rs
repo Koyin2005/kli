@@ -1,5 +1,10 @@
 use crate::{
-    CtxtRef, layout::{Layout, calculate_layout}, mir::{Constant, Locals, Location, Operand, Regs, StmtKind, passes::BodyPass, visitor::MutVisit}, types::Type,
+    CtxtRef,
+    layout::{Layout, calculate_layout},
+    mir::{
+        Constant, Locals, Location, Operand, Regs, StmtKind, passes::BodyPass, visitor::MutVisit,
+    },
+    types::Type,
 };
 
 pub struct RemoveZst;
@@ -15,13 +20,13 @@ impl<'ctxt> BodyPass<'ctxt> for RemoveZst {
         "remove-zst"
     }
     fn run(&self, ctxt: crate::CtxtRef<'ctxt>, body: &mut crate::mir::Body<'ctxt>) {
-        struct RemoveZstVisit<'ctxt, 'a>(CtxtRef<'ctxt>, &'a Locals<'ctxt>,&'a Regs<'ctxt>);
+        struct RemoveZstVisit<'ctxt, 'a>(CtxtRef<'ctxt>, &'a Locals<'ctxt>, &'a Regs<'ctxt>);
         impl<'ctxt> MutVisit<'ctxt> for RemoveZstVisit<'ctxt, '_> {
             fn visit_operand(&mut self, _: Location, operand: &mut crate::mir::Operand<'ctxt>) {
                 let Operand::Load(place) = operand else {
                     return;
                 };
-                let ty = place.type_of(self.0, self.1,self.2);
+                let ty = place.type_of(self.0, self.1, self.2);
                 if RemoveZst::is_zst(ty, self.0) {
                     *operand = Operand::Constant(Constant::zero_sized(ty));
                 }
@@ -34,7 +39,7 @@ impl<'ctxt> BodyPass<'ctxt> for RemoveZst {
                     _ => None,
                 };
                 if let Some(place) = place
-                    && RemoveZst::is_zst(place.type_of(self.0, self.1,self.2), self.0)
+                    && RemoveZst::is_zst(place.type_of(self.0, self.1, self.2), self.0)
                 {
                     stmt.kind = StmtKind::Noop;
                 } else {
@@ -42,7 +47,7 @@ impl<'ctxt> BodyPass<'ctxt> for RemoveZst {
                 }
             }
         }
-        let mut visit = RemoveZstVisit(ctxt, &body.locals,&body.registers);
+        let mut visit = RemoveZstVisit(ctxt, &body.locals, &body.registers);
         for (id, block) in body
             .block_info
             .blocks_mut_dont_dirty()

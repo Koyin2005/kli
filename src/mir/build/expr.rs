@@ -31,13 +31,11 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     pub(super) fn lower_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Place<'ctxt> {
         match &place.kind {
             typed_ast::PlaceKind::Index(base, index) => {
-                let base = self.place(base);
-                let index = self.expr_into_temp(index);
-                let len = self.assign_to_temp(
-                    place.loc,
-                    Type::new_int(self.ctxt),
-                    Rvalue::Len(base.clone()),
-                );
+                let Value::Reg(base) = self.expr_value(base) else {
+                    todo!("Force me into a register")
+                };
+                let index = self.expr_value(index);
+                /*let len
                 let in_bounds = self.assign_to_temp(
                     place.loc,
                     Type::new_bool(self.ctxt),
@@ -51,8 +49,11 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                     place.loc,
                     Operand::Load(Place::local(in_bounds)),
                     mir::AssertKind::InBounds,
-                );
-                base.with_index(index)
+                );*/
+                Place {
+                    base: mir::PlaceBase::ArrayElement(mir::ArrayElement { base, index }),
+                    projections: Vec::new(),
+                }
             }
             typed_ast::PlaceKind::Deref(base) => self.place(base).with_deref(),
             typed_ast::PlaceKind::Var(var) => {

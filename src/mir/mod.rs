@@ -23,6 +23,11 @@ define_id!(Local);
 impl Local {
     pub const FIRST_PARAM: Self = Self(0);
 }
+impl Display for Local {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "_{}", self.0)
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Copy)]
 pub enum PlaceProjection {
     Field(FieldId),
@@ -647,6 +652,11 @@ define_id!(BasicBlockId);
 impl BasicBlockId {
     pub const ENTRY: Self = Self(0);
 }
+impl Display for BasicBlockId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "bb{}", self.0)
+    }
+}
 define_id!(StmtId);
 #[derive(Default, Clone)]
 pub struct BasicBlock<'ctxt> {
@@ -697,6 +707,11 @@ pub struct LocalInfo<'ctxt> {
 }
 
 define_id!(Reg);
+impl Display for Reg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "%{}", self.0)
+    }
+}
 #[derive(Clone)]
 pub struct RegInfo<'ctxt> {
     pub ty: Type<'ctxt>,

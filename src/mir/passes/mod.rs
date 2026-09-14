@@ -55,7 +55,7 @@ impl<'ctxt> BodyPass<'ctxt> for DumpMir {
     }
     fn run(&self, ctxt: CtxtRef<'ctxt>, body: &mut Body<'ctxt>) {
         if should_dump(ctxt, body.src) {
-            let _ = MirDump::new(Box::new(std::io::stdout()), ctxt).write_body(body);
+            let _ = MirDump::new(ctxt).write_body(body);
         }
     }
     fn enabled(&self, ctxt: CtxtRef<'_>) -> bool {

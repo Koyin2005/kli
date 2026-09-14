@@ -1,356 +1,268 @@
+use std::fmt::Write;
+
 use crate::{
     Symbol,
-    collect::{CtxtRef, TypeDefKind},
+    collect::CtxtRef,
+    def_ids::DefId,
     mir::{
-        self, AggregateKind, AssertKind, BasicBlock, BasicBlockId, Body, BodySource, ConstValue,
-        LocalKind, Operand, Operation, Place, PlaceProjection, Rvalue, StmtKind, TerminatorKind,
-        Value,
+        self, AggregateKind, BasicBlock, BasicBlockId, Body, BodySource, LocalKind, Operation,
+        Place, PlaceProjection, StmtKind, TerminatorKind, Value,
     },
     typed_ast::FieldId,
-    types,
+    types::GenericArgs,
 };
 
 pub struct MirDump<'ctxt> {
-    output: Box<dyn std::io::Write>,
+    output: String,
     ctxt: CtxtRef<'ctxt>,
 }
 impl<'ctxt> MirDump<'ctxt> {
-    pub fn new(output: impl std::io::Write + 'static, ctxt: CtxtRef<'ctxt>) -> Self {
+    pub fn new(ctxt: CtxtRef<'ctxt>) -> Self {
         Self {
-            output: Box::new(output),
+            output: String::new(),
             ctxt,
         }
+    }
+    fn write_fmt_path(&mut self, id: DefId, args: &GenericArgs<'ctxt>) {
+        write!(
+            &mut self.output,
+            "{}{}",
+            self.ctxt.display_path_for(id),
+            args
+        )
+        .expect("should be infallible");
+    }
+    fn write_fmt(&mut self, f: impl std::fmt::Display) {
+        write!(&mut self.output, "{f}").expect("should be infallible");
+    }
+    fn write_fmt_dbg(&mut self, f: impl std::fmt::Debug) {
+        write!(&mut self.output, "{f:?}").expect("should be infallible");
+    }
+    fn writeln_fmt(&mut self, f: impl std::fmt::Display) {
+        writeln!(&mut self.output, "{f}").expect("should be infallible");
     }
     fn write_with_coma_sep<T>(
         &mut self,
         elems: impl IntoIterator<Item = T>,
-        mut f: impl FnMut(&mut Self, T) -> std::io::Result<()>,
-    ) -> std::io::Result<()> {
+        mut f: impl FnMut(&mut Self, T),
+    ) -> () {
         let mut first = true;
         for value in elems {
             if !first {
-                write!(self.output, ",")?;
+                self.output.push(',');
             }
-            f(self, value)?;
+            f(self, value);
             first = false;
         }
-        Ok(())
     }
-    fn write_header(&mut self, body: &Body) -> std::io::Result<()> {
+    fn write_header(&mut self, body: &Body) {
         match body.src {
             BodySource::Function(f) => {
                 if let crate::resolved_ast::Node::Method(_) = self.ctxt.node(f) {
                     let ty_id = self.ctxt.expect_parent(self.ctxt.expect_parent(f));
-                    write!(
-                        self.output,
-                        "fun {}.{}",
-                        self.ctxt.display(ty_id),
-                        self.ctxt.display(f)
-                    )?;
+                    self.write_fmt("fun ");
+                    self.write_fmt_path(ty_id, &GenericArgs::new());
+                    self.write_fmt(".");
+                    self.write_fmt_path(f, &GenericArgs::new());
                 } else {
-                    write!(self.output, "fun {}", self.ctxt.display(f))?;
+                    self.write_fmt("fun ");
+                    self.write_fmt_path(f, &GenericArgs::new());
                 }
             }
         }
-        write!(self.output, "(")?;
+        self.write_fmt("(");
 
         self.write_with_coma_sep(body.param_locals_iter(), |this, param| {
             let index = param.into_usize();
-            write!(this.output, "_{}", index)
-        })?;
+            this.write_fmt("_");
+            this.write_fmt(index);
+        });
 
-        writeln!(self.output, ") -> {}", body.return_type)?;
+        self.write_fmt(") -> ");
+        self.writeln_fmt(body.return_type);
         for (local, info) in body.locals.iter_enumerated() {
-            write!(self.output, " {:?}", local)?;
+            self.write_fmt(" ");
+            self.write_fmt_dbg(local);
             match &info.kind {
-                LocalKind::Param(var) => write!(
-                    self.output,
-                    " param {}",
-                    if let Some(var) = var {
+                LocalKind::Param(var) => {
+                    self.write_fmt(" param ");
+                    self.write_fmt(if let Some(var) = var {
                         var.0
                     } else {
                         Symbol::EMPTY_STRING
-                    }
-                ),
-                LocalKind::Var(var) => write!(self.output, " var {}", var.0),
-                LocalKind::Temp => write!(self.output, " temp {}", local.0),
-                LocalKind::Env => write!(self.output, " env"),
-            }?;
-            writeln!(self.output, " : {}", info.ty)?;
+                    });
+                }
+                LocalKind::Var(var) => {
+                    self.write_fmt(" var ");
+                    self.write_fmt(var.0);
+                }
+                LocalKind::Temp => {
+                    self.write_fmt(" temp ");
+                    self.write_fmt(local.0);
+                }
+                LocalKind::Env => self.write_fmt("env"),
+            };
+            self.write_fmt(" : ");
+            self.writeln_fmt(info.ty);
         }
-        Ok(())
     }
-    fn write_place(&mut self, place: &Place) -> std::io::Result<()> {
-        if place.projections.is_empty() {
-            return write!(self.output, "{}", place.base);
+    fn write_place(&mut self, place: &Place<'ctxt>) {
+        let old_output = std::mem::take(&mut self.output);
+        match place.base {
+            mir::PlaceBase::Local(local) => self.write_fmt(local),
+            mir::PlaceBase::ArrayElement(mir::ArrayElement { base, ref index }) => {
+                self.write_fmt(base);
+                self.write_value(index);
+            }
         }
-        let mut output = format!("{}", place.base);
         for projection in place.projections.iter() {
-            use std::fmt::Write;
             match projection {
                 PlaceProjection::Field(field) => {
-                    let _ = write!(&mut output, ".{}", field.into_usize());
+                    self.write_fmt(".");
+                    self.write_fmt(field.into_usize())
                 }
                 PlaceProjection::ConstantIndex(index) => {
-                    let _ = write!(&mut output, ".[{}]", index);
+                    self.write_fmt(".[");
+                    self.write_fmt(index);
+                    self.write_fmt("]");
                 }
                 PlaceProjection::Index(index) => {
-                    let _ = write!(&mut output, ".[_{}]", index.0);
+                    self.write_fmt(".[");
+                    self.write_fmt(index);
+                    self.write_fmt("]");
                 }
                 PlaceProjection::CaseDowncast(_, name) => {
-                    let current = std::mem::take(&mut output);
-                    let _ = write!(&mut output, "({} as {})", current, name);
+                    let current = std::mem::take(&mut self.output);
+                    self.write_fmt("(");
+                    self.write_fmt(current);
+                    self.write_fmt(" as ");
+                    self.write_fmt(name);
+                    self.write_fmt(")");
                 }
                 PlaceProjection::Deref => {
-                    _ = write!(&mut output, "^");
+                    self.write_fmt("^");
                 }
             };
         }
-        write!(self.output, "{}", output)
+        let output = std::mem::replace(&mut self.output, old_output);
+        self.write_fmt(output);
     }
-    fn write_rvalue(&mut self, rvalue: &Rvalue) -> std::io::Result<()> {
-        match rvalue {
-            Rvalue::AllocArray(ty, elements) => {
-                write!(self.output, "AllocArray[{}]{{", ty)?;
-                self.write_with_coma_sep(elements.iter(), |this, element| {
-                    this.write_operand(element)
-                })?;
-                write!(self.output, "}}")?;
-            }
-            Rvalue::ReadLine => {
-                write!(self.output, "read_line")?;
-            }
-            Rvalue::Use(operand) => {
-                self.write_operand(operand)?;
-            }
-            Rvalue::Binary(op, operands) => {
-                let (left, right) = &**operands;
-                write!(self.output, "{:?}(", op)?;
-                self.write_operand(left)?;
-                write!(self.output, ",")?;
-                self.write_operand(right)?;
-                write!(self.output, ")")?;
-            }
-            Rvalue::Len(place) => {
-                write!(self.output, "Len(")?;
-                self.write_place(place)?;
-                write!(self.output, ")")?;
-            }
-            Rvalue::Discriminant(place) => {
-                write!(self.output, "Discriminant(")?;
-                self.write_place(place)?;
-                write!(self.output, ")")?;
-            }
-            Rvalue::Aggregate(kind, fields) => {
-                match kind {
-                    AggregateKind::Tuple => (),
-                    AggregateKind::Variant(id, index, args) => {
-                        let name = self.ctxt.type_def(*id).case(*index).name;
-                        write!(self.output, "{}{}", name, args)?;
-                    }
-                    AggregateKind::NamedRecord(id, args) => {
-                        let name = self.ctxt.type_def(*id).name;
-                        write!(self.output, "{}{}", name, args)?;
-                    }
-                };
-                let (open_bracket, close_bracket) = match kind {
-                    AggregateKind::Variant(..) | AggregateKind::Tuple => ('(', ')'),
-                    _ => ('{', '}'),
-                };
-                let ctxt = self.ctxt;
-                let write_field_name = move |this: &mut MirDump<'_>, i: FieldId| match kind {
-                    AggregateKind::Variant(_, _, _) => write!(this.output, "{} = ", i.into_usize()),
-                    AggregateKind::NamedRecord(id, ..) => {
-                        write!(this.output, "{} = ", ctxt.type_def(*id).fields()[i].name)
-                    }
-                    _ => Ok(()),
-                };
-                write!(self.output, "{open_bracket}")?;
-                self.write_with_coma_sep(fields.iter_enumerated(), |this, (i, operand)| {
-                    write_field_name(this, i)?;
-                    this.write_operand(operand)
-                })?;
-                write!(self.output, "{}", close_bracket)?;
-            }
-            Rvalue::Call(operand, args) => {
-                write!(self.output, "call ")?;
-                self.write_operand(operand)?;
-                write!(self.output, "(")?;
-                self.write_with_coma_sep(args, |this, arg| this.write_operand(arg))?;
-                write!(self.output, ")")?;
-            }
-        }
-        Ok(())
-    }
-    fn write_constant(&mut self, ty: &types::TypeKind, value: &ConstValue) -> std::io::Result<()> {
-        if let ConstValue::Named(id, args) = value {
-            return write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args);
-        } else if let ConstValue::String(string) = value {
-            return write!(self.output, "\"{}\"", string.to_string().escape_debug());
-        } else if let ConstValue::ZeroSized = value {
-            return write!(self.output, "{ty}");
-        }
-        match ty {
-            types::TypeKind::String => unreachable!(),
-
-            types::TypeKind::Infer(_)
-            | types::TypeKind::Param(..)
-            | types::TypeKind::Unknown
-            | types::TypeKind::IntVar(_) => {
-                write!(self.output, "unknown of '{}'", ty)
-            }
-            types::TypeKind::Char => {
-                let &ConstValue::Scalar(value) = value else {
-                    unreachable!("can only be a scalar for char")
-                };
-                let Some(char) = value.try_into().ok().and_then(char::from_u32) else {
-                    unreachable!("Scalar constant should be char")
-                };
-                write!(self.output, "'{char}'")
-            }
-            types::TypeKind::Int => value
-                .as_scalar()
-                .map(|value| write!(self.output, "{}", value))
-                .unwrap_or_else(|| write!(self.output, "unknown of '{}'", ty)),
-            types::TypeKind::Bool => value
-                .as_scalar()
-                .and_then(|value| bool::try_from(value).ok())
-                .map_or(Ok(()), |value| write!(self.output, "{}", value)),
-            types::TypeKind::Never => unreachable!("already did zero sized types"),
-            types::TypeKind::Function(_) => match value {
-                ConstValue::Named(id, args) => {
-                    write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args)
-                }
-                _ => unreachable!("only values of function type"),
-            },
-            types::TypeKind::Tuple(_) | types::TypeKind::Array(_) | types::TypeKind::Box(_) => {
-                unimplemented!()
-            }
-            types::TypeKind::Named(def_id, ..) => match self.ctxt.type_def(*def_id).kind {
-                TypeDefKind::Record(..) => write!(self.output, "unknown value of {ty}"),
-                TypeDefKind::Variant(..) => write!(self.output, "unknown of '{}'", ty),
-            },
-        }
-    }
-    fn write_operand(&mut self, operand: &Operand) -> std::io::Result<()> {
-        match operand {
-            Operand::Load(place) => {
-                write!(self.output, "load ")?;
-                self.write_place(place)
-            }
-            Operand::Constant(constant) => {
-                write!(self.output, "const ")?;
-                self.write_constant(&constant.ty, &constant.value)
-            }
-        }
-    }
-    fn write_value(&mut self, value: &Value) -> std::io::Result<()> {
+    fn write_value(&mut self, value: &Value<'ctxt>) {
         match value {
             Value::Reg(reg) => {
-                write!(self.output, "%{}", reg.0)
+                self.write_fmt("%");
+                self.write_fmt(reg.0);
             }
             Value::Unit => {
-                write!(self.output, "()")
+                self.write_fmt("()");
             }
             Value::Bool(value) => {
-                write!(self.output, "{}", value)
+                self.write_fmt(value);
             }
             Value::Int(value) => {
-                write!(self.output, "{}", value)
+                self.write_fmt(value);
             }
             Value::Unknown(ty) => {
-                write!(self.output, "unknown[{}]", ty)
+                self.write_fmt("unknown[");
+                self.write_fmt(ty);
+                self.write_fmt("]");
             }
             Value::Function(id, args) => {
-                write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args)
+                self.write_fmt_path(*id, args);
             }
             Value::Lambda(_, id, args) => {
-                write!(self.output, "{}{}", self.ctxt.display_path_for(*id), args)
+                self.write_fmt_path(*id, args);
             }
             Value::Char(char) => {
-                write!(self.output, "{}", char)
+                self.write_fmt(char);
             }
             Value::String(string) => {
-                write!(self.output, "\"{}\"", string)
+                self.write_fmt("\"");
+                self.write_fmt(string);
+                self.write_fmt("\"");
             }
         }
     }
-    fn write_operation(&mut self, operation: &Operation<'ctxt>) -> std::io::Result<()> {
+    fn write_operation(&mut self, operation: &Operation<'ctxt>) {
         match operation {
             Operation::Discriminant(value) => {
-                write!(self.output, "discriminant ")?;
-                self.write_value(value)
+                self.write_fmt("discriminant ");
+                self.write_value(value);
             }
             Operation::ExtractPayload(value, case) => {
-                write!(self.output, "extract_payload ")?;
-                self.write_value(value)?;
-                write!(self.output, " as {}", case.into_usize())
+                self.write_fmt("extract_payload ");
+                self.write_value(value);
+                self.write_fmt(" as ");
+                self.write_fmt(case.into_usize());
             }
             Operation::Len(array) => {
-                write!(self.output, "len ")?;
+                self.write_fmt("len ");
                 self.write_value(array)
             }
             Operation::Load(place) => {
-                write!(self.output, "load ")?;
+                self.write_fmt("load ");
                 self.write_place(place)
             }
             Operation::ExtractElement(array, index) => {
-                write!(self.output, "extract_element ")?;
-                self.write_value(array)?;
-                write!(self.output, ", ")?;
-                self.write_value(index)
+                self.write_fmt("extract_element ");
+                self.write_value(array);
+                self.write_fmt(",");
+                self.write_value(index);
             }
             Operation::AllocArray(ty, fields) => {
-                write!(self.output, "alloc_array[{ty}] ")?;
+                self.write_fmt("alloc_array[");
+                self.write_fmt(ty);
+                self.write_fmt("] ");
                 self.write_with_coma_sep(fields, |this, field| this.write_value(field))
             }
             Operation::Cmp(cmp, left, right) => {
-                let name = match cmp {
+                self.write_fmt("cmp.");
+                self.write_fmt(match cmp {
                     mir::Comparison::Equals => "eq",
                     mir::Comparison::Greater => "gt",
                     mir::Comparison::Lesser => "lt",
-                };
-                write!(self.output, "cmp.{name} ")?;
-                self.write_value(left)?;
-                write!(self.output, ", ")?;
+                });
+                self.write_value(left);
+                self.write_fmt(",");
                 self.write_value(right)
             }
             Operation::Arith(op, left, right) => {
-                let name = match op {
+                self.write_fmt(match op {
                     mir::ArithOp::Add => "add",
                     mir::ArithOp::AddOverflow => "add_overflow",
                     mir::ArithOp::Sub => "sub",
                     mir::ArithOp::SubOverflow => "sub_overflow",
                     mir::ArithOp::Mul => "mul",
                     mir::ArithOp::MulOverflow => "mul_overflow",
-                };
-                write!(self.output, "{} ", name)?;
-                self.write_value(left)?;
-                write!(self.output, ", ")?;
+                });
+                self.write_fmt(" ");
+                self.write_value(left);
+                self.write_fmt(", ");
                 self.write_value(right)
             }
             Operation::ExtractField(value, field) => {
-                write!(self.output, "extract_field ")?;
-                self.write_value(value)?;
-                write!(self.output, ", {}", field.into_usize())
+                self.write_fmt("extract_field ");
+                self.write_value(value);
+                self.write_fmt(", ");
+                self.write_fmt(field.into_usize());
             }
             Operation::Call(callee, args) => {
-                write!(self.output, "call ")?;
-                self.write_value(callee)?;
-                write!(self.output, "(")?;
-                self.write_with_coma_sep(args, |this, arg| this.write_value(arg))?;
-                write!(self.output, ")")
+                self.write_fmt("call ");
+                self.write_value(callee);
+                self.write_fmt("(");
+                self.write_with_coma_sep(args, |this, arg| this.write_value(arg));
+                self.write_fmt(")");
             }
             Operation::Aggregate(kind, fields) => {
                 match kind {
                     AggregateKind::Tuple => (),
                     AggregateKind::Variant(id, index, args) => {
                         let name = self.ctxt.type_def(*id).case(*index).name;
-                        write!(self.output, "{}{}", name, args)?;
+                        write!(self.output, "{}{}", name, args);
                     }
                     AggregateKind::NamedRecord(id, args) => {
                         let name = self.ctxt.type_def(*id).name;
-                        write!(self.output, "{}{}", name, args)?;
+                        write!(self.output, "{}{}", name, args);
                     }
                 };
                 let (open_bracket, close_bracket) = match kind {
@@ -365,130 +277,105 @@ impl<'ctxt> MirDump<'ctxt> {
                     }
                     _ => Ok(()),
                 };
-                write!(self.output, "{open_bracket}")?;
+                write!(self.output, "{open_bracket}");
                 self.write_with_coma_sep(fields.iter_enumerated(), |this, (i, operand)| {
-                    write_field_name(this, i)?;
+                    write_field_name(this, i);
                     this.write_value(operand)
-                })?;
-                write!(self.output, "{}", close_bracket)
+                });
+                write!(self.output, "{}", close_bracket);
             }
         }
     }
-    fn write_block(&mut self, id: BasicBlockId, block: &BasicBlock<'ctxt>) -> std::io::Result<()> {
-        write!(self.output, " bb{}", id.into_usize())?;
+    fn write_block(&mut self, id: BasicBlockId, block: &BasicBlock<'ctxt>) {
+        self.write_fmt(id);
         if !block.args.is_empty() {
-            write!(self.output, "(")?;
+            self.write_fmt("(");
             self.write_with_coma_sep(block.args.iter(), |this, arg| {
-                write!(this.output, "%{}", arg.0)
-            })?;
-            write!(self.output, ")")?;
+                this.write_fmt(arg);
+            });
+            self.write_fmt(")");
         }
-        writeln!(self.output)?;
+        self.writeln_fmt("");
         for stmt in &block.stmts {
-            write!(self.output, "  ")?;
+            self.write_fmt("  ");
             match &stmt.kind {
                 StmtKind::Store(place, value) => {
-                    write!(self.output, "store ")?;
-                    self.write_place(place)?;
-                    write!(self.output, " = ")?;
-                    self.write_value(value)?;
-                    writeln!(self.output)?;
+                    self.write_fmt("store ");
+                    self.write_place(place);
+                    write!(self.output, " = ");
+                    self.write_value(value);
+                    writeln!(self.output);
                 }
                 StmtKind::Assign(reg, operation) => {
-                    write!(self.output, "%{} = ", reg.0)?;
-                    self.write_operation(operation)?;
-                    writeln!(self.output)?;
+                    write!(self.output, "%{} = ", reg.0);
+                    self.write_operation(operation);
+                    writeln!(self.output);
                 }
-                StmtKind::Print { value, err } => {
-                    write!(self.output, "{}print ", if *err { "e" } else { "" })?;
-                    self.write_operand(value)?;
-                    writeln!(self.output)?;
+                StmtKind::Print { err, .. } => {
+                    write!(self.output, "{}print ", if *err { "e" } else { "" });
+                    todo!("Handle print");
                 }
-                StmtKind::Noop => writeln!(self.output, "noop")?,
+                StmtKind::Noop => self.write_fmt("noop"),
                 StmtKind::PanicIf(value) => {
-                    write!(self.output, "panic_if ")?;
-                    self.write_value(value)?;
-                    writeln!(self.output)?;
+                    self.write_fmt("panic_if ");
+                    self.write_value(value);
+                    self.writeln_fmt("");
                 }
-                StmtKind::OldStore(place, value) => {
-                    self.write_place(place)?;
-                    write!(self.output, " = ")?;
-                    self.write_rvalue(value)?;
-                    writeln!(self.output)?;
+                StmtKind::OldStore(place, _) => {
+                    self.write_place(place);
+                    write!(self.output, " = ");
+                    todo!("remove rvalues");
                 }
             }
         }
-        write!(self.output, "  ")?;
+        self.write_fmt(" ");
         if let Some(ref terminator) = block.terminator {
             match &terminator.kind {
                 TerminatorKind::Switch(value, targets) => {
-                    write!(self.output, "switch ")?;
-                    self.write_value(value)?;
-                    writeln!(self.output, "")?;
+                    self.write_fmt("switch ");
+                    self.write_value(value);
+                    self.writeln_fmt("");
                     for target in &targets.targets {
-                        writeln!(self.output, "   {} -> bb{}", target.value, target.target.0)?;
+                        writeln!(self.output, "   {} -> bb{}", target.value, target.target.0);
                     }
-                    write!(self.output, "   otherwise -> bb{}", targets.otherwise.0)?;
+                    write!(self.output, "   otherwise -> bb{}", targets.otherwise.0);
                 }
                 TerminatorKind::Unreachable => {
-                    write!(self.output, "unreachable")?;
+                    write!(self.output, "unreachable");
                 }
-                TerminatorKind::OldReturn(value) => {
-                    write!(self.output, "return ")?;
-                    self.write_operand(value)?;
+                TerminatorKind::OldReturn(..) => {
+                    todo!("Ignored")
                 }
                 TerminatorKind::Return(value) => {
-                    write!(self.output, "return ")?;
-                    self.write_value(value)?;
+                    write!(self.output, "return ");
+                    self.write_value(value);
                 }
-                TerminatorKind::OldSwitch(operand, targets) => {
-                    write!(self.output, "switch ")?;
-                    self.write_operand(operand)?;
-                    write!(self.output, " ")?;
-                    for target in &targets.targets {
-                        write!(self.output, "{} -> bb{}, ", target.value, target.target.0)?;
-                    }
-                    write!(self.output, "otherwise -> bb{}", targets.otherwise.0)?;
+                TerminatorKind::OldSwitch(..) => {
+                    todo!("Ignore me")
                 }
                 TerminatorKind::Goto(block, args) => {
-                    write!(self.output, "goto bb{}", block.0)?;
+                    write!(self.output, "goto {}", block);
                     if !args.is_empty() {
-                        write!(self.output, "(")?;
-                        self.write_with_coma_sep(args, |this, arg| this.write_value(arg))?;
-                        write!(self.output, ")")?;
+                        write!(self.output, "(");
+                        self.write_with_coma_sep(args, |this, arg| this.write_value(arg));
+                        write!(self.output, ")");
                     }
                 }
-                TerminatorKind::Panic => write!(self.output, "panic")?,
-                TerminatorKind::OldAssert(operand, kind, block) => {
-                    write!(
-                        self.output,
-                        "assert({}",
-                        if kind.assert_false() { "!" } else { "" }
-                    )?;
-                    self.write_operand(operand)?;
-                    write!(self.output, ", ")?;
-                    match kind {
-                        AssertKind::InBounds => write!(self.output, "\"index out of bounds\"")?,
-                        AssertKind::Overflow(op) => {
-                            write!(self.output, "\"Overflow in computing {op:?}\"")?
-                        }
-                        AssertKind::DivideOverflow => {
-                            write!(self.output, "\"Overflow in computing division\"")?
-                        }
-                        AssertKind::DivideByZero => write!(self.output, "\"Divide by zero\"")?,
-                    }
-                    write!(self.output, ") -> bb{}", block.0)?
+                TerminatorKind::Panic => self.write_fmt("panic"),
+                TerminatorKind::OldAssert(..) => {
+                    todo!("ignored")
                 }
             }
         }
-        writeln!(self.output)
+        self.writeln_fmt("");
     }
     pub fn write_body(mut self, body: &Body<'ctxt>) -> std::io::Result<()> {
-        self.write_header(body)?;
+        use std::io::Write;
+        self.write_header(body);
         for (id, block) in body.block_info.blocks().iter_enumerated() {
-            self.write_block(id, block)?;
+            self.write_block(id, block);
         }
-        writeln!(self.output, "end\n")?;
-        Ok(())
+        self.output.push_str("end\n");
+        std::io::stdout().write_all(self.output.as_bytes())
     }
 }
