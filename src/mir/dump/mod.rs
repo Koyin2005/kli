@@ -274,6 +274,11 @@ impl<'ctxt> MirDump<'ctxt> {
     }
     fn write_operation(&mut self, operation: &Operation<'ctxt>) -> std::io::Result<()> {
         match operation {
+            Operation::ExtractPayload(value, case) => {
+                write!(self.output, "extract_payload ")?;
+                self.write_value(value)?;
+                write!(self.output, " as {}", case.into_usize())
+            }
             Operation::Len(array) => {
                 write!(self.output, "len ")?;
                 self.write_value(array)

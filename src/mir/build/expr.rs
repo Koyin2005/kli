@@ -6,49 +6,14 @@ use crate::{
     builtins::{Builtin, IntegerBuiltin},
     index_vec::IndexVec,
     mir::{
-        self, AggregateKind, ConstValue, Constant, Local, Operand, OverflowOp, Place, Rvalue,
-        Value,
+        self, AggregateKind, Local, Operand, Place, Rvalue, Value,
         build::{Builder, VarKind},
     },
     src_loc::SrcLoc,
     typed_ast::{self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern, PlaceKind},
     types::Type,
 };
-pub(super) enum BuiltinResult<'ctxt> {
-    Rvalue(Rvalue<'ctxt>),
-}
-impl<'ctxt> From<BuiltinResult<'ctxt>> for Rvalue<'ctxt> {
-    fn from(value: BuiltinResult<'ctxt>) -> Self {
-        match value {
-            BuiltinResult::Rvalue(value) => value,
-        }
-    }
-}
 impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
-    fn as_constant(&mut self, expr: &Expr<'ctxt>) -> Option<Constant<'ctxt>> {
-        match expr.kind {
-            ExprKind::Bool(value) => Some(Constant::bool(self.ctxt, value)),
-            ExprKind::Int(value) => Some(Constant {
-                ty: expr.ty,
-                value: ConstValue::Scalar(value as i128),
-            }),
-            ExprKind::Unit => Some(Constant::unit(self.ctxt)),
-            ExprKind::String(ref value) => Some(Constant {
-                ty: expr.ty,
-                value: ConstValue::String(Symbol::intern(value)),
-            }),
-            ExprKind::Function(id, ref generic_args) => {
-                let ty = expr.ty;
-                Some(Constant {
-                    ty,
-                    value: ConstValue::Named(id, generic_args.clone()),
-                })
-            }
-            ExprKind::Lambda(ref lambda) => Some(Self::lambda_code_constant(self.ctxt, lambda)),
-            ExprKind::Char(char) => Some(Constant::char(self.ctxt, char)),
-            _ => None,
-        }
-    }
     fn as_place(&mut self, expr: &Expr<'ctxt>) -> Option<Place> {
         if let ExprKind::Load(place) = &expr.kind {
             Some(self.lower_place(place))
@@ -56,25 +21,11 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             None
         }
     }
-    pub(super) fn as_operand(&mut self, expr: &Expr<'ctxt>) -> Option<Operand<'ctxt>> {
-        if let Some(constant) = self.as_constant(expr) {
-            Some(Operand::Constant(constant))
-        } else {
-            self.as_place(expr).map(Operand::Load)
-        }
-    }
     pub(super) fn place(&mut self, expr: &Expr<'ctxt>) -> Place {
         if let Some(place) = self.as_place(expr) {
             place
         } else {
             Place::local(self.expr_into_temp(expr))
-        }
-    }
-    pub(super) fn operand(&mut self, expr: &Expr<'ctxt>) -> Operand<'ctxt> {
-        if let Some(operand) = self.as_operand(expr) {
-            operand
-        } else {
-            Operand::Load(Place::local(self.expr_into_temp(expr)))
         }
     }
     pub(super) fn lower_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Place {
@@ -142,9 +93,17 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             | typed_ast::PatternKind::Err
             | typed_ast::PatternKind::Int(_)
             | typed_ast::PatternKind::Char(_) => (),
-            typed_ast::PatternKind::Case(def_id, ref generic_args, case_id, ref pattern) => {
+            typed_ast::PatternKind::Case(.., case_id, ref pattern) => {
                 if let Some(pattern) = pattern {
-                    todo!("Match pattern")
+                    let field_tuple = self.push_operation(
+                        loc,
+                        mir::Operation::ExtractPayload(value.clone(), case_id),
+                    );
+                    let value = Value::Reg(self.push_operation(
+                        loc,
+                        mir::Operation::ExtractField(Value::Reg(field_tuple), FieldId::new(0)),
+                    ));
+                    self.assign_to_pattern(loc, pattern, value);
                 }
             }
             typed_ast::PatternKind::Record(ref pattern_fields) => {
@@ -201,77 +160,8 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         }
     }
     pub fn expr_into_dest(&mut self, dest: Place, expr: &Expr<'ctxt>) {
-        match &expr.kind {
-            ExprKind::Err => unreachable!("Cannot have err here"),
-            ExprKind::Block(block_body, ..) => {
-                for stmt in block_body.stmts.iter() {
-                    self.stmt(stmt);
-                }
-                self.expr_into_dest(dest, &block_body.expr);
-            }
-            ExprKind::Unsafe(expr) => {
-                self.expr_into_dest(dest, expr);
-            }
-            ExprKind::Panic | ExprKind::NeverToAny(_) | ExprKind::Return(_) => {
-                self.expr_stmt(expr);
-            }
-            ExprKind::Case(expr, arms) => {
-                self.build_match(dest, expr, arms);
-            }
-            ExprKind::Logic(op, left, right) => {
-                //Evaluate the left hand side
-                let left_operand = self.operand(left);
-                let branch_block = self.current_block;
-
-                //Create the block for the short circuit side
-                let constant_block = self.new_block();
-
-                //Evaluate the right hand side
-                let rhs_block = self.switch_to_new_block();
-                self.expr_into_dest(dest.clone(), right);
-                let merge_block = self.goto_to_new_block(right.loc);
-
-                let (true_block, false_block, value, const_loc) = match op {
-                    LogicalOp::And => (rhs_block, constant_block, false, left.loc),
-                    LogicalOp::Or => (constant_block, rhs_block, true, right.loc),
-                };
-
-                self.switch_to_block(constant_block);
-                self.assign(
-                    const_loc,
-                    dest,
-                    Rvalue::Use(Operand::Constant(Constant::bool(self.ctxt, value))),
-                );
-                self.finish_block_with_goto(const_loc, merge_block);
-
-                self.switch_to_block(branch_block);
-                self.finish_block_with_old_if(left.loc, left_operand, true_block, false_block);
-
-                self.switch_to_block(merge_block);
-            }
-
-            ExprKind::Function(..)
-            | ExprKind::Array(..)
-            | ExprKind::Bool(_)
-            | ExprKind::Int(_)
-            | ExprKind::Unit
-            | ExprKind::Load(_)
-            | ExprKind::Call(..)
-            | ExprKind::Binary(..)
-            | ExprKind::For { .. }
-            | ExprKind::Assign(..)
-            | ExprKind::VariantInit(..)
-            | ExprKind::String(_)
-            | ExprKind::Lambda(_)
-            | ExprKind::BuiltinCall(..)
-            | ExprKind::NamedRecord(..)
-            | ExprKind::While(..)
-            | ExprKind::Tuple(..)
-            | ExprKind::Char(_) => {
-                let rvalue = self.build_rvalue(expr);
-                self.assign(expr.loc, dest, rvalue);
-            }
-        }
+        let value = self.expr_value(expr);
+        self.push_stmt(expr.loc, mir::StmtKind::Store(dest, value));
     }
     fn binary_op_rvalue(
         op: mir::BinaryOp,
@@ -279,123 +169,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         right: Operand<'ctxt>,
     ) -> Rvalue<'ctxt> {
         Rvalue::Binary(op, Box::new((left, right)))
-    }
-    pub(super) fn builtin_call(
-        &mut self,
-        _loc: SrcLoc,
-        builtin: Builtin,
-        args: &[Expr<'ctxt>],
-    ) -> BuiltinResult<'ctxt> {
-        let mut operands = || {
-            args.iter()
-                .map(|operand| self.operand(operand))
-                .collect::<Vec<_>>()
-        };
-        match builtin {
-            Builtin::StringLen => {
-                let place = self.place(&args[0]);
-                BuiltinResult::Rvalue(Rvalue::Len(place))
-            }
-            Builtin::EprintString => {
-                let [arg] = operands().try_into().unwrap();
-                self.push_stmt(
-                    args[0].loc,
-                    mir::StmtKind::Print {
-                        value: arg,
-                        err: true,
-                    },
-                );
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
-            }
-            Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
-                IntegerBuiltin::IntMaxValue => {
-                    let value = i64::MAX;
-                    BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::int(
-                        self.ctxt, value,
-                    ))))
-                }
-                IntegerBuiltin::ShiftLeft => {
-                    let [first, second] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::ShiftLeft,
-                        first,
-                        second,
-                    ))
-                }
-                IntegerBuiltin::ShiftRight => {
-                    let [first, second] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::ShiftRight,
-                        first,
-                        second,
-                    ))
-                }
-                IntegerBuiltin::WrappingAdd => {
-                    let [left, right] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::Wrapping(OverflowOp::Add),
-                        left,
-                        right,
-                    ))
-                }
-                IntegerBuiltin::OverflowingAdd => {
-                    let [left, right] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::Overflow(OverflowOp::Add),
-                        left,
-                        right,
-                    ))
-                }
-                IntegerBuiltin::WrappingSub => {
-                    let [left, right] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::Wrapping(OverflowOp::Subtract),
-                        left,
-                        right,
-                    ))
-                }
-                IntegerBuiltin::OverflowingSub => {
-                    let [left, right] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::Overflow(OverflowOp::Subtract),
-                        left,
-                        right,
-                    ))
-                }
-                IntegerBuiltin::WrappingMul => {
-                    let [left, right] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::Wrapping(OverflowOp::Multiply),
-                        left,
-                        right,
-                    ))
-                }
-                IntegerBuiltin::OverflowingMul => {
-                    let [left, right] = operands().try_into().unwrap();
-                    BuiltinResult::Rvalue(Self::binary_op_rvalue(
-                        mir::BinaryOp::Overflow(OverflowOp::Multiply),
-                        left,
-                        right,
-                    ))
-                }
-            },
-            Builtin::ReadLine => BuiltinResult::Rvalue(Rvalue::ReadLine),
-            Builtin::PrintString => {
-                let [arg] = operands().try_into().unwrap();
-                self.push_stmt(
-                    args[0].loc,
-                    mir::StmtKind::Print {
-                        value: arg,
-                        err: false,
-                    },
-                );
-                BuiltinResult::Rvalue(Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt))))
-            }
-            Builtin::Len => {
-                let place = self.place(&args[0]);
-                BuiltinResult::Rvalue(Rvalue::Len(place))
-            }
-        }
     }
     fn load_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Value<'ctxt> {
         match place.kind {
@@ -444,7 +217,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 self.expr_stmt(expr);
                 Value::Unknown(expr.ty)
             }
-            ExprKind::BuiltinCall(builtin, generic_args, exprs) => {
+            ExprKind::BuiltinCall(builtin, _, exprs) => {
                 fn get_values<'ctxt, const N: usize>(
                     this: &mut Builder<'_, 'ctxt>,
                     exprs: &[Expr<'ctxt>],
@@ -615,7 +388,11 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 self.switch_to_block(merge_block);
                 Value::Reg(result)
             }
-            ExprKind::Case(expr, case_arms) => todo!(),
+            ExprKind::Case(scrutinee, case_arms) => {
+                let dest = Place::local(self.new_temp(expr.ty));
+                self.build_match(dest.clone(), scrutinee, case_arms);
+                Value::Reg(self.push_operation(expr.loc, mir::Operation::Load(dest)))
+            }
             ExprKind::Lambda(lambda) => todo!(),
             ExprKind::Tuple(fields) => {
                 let fields = fields.iter().map(|field| self.expr_value(field)).collect();
@@ -655,209 +432,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             ExprKind::While(..) | ExprKind::For { .. } | ExprKind::Assign(..) => {
                 self.expr_stmt(expr);
                 Value::Unit
-            }
-        }
-    }
-    pub fn build_rvalue(&mut self, expr: &Expr<'ctxt>) -> Rvalue<'ctxt> {
-        match &expr.kind {
-            ExprKind::Err => unreachable!("Cannot have err here"),
-            ExprKind::Unit
-            | ExprKind::Int(_)
-            | ExprKind::Bool(_)
-            | ExprKind::Load(_)
-            | ExprKind::Function(..)
-            | ExprKind::String(..)
-            | ExprKind::Lambda(_)
-            | ExprKind::Char(_) => {
-                let operand = self
-                    .as_operand(expr)
-                    .unwrap_or_else(|| unreachable!("should be an constant operand '{:?}' ", expr));
-                Rvalue::Use(operand)
-            }
-            ExprKind::NamedRecord(id, generic_args, fields) => {
-                let mut field_map = fields
-                    .iter()
-                    .map(|field| (field.index, self.operand(&field.value)))
-                    .collect::<HashMap<_, _>>();
-                let fields = (0..fields.len())
-                    .map(FieldId::new)
-                    .map(|field| field_map.remove(&field).unwrap())
-                    .collect::<IndexVec<FieldId, _>>();
-                Rvalue::Aggregate(
-                    AggregateKind::NamedRecord(*id, generic_args.clone()),
-                    fields,
-                )
-            }
-            ExprKind::Tuple(fields) => Rvalue::Aggregate(
-                AggregateKind::Tuple,
-                fields.iter().map(|field| self.operand(field)).collect(),
-            ),
-            &ExprKind::VariantInit(id, index, ref args, ref value) => Rvalue::Aggregate(
-                AggregateKind::Variant(id, index, args.clone()),
-                value
-                    .as_deref()
-                    .into_iter()
-                    .map(|value| self.operand(value))
-                    .collect(),
-            ),
-            ExprKind::Call(callee, args) => {
-                let _ = callee
-                    .ty
-                    .as_function()
-                    .unwrap_or_else(|| unreachable!("Can't call non function at {:?}", expr.loc));
-
-                let callee_value = self.operand(callee);
-                let arg_values = args.iter().map(|arg| self.operand(arg)).collect::<Vec<_>>();
-                Rvalue::Call(callee_value, arg_values)
-            }
-            ExprKind::Binary(binary_op, left, right) => {
-                let (left_operand, right_operand, overflow_op) = match binary_op {
-                    BinaryOp::Add => (self.operand(left), self.operand(right), OverflowOp::Add),
-                    BinaryOp::Divide => {
-                        let left_operand = self.operand(left);
-                        let right_operand = self.operand(right);
-                        //Division can fail in 2 ways
-                        //Divide by zero
-                        //Divide int min by -1
-                        let is_zero = self.assign_equals(
-                            expr.loc,
-                            right_operand.clone(),
-                            Operand::Constant(Constant::int(self.ctxt, 0)),
-                        );
-                        self.finish_assert_to_new_block(
-                            expr.loc,
-                            Operand::Load(Place::local(is_zero)),
-                            mir::AssertKind::DivideByZero,
-                        );
-
-                        let is_left_min = self.assign_equals(
-                            expr.loc,
-                            left_operand.clone(),
-                            Operand::Constant(Constant::int(self.ctxt, i64::MIN as _)),
-                        );
-                        let is_right_neg_1 = self.assign_equals(
-                            expr.loc,
-                            left_operand.clone(),
-                            Operand::Constant(Constant::int(self.ctxt, -1)),
-                        );
-                        let overflow = self.assign_binary_result(
-                            expr.loc,
-                            Type::new_bool(self.ctxt),
-                            mir::BinaryOp::BitwiseAnd,
-                            Operand::Load(Place::local(is_left_min)),
-                            Operand::Load(Place::local(is_right_neg_1)),
-                        );
-                        self.finish_assert_to_new_block(
-                            expr.loc,
-                            Operand::Load(Place::local(overflow)),
-                            mir::AssertKind::DivideOverflow,
-                        );
-
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::Divide,
-                            left_operand,
-                            right_operand,
-                        );
-                    }
-                    BinaryOp::Subtract => (
-                        self.operand(left),
-                        self.operand(right),
-                        OverflowOp::Subtract,
-                    ),
-                    BinaryOp::Multiply => (
-                        self.operand(left),
-                        self.operand(right),
-                        OverflowOp::Multiply,
-                    ),
-                    BinaryOp::Equals => {
-                        let left_operand = self.operand(left);
-                        let right_operand = self.operand(right);
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::Equals,
-                            left_operand,
-                            right_operand,
-                        );
-                    }
-                    BinaryOp::Lesser => {
-                        let left_operand = self.operand(left);
-                        let right_operand = self.operand(right);
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::Lesser,
-                            left_operand,
-                            right_operand,
-                        );
-                    }
-                    BinaryOp::Greater => {
-                        let left_operand = self.operand(left);
-                        let right_operand = self.operand(right);
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::Greater,
-                            left_operand,
-                            right_operand,
-                        );
-                    }
-                    BinaryOp::BitwiseOr => {
-                        let left_operand = self.operand(left);
-                        let right_operand = self.operand(right);
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::BitwiseOr,
-                            left_operand,
-                            right_operand,
-                        );
-                    }
-                    BinaryOp::BitwiseAnd => {
-                        let left_operand = self.operand(left);
-                        let right_operand = self.operand(right);
-                        return Self::binary_op_rvalue(
-                            mir::BinaryOp::BitwiseAnd,
-                            left_operand,
-                            right_operand,
-                        );
-                    }
-                };
-                let checked_result = self.assign_to_temp(
-                    expr.loc,
-                    Type::pair(self.ctxt, expr.ty, Type::new_bool(self.ctxt)),
-                    Rvalue::Binary(
-                        mir::BinaryOp::Overflow(overflow_op),
-                        Box::new((left_operand, right_operand)),
-                    ),
-                );
-                let overflow =
-                    Operand::Load(Place::local(checked_result).with_field(FieldId::new(1)));
-                self.finish_assert_to_new_block(
-                    expr.loc,
-                    overflow,
-                    mir::AssertKind::Overflow(overflow_op),
-                );
-                let result =
-                    Operand::Load(Place::local(checked_result).with_field(FieldId::new(0)));
-                Rvalue::Use(result)
-            }
-            ExprKind::Block(..)
-            | ExprKind::Panic
-            | ExprKind::Case(..)
-            | ExprKind::NeverToAny(_)
-            | ExprKind::Logic(..)
-            | ExprKind::Return(_)
-            | ExprKind::Unsafe(_) => {
-                let temp = self.expr_into_temp(expr);
-                Rvalue::Use(Operand::Load(Place::local(temp)))
-            }
-            ExprKind::Array(elements) => {
-                let element_type = expr.ty.as_array().unwrap();
-                let elements = elements
-                    .iter()
-                    .map(|element| self.operand(element))
-                    .collect();
-                Rvalue::AllocArray(element_type, elements)
-            }
-            ExprKind::For { .. } | ExprKind::Assign(..) | ExprKind::While(..) => {
-                self.expr_stmt(expr);
-                Rvalue::Use(Operand::Constant(Constant::unit(self.ctxt)))
-            }
-            &ExprKind::BuiltinCall(builtin, _, ref args) => {
-                self.builtin_call(expr.loc, builtin, args).into()
             }
         }
     }

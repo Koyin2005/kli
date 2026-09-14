@@ -528,6 +528,7 @@ pub enum ArithOp {
 pub enum Operation<'ctxt> {
     Cmp(Comparison, Value<'ctxt>, Value<'ctxt>),
     Arith(ArithOp, Value<'ctxt>, Value<'ctxt>),
+    ExtractPayload(Value<'ctxt>, CaseId),
     ExtractField(Value<'ctxt>, FieldId),
     ExtractElement(Value<'ctxt>, Value<'ctxt>),
     Call(Value<'ctxt>, Vec<Value<'ctxt>>),
@@ -554,6 +555,14 @@ impl<'ctxt> Operation<'ctxt> {
                 }
                 _ => Type::new_int(ctxt),
             },
+            Operation::ExtractPayload(value, case_id) => {
+                let ty = value.type_of(ctxt, regs);
+                let Some((id, _, args)) = ty.as_named() else {
+                    unreachable!("Should be named")
+                };
+
+                ctxt.type_def(id).case(*case_id).payload_type(args, ctxt)
+            }
             Operation::ExtractField(value, field) => {
                 let ty = value.type_of(ctxt, regs);
                 let Some((ty, _)) = ty.field_info(*field, ctxt) else {

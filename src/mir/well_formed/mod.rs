@@ -290,6 +290,30 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     self.body.src_info(loc),
                 );
             }
+            Operation::ExtractPayload(value, case_id) => {
+                let loc = self.body.src_info(loc);
+                let ty = value.type_of(self.ctxt, &self.body.registers);
+                let (id, ..) = self.assert_with_some(
+                    &ty,
+                    |ty| ty.as_named(),
+                    || format!("Cannot get inner value of '{}'", ty),
+                    loc,
+                );
+
+                let type_def = self.ctxt.type_def(id);
+                let cases = self.assert_with_some(
+                    &type_def,
+                    |type_def| type_def.cases(),
+                    || format!("'{ty}' should have cases"),
+                    loc,
+                );
+                let _ = self.assert_with_some(
+                    cases,
+                    |cases| cases.get(*case_id),
+                    || format!("not enough cases"),
+                    loc,
+                );
+            }
             Operation::ExtractField(value, field) => {
                 let ty = value.type_of(self.ctxt, &self.body.registers);
                 self.assert(

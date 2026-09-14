@@ -1,8 +1,5 @@
 use crate::{
-    mir::{
-        TerminatorKind, Value,
-        build::{Builder, expr::BuiltinResult},
-    },
+    mir::{TerminatorKind, build::Builder},
     typed_ast::{Expr, ExprKind},
 };
 
