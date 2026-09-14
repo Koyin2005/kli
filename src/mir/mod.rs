@@ -484,7 +484,7 @@ pub struct Stmt<'ctxt> {
     pub loc: SrcLoc,
     pub kind: StmtKind<'ctxt>,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value<'ctxt> {
     Reg(Reg),
     Int(i64),
@@ -535,6 +535,7 @@ pub enum Operation<'ctxt> {
     Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Value<'ctxt>>),
     AllocArray(Type<'ctxt>, Vec<Value<'ctxt>>),
     Len(Value<'ctxt>),
+    Discriminant(Value<'ctxt>),
     Load(Place),
 }
 impl<'ctxt> Operation<'ctxt> {
@@ -545,6 +546,7 @@ impl<'ctxt> Operation<'ctxt> {
         locals: &Locals<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
+            Operation::Discriminant(_) => Type::new_int(ctxt),
             Operation::Len(_) => Type::new_int(ctxt),
             Operation::Load(place) => place.type_of(ctxt, locals),
             Operation::AllocArray(ty, _) => Type::new_array(ctxt, *ty),

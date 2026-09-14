@@ -252,6 +252,21 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_operation(&mut self, loc: Location, operation: &super::Operation<'ctxt>) {
         self.super_visit_operation(loc, operation);
         match operation {
+            Operation::Discriminant(value) => {
+                let loc = self.body.src_info(loc);
+                self.assert(
+                    if let Some((id, _, _)) =
+                        value.type_of(self.ctxt, &self.body.registers).as_named()
+                        && let TypeDefKind::Variant(_) = self.ctxt.type_def(id).kind
+                    {
+                        true
+                    } else {
+                        false
+                    },
+                    || "type does not have a discriminant",
+                    loc,
+                );
+            }
             Operation::Len(value) => {
                 let ty = value.type_of(self.ctxt, &self.body.registers);
                 self.assert(

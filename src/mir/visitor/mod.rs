@@ -174,7 +174,7 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_operation(&mut self, loc: Location, operation: &Operation<'ctxt>) {
         match operation {
-            Operation::Len(value) => {
+            Operation::Len(value) | Operation::Discriminant(value) => {
                 self.visit_value(loc, value);
             }
             Operation::Load(place) => {
@@ -236,7 +236,7 @@ pub trait MutVisit<'ctxt> {
     }
     fn visit_operation(&mut self, loc: Location, operation: &mut Operation<'ctxt>) {
         match operation {
-            Operation::Len(value) => {
+            Operation::Len(value) | Operation::Discriminant(value) => {
                 self.visit_value(loc, value);
             }
             Operation::Load(place) => {

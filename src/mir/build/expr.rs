@@ -56,7 +56,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             }
             typed_ast::PlaceKind::Deref(base) => self.place(base).with_deref(),
             typed_ast::PlaceKind::Var(var) => {
-                let Some(local) = self.body.local_for_var(var.1) else {
+                let Some(&VarKind::Local(local)) = self.resolve_var(var.1) else {
                     unreachable!("should have a local for {:?} at {:?}", var, place.loc)
                 };
                 Place::local(local)
@@ -77,7 +77,12 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         self.expr_into_dest(Place::local(temp), expr);
         temp
     }
-    fn assign_to_pattern(&mut self, loc: SrcLoc, pattern: &Pattern<'ctxt>, value: Value<'ctxt>) {
+    pub(super) fn assign_to_pattern(
+        &mut self,
+        loc: SrcLoc,
+        pattern: &Pattern<'ctxt>,
+        value: Value<'ctxt>,
+    ) {
         match pattern.kind {
             typed_ast::PatternKind::Binding(mutable, var, ty) => {
                 if matches!(mutable, Mutable::Mutable) {
@@ -196,7 +201,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             }
             PlaceKind::Upvar(def_id, var) => todo!(),
             PlaceKind::Deref(ref expr) => todo!(),
-            PlaceKind::Invalid => todo!(),
+            PlaceKind::Invalid => unreachable!("Cannot load from unknown place"),
         }
     }
     pub(super) fn expr_value(&mut self, expr: &Expr<'ctxt>) -> Value<'ctxt> {
@@ -383,9 +388,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 self.switch_to_block(merge_block);
                 Value::Reg(result)
             }
-            ExprKind::Case(scrutinee, case_arms) => {
-                self.build_match(expr.ty, scrutinee, case_arms)
-            }
+            ExprKind::Case(scrutinee, case_arms) => self.build_match(expr.ty, scrutinee, case_arms),
             ExprKind::Lambda(lambda) => todo!(),
             ExprKind::Tuple(fields) => {
                 let fields = fields.iter().map(|field| self.expr_value(field)).collect();

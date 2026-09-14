@@ -274,6 +274,10 @@ impl<'ctxt> MirDump<'ctxt> {
     }
     fn write_operation(&mut self, operation: &Operation<'ctxt>) -> std::io::Result<()> {
         match operation {
+            Operation::Discriminant(value) => {
+                write!(self.output, "discriminant ")?;
+                self.write_value(value)
+            }
             Operation::ExtractPayload(value, case) => {
                 write!(self.output, "extract_payload ")?;
                 self.write_value(value)?;

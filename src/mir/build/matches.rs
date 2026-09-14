@@ -1,16 +1,17 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::{
+    def_ids::DefId,
     mir::{
-        self, BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind, Value,
-        build::Builder,
+        self, BasicBlockId, Operand, Place, PlaceProjection, Rvalue, SwitchTarget, SwitchTargets,
+        TerminatorKind, Value, build::Builder,
     },
     src_loc::SrcLoc,
     typed_ast::{CaseArm, Expr, FieldId, Pattern, PatternKind},
     types::{CaseId, Type},
 };
 enum Test {
-    VariantSwitch,
+    VariantSwitch(DefId),
     IntSwitch,
     If,
 }
@@ -20,19 +21,25 @@ enum TestCase {
     False,
     EqualsChar(char),
     EqualsInt(i128),
-    Variant(CaseId),
+    Variant(DefId, CaseId),
 }
-type TestMatrix = Vec<(SrcLoc, usize, Vec<MatchTest>)>;
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Extraction {
+    Field(FieldId),
+    Payload(CaseId),
+}
+type TestMatrix<'ctxt> = Vec<(SrcLoc, usize, Vec<MatchTest<'ctxt>>)>;
 #[derive(Debug, Clone)]
-struct MatchTest {
-    place: Place,
+struct MatchTest<'ctxt> {
+    extractions: Vec<Extraction>,
+    value: Value<'ctxt>,
     case: TestCase,
     loc: SrcLoc,
 }
 impl<'ctxt> Builder<'_, 'ctxt> {
     fn build_tree(
         &mut self,
-        tests: TestMatrix,
+        tests: TestMatrix<'ctxt>,
         end_blocks: &mut Vec<(SrcLoc, usize, BasicBlockId)>,
     ) -> BasicBlockId {
         /* No more arms */
@@ -47,13 +54,14 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         let test = match head_test.case {
             TestCase::EqualsInt(_) => Test::IntSwitch,
             TestCase::False | TestCase::True => Test::If,
-            TestCase::Variant(_) => Test::VariantSwitch,
+            TestCase::Variant(def_id, _) => Test::VariantSwitch(def_id),
             TestCase::EqualsChar(_) => Test::IntSwitch,
         };
-        fn group_tests(
-            place: &Place,
-            tests: TestMatrix,
-        ) -> (BTreeMap<TestCase, TestMatrix>, TestMatrix) {
+        fn group_tests<'ctxt>(
+            value: &Value<'ctxt>,
+            projections: &[Extraction],
+            tests: TestMatrix<'ctxt>,
+        ) -> (BTreeMap<TestCase, TestMatrix<'ctxt>>, TestMatrix<'ctxt>) {
             let mut branches: BTreeMap<TestCase, TestMatrix> = BTreeMap::new();
             let mut others = TestMatrix::new();
             for mut row in tests {
@@ -62,11 +70,12 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     continue;
                 };
                 let &MatchTest {
-                    place: ref head_place,
+                    value: ref head_value,
+                    extractions: ref head_extractions,
                     case,
                     loc: _,
                 } = head;
-                if head_place != place {
+                if value != head_value && head_extractions != projections {
                     others.push(row);
                     continue;
                 }
@@ -75,7 +84,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             }
             (branches, others)
         }
-        let (tests, rest) = group_tests(&head_test.place, tests);
+        let (tests, rest) = group_tests(&head_test.value, &head_test.extractions, tests);
 
         let start_block = self.current_block;
         let otherwise_start = self.switch_to_new_block();
@@ -102,9 +111,18 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .copied()
                     .unwrap_or(otherwise_start);
 
-                let value = Value::Reg(
-                    self.push_operation(head_test.loc, mir::Operation::Load(head_test.place)),
-                );
+                let mut value = head_test.value;
+                for extraction in head_test.extractions {
+                    value = Value::Reg(self.push_operation(
+                        head_test.loc,
+                        match extraction {
+                            Extraction::Field(field) => mir::Operation::ExtractField(value, field),
+                            Extraction::Payload(case_id) => {
+                                mir::Operation::ExtractPayload(value, case_id)
+                            }
+                        },
+                    ));
+                }
                 self.finish_block_with_if(head_test.loc, value, true_block, false_block);
             }
             Test::IntSwitch => {
@@ -122,25 +140,34 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                         })
                     })
                     .collect();
-                self.finish_block_with_old_switch_targets(
+                let mut value = head_test.value;
+                for extraction in head_test.extractions {
+                    value = Value::Reg(self.push_operation(
+                        head_test.loc,
+                        match extraction {
+                            Extraction::Field(field) => mir::Operation::ExtractField(value, field),
+                            Extraction::Payload(case_id) => {
+                                mir::Operation::ExtractPayload(value, case_id)
+                            }
+                        },
+                    ));
+                }
+                self.finish_block_with_switch(
                     head_test.loc,
-                    Operand::Load(head_test.place),
-                    targets,
-                    otherwise_start,
+                    value,
+                    SwitchTargets {
+                        targets,
+                        otherwise: otherwise_start,
+                    },
                 );
             }
-            Test::VariantSwitch => {
-                let (id, _, _) = head_test
-                    .place
-                    .type_of(self.ctxt, &self.body.locals)
-                    .as_named()
-                    .unwrap();
+            Test::VariantSwitch(id) => {
                 let type_def = self.ctxt.type_def(id);
 
                 let targets = tests
                     .iter()
                     .filter_map(|(case, block)| {
-                        let TestCase::Variant(id) = *case else {
+                        let TestCase::Variant(_, id) = *case else {
                             return None;
                         };
                         Some(SwitchTarget {
@@ -151,66 +178,91 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .collect();
 
                 self.switch_to_block(start_block);
-                let disrciminant = self.assign_to_temp(
-                    head_test.loc,
-                    Type::new_int(self.ctxt),
-                    Rvalue::Discriminant(head_test.place),
+                let mut value = head_test.value;
+                for extraction in head_test.extractions {
+                    value = Value::Reg(self.push_operation(
+                        head_test.loc,
+                        match extraction {
+                            Extraction::Field(field) => mir::Operation::ExtractField(value, field),
+                            Extraction::Payload(case_id) => {
+                                mir::Operation::ExtractPayload(value, case_id)
+                            }
+                        },
+                    ));
+                }
+                let discriminant = Value::Reg(
+                    self.push_operation(head_test.loc, mir::Operation::Discriminant(value)),
                 );
-                self.finish_block_with_old_switch_targets(
+                self.finish_block_with_switch(
                     head_test.loc,
-                    Operand::Load(Place::local(disrciminant)),
-                    targets,
-                    otherwise_start,
+                    discriminant,
+                    SwitchTargets {
+                        targets,
+                        otherwise: otherwise_start,
+                    },
                 );
             }
         }
         self.switch_to_block(otherwise_start);
         self.build_tree(rest, end_blocks)
     }
-    fn match_tests(&self, place: Place, pattern: &Pattern) -> Vec<MatchTest> {
+    fn match_tests(
+        &self,
+        value: Value<'ctxt>,
+        extractions: Vec<Extraction>,
+        pattern: &Pattern<'ctxt>,
+    ) -> Vec<MatchTest<'ctxt>> {
         match &pattern.kind {
             PatternKind::Char(c) => {
                 vec![MatchTest {
-                    place,
+                    extractions,
+                    value,
                     case: TestCase::EqualsChar(*c),
                     loc: pattern.loc,
                 }]
             }
-            PatternKind::Case(id, .., index, inner) => {
+            PatternKind::Case(def_id, _, index, inner) => {
+                let def_id = &self.ctxt.expect_parent(*def_id);
                 if let Some(inner) = inner {
                     let mut tests = vec![MatchTest {
-                        place: place.clone(),
-                        case: TestCase::Variant(*index),
+                        extractions: extractions.clone(),
+                        value: value.clone(),
+                        case: TestCase::Variant(*def_id, *index),
                         loc: pattern.loc,
                     }];
-                    tests.extend(
-                        self.match_tests(
-                            place
-                                .with_case_downcast(*index, self.ctxt.expect_ident(*id).symbol)
-                                .with_field(FieldId::new(0)),
-                            inner,
-                        ),
-                    );
+                    tests.extend(self.match_tests(
+                        value,
+                        {
+                            let mut extractions = extractions;
+                            extractions.push(Extraction::Payload(*index));
+                            extractions.push(Extraction::Field(FieldId::new(0)));
+                            extractions
+                        },
+                        inner,
+                    ));
                     tests
                 } else {
                     vec![MatchTest {
-                        place,
-                        case: TestCase::Variant(*index),
+                        extractions,
+                        value,
+                        case: TestCase::Variant(*def_id, *index),
                         loc: pattern.loc,
                     }]
                 }
             }
-            PatternKind::Int(value) => {
+            PatternKind::Int(numeric_value) => {
                 vec![MatchTest {
-                    place,
-                    case: TestCase::EqualsInt(*value as i128),
+                    extractions,
+                    value,
+                    case: TestCase::EqualsInt(*numeric_value as i128),
                     loc: pattern.loc,
                 }]
             }
-            PatternKind::Bool(value) => vec![MatchTest {
+            PatternKind::Bool(bool_value) => vec![MatchTest {
                 loc: pattern.loc,
-                place,
-                case: if *value {
+                extractions,
+                value,
+                case: if *bool_value {
                     TestCase::True
                 } else {
                     TestCase::False
@@ -220,7 +272,15 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             PatternKind::Record(pattern_fields) => pattern_fields
                 .iter()
                 .flat_map(|field| {
-                    self.match_tests(place.clone().with_field(field.index), &field.pattern)
+                    self.match_tests(
+                        value.clone(),
+                        {
+                            let mut extractions = extractions.clone();
+                            extractions.push(Extraction::Field(field.index));
+                            extractions
+                        },
+                        &field.pattern,
+                    )
                 })
                 .collect(),
         }
@@ -232,7 +292,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         expr: &Expr<'ctxt>,
         arms: &[CaseArm<'ctxt>],
     ) -> Value<'ctxt> {
-        let place = self.place(expr);
+        let value = self.expr_value(expr);
         let tests = arms
             .iter()
             .enumerate()
@@ -240,7 +300,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                 (
                     arm.pattern.loc,
                     i,
-                    self.match_tests(place.clone(), &arm.pattern),
+                    self.match_tests(value.clone(), Vec::new(), &arm.pattern),
                 )
             })
             .collect::<Vec<_>>();
@@ -251,7 +311,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         let (end_block, [result]) = self.new_block_with_args([result_ty]);
         for (loc, i, block) in end_blocks.into_iter() {
             self.switch_to_block(block);
-            self.assign_place_to_pattern(&arms[i].pattern, place.clone());
+            self.assign_to_pattern(arms[i].pattern.loc, &arms[i].pattern, value.clone());
             let result = self.expr_value(&arms[i].body);
             self.finish_block_with_goto_args(loc, end_block, [result]);
         }
