@@ -412,7 +412,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     stmt.loc,
                 );
             }
-            StmtKind::Store(lhs, rhs) => {
+            StmtKind::OldStore(lhs, rhs) => {
                 let lhs_ty = lhs.type_of(self.ctxt, &self.body.locals);
                 let rhs_ty = rhs.type_of(self.ctxt, &self.body.locals);
                 self.assert(

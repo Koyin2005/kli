@@ -56,7 +56,7 @@ struct ConstAnalysis<'ctxt> {
 impl<'ctxt> Analysis<'ctxt> for ConstAnalysis<'ctxt> {
     type Domain = Values<'ctxt>;
     fn apply_stmt_effect(&mut self, state: &mut Self::Domain, stmt: &Stmt<'ctxt>) {
-        let StmtKind::Store(place, rvalue) = &stmt.kind else {
+        let StmtKind::OldStore(place, rvalue) = &stmt.kind else {
             return;
         };
         let PlaceBase::Local(local) = place.base;
@@ -122,7 +122,7 @@ impl<'ctxt> BodyPass<'ctxt> for ConstProp {
     }
 }
 fn apply_stmt_effect<'ctxt>(ctxt: CtxtRef<'ctxt>, values: &mut Values<'ctxt>, stmt: &Stmt<'ctxt>) {
-    let StmtKind::Store(place, rvalue) = &stmt.kind else {
+    let StmtKind::OldStore(place, rvalue) = &stmt.kind else {
         return;
     };
     let PlaceBase::Local(local) = place.base;

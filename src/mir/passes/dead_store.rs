@@ -56,7 +56,7 @@ struct LocalReplacer<'a> {
 }
 impl<'ctxt> MutVisit<'ctxt> for LocalReplacer<'_> {
     fn visit_stmt(&mut self, loc: crate::mir::Location, stmt: &mut crate::mir::Stmt) {
-        if let StmtKind::Store(place, rvalue) = &mut stmt.kind
+        if let StmtKind::OldStore(place, rvalue) = &mut stmt.kind
             && let PlaceBase::Local(local) = place.base
             && place.projections.is_empty()
             && rvalue.can_remove_if_unused()

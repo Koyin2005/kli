@@ -126,17 +126,20 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         self.expr_into_dest(Place::local(temp), expr);
         temp
     }
-    fn assign_to_pattern(&mut self, pattern: &Pattern<'ctxt>, value: &Expr<'ctxt>) {
+    fn assign_to_pattern(&mut self, pattern: &Pattern<'ctxt>, value_expr: &Expr<'ctxt>) {
         match pattern.kind {
-            typed_ast::PatternKind::Binding(mutable, var, _) => {
-                let value = self.expr_value(value);
+            typed_ast::PatternKind::Binding(mutable, var, ty) => {
+                let value = self.expr_value(value_expr);
                 if matches!(mutable, Mutable::Mutable) {
-                    todo!("Handle mutable variables")
+                    let local = self.new_var(var, ty);
+                    self.declare_var(var.1, VarKind::Local(local));
+                    //self.assign(value_expr.loc, Place::local(local), value);
+                } else {
+                    self.declare_var(var.1, VarKind::Value(value));
                 }
-                self.declare_var(var.1, VarKind::Value(value));
             }
             _ => {
-                let local = self.expr_into_temp(value);
+                let local = self.expr_into_temp(value_expr);
                 self.assign_place_to_pattern(pattern, Place::local(local));
             }
         }

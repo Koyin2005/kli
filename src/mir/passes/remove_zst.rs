@@ -31,7 +31,7 @@ impl<'ctxt> BodyPass<'ctxt> for RemoveZst {
             }
             fn visit_stmt(&mut self, loc: Location, stmt: &mut crate::mir::Stmt<'ctxt>) {
                 let place = match &mut stmt.kind {
-                    StmtKind::Store(place, rvalue) => {
+                    StmtKind::OldStore(place, rvalue) => {
                         rvalue.can_remove_if_unused().then_some(place)
                     }
                     _ => None,

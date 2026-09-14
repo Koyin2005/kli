@@ -383,7 +383,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     self.write_value(value)?;
                     writeln!(self.output)?;
                 }
-                StmtKind::Store(place, value) => {
+                StmtKind::OldStore(place, value) => {
                     self.write_place(place)?;
                     write!(self.output, " = ")?;
                     self.write_rvalue(value)?;
