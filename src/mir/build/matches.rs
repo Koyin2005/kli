@@ -1,10 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::{
-    mir::{BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind, build::Builder},
-    src_loc::SrcLoc,
-    typed_ast::{CaseArm, Expr, FieldId, Pattern, PatternKind},
-    types::{CaseId, Type},
+    mir::{self, BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind, Value, build::Builder}, src_loc::SrcLoc, typed_ast::{CaseArm, Expr, FieldId, Pattern, PatternKind}, types::{CaseId, Type},
 };
 enum Test {
     VariantSwitch,
@@ -98,9 +95,11 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .get(&TestCase::False)
                     .copied()
                     .unwrap_or(otherwise_start);
-                self.finish_block_with_old_if(
+
+                let value = Value::Reg(self.push_operation(head_test.loc, mir::Operation::Load(head_test.place)));
+                self.finish_block_with_if(
                     head_test.loc,
-                    Operand::Load(head_test.place),
+                    value,
                     true_block,
                     false_block,
                 );
@@ -120,7 +119,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                         })
                     })
                     .collect();
-                self.finish_block_with_switch_targets(
+                self.finish_block_with_old_switch_targets(
                     head_test.loc,
                     Operand::Load(head_test.place),
                     targets,
@@ -154,7 +153,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     Type::new_int(self.ctxt),
                     Rvalue::Discriminant(head_test.place),
                 );
-                self.finish_block_with_switch_targets(
+                self.finish_block_with_old_switch_targets(
                     head_test.loc,
                     Operand::Load(Place::local(disrciminant)),
                     targets,

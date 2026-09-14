@@ -4,7 +4,7 @@ use crate::{
     collect::CtxtRef,
     index_vec::IndexVec,
     mir::{
-        AssertKind, BasicBlock, BasicBlockId, BinaryOp, Body, BodySource, Context, Local,
+        AssertKind, BasicBlock, BasicBlockId, Body, BodySource, Context, Local,
         LocalInfo, Operand, Operation, Place, Reg, RegInfo, Regs, Rvalue, Stmt, StmtKind,
         SwitchTarget, SwitchTargets, Terminator, TerminatorKind, Value, basic_blocks::BasicBlocks,
     },
@@ -138,7 +138,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             kind: terminator,
         });
     }
-    pub(super) fn finish_block_with_switch_targets(
+    pub(super) fn finish_block_with_old_switch_targets(
         &mut self,
         loc: SrcLoc,
         operand: Operand<'ctxt>,
@@ -149,14 +149,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             loc,
             TerminatorKind::OldSwitch(operand, SwitchTargets { targets, otherwise }),
         );
-    }
-    pub(super) fn finish_block_with_old_switch(
-        &mut self,
-        loc: SrcLoc,
-        operand: Operand<'ctxt>,
-        targets: SwitchTargets,
-    ) {
-        self.finish_block(loc, TerminatorKind::OldSwitch(operand, targets));
     }
     pub(super) fn finish_block_with_switch(
         &mut self,
@@ -174,25 +166,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         false_block: BasicBlockId,
     ) {
         self.finish_block_with_switch(
-            loc,
-            value,
-            SwitchTargets {
-                targets: vec![SwitchTarget {
-                    value: 0,
-                    target: false_block,
-                }],
-                otherwise: true_block,
-            },
-        );
-    }
-    pub(super) fn finish_block_with_old_if(
-        &mut self,
-        loc: SrcLoc,
-        value: Operand<'ctxt>,
-        true_block: BasicBlockId,
-        false_block: BasicBlockId,
-    ) {
-        self.finish_block_with_old_switch(
             loc,
             value,
             SwitchTargets {
@@ -228,30 +201,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         let temp = self.new_temp(ty);
         self.assign(loc, Place::local(temp), value);
         temp
-    }
-    pub(super) fn assign_equals(
-        &mut self,
-        loc: SrcLoc,
-        left: Operand<'ctxt>,
-        right: Operand<'ctxt>,
-    ) -> Local {
-        self.assign_binary_result(
-            loc,
-            Type::new_bool(self.ctxt),
-            BinaryOp::Equals,
-            left,
-            right,
-        )
-    }
-    pub(super) fn assign_binary_result(
-        &mut self,
-        loc: SrcLoc,
-        ty: Type<'ctxt>,
-        op: BinaryOp,
-        left: Operand<'ctxt>,
-        right: Operand<'ctxt>,
-    ) -> Local {
-        self.assign_to_temp(loc, ty, Rvalue::Binary(op, Box::new((left, right))))
     }
     pub(super) fn panic(&mut self, loc: SrcLoc) {
         let block = self.new_block();
