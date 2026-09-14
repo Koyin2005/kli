@@ -45,10 +45,12 @@ pub trait Visit<'ctxt> {
     fn super_visit_terminator(&mut self, loc: Location, terminator: &Terminator<'ctxt>) {
         match &terminator.kind {
             TerminatorKind::Goto(_) | TerminatorKind::Panic | TerminatorKind::Unreachable => (),
-            TerminatorKind::Switch(operand, _)
+            TerminatorKind::OldSwitch(operand, _)
             | TerminatorKind::OldAssert(operand, ..)
             | TerminatorKind::OldReturn(operand) => self.visit_operand(loc, operand),
-            TerminatorKind::Return(value) => self.visit_value(loc, value),
+            TerminatorKind::Return(value) | TerminatorKind::Switch(value, _) => {
+                self.visit_value(loc, value)
+            }
         }
     }
     fn super_visit_block(&mut self, id: BasicBlockId, info: &BasicBlock<'ctxt>) {
@@ -265,10 +267,12 @@ pub trait MutVisit<'ctxt> {
     fn super_visit_terminator(&mut self, loc: Location, terminator: &mut Terminator<'ctxt>) {
         match &mut terminator.kind {
             TerminatorKind::Goto(_) | TerminatorKind::Panic | TerminatorKind::Unreachable => (),
-            TerminatorKind::Switch(operand, _)
+            TerminatorKind::OldSwitch(operand, _)
             | TerminatorKind::OldAssert(operand, ..)
             | TerminatorKind::OldReturn(operand) => self.visit_operand(loc, operand),
-            TerminatorKind::Return(value) => self.visit_value(loc, value),
+            TerminatorKind::Return(value) | TerminatorKind::Switch(value, _) => {
+                self.visit_value(loc, value)
+            }
         }
     }
     fn super_visit_block(&mut self, id: BasicBlockId, info: &mut BasicBlock<'ctxt>) {

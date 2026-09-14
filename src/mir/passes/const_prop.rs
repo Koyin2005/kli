@@ -73,7 +73,7 @@ impl<'ctxt> Analysis<'ctxt> for ConstAnalysis<'ctxt> {
         terminator: &mir::Terminator<'ctxt>,
         mut f: impl FnMut(BasicBlockId),
     ) {
-        if let TerminatorKind::Switch(condition, targets) = &terminator.kind
+        if let TerminatorKind::OldSwitch(condition, targets) = &terminator.kind
             && let Some(LocalValue::Simple(constant)) = eval_operand(&state, condition)
             && let ConstValue::Scalar(value) = constant.value
         {

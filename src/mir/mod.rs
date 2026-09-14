@@ -431,7 +431,7 @@ impl<'ctxt> Terminator<'ctxt> {
             | TerminatorKind::Panic
             | TerminatorKind::Unreachable
             | TerminatorKind::Return(_) => SuccessorsIter::Leaf,
-            TerminatorKind::Switch(_, ref targets) => {
+            TerminatorKind::OldSwitch(_, ref targets) | TerminatorKind::Switch(_, ref targets) => {
                 SuccessorsIter::Switch(targets.succesors_iter())
             }
         })
@@ -441,7 +441,8 @@ impl<'ctxt> Terminator<'ctxt> {
             TerminatorKind::Goto(block) | TerminatorKind::OldAssert(.., block) => {
                 (Some(block), None)
             }
-            TerminatorKind::Switch(_, switch_targets) => (
+            TerminatorKind::OldSwitch(_, switch_targets)
+            | TerminatorKind::Switch(_, switch_targets) => (
                 None,
                 Some(
                     switch_targets
@@ -461,7 +462,8 @@ impl<'ctxt> Terminator<'ctxt> {
 #[derive(Clone, Debug)]
 pub enum TerminatorKind<'ctxt> {
     OldAssert(Operand<'ctxt>, AssertKind, BasicBlockId),
-    Switch(Operand<'ctxt>, SwitchTargets),
+    OldSwitch(Operand<'ctxt>, SwitchTargets),
+    Switch(Value<'ctxt>, SwitchTargets),
     Unreachable,
     OldReturn(Operand<'ctxt>),
     Return(Value<'ctxt>),

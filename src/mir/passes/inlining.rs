@@ -233,7 +233,8 @@ fn inline_budget_used_by(body: &Body<'_>) -> u32 {
                     };
                     match term.kind {
                         TerminatorKind::OldAssert(..) => INSTR_BUDGET,
-                        TerminatorKind::Switch(_, ref switch_targets) => {
+                        TerminatorKind::OldSwitch(_, ref switch_targets)
+                        | TerminatorKind::Switch(_, ref switch_targets) => {
                             (2 + switch_targets.targets.iter().len()) as u32 * INSTR_BUDGET
                         }
                         TerminatorKind::Unreachable => INSTR_BUDGET,

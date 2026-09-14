@@ -54,7 +54,7 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
                 self.finish_block_with_goto(condition.loc, loop_start);
                 self.switch_to_block(loop_start);
 
-                let loop_condition = self.operand(condition);
+                let loop_condition = self.expr_value(condition);
                 self.finish_block_with_if(body.loc, loop_condition, loop_body_start, loop_end);
 
                 self.switch_to_block(loop_body_start);

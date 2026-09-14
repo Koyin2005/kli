@@ -53,7 +53,7 @@ impl<'ctxt> BodyPass<'ctxt> for SimplifyCfg {
                         modified = true;
                         continue;
                     }
-                    TerminatorKind::Switch(ref operand, ref targets) => {
+                    TerminatorKind::OldSwitch(ref operand, ref targets) => {
                         if let Operand::Constant(constant) = operand
                             && let Some(value) = constant.value.as_scalar()
                             && let target = targets.branch_for_value(value)

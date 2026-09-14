@@ -227,7 +227,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 self.finish_block_with_goto(const_loc, merge_block);
 
                 self.switch_to_block(branch_block);
-                self.finish_block_with_if(left.loc, left_operand, true_block, false_block);
+                self.finish_block_with_old_if(left.loc, left_operand, true_block, false_block);
 
                 self.switch_to_block(merge_block);
             }
@@ -388,6 +388,12 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                     VarKind::Value(value) => value.clone(),
                 }
             }
+            PlaceKind::Field(ref base, field) => {
+                let base = self.load_place(base);
+                Value::Reg(
+                    self.push_operation(place.loc, mir::Operation::ExtractField(base, field)),
+                )
+            }
             _ => todo!("other kinds {:?}", place),
         }
     }
@@ -482,8 +488,28 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 Value::Reg(tuple)
             }
             ExprKind::Array(exprs) => todo!(),
-            ExprKind::NamedRecord(def_id, generic_args, record_field_inits) => todo!(),
-            ExprKind::While(expr, expr1) => todo!(),
+            ExprKind::NamedRecord(def_id, generic_args, fields) => {
+                let mut field_map = fields
+                    .iter()
+                    .map(|field| (field.index, self.expr_value(&field.value)))
+                    .collect::<HashMap<_, _>>();
+                let fields = (0..fields.len())
+                    .map(FieldId::new)
+                    .map(|field| field_map.remove(&field).unwrap())
+                    .collect::<IndexVec<FieldId, _>>();
+                let record = self.push_operation(
+                    expr.loc,
+                    mir::Operation::Aggregate(
+                        AggregateKind::NamedRecord(*def_id, generic_args.clone()),
+                        fields,
+                    ),
+                );
+                Value::Reg(record)
+            }
+            ExprKind::While(..) => {
+                self.expr_stmt(expr);
+                Value::Unit
+            }
         }
     }
     pub fn build_rvalue(&mut self, expr: &Expr<'ctxt>) -> Rvalue<'ctxt> {

@@ -370,6 +370,15 @@ impl<'ctxt> MirDump<'ctxt> {
         write!(self.output, "  ")?;
         if let Some(ref terminator) = block.terminator {
             match &terminator.kind {
+                TerminatorKind::Switch(value, targets) => {
+                    write!(self.output, "switch ")?;
+                    self.write_value(value)?;
+                    writeln!(self.output,"")?;
+                    for target in &targets.targets {
+                        writeln!(self.output, "   {} -> bb{}", target.value, target.target.0)?;
+                    }
+                    write!(self.output, "   otherwise -> bb{}", targets.otherwise.0)?;
+                }
                 TerminatorKind::Unreachable => {
                     write!(self.output, "unreachable")?;
                 }
@@ -381,7 +390,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     write!(self.output, "return ")?;
                     self.write_value(value)?;
                 }
-                TerminatorKind::Switch(operand, targets) => {
+                TerminatorKind::OldSwitch(operand, targets) => {
                     write!(self.output, "switch ")?;
                     self.write_operand(operand)?;
                     write!(self.output, " ")?;

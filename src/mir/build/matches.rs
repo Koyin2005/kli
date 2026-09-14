@@ -98,7 +98,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .get(&TestCase::False)
                     .copied()
                     .unwrap_or(otherwise_start);
-                self.finish_block_with_if(
+                self.finish_block_with_old_if(
                     head_test.loc,
                     Operand::Load(head_test.place),
                     true_block,

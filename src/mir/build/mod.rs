@@ -136,13 +136,21 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     ) {
         self.finish_block(
             loc,
-            TerminatorKind::Switch(operand, SwitchTargets { targets, otherwise }),
+            TerminatorKind::OldSwitch(operand, SwitchTargets { targets, otherwise }),
         );
+    }
+    pub(super) fn finish_block_with_old_switch(
+        &mut self,
+        loc: SrcLoc,
+        operand: Operand<'ctxt>,
+        targets: SwitchTargets,
+    ) {
+        self.finish_block(loc, TerminatorKind::OldSwitch(operand, targets));
     }
     pub(super) fn finish_block_with_switch(
         &mut self,
         loc: SrcLoc,
-        operand: Operand<'ctxt>,
+        operand: Value<'ctxt>,
         targets: SwitchTargets,
     ) {
         self.finish_block(loc, TerminatorKind::Switch(operand, targets));
@@ -150,13 +158,32 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     pub(super) fn finish_block_with_if(
         &mut self,
         loc: SrcLoc,
-        operand: Operand<'ctxt>,
+        value: Value<'ctxt>,
         true_block: BasicBlockId,
         false_block: BasicBlockId,
     ) {
         self.finish_block_with_switch(
             loc,
-            operand,
+            value,
+            SwitchTargets {
+                targets: vec![SwitchTarget {
+                    value: 0,
+                    target: false_block,
+                }],
+                otherwise: true_block,
+            },
+        );
+    }
+    pub(super) fn finish_block_with_old_if(
+        &mut self,
+        loc: SrcLoc,
+        value: Operand<'ctxt>,
+        true_block: BasicBlockId,
+        false_block: BasicBlockId,
+    ) {
+        self.finish_block_with_old_switch(
+            loc,
+            value,
             SwitchTargets {
                 targets: vec![SwitchTarget {
                     value: 0,
