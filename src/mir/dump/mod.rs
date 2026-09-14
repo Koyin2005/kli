@@ -274,6 +274,16 @@ impl<'ctxt> MirDump<'ctxt> {
     }
     fn write_operation(&mut self, operation: &Operation<'ctxt>) -> std::io::Result<()> {
         match operation {
+            Operation::ExtractElement(array, index) => {
+                write!(self.output, "extract_element ")?;
+                self.write_value(array)?;
+                write!(self.output, ", ")?;
+                self.write_value(index)
+            }
+            Operation::AllocArray(ty, fields) => {
+                write!(self.output, "alloc_array[{ty}] ")?;
+                self.write_with_coma_sep(fields, |this, field| this.write_value(field))
+            }
             Operation::Cmp(cmp, left, right) => {
                 let name = match cmp {
                     mir::Comparison::Equals => "eq",

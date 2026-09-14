@@ -547,12 +547,15 @@ pub enum Operation<'ctxt> {
     Cmp(Comparison, Value<'ctxt>, Value<'ctxt>),
     Arith(ArithOp, Value<'ctxt>, Value<'ctxt>),
     ExtractField(Value<'ctxt>, FieldId),
+    ExtractElement(Value<'ctxt>, Value<'ctxt>),
     Call(Value<'ctxt>, Vec<Value<'ctxt>>),
     Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Value<'ctxt>>),
+    AllocArray(Type<'ctxt>, Vec<Value<'ctxt>>),
 }
 impl<'ctxt> Operation<'ctxt> {
     pub fn result_type(&self, ctxt: CtxtRef<'ctxt>, regs: &Regs<'ctxt>) -> Type<'ctxt> {
         match self {
+            Operation::AllocArray(ty, _) => Type::new_array(ctxt, *ty),
             Operation::Cmp(..) => Type::new_bool(ctxt),
             Operation::Arith(op, ..) => match op {
                 ArithOp::AddOverflow | ArithOp::SubOverflow | ArithOp::MulOverflow => {
@@ -564,6 +567,13 @@ impl<'ctxt> Operation<'ctxt> {
                 let ty = value.type_of(ctxt, regs);
                 let Some((ty, _)) = ty.field_info(*field, ctxt) else {
                     unreachable!("Should be a type with fields")
+                };
+                ty
+            }
+            Operation::ExtractElement(value, _) => {
+                let ty = value.type_of(ctxt, regs);
+                let Some(ty) = ty.as_array() else {
+                    unreachable!("Should be an array type")
                 };
                 ty
             }

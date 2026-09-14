@@ -394,7 +394,16 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                     self.push_operation(place.loc, mir::Operation::ExtractField(base, field)),
                 )
             }
-            _ => todo!("other kinds {:?}", place),
+            PlaceKind::Index(ref base, ref index) => {
+                let base = self.expr_value(base);
+                let index = self.expr_value(index);
+                Value::Reg(
+                    self.push_operation(place.loc, mir::Operation::ExtractElement(base, index)),
+                )
+            }
+            PlaceKind::Upvar(def_id, var) => todo!(),
+            PlaceKind::Deref(ref expr) => todo!(),
+            PlaceKind::Invalid => todo!(),
         }
     }
     pub(super) fn expr_value(&mut self, expr: &Expr<'ctxt>) -> Value<'ctxt> {
@@ -532,7 +541,15 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 );
                 Value::Reg(tuple)
             }
-            ExprKind::Array(exprs) => todo!(),
+            ExprKind::Array(elements) => {
+                let ty = expr.ty.as_array().expect("should be an array");
+                let elements = elements
+                    .iter()
+                    .map(|element| self.expr_value(element))
+                    .collect();
+                let array = self.push_operation(expr.loc, mir::Operation::AllocArray(ty, elements));
+                Value::Reg(array)
+            }
             ExprKind::NamedRecord(def_id, generic_args, fields) => {
                 let mut field_map = fields
                     .iter()

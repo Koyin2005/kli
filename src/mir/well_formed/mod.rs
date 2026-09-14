@@ -263,6 +263,17 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_operation(&mut self, loc: Location, operation: &super::Operation<'ctxt>) {
         self.super_visit_operation(loc, operation);
         match operation {
+            Operation::AllocArray(ty, elements) => {
+                let loc = self.body.src_info(loc);
+                for element in elements {
+                    let element = element.type_of(self.ctxt(), &self.body.registers);
+                    self.assert(
+                        element == *ty,
+                        || format!("Array elements should have type '{}'", ty),
+                        loc,
+                    );
+                }
+            }
             Operation::Cmp(_, left, right) => {
                 let lhs_ty = left.type_of(self.ctxt, &self.body.registers);
                 let rhs_ty = right.type_of(self.ctxt, &self.body.registers);
@@ -287,6 +298,22 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     ty.field_info(*field, self.ctxt()).is_some(),
                     || format!("{ty} does not have a field {field:?}"),
                     self.body.src_info(loc),
+                );
+            }
+            Operation::ExtractElement(array, index) => {
+                let loc = self.body.src_info(loc);
+                let ty = array.type_of(self.ctxt, &self.body.registers);
+                let _ = self.assert_with_some(
+                    ty,
+                    |ty| ty.as_array(),
+                    || "Cannot take an index for non-array",
+                    loc,
+                );
+                let ty = index.type_of(self.ctxt, &self.body.registers);
+                self.assert(
+                    ty.is_integer(),
+                    || format!("Index should be an int not '{ty}'"),
+                    loc,
                 );
             }
             Operation::Call(callee, args) => {

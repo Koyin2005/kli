@@ -170,11 +170,9 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_operation(&mut self, loc: Location, operation: &Operation<'ctxt>) {
         match operation {
-            Operation::Cmp(_, left, right) => {
-                self.visit_value(loc, left);
-                self.visit_value(loc, right);
-            }
-            Operation::Arith(_, left, right) => {
+            Operation::Cmp(_, left, right)
+            | Operation::Arith(_, left, right)
+            | Operation::ExtractElement(left, right) => {
                 self.visit_value(loc, left);
                 self.visit_value(loc, right);
             }
@@ -188,6 +186,11 @@ pub trait Visit<'ctxt> {
                 }
             }
             Operation::Aggregate(_, fields) => {
+                for field in fields {
+                    self.visit_value(loc, field);
+                }
+            }
+            Operation::AllocArray(_, fields) => {
                 for field in fields {
                     self.visit_value(loc, field);
                 }
@@ -223,11 +226,9 @@ pub trait MutVisit<'ctxt> {
     }
     fn visit_operation(&mut self, loc: Location, operation: &mut Operation<'ctxt>) {
         match operation {
-            Operation::Cmp(_, left, right) => {
-                self.visit_value(loc, left);
-                self.visit_value(loc, right);
-            }
-            Operation::Arith(_, left, right) => {
+            Operation::Cmp(_, left, right)
+            | Operation::Arith(_, left, right)
+            | Operation::ExtractElement(left, right) => {
                 self.visit_value(loc, left);
                 self.visit_value(loc, right);
             }
@@ -241,6 +242,11 @@ pub trait MutVisit<'ctxt> {
                 }
             }
             Operation::Aggregate(_, fields) => {
+                for field in fields {
+                    self.visit_value(loc, field);
+                }
+            }
+            Operation::AllocArray(_, fields) => {
                 for field in fields {
                     self.visit_value(loc, field);
                 }
