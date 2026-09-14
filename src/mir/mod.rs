@@ -70,7 +70,7 @@ pub enum PlaceBase {
     Local(Local),
 }
 impl PlaceBase {
-    pub fn type_of<'ctxt>(self, locals: &Locals<'ctxt>, _: Type<'ctxt>) -> Type<'ctxt> {
+    pub fn type_of<'ctxt>(self, locals: &Locals<'ctxt>) -> Type<'ctxt> {
         match self {
             PlaceBase::Local(local) => locals[local].ty,
         }
@@ -120,13 +120,8 @@ impl Place {
         self
     }
 
-    pub fn type_of<'ctxt>(
-        &self,
-        ctxt: CtxtRef<'ctxt>,
-        locals: &Locals<'ctxt>,
-        return_type: Type<'ctxt>,
-    ) -> Type<'ctxt> {
-        let mut ty = self.base.type_of(locals, return_type);
+    pub fn type_of<'ctxt>(&self, ctxt: CtxtRef<'ctxt>, locals: &Locals<'ctxt>) -> Type<'ctxt> {
+        let mut ty = self.base.type_of(locals);
         for projection in self.projections.iter() {
             ty = projection.apply_projection_to_type(ty, ctxt);
         }
@@ -193,15 +188,10 @@ pub enum Operand<'ctxt> {
     Constant(Constant<'ctxt>),
 }
 impl<'ctxt> Operand<'ctxt> {
-    pub fn type_of(
-        &self,
-        ctxt: CtxtRef<'ctxt>,
-        locals: &Locals<'ctxt>,
-        return_type: Type<'ctxt>,
-    ) -> Type<'ctxt> {
+    pub fn type_of(&self, ctxt: CtxtRef<'ctxt>, locals: &Locals<'ctxt>) -> Type<'ctxt> {
         match self {
             Operand::Constant(constant) => constant.ty,
-            Operand::Load(place) => place.type_of(ctxt, locals, return_type),
+            Operand::Load(place) => place.type_of(ctxt, locals),
         }
     }
 }
@@ -257,20 +247,14 @@ impl<'ctxt> Rvalue<'ctxt> {
         }
     }
 
-    pub fn type_of(
-        &self,
-        ctxt: CtxtRef<'ctxt>,
-        locals: &Locals<'ctxt>,
-        return_type: Type<'ctxt>,
-    ) -> Type<'ctxt> {
+    pub fn type_of(&self, ctxt: CtxtRef<'ctxt>, locals: &Locals<'ctxt>) -> Type<'ctxt> {
         match self {
             Rvalue::AllocArray(ty, _) => Type::new_array(ctxt, *ty),
             Rvalue::ReadLine => Type::new_string(ctxt),
-            Rvalue::Use(operand) => operand.type_of(ctxt, locals, return_type),
+            Rvalue::Use(operand) => operand.type_of(ctxt, locals),
             Rvalue::Len(_) => Type::new_int(ctxt),
             Rvalue::Call(operand, _) => {
-                let Some(function) = operand.type_of(ctxt, locals, return_type).as_function()
-                else {
+                let Some(function) = operand.type_of(ctxt, locals).as_function() else {
                     unreachable!("Should be a function type")
                 };
                 function.return_type
@@ -278,18 +262,18 @@ impl<'ctxt> Rvalue<'ctxt> {
             Rvalue::Binary(op, left_and_right) => match op {
                 BinaryOp::Overflow(_) => Type::pair(
                     ctxt,
-                    left_and_right.0.type_of(ctxt, locals, return_type),
+                    left_and_right.0.type_of(ctxt, locals),
                     Type::new_bool(ctxt),
                 ),
                 BinaryOp::Wrapping(_)
                 | BinaryOp::BitwiseAnd
                 | BinaryOp::BitwiseOr
                 | BinaryOp::ShiftLeft
-                | BinaryOp::ShiftRight => left_and_right.0.type_of(ctxt, locals, return_type),
-                BinaryOp::Divide => left_and_right.0.type_of(ctxt, locals, return_type),
+                | BinaryOp::ShiftRight => left_and_right.0.type_of(ctxt, locals),
+                BinaryOp::Divide => left_and_right.0.type_of(ctxt, locals),
                 BinaryOp::Equals => Type::new_bool(ctxt),
                 BinaryOp::Lesser | BinaryOp::Greater => Type::new_bool(ctxt),
-                BinaryOp::Offset => left_and_right.0.type_of(ctxt, locals, return_type),
+                BinaryOp::Offset => left_and_right.0.type_of(ctxt, locals),
             },
             Rvalue::Aggregate(aggregate, operands) => match aggregate {
                 &AggregateKind::Variant(id, _, ref args)
@@ -299,9 +283,7 @@ impl<'ctxt> Rvalue<'ctxt> {
                 }
                 AggregateKind::Tuple => Type::tuple_from_iter(
                     ctxt,
-                    operands
-                        .iter()
-                        .map(|operand| operand.type_of(ctxt, locals, return_type)),
+                    operands.iter().map(|operand| operand.type_of(ctxt, locals)),
                 ),
             },
             Rvalue::Discriminant(_) => Type::new_int(ctxt),

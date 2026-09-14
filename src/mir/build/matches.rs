@@ -130,7 +130,7 @@ impl<'ctxt> Builder<'_, 'ctxt> {
             Test::VariantSwitch => {
                 let (id, _, _) = head_test
                     .place
-                    .type_of(self.ctxt, &self.body.locals, self.body.return_type)
+                    .type_of(self.ctxt, &self.body.locals)
                     .as_named()
                     .unwrap();
                 let type_def = self.ctxt.type_def(id);
