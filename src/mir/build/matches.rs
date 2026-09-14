@@ -1,7 +1,13 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::{
-    mir::{self, BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind, Value, build::Builder}, src_loc::SrcLoc, typed_ast::{CaseArm, Expr, FieldId, Pattern, PatternKind}, types::{CaseId, Type},
+    mir::{
+        self, BasicBlockId, Operand, Place, Rvalue, SwitchTarget, TerminatorKind, Value,
+        build::Builder,
+    },
+    src_loc::SrcLoc,
+    typed_ast::{CaseArm, Expr, FieldId, Pattern, PatternKind},
+    types::{CaseId, Type},
 };
 enum Test {
     VariantSwitch,
@@ -96,13 +102,10 @@ impl<'ctxt> Builder<'_, 'ctxt> {
                     .copied()
                     .unwrap_or(otherwise_start);
 
-                let value = Value::Reg(self.push_operation(head_test.loc, mir::Operation::Load(head_test.place)));
-                self.finish_block_with_if(
-                    head_test.loc,
-                    value,
-                    true_block,
-                    false_block,
+                let value = Value::Reg(
+                    self.push_operation(head_test.loc, mir::Operation::Load(head_test.place)),
                 );
+                self.finish_block_with_if(head_test.loc, value, true_block, false_block);
             }
             Test::IntSwitch => {
                 let targets = tests
@@ -223,7 +226,12 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         }
     }
 
-    pub(super) fn build_match(&mut self, dest: Place, expr: &Expr<'ctxt>, arms: &[CaseArm<'ctxt>]) {
+    pub(super) fn build_match(
+        &mut self,
+        result_ty: Type<'ctxt>,
+        expr: &Expr<'ctxt>,
+        arms: &[CaseArm<'ctxt>],
+    ) -> Value<'ctxt> {
         let place = self.place(expr);
         let tests = arms
             .iter()
@@ -240,13 +248,14 @@ impl<'ctxt> Builder<'_, 'ctxt> {
         self.build_tree(tests, &mut end_blocks);
         self.finish_block(expr.loc, TerminatorKind::Unreachable);
 
-        let end_block = self.switch_to_new_block();
+        let (end_block, [result]) = self.new_block_with_args([result_ty]);
         for (loc, i, block) in end_blocks.into_iter() {
             self.switch_to_block(block);
             self.assign_place_to_pattern(&arms[i].pattern, place.clone());
-            self.expr_into_dest(dest.clone(), &arms[i].body);
-            self.finish_block_with_goto(loc, end_block);
+            let result = self.expr_value(&arms[i].body);
+            self.finish_block_with_goto_args(loc, end_block, [result]);
         }
         self.switch_to_block(end_block);
+        Value::Reg(result)
     }
 }

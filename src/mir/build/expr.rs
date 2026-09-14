@@ -375,23 +375,16 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
 
                 let (merge_block, [result]) = self.new_block_with_args([Type::new_bool(self.ctxt)]);
                 self.switch_to_block(true_block);
-                self.finish_block(
-                    expr.loc,
-                    mir::TerminatorKind::Goto(merge_block, vec![true_block_value]),
-                );
+                self.finish_block_with_goto_args(expr.loc, merge_block, [true_block_value]);
+
                 self.switch_to_block(false_block);
-                self.finish_block(
-                    expr.loc,
-                    mir::TerminatorKind::Goto(merge_block, vec![false_block_value]),
-                );
+                self.finish_block_with_goto_args(expr.loc, merge_block, [false_block_value]);
 
                 self.switch_to_block(merge_block);
                 Value::Reg(result)
             }
             ExprKind::Case(scrutinee, case_arms) => {
-                let dest = Place::local(self.new_temp(expr.ty));
-                self.build_match(dest.clone(), scrutinee, case_arms);
-                Value::Reg(self.push_operation(expr.loc, mir::Operation::Load(dest)))
+                self.build_match(expr.ty, scrutinee, case_arms)
             }
             ExprKind::Lambda(lambda) => todo!(),
             ExprKind::Tuple(fields) => {

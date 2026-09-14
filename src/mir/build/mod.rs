@@ -4,9 +4,9 @@ use crate::{
     collect::CtxtRef,
     index_vec::IndexVec,
     mir::{
-        AssertKind, BasicBlock, BasicBlockId, Body, BodySource, Context, Local,
-        LocalInfo, Operand, Operation, Place, Reg, RegInfo, Regs, Rvalue, Stmt, StmtKind,
-        SwitchTarget, SwitchTargets, Terminator, TerminatorKind, Value, basic_blocks::BasicBlocks,
+        AssertKind, BasicBlock, BasicBlockId, Body, BodySource, Context, Local, LocalInfo, Operand,
+        Operation, Place, Reg, RegInfo, Regs, Rvalue, Stmt, StmtKind, SwitchTarget, SwitchTargets,
+        Terminator, TerminatorKind, Value, basic_blocks::BasicBlocks,
     },
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
@@ -180,6 +180,15 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     pub(super) fn finish_block_with_goto(&mut self, loc: SrcLoc, block: BasicBlockId) {
         self.finish_block(loc, TerminatorKind::Goto(block, Vec::new()));
     }
+    pub(super) fn finish_block_with_goto_args<const N: usize>(
+        &mut self,
+        loc: SrcLoc,
+        block: BasicBlockId,
+        args: [Value<'ctxt>; N],
+    ) {
+        self.finish_block(loc, TerminatorKind::Goto(block, Vec::from(args)));
+    }
+
     pub(super) fn push_stmt(&mut self, loc: SrcLoc, kind: StmtKind<'ctxt>) {
         self.body.block_info.blocks_mut()[self.current_block]
             .stmts
