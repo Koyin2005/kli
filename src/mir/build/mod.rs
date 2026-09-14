@@ -105,6 +105,18 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             .blocks_mut()
             .push(BasicBlock::default())
     }
+    pub(super) fn new_block_with_args<const N: usize>(
+        &mut self,
+        args: [Type<'ctxt>; N],
+    ) -> (BasicBlockId, [Reg; N]) {
+        let mut block = BasicBlock::default();
+        let args = args.map(|arg| {
+            let reg = self.body.registers.push(RegInfo { ty: arg });
+            block.args.push(reg);
+            reg
+        });
+        (self.body.block_info.blocks_mut().push(block), args)
+    }
     pub(super) fn switch_to_block(&mut self, block: BasicBlockId) {
         self.current_block = block;
     }

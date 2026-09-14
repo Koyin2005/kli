@@ -488,15 +488,38 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             }
             ExprKind::Logic(logical_op, left, right) => {
                 let left_value = self.expr_value(left);
-                match logical_op {
-                    LogicalOp::And => todo!(),
-                    LogicalOp::Or => {
-                        let true_block = self.new_block();
-                        let false_block = self.new_block();
-                        self.finish_block_with_if(expr.loc, left_value, true_block, false_block);
-                        todo!()
+                let start_block = self.current_block;
+
+                let (true_block, false_block, true_block_value, false_block_value) = {
+                    let constant_block = self.new_block();
+                    let right_side = self.switch_to_new_block();
+                    let right_value = self.expr_value(right);
+                    match logical_op {
+                        LogicalOp::And => {
+                            (right_side, constant_block, right_value, left_value.clone())
+                        }
+                        LogicalOp::Or => {
+                            (constant_block, right_side, left_value.clone(), right_value)
+                        }
                     }
-                }
+                };
+                self.switch_to_block(start_block);
+                self.finish_block_with_if(expr.loc, left_value, true_block, false_block);
+
+                let (merge_block, [result]) = self.new_block_with_args([Type::new_bool(self.ctxt)]);
+                self.switch_to_block(true_block);
+                self.finish_block(
+                    expr.loc,
+                    mir::TerminatorKind::Goto(merge_block, vec![true_block_value]),
+                );
+                self.switch_to_block(false_block);
+                self.finish_block(
+                    expr.loc,
+                    mir::TerminatorKind::Goto(merge_block, vec![false_block_value]),
+                );
+
+                self.switch_to_block(merge_block);
+                Value::Reg(result)
             }
             ExprKind::Case(expr, case_arms) => todo!(),
             ExprKind::Assign(place, expr) => todo!(),

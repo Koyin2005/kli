@@ -41,27 +41,22 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
                 self.for_loop(pattern, iterator, iterator_type, body);
             }
             ExprKind::While(condition, body) => {
-                let loop_start = self.new_block();
-                let loop_body_start = self.new_block();
-                let loop_end = self.new_block();
-                // while cond body
-                // L1
-                //  if cond goto L2 else goto L3
-                // L2
-                //  body
-                //  goto L1
-                // L3
-                self.finish_block_with_goto(condition.loc, loop_start);
-                self.switch_to_block(loop_start);
-
+                let loop_start = self.goto_to_new_block(expr.loc);
                 let loop_condition = self.expr_value(condition);
-                self.finish_block_with_if(body.loc, loop_condition, loop_body_start, loop_end);
+                let loop_cond_end = self.current_block;
 
-                self.switch_to_block(loop_body_start);
+                let loop_body = self.switch_to_new_block();
                 self.expr_stmt(body);
+                let loop_body_end = self.current_block;
+
+                let end = self.new_block();
+                self.switch_to_block(loop_cond_end);
+                self.finish_block_with_if(expr.loc, loop_condition, loop_body, end);
+
+                self.switch_to_block(loop_body_end);
                 self.finish_block_with_goto(expr.loc, loop_start);
 
-                self.switch_to_block(loop_end);
+                self.switch_to_block(end);
             }
             ExprKind::BuiltinCall(builtin, _, args) => {
                 match self.builtin_call(expr.loc, *builtin, args) {
