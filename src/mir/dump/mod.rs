@@ -345,7 +345,15 @@ impl<'ctxt> MirDump<'ctxt> {
         }
     }
     fn write_block(&mut self, id: BasicBlockId, block: &BasicBlock<'ctxt>) -> std::io::Result<()> {
-        writeln!(self.output, " bb{}", id.into_usize())?;
+        write!(self.output, " bb{}", id.into_usize())?;
+        if !block.args.is_empty() {
+            write!(self.output, "(")?;
+            self.write_with_coma_sep(block.args.iter(), |this, arg| {
+                write!(this.output, "%{}", arg.0)
+            })?;
+            write!(self.output, ")")?;
+        }
+        writeln!(self.output)?;
         for stmt in &block.stmts {
             write!(self.output, "  ")?;
             match &stmt.kind {
@@ -405,7 +413,14 @@ impl<'ctxt> MirDump<'ctxt> {
                     }
                     write!(self.output, "otherwise -> bb{}", targets.otherwise.0)?;
                 }
-                TerminatorKind::Goto(block) => write!(self.output, "goto -> bb{}", block.0)?,
+                TerminatorKind::Goto(block, args) => {
+                    write!(self.output, "goto bb{}", block.0)?;
+                    if !args.is_empty() {
+                        write!(self.output, "(")?;
+                        self.write_with_coma_sep(args, |this, arg| this.write_value(arg))?;
+                        write!(self.output, ")")?;
+                    }
+                }
                 TerminatorKind::Panic => write!(self.output, "panic")?,
                 TerminatorKind::OldAssert(operand, kind, block) => {
                     write!(

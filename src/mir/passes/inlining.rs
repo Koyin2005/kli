@@ -56,7 +56,7 @@ pub fn run_pass<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
                         false
                     }
                 }));
-                let TerminatorKind::Goto(ref mut target) =
+                let TerminatorKind::Goto(ref mut target, ..) =
                     current_block.expect_terminator_mut().kind
                 else {
                     panic!("should be a goto")
@@ -154,7 +154,7 @@ fn split_calls<'ctxt>(body: &mut Body<'ctxt>) {
                 continue;
             };
             if stmt_id != block.stmts.last()
-                || !matches!(block.expect_terminator().kind, TerminatorKind::Goto(_))
+                || !matches!(block.expect_terminator().kind, TerminatorKind::Goto(..))
             {
                 call_stmt = Some(stmt_id);
                 break;
@@ -165,10 +165,14 @@ fn split_calls<'ctxt>(body: &mut Body<'ctxt>) {
             let src_info = block.expect_terminator().src_info;
             let terminator = block.terminator.take();
 
-            let next_block_id = blocks.push(BasicBlock { stmts, terminator });
+            let next_block_id = blocks.push(BasicBlock {
+                args: Vec::new(),
+                stmts,
+                terminator,
+            });
             blocks[block_id].terminator = Some(Terminator {
                 src_info,
-                kind: mir::TerminatorKind::Goto(next_block_id),
+                kind: mir::TerminatorKind::Goto(next_block_id, Vec::new()),
             });
         }
         block_id = block_id.next();
@@ -197,7 +201,7 @@ impl<'ctxt> MutVisit<'ctxt> for Updater {
             mir::TerminatorKind::OldReturn(_) => {
                 let mir::TerminatorKind::OldReturn(value) = std::mem::replace(
                     &mut terminator.kind,
-                    mir::TerminatorKind::Goto(self.return_target),
+                    mir::TerminatorKind::Goto(self.return_target, Vec::new()),
                 ) else {
                     unreachable!()
                 };
@@ -239,7 +243,7 @@ fn inline_budget_used_by(body: &Body<'_>) -> u32 {
                         }
                         TerminatorKind::Unreachable => INSTR_BUDGET,
                         TerminatorKind::OldReturn(_) | TerminatorKind::Return(_) => 0,
-                        TerminatorKind::Goto(_) => INSTR_BUDGET,
+                        TerminatorKind::Goto(..) => INSTR_BUDGET,
                         TerminatorKind::Panic => 2 * INSTR_BUDGET,
                     }
                 } as usize

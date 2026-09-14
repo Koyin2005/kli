@@ -117,7 +117,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     /// Returns the new block while terminating the old block with a goto to the new block
     pub(super) fn goto_to_new_block(&mut self, loc: SrcLoc) -> BasicBlockId {
         let block = self.new_block();
-        self.finish_block(loc, TerminatorKind::Goto(block));
+        self.finish_block(loc, TerminatorKind::Goto(block, Vec::new()));
         self.current_block = block;
         block
     }
@@ -194,7 +194,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         );
     }
     pub(super) fn finish_block_with_goto(&mut self, loc: SrcLoc, block: BasicBlockId) {
-        self.finish_block(loc, TerminatorKind::Goto(block));
+        self.finish_block(loc, TerminatorKind::Goto(block, Vec::new()));
     }
     pub(super) fn push_stmt(&mut self, loc: SrcLoc, kind: StmtKind<'ctxt>) {
         self.body.block_info.blocks_mut()[self.current_block]

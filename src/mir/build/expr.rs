@@ -415,7 +415,24 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 self.expr_stmt(expr);
                 Value::Unknown(expr.ty)
             }
-            ExprKind::BuiltinCall(builtin, generic_args, exprs) => todo!(),
+            ExprKind::BuiltinCall(builtin, generic_args, exprs) => match *builtin {
+                Builtin::Len => todo!(),
+                Builtin::StringLen => todo!(),
+                Builtin::PrintString => todo!(),
+                Builtin::EprintString => todo!(),
+                Builtin::ReadLine => todo!(),
+                Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
+                    IntegerBuiltin::IntMaxValue => todo!(),
+                    IntegerBuiltin::ShiftLeft => todo!(),
+                    IntegerBuiltin::ShiftRight => todo!(),
+                    IntegerBuiltin::WrappingAdd => todo!(),
+                    IntegerBuiltin::OverflowingAdd => todo!(),
+                    IntegerBuiltin::WrappingSub => todo!(),
+                    IntegerBuiltin::OverflowingSub => todo!(),
+                    IntegerBuiltin::WrappingMul => todo!(),
+                    IntegerBuiltin::OverflowingMul => todo!(),
+                },
+            },
             ExprKind::VariantInit(def_id, case_id, generic_args, expr) => todo!(),
             ExprKind::Function(def_id, generic_args) => {
                 Value::Function(*def_id, generic_args.clone())
@@ -469,7 +486,18 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                     mir::Operation::ExtractField(Value::Reg(tuple), FieldId::new(0)),
                 ))
             }
-            ExprKind::Logic(logical_op, left, right) => todo!(),
+            ExprKind::Logic(logical_op, left, right) => {
+                let left_value = self.expr_value(left);
+                match logical_op {
+                    LogicalOp::And => todo!(),
+                    LogicalOp::Or => {
+                        let true_block = self.new_block();
+                        let false_block = self.new_block();
+                        self.finish_block_with_if(expr.loc, left_value, true_block, false_block);
+                        todo!()
+                    }
+                }
+            }
             ExprKind::Case(expr, case_arms) => todo!(),
             ExprKind::Assign(place, expr) => todo!(),
             ExprKind::Lambda(lambda) => todo!(),

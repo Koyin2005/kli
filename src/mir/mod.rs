@@ -424,7 +424,7 @@ pub struct Terminator<'ctxt> {
 impl<'ctxt> Terminator<'ctxt> {
     pub fn successors(&self) -> Successors<'_> {
         Successors(match self.kind {
-            TerminatorKind::OldAssert(.., block) | TerminatorKind::Goto(block) => {
+            TerminatorKind::OldAssert(.., block) | TerminatorKind::Goto(block, _) => {
                 SuccessorsIter::Single(Some(block))
             }
             TerminatorKind::OldReturn(_)
@@ -438,7 +438,7 @@ impl<'ctxt> Terminator<'ctxt> {
     }
     pub fn successors_mut(&mut self) -> impl Iterator<Item = &mut BasicBlockId> {
         let (single, multiple) = match &mut self.kind {
-            TerminatorKind::Goto(block) | TerminatorKind::OldAssert(.., block) => {
+            TerminatorKind::Goto(block, _) | TerminatorKind::OldAssert(.., block) => {
                 (Some(block), None)
             }
             TerminatorKind::OldSwitch(_, switch_targets)
@@ -467,7 +467,7 @@ pub enum TerminatorKind<'ctxt> {
     Unreachable,
     OldReturn(Operand<'ctxt>),
     Return(Value<'ctxt>),
-    Goto(BasicBlockId),
+    Goto(BasicBlockId, Vec<Value<'ctxt>>),
     Panic,
 }
 
@@ -602,6 +602,7 @@ impl BasicBlockId {
 define_id!(StmtId);
 #[derive(Default, Clone)]
 pub struct BasicBlock<'ctxt> {
+    pub args: Vec<Reg>,
     pub stmts: IndexVec<StmtId, Stmt<'ctxt>>,
     pub terminator: Option<Terminator<'ctxt>>,
 }

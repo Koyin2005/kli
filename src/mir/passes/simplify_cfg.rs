@@ -27,7 +27,10 @@ impl<'ctxt> BodyPass<'ctxt> for SimplifyCfg {
             let block_indices = body.block_info.blocks().indices().collect::<Vec<_>>();
             for block in block_indices {
                 let targets = match body.block_info.blocks()[block].expect_terminator().kind {
-                    TerminatorKind::Goto(target) => {
+                    TerminatorKind::Goto(target, ref args) => {
+                        if !args.is_empty() {
+                            continue;
+                        }
                         if body.block_info.predecessors()[target].len() != 1 {
                             continue;
                         }
@@ -77,7 +80,7 @@ impl<'ctxt> BodyPass<'ctxt> for SimplifyCfg {
                                 {
                                     return None;
                                 }
-                                let TerminatorKind::Goto(target) =
+                                let TerminatorKind::Goto(target, _) =
                                     body.block_info.blocks()[succ].expect_terminator().kind
                                 else {
                                     return None;

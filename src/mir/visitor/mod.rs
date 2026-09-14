@@ -44,7 +44,12 @@ pub trait Visit<'ctxt> {
     fn super_visit_constant(&mut self, _loc: Location, _constant: &Constant<'ctxt>) {}
     fn super_visit_terminator(&mut self, loc: Location, terminator: &Terminator<'ctxt>) {
         match &terminator.kind {
-            TerminatorKind::Goto(_) | TerminatorKind::Panic | TerminatorKind::Unreachable => (),
+            TerminatorKind::Goto(_, args) => {
+                for arg in args {
+                    self.visit_value(loc, arg);
+                }
+            }
+            TerminatorKind::Panic | TerminatorKind::Unreachable => (),
             TerminatorKind::OldSwitch(operand, _)
             | TerminatorKind::OldAssert(operand, ..)
             | TerminatorKind::OldReturn(operand) => self.visit_operand(loc, operand),
@@ -270,7 +275,12 @@ pub trait MutVisit<'ctxt> {
     fn super_visit_constant(&mut self, _loc: Location, _constant: &mut Constant<'ctxt>) {}
     fn super_visit_terminator(&mut self, loc: Location, terminator: &mut Terminator<'ctxt>) {
         match &mut terminator.kind {
-            TerminatorKind::Goto(_) | TerminatorKind::Panic | TerminatorKind::Unreachable => (),
+            TerminatorKind::Goto(_, args) => {
+                for arg in args {
+                    self.visit_value(loc, arg);
+                }
+            }
+            TerminatorKind::Panic | TerminatorKind::Unreachable => (),
             TerminatorKind::OldSwitch(operand, _)
             | TerminatorKind::OldAssert(operand, ..)
             | TerminatorKind::OldReturn(operand) => self.visit_operand(loc, operand),
