@@ -374,9 +374,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     write!(self.output, "return ")?;
                     self.write_value(value)?;
                 }
-                TerminatorKind::OldSwitch(..) => {
-                    todo!("Ignore me")
-                }
                 TerminatorKind::Goto(block, args) => {
                     write!(self.output, "goto {}", block)?;
                     if !args.is_empty() {

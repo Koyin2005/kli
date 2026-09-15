@@ -3,8 +3,8 @@ use crate::{
     def_ids::DefId,
     index_vec::IndexVec,
     mir::{
-        self, BasicBlockId, BinaryOp, Body, ConstValue, Constant, Local, Operand, OverflowOp,
-        Place, PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind, TerminatorKind,
+        self, BasicBlockId, BinaryOp, Body, Constant, Local, Operand, OverflowOp,
+        Place, PlaceBase, PlaceProjection, Rvalue, Stmt, StmtKind,
         passes::{
             BodyPass,
             dataflow::{self, Analysis, Domain},
@@ -73,17 +73,10 @@ impl<'ctxt> Analysis<'ctxt> for ConstAnalysis<'ctxt> {
         &self,
         state: &Self::Domain,
         terminator: &mir::Terminator<'ctxt>,
-        mut f: impl FnMut(BasicBlockId),
+        f: impl FnMut(BasicBlockId),
     ) {
-        if let TerminatorKind::OldSwitch(condition, targets) = &terminator.kind
-            && let Some(LocalValue::Simple(constant)) = eval_operand(&state, condition)
-            && let ConstValue::Scalar(value) = constant.value
-        {
-            let succ = targets.branch_for_value(value);
-            f(succ);
-        } else {
             dataflow::prop_uniform(self, state, terminator, f);
-        }
+    
     }
 }
 

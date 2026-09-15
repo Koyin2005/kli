@@ -1,8 +1,6 @@
-use std::collections::BTreeMap;
-
 use crate::{
     index_vec::IndexVec,
-    mir::{BasicBlock, BasicBlockId, Operand, StmtKind, TerminatorKind, passes::BodyPass},
+    mir::{BasicBlock, BasicBlockId, StmtKind, TerminatorKind, passes::BodyPass},
 };
 
 pub enum SimplifyCfg {
@@ -26,7 +24,7 @@ impl<'ctxt> BodyPass<'ctxt> for SimplifyCfg {
             modified = false;
             let block_indices = body.block_info.blocks().indices().collect::<Vec<_>>();
             for block in block_indices {
-                let targets = match body.block_info.blocks()[block].expect_terminator().kind {
+                match body.block_info.blocks()[block].expect_terminator().kind {
                     TerminatorKind::Goto(target, ref args) => {
                         if !args.is_empty() {
                             continue;
@@ -38,51 +36,8 @@ impl<'ctxt> BodyPass<'ctxt> for SimplifyCfg {
                         modified = true;
                         continue;
                     }
-                    TerminatorKind::OldSwitch(ref operand, ref targets) => {
-                        if let Operand::Constant(constant) = operand
-                            && let Some(value) = constant.value.as_scalar()
-                            && let target = targets.branch_for_value(value)
-                            && body.block_info.predecessors()[target].len() == 1
-                        {
-                            Self::steal(body.block_info.blocks_mut(), target, block);
-                            modified = true;
-                            continue;
-                        }
-                        body.block_info.blocks()[block]
-                            .expect_terminator()
-                            .successors()
-                            .filter_map(|succ| {
-                                if body.block_info.predecessors()[succ].len() > 1 {
-                                    return None;
-                                }
-                                if !body.block_info.blocks()[succ]
-                                    .stmts
-                                    .iter()
-                                    .all(|stmt| matches!(stmt.kind, StmtKind::Noop))
-                                {
-                                    return None;
-                                }
-                                let TerminatorKind::Goto(target, _) =
-                                    body.block_info.blocks()[succ].expect_terminator().kind
-                                else {
-                                    return None;
-                                };
-                                Some((succ, target))
-                            })
-                            .collect::<BTreeMap<_, _>>()
-                    }
                     _ => continue,
                 };
-                if let Some(ref mut terminator) = body.block_info.blocks_mut()[block].terminator {
-                    for block in terminator.successors_mut() {
-                        *block = if let Some(target) = targets.get(block) {
-                            modified = true;
-                            *target
-                        } else {
-                            continue;
-                        };
-                    }
-                }
             }
         }
         for block in body.block_info.blocks_mut_dont_dirty().iter_mut() {
