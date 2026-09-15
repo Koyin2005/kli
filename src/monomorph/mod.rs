@@ -38,6 +38,9 @@ pub fn instantiate_body<'ctxt>(
         fn visit_operation(&mut self, loc: mir::Location, operation: &mut mir::Operation<'ctxt>) {
             self.super_visit_operation(loc, operation);
             match operation {
+                mir::Operation::Zeroed(ty) => {
+                    *ty = self.instantiate(*ty);
+                }
                 mir::Operation::AllocArray(ty, _) => {
                     *ty = self.instantiate(*ty);
                 }

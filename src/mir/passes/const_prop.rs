@@ -1,11 +1,18 @@
 use crate::{
-    CtxtRef, def_ids::DefId, index_vec::IndexVec, mir::{
-        self, BasicBlockId, Body, Local, Place, PlaceBase, PlaceProjection, Reg, Stmt, StmtKind, passes::{
+    CtxtRef,
+    def_ids::DefId,
+    index_vec::IndexVec,
+    mir::{
+        self, BasicBlockId, Body, Local, Place, PlaceBase, PlaceProjection, Reg, Stmt, StmtKind,
+        passes::{
             BodyPass,
             dataflow::{self, Analysis, Domain},
             optimisation_enabled,
-        }, visitor::MutVisit,
-    }, typed_ast::FieldId, types::{CaseId, GenericArgs},
+        },
+        visitor::MutVisit,
+    },
+    typed_ast::FieldId,
+    types::{CaseId, GenericArgs},
 };
 
 type Constant<'ctxt> = ();
@@ -112,7 +119,7 @@ fn eval_rvalue<'ctxt>(_ctxt: CtxtRef<'ctxt>, _values: &Values<'ctxt>) -> Option<
 }
 
 fn load_value<'ctxt>(values: &Values<'ctxt>, reg: Reg) -> Option<LocalValue<'ctxt>> {
-    None   
+    None
 }
 type Values<'ctxt> = IndexVec<Reg, Option<LocalValue<'ctxt>>>;
 

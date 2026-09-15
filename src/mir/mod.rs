@@ -413,6 +413,7 @@ pub enum BitwiseOp {
 }
 #[derive(Clone, Debug)]
 pub enum Operation<'ctxt> {
+    Zeroed(Type<'ctxt>),
     Not(Value<'ctxt>),
     Cmp(Comparison, Value<'ctxt>, Value<'ctxt>),
     Arith(ArithOp, Value<'ctxt>, Value<'ctxt>),
@@ -437,6 +438,7 @@ impl<'ctxt> Operation<'ctxt> {
         locals: &Locals<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
+            Operation::Zeroed(ty) => *ty,
             Operation::ReadLine => Type::new_string(ctxt),
             Operation::Bitwise(op, left, _) => match op {
                 BitwiseOp::And | BitwiseOp::Or => left.type_of(ctxt, regs),

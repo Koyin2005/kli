@@ -1,7 +1,13 @@
 use crate::{
     CtxtRef,
     layout::{Layout, calculate_layout},
-    mir::{Locals, Location, Regs, StmtKind, passes::BodyPass, visitor::MutVisit},
+    mir::{
+        Locals, Location,
+        Operation::{self, Load},
+        Regs, StmtKind,
+        passes::BodyPass,
+        visitor::MutVisit,
+    },
     types::Type,
 };
 
@@ -21,17 +27,25 @@ impl<'ctxt> BodyPass<'ctxt> for RemoveZst {
         struct RemoveZstVisit<'ctxt, 'a>(CtxtRef<'ctxt>, &'a Locals<'ctxt>, &'a Regs<'ctxt>);
         impl<'ctxt> MutVisit<'ctxt> for RemoveZstVisit<'ctxt, '_> {
             fn visit_stmt(&mut self, loc: Location, stmt: &mut crate::mir::Stmt<'ctxt>) {
-                let place = match &mut stmt.kind {
-                    StmtKind::Store(place, _) => Some(place),
-                    _ => None,
-                };
-                if let Some(place) = place
-                    && RemoveZst::is_zst(place.type_of(self.0, self.1, self.2), self.0)
-                {
-                    stmt.kind = StmtKind::Noop;
-                } else {
-                    self.super_visit_stmt(loc, stmt);
+                match &mut stmt.kind {
+                    StmtKind::Store(place, _) => {
+                        if RemoveZst::is_zst(place.type_of(self.0, self.1, self.2), self.0) {
+                            stmt.kind = StmtKind::Noop;
+                            return;
+                        }
+                    }
+                    StmtKind::Assign(_, operation) => {
+                        if let Load(place) = operation
+                            && let ty = place.type_of(self.0, self.1, self.2)
+                            && RemoveZst::is_zst(ty, self.0)
+                        {
+                            *operation = Operation::Zeroed(ty);
+                            return;
+                        }
+                    }
+                    _ => (),
                 }
+                self.super_visit_stmt(loc, stmt);
             }
         }
         let mut visit = RemoveZstVisit(ctxt, &body.locals, &body.registers);
