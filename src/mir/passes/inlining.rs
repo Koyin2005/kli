@@ -9,7 +9,7 @@ use crate::{
 };
 
 pub fn run_pass<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
-    if !optimisation_enabled(ctxt) {
+    if !optimisation_enabled(ctxt) || true {
         return;
     }
 
