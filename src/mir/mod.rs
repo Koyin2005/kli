@@ -557,11 +557,19 @@ pub enum ArithOp {
     SubOverflow,
     MulOverflow,
 }
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
+pub enum BitwiseOp {
+    ShiftLeft,
+    ShiftRight,
+    And,
+    Or,
+}
 #[derive(Clone, Debug)]
 pub enum Operation<'ctxt> {
     Not(Value<'ctxt>),
     Cmp(Comparison, Value<'ctxt>, Value<'ctxt>),
     Arith(ArithOp, Value<'ctxt>, Value<'ctxt>),
+    Bitwise(BitwiseOp, Value<'ctxt>, Value<'ctxt>),
     ExtractPayload(Value<'ctxt>, CaseId),
     ExtractField(Value<'ctxt>, FieldId),
     ExtractElement(Value<'ctxt>, Value<'ctxt>),
@@ -581,6 +589,10 @@ impl<'ctxt> Operation<'ctxt> {
         locals: &Locals<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
+            Operation::Bitwise(op, left, _) => match op {
+                BitwiseOp::And | BitwiseOp::Or => left.type_of(ctxt, regs),
+                BitwiseOp::ShiftLeft | BitwiseOp::ShiftRight => Type::new_int(ctxt),
+            },
             Operation::Not(_) => Type::new_bool(ctxt),
             Operation::InBounds(..) => Type::new_bool(ctxt),
             Operation::Discriminant(_) => Type::new_int(ctxt),

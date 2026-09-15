@@ -122,14 +122,11 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         let value = self.expr_value(expr);
         self.push_stmt(expr.loc, mir::StmtKind::Store(dest, value));
     }
-    fn bounds_check(&mut self,loc: SrcLoc, base : Value<'ctxt>, index : Value<'ctxt>){
-                let in_bounds = self.push_operation(
-                    loc,
-                    mir::Operation::InBounds(base.clone(), index.clone()),
-                );
-                let out_of_bounds = self.push_operation(loc, mir::Operation::Not(Value::Reg(in_bounds)));
-                self.push_stmt(loc, mir::StmtKind::PanicIf(Value::Reg(out_of_bounds)));
-
+    fn bounds_check(&mut self, loc: SrcLoc, base: Value<'ctxt>, index: Value<'ctxt>) {
+        let in_bounds =
+            self.push_operation(loc, mir::Operation::InBounds(base.clone(), index.clone()));
+        let out_of_bounds = self.push_operation(loc, mir::Operation::Not(Value::Reg(in_bounds)));
+        self.push_stmt(loc, mir::StmtKind::PanicIf(Value::Reg(out_of_bounds)));
     }
     fn load_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Value<'ctxt> {
         match place.kind {

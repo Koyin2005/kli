@@ -190,7 +190,8 @@ pub trait Visit<'ctxt> {
             Operation::Cmp(_, left, right)
             | Operation::Arith(_, left, right)
             | Operation::ExtractElement(left, right)
-            | Operation::InBounds(left, right) => {
+            | Operation::InBounds(left, right)
+            | Operation::Bitwise(_, left, right) => {
                 self.visit_value(loc, left);
                 self.visit_value(loc, right);
             }
@@ -250,7 +251,7 @@ pub trait MutVisit<'ctxt> {
     }
     fn visit_operation(&mut self, loc: Location, operation: &mut Operation<'ctxt>) {
         match operation {
-            Operation::Len(value) | Operation::Discriminant(value)| Operation::Not(value) => {
+            Operation::Len(value) | Operation::Discriminant(value) | Operation::Not(value) => {
                 self.visit_value(loc, value);
             }
             Operation::Load(place) => {
@@ -259,7 +260,8 @@ pub trait MutVisit<'ctxt> {
             Operation::Cmp(_, left, right)
             | Operation::Arith(_, left, right)
             | Operation::ExtractElement(left, right)
-            | Operation::InBounds(left, right) => {
+            | Operation::InBounds(left, right)
+            | Operation::Bitwise(_, left, right) => {
                 self.visit_value(loc, left);
                 self.visit_value(loc, right);
             }

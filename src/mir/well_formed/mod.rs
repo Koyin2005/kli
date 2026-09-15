@@ -4,7 +4,7 @@ use crate::{
     collect::{CtxtRef, TypeDefKind},
     diagnostics::emit_fatal_diagnostic,
     mir::{
-        BinaryOp, Body, Location, Operation, Stmt, StmtKind, TerminatorKind,
+        BinaryOp, BitwiseOp, Body, Location, Operation, Stmt, StmtKind, TerminatorKind,
         visitor::{PlaceCtxt, Visit},
     },
     src_loc::SrcLoc,
@@ -312,9 +312,34 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_operation(&mut self, loc: Location, operation: &super::Operation<'ctxt>) {
         self.super_visit_operation(loc, operation);
         match operation {
+            Operation::Bitwise(op, left, right) => {
+                let left_ty = left.type_of(self.ctxt, &self.body.registers);
+                let right_ty = right.type_of(self.ctxt, &self.body.registers);
+                self.assert(
+                    left_ty == right_ty,
+                    || format!("{op:?} should have operands {left_ty} and {right_ty}"),
+                    self.body.src_info(loc),
+                );
+                match op {
+                    BitwiseOp::And | BitwiseOp::Or => {
+                        self.assert(
+                            left_ty.is_bool() || left_ty.is_integer(),
+                            || format!("expected int"),
+                            self.body.src_info(loc),
+                        );
+                    }
+                    BitwiseOp::ShiftLeft | BitwiseOp::ShiftRight => {
+                        self.assert(
+                            left_ty.is_integer(),
+                            || format!("expected int"),
+                            self.body.src_info(loc),
+                        );
+                    }
+                }
+            }
             Operation::Not(value) => {
                 let ty = value.type_of(self.ctxt, &self.body.registers);
-self.assert(
+                self.assert(
                     ty.is_bool(),
                     || format!("Should be a bool '{}'", ty),
                     self.body.src_info(loc),

@@ -253,6 +253,18 @@ impl<'ctxt> MirDump<'ctxt> {
                 self.write_fmt(", ")?;
                 self.write_value(right)
             }
+            Operation::Bitwise(op, left, right) => {
+                self.write_fmt(match op {
+                    mir::BitwiseOp::ShiftLeft => "shift_left",
+                    mir::BitwiseOp::ShiftRight => "shift_right",
+                    mir::BitwiseOp::And => "and",
+                    mir::BitwiseOp::Or => "or",
+                })?;
+                self.write_fmt(" ")?;
+                self.write_value(left)?;
+                self.write_fmt(", ")?;
+                self.write_value(right)
+            }
             Operation::ExtractField(value, field) => {
                 self.write_fmt("extract_field ")?;
                 self.write_value(value)?;
