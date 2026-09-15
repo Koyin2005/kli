@@ -1,18 +1,11 @@
 use crate::{
-    CtxtRef,
-    def_ids::DefId,
-    index_vec::IndexVec,
-    mir::{
-        self, BasicBlockId, Body, Local, Place, PlaceBase, PlaceProjection, Stmt, StmtKind,
-        passes::{
+    CtxtRef, def_ids::DefId, index_vec::IndexVec, mir::{
+        self, BasicBlockId, Body, Local, Place, PlaceBase, PlaceProjection, Reg, Stmt, StmtKind, passes::{
             BodyPass,
             dataflow::{self, Analysis, Domain},
             optimisation_enabled,
-        },
-        visitor::MutVisit,
-    },
-    typed_ast::FieldId,
-    types::{CaseId, GenericArgs},
+        }, visitor::MutVisit,
+    }, typed_ast::FieldId, types::{CaseId, GenericArgs},
 };
 
 type Constant<'ctxt> = ();
@@ -56,17 +49,9 @@ struct ConstAnalysis<'ctxt> {
 impl<'ctxt> Analysis<'ctxt> for ConstAnalysis<'ctxt> {
     type Domain = Values<'ctxt>;
     fn apply_stmt_effect(&mut self, state: &mut Self::Domain, stmt: &Stmt<'ctxt>) {
-        let StmtKind::Store(place, rvalue) = &stmt.kind else {
+        let StmtKind::Assign(reg, operation) = &stmt.kind else {
             return;
         };
-        let PlaceBase::Local(local) = place.base else {
-            unreachable!();
-        };
-        if !place.projections.is_empty() {
-            state[local] = None;
-            return;
-        }
-        _ = rvalue;
     }
 
     fn propagate_to_basic_blocks(
@@ -117,52 +102,19 @@ impl<'ctxt> BodyPass<'ctxt> for ConstProp {
 }
 fn apply_stmt_effect<'ctxt>(ctxt: CtxtRef<'ctxt>, values: &mut Values<'ctxt>, stmt: &Stmt<'ctxt>) {
     _ = ctxt;
-    let StmtKind::Store(place, rvalue) = &stmt.kind else {
+    let StmtKind::Assign(reg, rvalue) = &stmt.kind else {
         return;
     };
-    let PlaceBase::Local(local) = place.base else {
-        unreachable!()
-    };
-    if !place.projections.is_empty() {
-        values[local] = None;
-        return;
-    }
-    _ = rvalue;
 }
 
 fn eval_rvalue<'ctxt>(_ctxt: CtxtRef<'ctxt>, _values: &Values<'ctxt>) -> Option<LocalValue<'ctxt>> {
     todo!()
 }
 
-fn load_value<'ctxt>(values: &Values<'ctxt>, place: &Place<'ctxt>) -> Option<LocalValue<'ctxt>> {
-    let PlaceBase::Local(local) = place.base else {
-        unreachable!()
-    };
-    let mut value = values[local].clone()?;
-    for projection in place.projections.iter() {
-        value = match projection {
-            PlaceProjection::Field(field) => {
-                let LocalValue::Tuple(fields) = value else {
-                    return None;
-                };
-                LocalValue::Simple(fields[*field].clone())
-            }
-            PlaceProjection::CaseDowncast(case, _) => {
-                let LocalValue::Variant(_, current_case, _, value) = value else {
-                    return None;
-                };
-                if *case != current_case {
-                    return None;
-                }
-                LocalValue::Tuple(value.into_iter().collect())
-            }
-            _ => return None,
-        }
-    }
-
-    Some(value)
+fn load_value<'ctxt>(values: &Values<'ctxt>, reg: Reg) -> Option<LocalValue<'ctxt>> {
+    None   
 }
-type Values<'ctxt> = IndexVec<Local, Option<LocalValue<'ctxt>>>;
+type Values<'ctxt> = IndexVec<Reg, Option<LocalValue<'ctxt>>>;
 
 struct OperandUpdater<'a, 'ctxt> {
     values: &'a Values<'ctxt>,
