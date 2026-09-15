@@ -600,8 +600,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
             StmtKind::Noop => (),
             StmtKind::Print { value, err: _ } => {
                 self.assert(
-                    value.type_of(self.ctxt, &self.body.locals, &self.body.registers)
-                        == Type::new_string(self.ctxt),
+                    value.type_of(self.ctxt, &self.body.registers) == Type::new_string(self.ctxt),
                     || "cannot print non string",
                     stmt.loc,
                 );

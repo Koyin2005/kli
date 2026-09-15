@@ -656,7 +656,7 @@ pub enum StmtKind<'ctxt> {
     Assign(Reg, Operation<'ctxt>),
     Store(Place<'ctxt>, Value<'ctxt>),
     OldStore(Place<'ctxt>, Box<Rvalue<'ctxt>>),
-    Print { value: Operand<'ctxt>, err: bool },
+    Print { value: Value<'ctxt>, err: bool },
 }
 define_id!(BasicBlockId);
 impl BasicBlockId {

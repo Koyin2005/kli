@@ -193,8 +193,16 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                         Value::Reg(self.push_operation(expr.loc, mir::Operation::Len(array)))
                     }
                     Builtin::StringLen => todo!(),
-                    Builtin::PrintString => todo!(),
-                    Builtin::EprintString => todo!(),
+                    Builtin::PrintString => {
+                        let [value] = get_values(self, exprs);
+                        self.push_stmt(expr.loc, mir::StmtKind::Print { value, err: false });
+                        Value::Unit
+                    }
+                    Builtin::EprintString => {
+                        let [value] = get_values(self, exprs);
+                        self.push_stmt(expr.loc, mir::StmtKind::Print { value, err: true });
+                        Value::Unit
+                    }
                     Builtin::ReadLine => todo!(),
                     Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
                         IntegerBuiltin::IntMaxValue => Value::Int(i64::MAX),

@@ -181,7 +181,7 @@ impl<'ctxt> MirDump<'ctxt> {
             Value::Char(char) => self.write_fmt(char),
             Value::String(string) => {
                 self.write_fmt("\"")?;
-                self.write_fmt(string)?;
+                string.with_str(|s| self.write_fmt(s.escape_debug()))?;
                 self.write_fmt("\"")
             }
         }
@@ -336,9 +336,10 @@ impl<'ctxt> MirDump<'ctxt> {
                     self.write_operation(operation)?;
                     writeln!(self.output)?;
                 }
-                StmtKind::Print { err, .. } => {
+                StmtKind::Print { err, value } => {
                     write!(self.output, "{}print ", if *err { "e" } else { "" })?;
-                    todo!("Handle print");
+                    self.write_value(value)?;
+                    writeln!(self.output)?;
                 }
                 StmtKind::Noop => self.write_fmt("noop")?,
                 StmtKind::PanicIf(value) => {

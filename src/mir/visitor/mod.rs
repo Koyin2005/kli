@@ -36,8 +36,8 @@ pub trait Visit<'ctxt> {
             StmtKind::OldStore(place, rvalue) => {
                 self.visit_assign(loc, place, rvalue);
             }
-            StmtKind::Print { value: operand, .. } => {
-                self.visit_operand(loc, operand);
+            StmtKind::Print { value, .. } => {
+                self.visit_value(loc, value);
             }
             StmtKind::Assign(dst, operation) => {
                 self.visit_reg(loc, *dst, PlaceCtxt::Write);
@@ -307,11 +307,8 @@ pub trait MutVisit<'ctxt> {
                 self.visit_reg(loc, dst);
                 self.visit_operation(loc, operation);
             }
-            StmtKind::Print {
-                value: operand,
-                err: _,
-            } => {
-                self.visit_operand(loc, operand);
+            StmtKind::Print { value, err: _ } => {
+                self.visit_value(loc, value);
             }
         }
     }
