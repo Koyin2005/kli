@@ -1,6 +1,6 @@
 use crate::{
     index_vec::IndexVec,
-    mir::{BasicBlock, BasicBlockId, StmtKind, TerminatorKind, passes::BodyPass},
+    mir::{BasicBlock, BasicBlockId, StmtKind, TerminatorKind, Value, passes::BodyPass},
 };
 
 pub enum SimplifyCfg {
@@ -61,8 +61,11 @@ impl SimplifyCfg {
         blocks[block].expect_terminator_mut().kind = new_term;
     }
     fn remove_noops(block: &mut BasicBlock) {
-        block
-            .stmts
-            .retain(|_, stmt| !matches!(stmt.kind, StmtKind::Noop));
+        block.stmts.retain(|_, stmt| {
+            !matches!(
+                stmt.kind,
+                StmtKind::Noop | StmtKind::PanicIf(Value::Bool(false))
+            )
+        });
     }
 }

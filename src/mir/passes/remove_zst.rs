@@ -28,12 +28,13 @@ impl<'ctxt> BodyPass<'ctxt> for RemoveZst {
         impl<'ctxt> MutVisit<'ctxt> for RemoveZstVisit<'ctxt, '_> {
             fn visit_stmt(&mut self, loc: Location, stmt: &mut crate::mir::Stmt<'ctxt>) {
                 match &mut stmt.kind {
-                    StmtKind::Store(place, _) => {
-                        if RemoveZst::is_zst(place.type_of(self.0, self.1, self.2), self.0) {
-                            stmt.kind = StmtKind::Noop;
-                            return;
-                        }
+                    StmtKind::Store(place, _)
+                        if RemoveZst::is_zst(place.type_of(self.0, self.1, self.2), self.0) =>
+                    {
+                        stmt.kind = StmtKind::Noop;
+                        return;
                     }
+
                     StmtKind::Assign(_, operation) => {
                         if let Load(place) = operation
                             && let ty = place.type_of(self.0, self.1, self.2)
