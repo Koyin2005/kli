@@ -1,7 +1,7 @@
 use crate::{
     CtxtRef,
     mir::{
-        BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operation, Place,
+        BasicBlock, BasicBlockId, Body, Local, Location, Operation, Place,
         PlaceBase, PlaceProjection, Reg, Stmt, StmtKind, Terminator, TerminatorKind, Value,
     },
 };
@@ -38,7 +38,6 @@ pub trait Visit<'ctxt> {
             }
         }
     }
-    fn super_visit_constant(&mut self, _loc: Location, _constant: &Constant<'ctxt>) {}
     fn super_visit_terminator(&mut self, loc: Location, terminator: &Terminator<'ctxt>) {
         match &terminator.kind {
             TerminatorKind::Goto(_, args) => {
@@ -104,9 +103,6 @@ pub trait Visit<'ctxt> {
     }
     fn visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
         self.super_visit_projection(loc, projection);
-    }
-    fn visit_constant(&mut self, loc: Location, constant: &Constant<'ctxt>) {
-        self.super_visit_constant(loc, constant);
     }
     fn visit_terminator(&mut self, loc: Location, terminator: &Terminator<'ctxt>) {
         self.super_visit_terminator(loc, terminator);
@@ -250,7 +246,6 @@ pub trait MutVisit<'ctxt> {
             }
         }
     }
-    fn super_visit_constant(&mut self, _loc: Location, _constant: &mut Constant<'ctxt>) {}
     fn super_visit_terminator(&mut self, loc: Location, terminator: &mut Terminator<'ctxt>) {
         match &mut terminator.kind {
             TerminatorKind::Goto(_, args) => {
@@ -317,9 +312,6 @@ pub trait MutVisit<'ctxt> {
     }
     fn visit_projection(&mut self, loc: Location, projection: &mut PlaceProjection) {
         self.super_visit_projection(loc, projection);
-    }
-    fn visit_constant(&mut self, loc: Location, constant: &mut Constant<'ctxt>) {
-        self.super_visit_constant(loc, constant);
     }
     fn visit_terminator(&mut self, loc: Location, terminator: &mut Terminator<'ctxt>) {
         self.super_visit_terminator(loc, terminator);

@@ -148,59 +148,6 @@ impl<'ctxt> Place<'ctxt> {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum ConstValue<'ctxt> {
-    ZeroSized,
-    Named(DefId, GenericArgs<'ctxt>),
-    Scalar(i128),
-    String(Symbol),
-}
-impl<'ctxt> ConstValue<'ctxt> {
-    fn as_scalar(&self) -> Option<i128> {
-        match self {
-            Self::Scalar(value) => Some(*value),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Constant<'ctxt> {
-    pub ty: Type<'ctxt>,
-
-    pub value: ConstValue<'ctxt>,
-}
-impl<'ctxt> Constant<'ctxt> {
-    pub fn zero(ctxt: CtxtRef<'ctxt>) -> Self {
-        Self::int(ctxt, 0)
-    }
-    pub fn bool(ctxt: CtxtRef<'ctxt>, value: bool) -> Self {
-        Self {
-            ty: Type::new_bool(ctxt),
-            value: ConstValue::Scalar(value as i128),
-        }
-    }
-    pub fn int(ctxt: CtxtRef<'ctxt>, value: i64) -> Self {
-        Self {
-            ty: Type::new_int(ctxt),
-            value: ConstValue::Scalar(value as i128),
-        }
-    }
-    pub fn char(ctxt: CtxtRef<'ctxt>, value: char) -> Self {
-        Self {
-            ty: Type::new_char(ctxt),
-            value: ConstValue::Scalar(value as i128),
-        }
-    }
-    pub const fn zero_sized(ty: Type<'ctxt>) -> Self {
-        Self {
-            ty,
-            value: ConstValue::ZeroSized,
-        }
-    }
-    pub fn unit(ctxt: CtxtRef<'ctxt>) -> Self {
-        Self::zero_sized(Type::new_unit(ctxt))
-    }
-}
 #[derive(Clone, Debug)]
 pub enum AggregateKind<'ctxt> {
     Tuple,

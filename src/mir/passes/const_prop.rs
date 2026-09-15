@@ -3,7 +3,7 @@ use crate::{
     def_ids::DefId,
     index_vec::IndexVec,
     mir::{
-        self, BasicBlockId, Body, Constant, Local, Place, PlaceBase,
+        self, BasicBlockId, Body, Local, Place, PlaceBase,
         PlaceProjection, Stmt, StmtKind,
         passes::{
             BodyPass,
@@ -16,6 +16,7 @@ use crate::{
     types::{CaseId, GenericArgs},
 };
 
+type Constant<'ctxt> = ();
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum LocalValue<'ctxt> {
     Variant(DefId, CaseId, GenericArgs<'ctxt>, Option<Constant<'ctxt>>),

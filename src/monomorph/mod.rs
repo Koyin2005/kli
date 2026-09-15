@@ -32,19 +32,6 @@ pub fn instantiate_body<'ctxt>(
         }
     }
     impl<'ctxt> MutVisit<'ctxt> for Instantiator<'_, 'ctxt> {
-        fn visit_constant(&mut self, _: mir::Location, constant: &mut mir::Constant<'ctxt>) {
-            constant.ty = self.instantiate(constant.ty);
-            match &mut constant.value {
-                mir::ConstValue::Named(_, generic_args) => {
-                    for arg in generic_args.iter_mut() {
-                        *arg = self.instantiate(*arg);
-                    }
-                }
-                mir::ConstValue::Scalar(_)
-                | mir::ConstValue::String(_)
-                | mir::ConstValue::ZeroSized => (),
-            }
-        }
     }
     Instantiator { ctxt, args: &args }.visit_body_no_invalidate(&mut new_instance);
     new_instance
