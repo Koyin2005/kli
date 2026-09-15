@@ -1,7 +1,7 @@
 use crate::{
     CtxtRef,
     mir::{
-        BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Operation, Place,
+        BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operation, Place,
         PlaceBase, PlaceProjection, Reg, Stmt, StmtKind, Terminator, TerminatorKind, Value,
     },
 };
@@ -93,18 +93,8 @@ pub trait Visit<'ctxt> {
             self.visit_projection(loc, *projection);
         }
     }
-    fn super_visit_operand(&mut self, loc: Location, operand: &Operand<'ctxt>) {
-        match operand {
-            Operand::Load(place) => self.visit_place(PlaceCtxt::Read, loc, place),
-            Operand::Constant(constant) => self.visit_constant(loc, constant),
-        }
-    }
-
     fn visit_stmt(&mut self, loc: Location, stmt: &Stmt<'ctxt>) {
         self.super_visit_stmt(loc, stmt);
-    }
-    fn visit_operand(&mut self, loc: Location, operand: &Operand<'ctxt>) {
-        self.super_visit_operand(loc, operand);
     }
     fn visit_local(&mut self, ctxt: PlaceCtxt, loc: Location, local: Local) {
         self.super_visit_local(ctxt, loc, local);
@@ -315,18 +305,9 @@ pub trait MutVisit<'ctxt> {
             self.visit_projection(loc, projection);
         }
     }
-    fn super_visit_operand(&mut self, loc: Location, operand: &mut Operand<'ctxt>) {
-        match operand {
-            Operand::Load(place) => self.visit_place(loc, place),
-            Operand::Constant(constant) => self.visit_constant(loc, constant),
-        }
-    }
 
     fn visit_stmt(&mut self, loc: Location, stmt: &mut Stmt<'ctxt>) {
         self.super_visit_stmt(loc, stmt);
-    }
-    fn visit_operand(&mut self, loc: Location, operand: &mut Operand<'ctxt>) {
-        self.super_visit_operand(loc, operand);
     }
     fn visit_local(&mut self, loc: Location, local: &mut Local) {
         self.super_visit_local(loc, local);

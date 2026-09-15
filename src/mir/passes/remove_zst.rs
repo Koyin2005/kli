@@ -2,7 +2,7 @@ use crate::{
     CtxtRef,
     layout::{Layout, calculate_layout},
     mir::{
-        Constant, Locals, Location, Operand, Regs, StmtKind, passes::BodyPass, visitor::MutVisit,
+        Locals, Location, Regs, StmtKind, passes::BodyPass, visitor::MutVisit,
     },
     types::Type,
 };
@@ -22,15 +22,6 @@ impl<'ctxt> BodyPass<'ctxt> for RemoveZst {
     fn run(&self, ctxt: crate::CtxtRef<'ctxt>, body: &mut crate::mir::Body<'ctxt>) {
         struct RemoveZstVisit<'ctxt, 'a>(CtxtRef<'ctxt>, &'a Locals<'ctxt>, &'a Regs<'ctxt>);
         impl<'ctxt> MutVisit<'ctxt> for RemoveZstVisit<'ctxt, '_> {
-            fn visit_operand(&mut self, _: Location, operand: &mut crate::mir::Operand<'ctxt>) {
-                let Operand::Load(place) = operand else {
-                    return;
-                };
-                let ty = place.type_of(self.0, self.1, self.2);
-                if RemoveZst::is_zst(ty, self.0) {
-                    *operand = Operand::Constant(Constant::zero_sized(ty));
-                }
-            }
             fn visit_stmt(&mut self, loc: Location, stmt: &mut crate::mir::Stmt<'ctxt>) {
                 let place = match &mut stmt.kind {
                     StmtKind::Store(place, _) => Some(place),

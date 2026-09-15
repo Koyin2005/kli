@@ -202,24 +202,6 @@ impl<'ctxt> Constant<'ctxt> {
     }
 }
 #[derive(Clone, Debug)]
-pub enum Operand<'ctxt> {
-    Load(Place<'ctxt>),
-    Constant(Constant<'ctxt>),
-}
-impl<'ctxt> Operand<'ctxt> {
-    pub fn type_of(
-        &self,
-        ctxt: CtxtRef<'ctxt>,
-        locals: &Locals<'ctxt>,
-        registers: &Regs<'ctxt>,
-    ) -> Type<'ctxt> {
-        match self {
-            Operand::Constant(constant) => constant.ty,
-            Operand::Load(place) => place.type_of(ctxt, locals, registers),
-        }
-    }
-}
-#[derive(Clone, Debug)]
 pub enum AggregateKind<'ctxt> {
     Tuple,
     NamedRecord(DefId, GenericArgs<'ctxt>),

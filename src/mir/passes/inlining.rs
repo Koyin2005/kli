@@ -1,7 +1,7 @@
 use crate::{
     CtxtRef,
     mir::{
-        self, BasicBlock, BasicBlockId, Body, BodySource, Local, Location, Operand, Place,
+        self, BasicBlock, BasicBlockId, Body, BodySource, Local, Location, Place,
         TerminatorKind, passes::optimisation_enabled, visitor::MutVisit,
     },
     monomorph::instantiate_body,
@@ -82,7 +82,7 @@ struct InlininingSite<'ctxt> {
     generic_args: GenericArgs<'ctxt>,
     block: BasicBlockId,
     return_place: Place<'ctxt>,
-    args: Vec<Operand<'ctxt>>,
+    args: Vec<()>,
 }
 fn find_inlining_site<'ctxt>(
     mir: &mir::Context<'ctxt>,

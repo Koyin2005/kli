@@ -3,7 +3,7 @@ use crate::{
     def_ids::DefId,
     index_vec::IndexVec,
     mir::{
-        self, BasicBlockId, Body, Constant, Local, Operand, Place, PlaceBase,
+        self, BasicBlockId, Body, Constant, Local, Place, PlaceBase,
         PlaceProjection, Stmt, StmtKind,
         passes::{
             BodyPass,
@@ -130,15 +130,6 @@ fn apply_stmt_effect<'ctxt>(ctxt: CtxtRef<'ctxt>, values: &mut Values<'ctxt>, st
     _ = rvalue;
 }
 
-fn eval_operand<'ctxt>(
-    values: &Values<'ctxt>,
-    operand: &Operand<'ctxt>,
-) -> Option<LocalValue<'ctxt>> {
-    match operand {
-        Operand::Constant(constant) => Some(LocalValue::Simple(constant.clone())),
-        Operand::Load(place) => load_value(values, place),
-    }
-}
 fn eval_rvalue<'ctxt>(
     _ctxt: CtxtRef<'ctxt>,
     _values: &Values<'ctxt>,
@@ -181,11 +172,4 @@ struct OperandUpdater<'a, 'ctxt> {
     ctxt: CtxtRef<'ctxt>,
 }
 impl<'ctxt> MutVisit<'ctxt> for OperandUpdater<'_, 'ctxt> {
-    fn visit_operand(&mut self, _: crate::mir::Location, operand: &mut Operand<'ctxt>) {
-        if let Operand::Load(place) = operand
-            && let Some(LocalValue::Simple(value)) = load_value(self.values, place)
-        {
-            *operand = Operand::Constant(value);
-        }
-    }
 }
