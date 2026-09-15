@@ -2,7 +2,7 @@ use crate::{
     CtxtRef,
     mir::{
         BasicBlock, BasicBlockId, Body, Constant, Local, Location, Operand, Operation, Place,
-        PlaceBase, PlaceProjection, Reg, Rvalue, Stmt, StmtKind, Terminator, TerminatorKind, Value,
+        PlaceBase, PlaceProjection, Reg, Stmt, StmtKind, Terminator, TerminatorKind, Value,
     },
 };
 pub enum PlaceCtxt {
@@ -13,10 +13,6 @@ pub trait Visit<'ctxt> {
     #[track_caller]
     fn ctxt(&self) -> CtxtRef<'ctxt> {
         unimplemented!("not implemented")
-    }
-    fn visit_assign(&mut self, loc: Location, place: &Place<'ctxt>, rvalue: &Rvalue<'ctxt>) {
-        self.visit_place(PlaceCtxt::Write, loc, place);
-        self.visit_rvalue(loc, rvalue);
     }
     fn visit_reg(&mut self, loc: Location, reg: Reg, ctxt: PlaceCtxt) {
         _ = loc;
@@ -74,35 +70,6 @@ pub trait Visit<'ctxt> {
             info.expect_terminator(),
         );
     }
-    fn super_visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue<'ctxt>) {
-        match rvalue {
-            Rvalue::AllocArray(_, elements) => {
-                for element in elements {
-                    self.visit_operand(loc, element);
-                }
-            }
-            Rvalue::ReadLine => (),
-            Rvalue::Discriminant(place) => self.visit_place(PlaceCtxt::Read, loc, place),
-            Rvalue::Len(place) => self.visit_place(PlaceCtxt::Read, loc, place),
-            Rvalue::Use(operand) => self.visit_operand(loc, operand),
-            Rvalue::Aggregate(_, fields) => {
-                for field in fields {
-                    self.visit_operand(loc, field);
-                }
-            }
-            Rvalue::Call(operand, operands) => {
-                self.visit_operand(loc, operand);
-                for operand in operands {
-                    self.visit_operand(loc, operand);
-                }
-            }
-            Rvalue::Binary(_, operands) => {
-                let (left, right) = operands.as_ref();
-                self.visit_operand(loc, left);
-                self.visit_operand(loc, right);
-            }
-        }
-    }
     fn super_visit_projection(&mut self, loc: Location, projection: PlaceProjection) {
         match projection {
             PlaceProjection::ConstantIndex(_) | PlaceProjection::Field(_) => (),
@@ -150,9 +117,6 @@ pub trait Visit<'ctxt> {
     }
     fn visit_constant(&mut self, loc: Location, constant: &Constant<'ctxt>) {
         self.super_visit_constant(loc, constant);
-    }
-    fn visit_rvalue(&mut self, loc: Location, rvalue: &Rvalue<'ctxt>) {
-        self.super_visit_rvalue(loc, rvalue);
     }
     fn visit_terminator(&mut self, loc: Location, terminator: &Terminator<'ctxt>) {
         self.super_visit_terminator(loc, terminator);
@@ -222,15 +186,6 @@ pub trait Visit<'ctxt> {
 }
 
 pub trait MutVisit<'ctxt> {
-    fn visit_assign(
-        &mut self,
-        loc: Location,
-        place: &mut Place<'ctxt>,
-        rvalue: &mut Rvalue<'ctxt>,
-    ) {
-        self.visit_place(loc, place);
-        self.visit_rvalue(loc, rvalue);
-    }
     fn visit_value(&mut self, loc: Location, value: &mut Value<'ctxt>) {
         match value {
             Value::Reg(reg) => self.visit_reg(loc, reg),
@@ -337,35 +292,6 @@ pub trait MutVisit<'ctxt> {
             info.expect_terminator_mut(),
         );
     }
-    fn super_visit_rvalue(&mut self, loc: Location, rvalue: &mut Rvalue<'ctxt>) {
-        match rvalue {
-            Rvalue::AllocArray(_, elements) => {
-                for element in elements {
-                    self.visit_operand(loc, element);
-                }
-            }
-            Rvalue::ReadLine => (),
-            Rvalue::Discriminant(place) => self.visit_place(loc, place),
-            Rvalue::Len(place) => self.visit_place(loc, place),
-            Rvalue::Use(operand) => self.visit_operand(loc, operand),
-            Rvalue::Aggregate(_, fields) => {
-                for field in fields {
-                    self.visit_operand(loc, field);
-                }
-            }
-            Rvalue::Call(operand, operands) => {
-                self.visit_operand(loc, operand);
-                for operand in operands {
-                    self.visit_operand(loc, operand);
-                }
-            }
-            Rvalue::Binary(_, operands) => {
-                let (left, right) = operands.as_mut();
-                self.visit_operand(loc, left);
-                self.visit_operand(loc, right);
-            }
-        }
-    }
     fn super_visit_projection(&mut self, loc: Location, projection: &mut PlaceProjection) {
         match projection {
             PlaceProjection::ConstantIndex(_) | PlaceProjection::Field(_) => (),
@@ -413,9 +339,6 @@ pub trait MutVisit<'ctxt> {
     }
     fn visit_constant(&mut self, loc: Location, constant: &mut Constant<'ctxt>) {
         self.super_visit_constant(loc, constant);
-    }
-    fn visit_rvalue(&mut self, loc: Location, rvalue: &mut Rvalue<'ctxt>) {
-        self.super_visit_rvalue(loc, rvalue);
     }
     fn visit_terminator(&mut self, loc: Location, terminator: &mut Terminator<'ctxt>) {
         self.super_visit_terminator(loc, terminator);

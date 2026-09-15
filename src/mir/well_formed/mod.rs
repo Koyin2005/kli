@@ -4,11 +4,11 @@ use crate::{
     collect::{CtxtRef, TypeDefKind},
     diagnostics::emit_fatal_diagnostic,
     mir::{
-        BinaryOp, BitwiseOp, Body, Location, Operation, Stmt, StmtKind, TerminatorKind,
+        BitwiseOp, Body, Location, Operation, Stmt, StmtKind, TerminatorKind,
         visitor::{PlaceCtxt, Visit},
     },
     src_loc::SrcLoc,
-    types::{FunctionSig, Type, TypeKind},
+    types::{FunctionSig, Type},
 };
 pub struct WellFormed<'ctxt, 'body> {
     ctxt: CtxtRef<'ctxt>,
@@ -93,164 +93,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         }
     }
 
-    fn visit_rvalue(&mut self, loc: Location, rvalue: &super::Rvalue<'ctxt>) {
-        self.super_visit_rvalue(loc, rvalue);
-        let loc = self.body.src_info(loc);
-        match rvalue {
-            super::Rvalue::AllocArray(ty, elements) => {
-                for element in elements {
-                    let element =
-                        element.type_of(self.ctxt(), &self.body.locals, &self.body.registers);
-                    self.assert(
-                        element == *ty,
-                        || format!("Array elements should have type '{}'", ty),
-                        loc,
-                    );
-                }
-            }
-            super::Rvalue::ReadLine => (),
-            super::Rvalue::Discriminant(place) => {
-                self.assert(
-                    if let Some((id, _, _)) = place
-                        .type_of(self.ctxt, &self.body.locals, &self.body.registers)
-                        .as_named()
-                        && let TypeDefKind::Variant(_) = self.ctxt.type_def(id).kind
-                    {
-                        true
-                    } else {
-                        false
-                    },
-                    || "type does not have a discriminant",
-                    loc,
-                );
-            }
-            super::Rvalue::Aggregate(aggregate_kind, fields) => match aggregate_kind {
-                super::AggregateKind::NamedRecord(id, args) => {
-                    let type_def = self.ctxt.type_def(*id);
-                    let field_info = type_def.fields();
-                    self.assert(
-                        fields.len() == field_info.len(),
-                        || "should have fields for each field def",
-                        loc,
-                    );
-                    for (field, operand) in field_info.iter().zip(fields) {
-                        let field_ty = field.type_of(args, self.ctxt);
-                        self.assert(
-                            field_ty
-                                == operand.type_of(
-                                    self.ctxt,
-                                    &self.body.locals,
-                                    &self.body.registers,
-                                ),
-                            || format!("Field of '{}' should have type '{}'", field.name, field_ty),
-                            loc,
-                        );
-                    }
-                }
-                super::AggregateKind::Variant(id, index, args) => {
-                    let type_def = self.ctxt.type_def(*id);
-                    let case_def = type_def.case(*index);
-
-                    let field = case_def.field;
-                    let field_ty = field.map(|field| field.type_of(args, self.ctxt));
-                    if let Some(field_ty) = field_ty {
-                        let field = self.assert_with_some(
-                            fields.as_slice(),
-                            |fields| {
-                                if let [field] = fields {
-                                    Some(field)
-                                } else {
-                                    None
-                                }
-                            },
-                            || {
-                                format!(
-                                    "Variants can only have at most 1 inner field not {}",
-                                    fields.len()
-                                )
-                            },
-                            loc,
-                        );
-                        let operand_ty =
-                            field.type_of(self.ctxt, &self.body.locals, &self.body.registers);
-                        self.assert(
-                            field_ty == operand_ty,
-                            || format!("{field_ty} and {operand_ty} should be same types"),
-                            loc,
-                        );
-                    } else {
-                        self.assert(
-                            fields.is_empty(),
-                            || format!("{} should have no fields", case_def.name),
-                            loc,
-                        );
-                    }
-                }
-                super::AggregateKind::Tuple => (),
-            },
-            super::Rvalue::Use(_) => (),
-            super::Rvalue::Call(operand, operands) => {
-                let callee = operand.type_of(self.ctxt, &self.body.locals, &self.body.registers);
-                let FunctionSig { params, .. } = self.assert_with_some(
-                    &callee,
-                    |ty| ty.as_function(),
-                    || "Can only call function types",
-                    loc,
-                );
-                let operand_tys = operands
-                    .iter()
-                    .map(|operand| {
-                        operand.type_of(self.ctxt, &self.body.locals, &self.body.registers)
-                    })
-                    .collect::<Vec<_>>();
-                self.assert(
-                    operand_tys == *params,
-                    || format!("Expected '{:?}' but got '{:?}'", params, operand_tys),
-                    loc,
-                );
-            }
-            super::Rvalue::Binary(binary_op, left_and_right) => {
-                let (left, right) = left_and_right.as_ref();
-                match (
-                    binary_op,
-                    left.type_of(self.ctxt, &self.body.locals, &self.body.registers),
-                    right.type_of(self.ctxt, &self.body.locals, &self.body.registers),
-                ) {
-                    (
-                        BinaryOp::Divide | BinaryOp::Overflow(_) | BinaryOp::Wrapping(_),
-                        left,
-                        right,
-                    ) if left == right && left.is_integer() => (),
-                    (BinaryOp::Lesser | BinaryOp::Greater, left, right)
-                        if left == right && left.is_builtin_scalar() => {}
-                    (BinaryOp::BitwiseAnd | BinaryOp::BitwiseOr, left, right)
-                        if left == right && (left.is_integer() || left.is_bool()) => {}
-                    (BinaryOp::ShiftLeft | BinaryOp::ShiftRight, left, right)
-                        if left == right && left.is_integer() => {}
-                    (BinaryOp::Equals, left, right) => self.assert(
-                        left == right,
-                        || format!("Cannot equate '{}' and '{}'", left, right),
-                        loc,
-                    ),
-                    (BinaryOp::Offset, left, right)
-                        if left.as_raw_ptr().is_some_and(|_| right.is_integer()) => {}
-                    (op, left, right) => self.assert(
-                        false,
-                        || format!("invalid '{op:?}' with operands {} and {}", left, right),
-                        loc,
-                    ),
-                }
-            }
-            super::Rvalue::Len(place) => {
-                let ty = place.type_of(self.ctxt, &self.body.locals, &self.body.registers);
-                self.assert(
-                    ty.as_array().is_some() || matches!(ty.kind(), TypeKind::String),
-                    || "Expected an array or string type",
-                    loc,
-                );
-            }
-        }
-    }
     fn visit_terminator(&mut self, loc: Location, terminator: &super::Terminator<'ctxt>) {
         self.super_visit_terminator(loc, terminator);
         match &terminator.kind {

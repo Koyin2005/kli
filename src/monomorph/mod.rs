@@ -45,27 +45,6 @@ pub fn instantiate_body<'ctxt>(
                 | mir::ConstValue::ZeroSized => (),
             }
         }
-        fn visit_rvalue(&mut self, loc: mir::Location, rvalue: &mut mir::Rvalue<'ctxt>) {
-            self.super_visit_rvalue(loc, rvalue);
-            match rvalue {
-                mir::Rvalue::Aggregate(kind, _) => match kind {
-                    mir::AggregateKind::Variant(_, _, args)
-                    | mir::AggregateKind::NamedRecord(_, args) => {
-                        for arg in args.iter_mut() {
-                            *arg = self.instantiate(*arg);
-                        }
-                    }
-                    mir::AggregateKind::Tuple => (),
-                },
-                mir::Rvalue::AllocArray(ty, _) => *ty = self.instantiate(*ty),
-                mir::Rvalue::ReadLine
-                | mir::Rvalue::Use(..)
-                | mir::Rvalue::Call(..)
-                | mir::Rvalue::Binary(..)
-                | mir::Rvalue::Len(_)
-                | mir::Rvalue::Discriminant(_) => (),
-            }
-        }
     }
     Instantiator { ctxt, args: &args }.visit_body_no_invalidate(&mut new_instance);
     new_instance

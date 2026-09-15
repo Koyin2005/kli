@@ -3,8 +3,8 @@ use crate::{
     def_ids::DefId,
     index_vec::IndexVec,
     mir::{
-        self, BasicBlockId, BinaryOp, Body, Constant, Local, Operand, OverflowOp, Place, PlaceBase,
-        PlaceProjection, Rvalue, Stmt, StmtKind,
+        self, BasicBlockId, Body, Constant, Local, Operand, Place, PlaceBase,
+        PlaceProjection, Stmt, StmtKind,
         passes::{
             BodyPass,
             dataflow::{self, Analysis, Domain},
@@ -140,75 +140,10 @@ fn eval_operand<'ctxt>(
     }
 }
 fn eval_rvalue<'ctxt>(
-    ctxt: CtxtRef<'ctxt>,
-    values: &Values<'ctxt>,
-    rvalue: &Rvalue<'ctxt>,
+    _ctxt: CtxtRef<'ctxt>,
+    _values: &Values<'ctxt>,
 ) -> Option<LocalValue<'ctxt>> {
-    match rvalue {
-        Rvalue::Use(operand) => eval_operand(values, operand),
-        Rvalue::Aggregate(kind, fields) => match kind {
-            mir::AggregateKind::Tuple => Some(LocalValue::Tuple(
-                fields
-                    .iter()
-                    .map(|field| {
-                        let LocalValue::Simple(constant) = eval_operand(values, field)? else {
-                            return None;
-                        };
-                        Some(constant)
-                    })
-                    .collect::<Option<IndexVec<FieldId, _>>>()?,
-            )),
-            mir::AggregateKind::NamedRecord(..) => None,
-            mir::AggregateKind::Variant(id, case, args) => Some(LocalValue::Variant(
-                *id,
-                *case,
-                args.clone(),
-                if let Some(field) = fields.iter().next() {
-                    let LocalValue::Simple(constant) = eval_operand(values, field)? else {
-                        return None;
-                    };
-                    Some(constant)
-                } else {
-                    None
-                },
-            )),
-        },
-        Rvalue::Binary(op, operands) => {
-            let (left, right) = &**operands;
-            let left = eval_operand(values, left)?;
-            let right = eval_operand(values, right)?;
-            match op {
-                BinaryOp::Equals => Some(LocalValue::Simple(Constant::bool(ctxt, left == right))),
-                BinaryOp::Overflow(op) => {
-                    let LocalValue::Simple(left) = left else {
-                        return None;
-                    };
-                    let LocalValue::Simple(right) = right else {
-                        return None;
-                    };
-                    let left = left.value.as_scalar()? as i64;
-                    let right = right.value.as_scalar()? as i64;
-                    let (left, right) = match op {
-                        OverflowOp::Add => left.overflowing_add(right),
-                        OverflowOp::Multiply => left.overflowing_mul(right),
-                        OverflowOp::Subtract => left.overflowing_sub(right),
-                    };
-                    let left_value = Constant::int(ctxt, left);
-                    let right_value = Constant::bool(ctxt, right);
-                    Some(LocalValue::Tuple(IndexVec::from([left_value, right_value])))
-                }
-                _ => None,
-            }
-        }
-        Rvalue::Discriminant(place) => {
-            let LocalValue::Variant(def_id, case, _, _) = load_value(values, place)? else {
-                unreachable!("Should be a variant")
-            };
-            let value = ctxt.type_def(def_id).case_value(case).1;
-            Some(LocalValue::Simple(Constant::int(ctxt, value.into())))
-        }
-        _ => None,
-    }
+    todo!()
 }
 
 fn load_value<'ctxt>(values: &Values<'ctxt>, place: &Place<'ctxt>) -> Option<LocalValue<'ctxt>> {
@@ -239,21 +174,6 @@ fn load_value<'ctxt>(values: &Values<'ctxt>, place: &Place<'ctxt>) -> Option<Loc
 
     Some(value)
 }
-
-fn as_rvalue<'ctxt>(value: LocalValue<'ctxt>) -> Rvalue<'ctxt> {
-    match value {
-        LocalValue::Tuple(fields) => Rvalue::Aggregate(
-            mir::AggregateKind::Tuple,
-            fields.into_iter().map(Operand::Constant).collect(),
-        ),
-        LocalValue::Simple(constant) => Rvalue::Use(Operand::Constant(constant)),
-        LocalValue::Variant(id, case, args, value) => Rvalue::Aggregate(
-            mir::AggregateKind::Variant(id, case, args),
-            value.into_iter().map(Operand::Constant).collect(),
-        ),
-    }
-}
-
 type Values<'ctxt> = IndexVec<Local, Option<LocalValue<'ctxt>>>;
 
 struct OperandUpdater<'a, 'ctxt> {
@@ -266,12 +186,6 @@ impl<'ctxt> MutVisit<'ctxt> for OperandUpdater<'_, 'ctxt> {
             && let Some(LocalValue::Simple(value)) = load_value(self.values, place)
         {
             *operand = Operand::Constant(value);
-        }
-    }
-    fn visit_rvalue(&mut self, loc: mir::Location, rvalue: &mut Rvalue<'ctxt>) {
-        self.super_visit_rvalue(loc, rvalue);
-        if let Some(value) = eval_rvalue(self.ctxt, self.values, rvalue) {
-            *rvalue = as_rvalue(value);
         }
     }
 }
