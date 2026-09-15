@@ -14,13 +14,11 @@ impl BodyPass<'_> for DeadStoreElim {
     }
     fn run(&self, _: crate::CtxtRef<'_>, body: &mut crate::mir::Body) {
         let mut finder = LocalFinder {
-            locals: HashSet::from_iter(body.locals.indices().filter_map(|local| {
-                if local.0 < body.param_count {
-                    Some(local)
-                } else {
-                    None
-                }
-            })),
+            locals: HashSet::from_iter(
+                body.locals
+                    .indices()
+                    .filter(|local| local.0 < body.param_count),
+            ),
         };
         for block in reachable(&body.block_info) {
             finder.visit_block(block, &body.block_info.blocks()[block]);

@@ -185,7 +185,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                         .as_array()
                         .expect("wrong amount of elements")
                         .each_ref();
-                    elements.map(|element| this.expr_value(&element))
+                    elements.map(|element| this.expr_value(element))
                 }
                 match *builtin {
                     Builtin::Len => {

@@ -66,7 +66,7 @@ impl<'ctxt> Analysis<'ctxt> for ConstAnalysis<'ctxt> {
             state[local] = None;
             return;
         }
-        state[local] = eval_rvalue(self.ctxt, &state, rvalue);
+        state[local] = eval_rvalue(self.ctxt, state, rvalue);
     }
 
     fn propagate_to_basic_blocks(
@@ -99,13 +99,13 @@ impl<'ctxt> BodyPass<'ctxt> for ConstProp {
             for (id, stmt) in &mut block.stmts.iter_mut_enumerated() {
                 apply_stmt_effect(ctxt, state, stmt);
                 OperandUpdater {
-                    values: &state,
+                    values: state,
                     ctxt,
                 }
                 .visit_stmt(mir::Location::stmt(block_id, id), stmt);
             }
             OperandUpdater {
-                values: &state,
+                values: state,
                 ctxt,
             }
             .visit_terminator(
@@ -126,7 +126,7 @@ fn apply_stmt_effect<'ctxt>(ctxt: CtxtRef<'ctxt>, values: &mut Values<'ctxt>, st
         values[local] = None;
         return;
     }
-    values[local] = eval_rvalue(ctxt, &values, rvalue);
+    values[local] = eval_rvalue(ctxt, values, rvalue);
 }
 
 fn eval_operand<'ctxt>(

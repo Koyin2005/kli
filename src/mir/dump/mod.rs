@@ -129,7 +129,7 @@ impl<'ctxt> MirDump<'ctxt> {
                 ref base,
                 ref index,
             }) => {
-                self.write_value(&base)?;
+                self.write_value(base)?;
                 self.write_fmt(".[")?;
                 self.write_value(index)?;
                 self.write_fmt("]")?;

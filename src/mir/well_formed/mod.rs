@@ -325,14 +325,14 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     BitwiseOp::And | BitwiseOp::Or => {
                         self.assert(
                             left_ty.is_bool() || left_ty.is_integer(),
-                            || format!("expected int"),
+                            || "expected int",
                             self.body.src_info(loc),
                         );
                     }
                     BitwiseOp::ShiftLeft | BitwiseOp::ShiftRight => {
                         self.assert(
                             left_ty.is_integer(),
-                            || format!("expected int"),
+                            || "expected int",
                             self.body.src_info(loc),
                         );
                     }
@@ -434,7 +434,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                 let _ = self.assert_with_some(
                     cases,
                     |cases| cases.get(*case_id),
-                    || format!("not enough cases"),
+                    || "not enough cases",
                     loc,
                 );
             }

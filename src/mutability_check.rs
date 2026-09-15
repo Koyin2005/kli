@@ -45,7 +45,7 @@ impl<'ctxt> MutabilityCheck<'ctxt> {
             }
             PlaceKind::Upvar(.., var) => self.modifiy_error(var, place.loc),
             PlaceKind::Field(ref place, _) => {
-                self.check_mutable(&place);
+                self.check_mutable(place);
             }
             PlaceKind::Index(..) | PlaceKind::Deref(_) | PlaceKind::Invalid => (),
         }
