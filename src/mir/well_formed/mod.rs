@@ -48,7 +48,9 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
         self.ctxt
     }
     fn visit_place(&mut self, _: PlaceCtxt, loc: Location, place: &super::Place<'ctxt>) {
-        let mut ty = place.base.type_of(&self.body.locals, &self.body.registers);
+        let mut ty = place
+            .base
+            .type_of(self.ctxt, &self.body.locals, &self.body.registers);
         for proj in &place.projections {
             let loc = self.body.src_info(loc);
             match proj {
@@ -310,6 +312,14 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_operation(&mut self, loc: Location, operation: &super::Operation<'ctxt>) {
         self.super_visit_operation(loc, operation);
         match operation {
+            Operation::Not(value) => {
+                let ty = value.type_of(self.ctxt, &self.body.registers);
+self.assert(
+                    ty.is_bool(),
+                    || format!("Should be a bool '{}'", ty),
+                    self.body.src_info(loc),
+                );
+            }
             Operation::Discriminant(value) => {
                 let loc = self.body.src_info(loc);
                 self.assert(
@@ -323,6 +333,21 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     },
                     || "type does not have a discriminant",
                     loc,
+                );
+            }
+            Operation::InBounds(base, index) => {
+                let ty = base.type_of(self.ctxt, &self.body.registers);
+                self.assert(
+                    ty.as_array().is_some(),
+                    || format!("Should be an array '{}'", ty),
+                    self.body.src_info(loc),
+                );
+
+                let ty = index.type_of(self.ctxt, &self.body.registers);
+                self.assert(
+                    ty.is_integer(),
+                    || format!("Should be an integer '{ty}'"),
+                    self.body.src_info(loc),
                 );
             }
             Operation::Len(value) => {

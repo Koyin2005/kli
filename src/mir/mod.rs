@@ -72,7 +72,7 @@ impl PlaceProjection {
 }
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ArrayElement<'ctxt> {
-    pub base: Reg,
+    pub base: Value<'ctxt>,
     pub index: Value<'ctxt>,
 }
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -81,26 +81,19 @@ pub enum PlaceBase<'ctxt> {
     ArrayElement(ArrayElement<'ctxt>),
 }
 impl<'ctxt> PlaceBase<'ctxt> {
-    pub fn type_of(&self, locals: &Locals<'ctxt>, registers: &Regs<'ctxt>) -> Type<'ctxt> {
+    pub fn type_of(
+        &self,
+        ctxt: CtxtRef<'ctxt>,
+        locals: &Locals<'ctxt>,
+        registers: &Regs<'ctxt>,
+    ) -> Type<'ctxt> {
         match self {
             &PlaceBase::Local(local) => locals[local].ty,
-            PlaceBase::ArrayElement(array_element) => registers[array_element.base]
-                .ty
+            PlaceBase::ArrayElement(array_element) => array_element
+                .base
+                .type_of(ctxt, registers)
                 .as_array()
                 .expect("should be an array"),
-        }
-    }
-}
-impl<'ctxt> Display for PlaceBase<'ctxt> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Local(local) => write!(f, "_{}", local.0),
-            Self::ArrayElement(array_element) => write!(
-                f,
-                "%{}.[{:?}]",
-                array_element.base.into_usize(),
-                array_element.index
-            ),
         }
     }
 }
@@ -147,7 +140,7 @@ impl<'ctxt> Place<'ctxt> {
         locals: &Locals<'ctxt>,
         registers: &Regs<'ctxt>,
     ) -> Type<'ctxt> {
-        let mut ty = self.base.type_of(locals, registers);
+        let mut ty = self.base.type_of(ctxt, locals, registers);
         for projection in self.projections.iter() {
             ty = projection.apply_projection_to_type(ty, ctxt);
         }
@@ -566,12 +559,14 @@ pub enum ArithOp {
 }
 #[derive(Clone, Debug)]
 pub enum Operation<'ctxt> {
+    Not(Value<'ctxt>),
     Cmp(Comparison, Value<'ctxt>, Value<'ctxt>),
     Arith(ArithOp, Value<'ctxt>, Value<'ctxt>),
     ExtractPayload(Value<'ctxt>, CaseId),
     ExtractField(Value<'ctxt>, FieldId),
     ExtractElement(Value<'ctxt>, Value<'ctxt>),
     Call(Value<'ctxt>, Vec<Value<'ctxt>>),
+    InBounds(Value<'ctxt>, Value<'ctxt>),
     Aggregate(AggregateKind<'ctxt>, IndexVec<FieldId, Value<'ctxt>>),
     AllocArray(Type<'ctxt>, Vec<Value<'ctxt>>),
     Len(Value<'ctxt>),
@@ -586,6 +581,8 @@ impl<'ctxt> Operation<'ctxt> {
         locals: &Locals<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
+            Operation::Not(_) => Type::new_bool(ctxt),
+            Operation::InBounds(..) => Type::new_bool(ctxt),
             Operation::Discriminant(_) => Type::new_int(ctxt),
             Operation::Len(_) => Type::new_int(ctxt),
             Operation::Load(place) => place.type_of(ctxt, locals, regs),

@@ -6,7 +6,7 @@ use crate::{
     builtins::{Builtin, IntegerBuiltin},
     index_vec::IndexVec,
     mir::{
-        self, AggregateKind, Local, Operand, Place, Rvalue, Value,
+        self, AggregateKind, Local, Place, Value,
         build::{Builder, VarKind},
     },
     src_loc::SrcLoc,
@@ -31,25 +31,9 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     pub(super) fn lower_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Place<'ctxt> {
         match &place.kind {
             typed_ast::PlaceKind::Index(base, index) => {
-                let Value::Reg(base) = self.expr_value(base) else {
-                    todo!("Force me into a register")
-                };
+                let base = self.expr_value(base);
                 let index = self.expr_value(index);
-                /*let len
-                let in_bounds = self.assign_to_temp(
-                    place.loc,
-                    Type::new_bool(self.ctxt),
-                    Self::binary_op_rvalue(
-                        mir::BinaryOp::Lesser,
-                        Operand::Load(Place::local(index)),
-                        Operand::Load(Place::local(len)),
-                    ),
-                );
-                self.finish_assert_to_new_block(
-                    place.loc,
-                    Operand::Load(Place::local(in_bounds)),
-                    mir::AssertKind::InBounds,
-                );*/
+                self.bounds_check(place.loc, base.clone(), index.clone());
                 Place {
                     base: mir::PlaceBase::ArrayElement(mir::ArrayElement { base, index }),
                     projections: Vec::new(),
@@ -138,12 +122,14 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         let value = self.expr_value(expr);
         self.push_stmt(expr.loc, mir::StmtKind::Store(dest, value));
     }
-    fn binary_op_rvalue(
-        op: mir::BinaryOp,
-        left: Operand<'ctxt>,
-        right: Operand<'ctxt>,
-    ) -> Rvalue<'ctxt> {
-        Rvalue::Binary(op, Box::new((left, right)))
+    fn bounds_check(&mut self,loc: SrcLoc, base : Value<'ctxt>, index : Value<'ctxt>){
+                let in_bounds = self.push_operation(
+                    loc,
+                    mir::Operation::InBounds(base.clone(), index.clone()),
+                );
+                let out_of_bounds = self.push_operation(loc, mir::Operation::Not(Value::Reg(in_bounds)));
+                self.push_stmt(loc, mir::StmtKind::PanicIf(Value::Reg(out_of_bounds)));
+
     }
     fn load_place(&mut self, place: &typed_ast::Place<'ctxt>) -> Value<'ctxt> {
         match place.kind {
@@ -165,6 +151,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
             PlaceKind::Index(ref base, ref index) => {
                 let base = self.expr_value(base);
                 let index = self.expr_value(index);
+                self.bounds_check(place.loc, base.clone(), index.clone());
                 Value::Reg(
                     self.push_operation(place.loc, mir::Operation::ExtractElement(base, index)),
                 )

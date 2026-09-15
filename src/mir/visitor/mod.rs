@@ -124,7 +124,7 @@ pub trait Visit<'ctxt> {
                 self.visit_local(ctxt, loc, local);
             }
             PlaceBase::ArrayElement(array_element) => {
-                self.visit_reg(loc, array_element.base, ctxt);
+                self.visit_value(loc, &array_element.base);
                 self.visit_value(loc, &array_element.index);
             }
         }
@@ -181,7 +181,7 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_operation(&mut self, loc: Location, operation: &Operation<'ctxt>) {
         match operation {
-            Operation::Len(value) | Operation::Discriminant(value) => {
+            Operation::Len(value) | Operation::Discriminant(value) | Operation::Not(value) => {
                 self.visit_value(loc, value);
             }
             Operation::Load(place) => {
@@ -189,7 +189,8 @@ pub trait Visit<'ctxt> {
             }
             Operation::Cmp(_, left, right)
             | Operation::Arith(_, left, right)
-            | Operation::ExtractElement(left, right) => {
+            | Operation::ExtractElement(left, right)
+            | Operation::InBounds(left, right) => {
                 self.visit_value(loc, left);
                 self.visit_value(loc, right);
             }
@@ -249,7 +250,7 @@ pub trait MutVisit<'ctxt> {
     }
     fn visit_operation(&mut self, loc: Location, operation: &mut Operation<'ctxt>) {
         match operation {
-            Operation::Len(value) | Operation::Discriminant(value) => {
+            Operation::Len(value) | Operation::Discriminant(value)| Operation::Not(value) => {
                 self.visit_value(loc, value);
             }
             Operation::Load(place) => {
@@ -257,7 +258,8 @@ pub trait MutVisit<'ctxt> {
             }
             Operation::Cmp(_, left, right)
             | Operation::Arith(_, left, right)
-            | Operation::ExtractElement(left, right) => {
+            | Operation::ExtractElement(left, right)
+            | Operation::InBounds(left, right) => {
                 self.visit_value(loc, left);
                 self.visit_value(loc, right);
             }
@@ -390,7 +392,7 @@ pub trait MutVisit<'ctxt> {
                 self.visit_local(loc, local);
             }
             PlaceBase::ArrayElement(array_element) => {
-                self.visit_reg(loc, &mut array_element.base);
+                self.visit_value(loc, &mut array_element.base);
                 self.visit_value(loc, &mut array_element.index);
             }
         }

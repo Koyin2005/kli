@@ -4,9 +4,9 @@ use crate::{
     collect::CtxtRef,
     index_vec::IndexVec,
     mir::{
-        AssertKind, BasicBlock, BasicBlockId, Body, BodySource, Context, Local, LocalInfo, Operand,
-        Operation, Place, Reg, RegInfo, Regs, Rvalue, Stmt, StmtKind, SwitchTarget, SwitchTargets,
-        Terminator, TerminatorKind, Value, basic_blocks::BasicBlocks,
+        BasicBlock, BasicBlockId, Body, BodySource, Context, Local, LocalInfo, Operation, Reg,
+        RegInfo, Regs, Stmt, StmtKind, SwitchTarget, SwitchTargets, Terminator, TerminatorKind,
+        Value, basic_blocks::BasicBlocks,
     },
     resolved_ast::{Var, VarId},
     src_loc::SrcLoc,
@@ -72,19 +72,6 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     }
     pub(super) fn new_local_from_info(&mut self, info: LocalInfo<'ctxt>) -> Local {
         self.body.locals.push(info)
-    }
-    pub(super) fn finish_assert_to_new_block(
-        &mut self,
-        loc: SrcLoc,
-        operand: Operand<'ctxt>,
-        assert_kind: AssertKind,
-    ) {
-        let new_block = self.new_block();
-        self.finish_block(
-            loc,
-            TerminatorKind::OldAssert(operand, assert_kind, new_block),
-        );
-        self.switch_to_block(new_block);
     }
     pub(super) fn new_temp(&mut self, ty: Type<'ctxt>) -> Local {
         self.new_local_from_info(LocalInfo {
@@ -189,22 +176,9 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
         self.push_stmt(loc, StmtKind::Assign(reg, operation));
         reg
     }
-    pub(super) fn assign_to_temp(
-        &mut self,
-        loc: SrcLoc,
-        ty: Type<'ctxt>,
-        value: Rvalue<'ctxt>,
-    ) -> Local {
-        let temp = self.new_temp(ty);
-        self.assign(loc, Place::local(temp), value);
-        temp
-    }
     pub(super) fn panic(&mut self, loc: SrcLoc) {
         let block = self.new_block();
         self.finish_block(loc, TerminatorKind::Panic);
         self.switch_to_block(block);
-    }
-    pub(super) fn assign(&mut self, loc: SrcLoc, place: Place<'ctxt>, value: Rvalue<'ctxt>) {
-        self.push_stmt(loc, StmtKind::OldStore(place, Box::new(value)));
     }
 }
