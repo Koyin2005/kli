@@ -370,9 +370,6 @@ impl<'ctxt> MirDump<'ctxt> {
                 TerminatorKind::Unreachable => {
                     write!(self.output, "unreachable")?;
                 }
-                TerminatorKind::OldReturn(..) => {
-                    todo!("Ignored")
-                }
                 TerminatorKind::Return(value) => {
                     write!(self.output, "return ")?;
                     self.write_value(value)?;

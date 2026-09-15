@@ -54,9 +54,9 @@ pub trait Visit<'ctxt> {
                 }
             }
             TerminatorKind::Panic | TerminatorKind::Unreachable => (),
-            TerminatorKind::OldSwitch(operand, _)
-            | TerminatorKind::OldAssert(operand, ..)
-            | TerminatorKind::OldReturn(operand) => self.visit_operand(loc, operand),
+            TerminatorKind::OldSwitch(operand, _) | TerminatorKind::OldAssert(operand, ..) => {
+                self.visit_operand(loc, operand)
+            }
             TerminatorKind::Return(value) | TerminatorKind::Switch(value, _) => {
                 self.visit_value(loc, value)
             }
@@ -323,9 +323,9 @@ pub trait MutVisit<'ctxt> {
                 }
             }
             TerminatorKind::Panic | TerminatorKind::Unreachable => (),
-            TerminatorKind::OldSwitch(operand, _)
-            | TerminatorKind::OldAssert(operand, ..)
-            | TerminatorKind::OldReturn(operand) => self.visit_operand(loc, operand),
+            TerminatorKind::OldSwitch(operand, _) | TerminatorKind::OldAssert(operand, ..) => {
+                self.visit_operand(loc, operand)
+            }
             TerminatorKind::Return(value) | TerminatorKind::Switch(value, _) => {
                 self.visit_value(loc, value)
             }

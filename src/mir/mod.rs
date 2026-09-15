@@ -440,10 +440,9 @@ impl<'ctxt> Terminator<'ctxt> {
             TerminatorKind::OldAssert(.., block) | TerminatorKind::Goto(block, _) => {
                 SuccessorsIter::Single(Some(block))
             }
-            TerminatorKind::OldReturn(_)
-            | TerminatorKind::Panic
-            | TerminatorKind::Unreachable
-            | TerminatorKind::Return(_) => SuccessorsIter::Leaf,
+            TerminatorKind::Panic | TerminatorKind::Unreachable | TerminatorKind::Return(_) => {
+                SuccessorsIter::Leaf
+            }
             TerminatorKind::OldSwitch(_, ref targets) | TerminatorKind::Switch(_, ref targets) => {
                 SuccessorsIter::Switch(targets.succesors_iter())
             }
@@ -466,7 +465,7 @@ impl<'ctxt> Terminator<'ctxt> {
                 ),
             ),
             TerminatorKind::Unreachable => None.unzip(),
-            TerminatorKind::OldReturn(_) | TerminatorKind::Return(_) => None.unzip(),
+            TerminatorKind::Return(_) => None.unzip(),
             TerminatorKind::Panic => None.unzip(),
         };
         single.into_iter().chain(multiple.into_iter().flatten())
@@ -478,7 +477,6 @@ pub enum TerminatorKind<'ctxt> {
     OldSwitch(Operand<'ctxt>, SwitchTargets),
     Switch(Value<'ctxt>, SwitchTargets),
     Unreachable,
-    OldReturn(Operand<'ctxt>),
     Return(Value<'ctxt>),
     Goto(BasicBlockId, Vec<Value<'ctxt>>),
     Panic,
