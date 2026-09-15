@@ -203,7 +203,9 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                         self.push_stmt(expr.loc, mir::StmtKind::Print { value, err: true });
                         Value::Unit
                     }
-                    Builtin::ReadLine => todo!(),
+                    Builtin::ReadLine => {
+                        Value::Reg(self.push_operation(expr.loc, mir::Operation::ReadLine))
+                    }
                     Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
                         IntegerBuiltin::IntMaxValue => Value::Int(i64::MAX),
                         IntegerBuiltin::ShiftLeft => {

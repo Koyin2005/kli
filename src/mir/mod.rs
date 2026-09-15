@@ -581,6 +581,7 @@ pub enum Operation<'ctxt> {
     Len(Value<'ctxt>),
     Discriminant(Value<'ctxt>),
     Load(Place<'ctxt>),
+    ReadLine,
 }
 impl<'ctxt> Operation<'ctxt> {
     pub fn result_type(
@@ -590,6 +591,7 @@ impl<'ctxt> Operation<'ctxt> {
         locals: &Locals<'ctxt>,
     ) -> Type<'ctxt> {
         match self {
+            Operation::ReadLine => Type::new_string(ctxt),
             Operation::Bitwise(op, left, _) => match op {
                 BitwiseOp::And | BitwiseOp::Or => left.type_of(ctxt, regs),
                 BitwiseOp::ShiftLeft | BitwiseOp::ShiftRight => Type::new_int(ctxt),

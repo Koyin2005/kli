@@ -188,6 +188,7 @@ impl<'ctxt> MirDump<'ctxt> {
     }
     fn write_operation(&mut self, operation: &Operation<'ctxt>) -> WriteResult {
         match operation {
+            Operation::ReadLine => self.write_fmt("read_line"),
             Operation::InBounds(base, index) => {
                 self.write_fmt("in_bounds ")?;
                 self.write_value(base)?;

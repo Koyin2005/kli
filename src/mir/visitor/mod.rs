@@ -181,6 +181,7 @@ pub trait Visit<'ctxt> {
     }
     fn super_visit_operation(&mut self, loc: Location, operation: &Operation<'ctxt>) {
         match operation {
+            Operation::ReadLine => (),
             Operation::Len(value) | Operation::Discriminant(value) | Operation::Not(value) => {
                 self.visit_value(loc, value);
             }
@@ -251,6 +252,7 @@ pub trait MutVisit<'ctxt> {
     }
     fn visit_operation(&mut self, loc: Location, operation: &mut Operation<'ctxt>) {
         match operation {
+            Operation::ReadLine => (),
             Operation::Len(value) | Operation::Discriminant(value) | Operation::Not(value) => {
                 self.visit_value(loc, value);
             }
