@@ -198,8 +198,20 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                     Builtin::ReadLine => todo!(),
                     Builtin::IntegerBuiltin(integer_builtin) => match integer_builtin {
                         IntegerBuiltin::IntMaxValue => Value::Int(i64::MAX),
-                        IntegerBuiltin::ShiftLeft => todo!(),
-                        IntegerBuiltin::ShiftRight => todo!(),
+                        IntegerBuiltin::ShiftLeft => {
+                            let [left, right] = get_values(self, exprs);
+                            Value::Reg(self.push_operation(
+                                expr.loc,
+                                mir::Operation::Bitwise(mir::BitwiseOp::ShiftLeft, left, right),
+                            ))
+                        }
+                        IntegerBuiltin::ShiftRight => {
+                            let [left, right] = get_values(self, exprs);
+                            Value::Reg(self.push_operation(
+                                expr.loc,
+                                mir::Operation::Bitwise(mir::BitwiseOp::ShiftRight, left, right),
+                            ))
+                        }
                         IntegerBuiltin::WrappingAdd => {
                             let [left, right] = get_values(self, exprs);
                             Value::Reg(self.push_operation(
