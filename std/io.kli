@@ -1,0 +1,4 @@
+fun println(s : string) -> () = do 
+    builtins.print_string(s);
+    builtins.print_string("\n");
+end
