@@ -386,9 +386,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     }
                 }
                 TerminatorKind::Panic => self.write_fmt("panic")?,
-                TerminatorKind::OldAssert(..) => {
-                    todo!("ignored")
-                }
             }
         }
         self.writeln_fmt("")
