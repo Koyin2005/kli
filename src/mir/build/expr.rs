@@ -306,15 +306,61 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                     BinaryOp::Add => mir::ArithOp::AddOverflow,
                     BinaryOp::Subtract => mir::ArithOp::SubOverflow,
                     BinaryOp::Multiply => mir::ArithOp::MulOverflow,
-                    BinaryOp::Divide => todo!(),
-                    BinaryOp::BitwiseOr => return Value::Reg(self.push_operation(
+                    BinaryOp::Divide => {
+                        //Panic if left == MIN and right == -1
+                        let is_min = self.push_operation(
+                            expr.loc,
+                            mir::Operation::Cmp(
+                                mir::Comparison::Equals,
+                                left.clone(),
+                                Value::Int(i64::MIN),
+                            ),
+                        );
+                        let is_neg_1 = self.push_operation(
+                            expr.loc,
+                            mir::Operation::Cmp(
+                                mir::Comparison::Equals,
+                                left.clone(),
+                                Value::Int(-1),
+                            ),
+                        );
+                        let is_overflowed = self.push_operation(
+                            expr.loc,
+                            mir::Operation::Bitwise(
+                                mir::BitwiseOp::And,
+                                Value::Reg(is_min),
+                                Value::Reg(is_neg_1),
+                            ),
+                        );
+                        self.push_stmt(expr.loc, mir::StmtKind::PanicIf(Value::Reg(is_overflowed)));
+                        //Panic if right == 0
+                        let is_zero = self.push_operation(
+                            expr.loc,
+                            mir::Operation::Cmp(
+                                mir::Comparison::Equals,
+                                right.clone(),
+                                Value::Int(0),
+                            ),
+                        );
+                        self.push_stmt(expr.loc, mir::StmtKind::PanicIf(Value::Reg(is_zero)));
+                        let divide = self.push_operation(
+                            expr.loc,
+                            mir::Operation::Arith(mir::ArithOp::Divide, left, right),
+                        );
+                        return Value::Reg(divide);
+                    }
+                    BinaryOp::BitwiseOr => {
+                        return Value::Reg(self.push_operation(
                             expr.loc,
                             mir::Operation::Bitwise(mir::BitwiseOp::Or, left, right),
-                        )),
-                    BinaryOp::BitwiseAnd => return Value::Reg(self.push_operation(
+                        ));
+                    }
+                    BinaryOp::BitwiseAnd => {
+                        return Value::Reg(self.push_operation(
                             expr.loc,
                             mir::Operation::Bitwise(mir::BitwiseOp::And, left, right),
-                        )),
+                        ));
+                    }
                 };
 
                 let tuple =

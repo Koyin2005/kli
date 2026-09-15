@@ -235,6 +235,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     mir::Comparison::Greater => "gt",
                     mir::Comparison::Lesser => "lt",
                 })?;
+                self.write_fmt(" ")?;
                 self.write_value(left)?;
                 self.write_fmt(",")?;
                 self.write_value(right)
@@ -247,6 +248,7 @@ impl<'ctxt> MirDump<'ctxt> {
                     mir::ArithOp::SubOverflow => "sub_overflow",
                     mir::ArithOp::Mul => "mul",
                     mir::ArithOp::MulOverflow => "mul_overflow",
+                    mir::ArithOp::Divide => "divide",
                 })?;
                 self.write_fmt(" ")?;
                 self.write_value(left)?;

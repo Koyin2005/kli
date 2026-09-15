@@ -556,6 +556,7 @@ pub enum ArithOp {
     AddOverflow,
     SubOverflow,
     MulOverflow,
+    Divide,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub enum BitwiseOp {
