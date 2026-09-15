@@ -188,6 +188,10 @@ impl<'ctxt> MirDump<'ctxt> {
     }
     fn write_operation(&mut self, operation: &Operation<'ctxt>) -> WriteResult {
         match operation {
+            Operation::Copy(value) => {
+                self.write_fmt("copy ")?;
+                self.write_value(value)
+            }
             Operation::Zeroed(ty) => {
                 self.write_fmt("zeroed ")?;
                 self.write_fmt(ty)

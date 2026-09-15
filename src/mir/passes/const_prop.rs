@@ -4,7 +4,7 @@ use crate::{
     index_vec::IndexVec,
     mir::{
         self, ArithOp, BasicBlockId, BitwiseOp, Body, Comparison, Operation, Reg, Stmt, StmtKind,
-        Value,
+        TerminatorKind, Value,
         passes::{
             BodyPass,
             dataflow::{self, Analysis, Domain},
@@ -31,6 +31,7 @@ enum KnownValue<'ctxt> {
     Zeroed(Type<'ctxt>),
     String(Symbol),
     Function(DefId, GenericArgs<'ctxt>),
+    Unknown
 }
 impl KnownValue<'_> {
     fn as_scalar(&self) -> Option<i64> {
@@ -74,10 +75,13 @@ impl<'ctxt> Domain for Values<'ctxt> {
                     true
                 }
                 (Some(dst_value), Some(src)) => {
-                    if dst_value != src {
+                    if *src == KnownValue::Unknown{
+                        false
+                    }
+                    else if dst_value != src {
                         dst.clone_from(&None);
                         true
-                    } else {
+                    } else{
                         false
                     }
                 }
@@ -86,11 +90,36 @@ impl<'ctxt> Domain for Values<'ctxt> {
         changed
     }
 }
-struct ConstAnalysis<'ctxt> {
+struct ConstAnalysis<'a, 'ctxt> {
     ctxt: CtxtRef<'ctxt>,
+    body: &'a Body<'ctxt>,
 }
 
-impl<'ctxt> Analysis<'ctxt> for ConstAnalysis<'ctxt> {
+impl<'ctxt> ConstAnalysis<'_,'ctxt>{
+    
+    fn visit_terminator(
+        &self,
+        state: &Values<'ctxt>,
+        terminator: &mir::Terminator<'ctxt>,
+        propagate: impl FnMut(BasicBlockId,&Values<'ctxt>),
+    ) {
+        if let TerminatorKind::Goto(block, args) = &terminator.kind
+            && !args.is_empty()
+        {
+            let mut state = state.clone();
+            let regs = self.body.block_info.blocks()[*block].args.clone();
+            for (value, reg) in args.iter().zip(regs) {
+                let value = simplify_value(&mut state, value);
+                state[reg] = value;
+            }
+            dataflow::prop_uniform(self, &state, terminator, propagate);
+            return;
+        }
+
+        dataflow::prop_uniform(self, state, terminator, propagate);
+    }
+}
+impl<'ctxt> Analysis<'ctxt> for ConstAnalysis<'_, 'ctxt> {
     type Domain = Values<'ctxt>;
     fn apply_stmt_effect(&mut self, state: &mut Self::Domain, stmt: &Stmt<'ctxt>) {
         apply_stmt_effect(self.ctxt, state, stmt);
@@ -100,9 +129,9 @@ impl<'ctxt> Analysis<'ctxt> for ConstAnalysis<'ctxt> {
         &self,
         state: &Self::Domain,
         terminator: &mir::Terminator<'ctxt>,
-        f: impl FnMut(BasicBlockId),
+        propagate: impl FnMut(BasicBlockId,&Self::Domain),
     ) {
-        dataflow::prop_uniform(self, state, terminator, f);
+        self.visit_terminator(state, terminator, propagate);
     }
 }
 
@@ -115,7 +144,7 @@ impl<'ctxt> BodyPass<'ctxt> for ConstProp {
         optimisation_enabled(ctxt)
     }
     fn run(&self, ctxt: crate::CtxtRef<'ctxt>, body: &'_ mut crate::mir::Body<'ctxt>) {
-        let mut states = ConstAnalysis { ctxt }.iterate_to_fixpoint(body);
+        let mut states = ConstAnalysis { ctxt, body }.iterate_to_fixpoint(body);
         for (block_id, block) in body
             .block_info
             .blocks_mut_dont_dirty()
@@ -143,7 +172,6 @@ impl<'ctxt> BodyPass<'ctxt> for ConstProp {
     }
 }
 fn apply_stmt_effect<'ctxt>(ctxt: CtxtRef<'ctxt>, values: &mut Values<'ctxt>, stmt: &Stmt<'ctxt>) {
-    _ = ctxt;
     let StmtKind::Assign(reg, rvalue) = &stmt.kind else {
         return;
     };
@@ -157,6 +185,9 @@ fn eval_operation<'ctxt>(
     operation: &Operation<'ctxt>,
 ) -> Option<KnownValue<'ctxt>> {
     match operation {
+        Operation::Copy(value) => {
+            simplify_value(values, value)
+        }
         Operation::Cmp(op, left, right) => {
             let left = simplify_value(values, left)?.as_scalar()?;
             let right = simplify_value(values, right)?.as_scalar()?;
@@ -241,7 +272,7 @@ fn simplify_value<'ctxt>(
         }
         Value::Lambda(..) => todo!("lambda"),
         Value::Unit => Some(KnownValue::Unit),
-        Value::Unknown(_) => None,
+        Value::Unknown(_) => Some(KnownValue::Unknown),
     }
 }
 fn load_value<'ctxt>(values: &Values<'ctxt>, reg: Reg) -> Option<Value<'ctxt>> {
@@ -252,7 +283,7 @@ fn load_value<'ctxt>(values: &Values<'ctxt>, reg: Reg) -> Option<Value<'ctxt>> {
         KnownValue::Bool(value) => Some(Value::Bool(*value)),
         KnownValue::Function(def_id, args) => Some(Value::Function(*def_id, args.clone())),
         KnownValue::String(string) => Some(Value::String(*string)),
-        KnownValue::Tuple(..) | KnownValue::Variant(..) | KnownValue::Zeroed(..) => None,
+        KnownValue::Tuple(..) | KnownValue::Variant(..) | KnownValue::Zeroed(..) | KnownValue::Unknown => None,
     }
 }
 type Values<'ctxt> = IndexVec<Reg, Option<KnownValue<'ctxt>>>;

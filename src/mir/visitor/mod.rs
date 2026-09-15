@@ -127,7 +127,10 @@ pub trait Visit<'ctxt> {
         match operation {
             Operation::Zeroed(_) => {}
             Operation::ReadLine => (),
-            Operation::Len(value) | Operation::Discriminant(value) | Operation::Not(value) => {
+            Operation::Len(value)
+            | Operation::Discriminant(value)
+            | Operation::Not(value)
+            | Operation::Copy(value) => {
                 self.visit_value(loc, value);
             }
             Operation::Load(place) => {
@@ -190,7 +193,10 @@ pub trait MutVisit<'ctxt> {
         match operation {
             Operation::Zeroed(_) => (),
             Operation::ReadLine => (),
-            Operation::Len(value) | Operation::Discriminant(value) | Operation::Not(value) => {
+            Operation::Len(value)
+            | Operation::Discriminant(value)
+            | Operation::Not(value)
+            | Operation::Copy(value) => {
                 self.visit_value(loc, value);
             }
             Operation::Load(place) => {

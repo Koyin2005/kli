@@ -63,7 +63,8 @@ pub fn instantiate_body<'ctxt>(
                 | mir::Operation::Len(_)
                 | mir::Operation::Discriminant(_)
                 | mir::Operation::Load(_)
-                | mir::Operation::ReadLine => (),
+                | mir::Operation::ReadLine
+                | mir::Operation::Copy(_) => (),
             }
         }
         fn visit_value(&mut self, _: mir::Location, value: &mut mir::Value<'ctxt>) {

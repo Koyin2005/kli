@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use std::collections::VecDeque;
+use std::{collections::{HashSet, VecDeque}, fmt::Debug};
 
 use crate::{
     index_vec::IndexVec,
@@ -16,24 +16,23 @@ pub fn prop_uniform<'ctxt, A: Analysis<'ctxt> + ?Sized>(
     a: &A,
     state: &A::Domain,
     terminator: &Terminator<'ctxt>,
-    mut f: impl FnMut(BasicBlockId),
+    mut f: impl FnMut(BasicBlockId,&A::Domain),
 ) {
     for succ in terminator.successors() {
-        f(succ);
+        f(succ,state);
     }
 }
 pub trait Analysis<'ctxt> {
-    type Domain: Domain + Default;
+    type Domain: Domain + Default + Debug;
 
     fn apply_stmt_effect(&mut self, state: &mut Self::Domain, stmt: &Stmt<'ctxt>);
-
     fn propagate_to_basic_blocks(
         &self,
         state: &Self::Domain,
         terminator: &Terminator<'ctxt>,
-        f: impl FnMut(BasicBlockId),
+        propagate: impl FnMut(BasicBlockId,&Self::Domain),
     ) {
-        prop_uniform(self, state, terminator, f);
+        prop_uniform(self, state, terminator, propagate);
     }
     fn iterate_to_fixpoint(&mut self, body: &Body<'ctxt>) -> IndexVec<BasicBlockId, Self::Domain> {
         let mut state = Self::Domain::default();
@@ -42,16 +41,19 @@ pub trait Analysis<'ctxt> {
                 Self::Domain::initial(body)
             });
         let mut queue = VecDeque::new();
+        let mut in_queue = HashSet::new();
         queue.push_front(BasicBlockId::ENTRY);
         while let Some(block) = queue.pop_back() {
+            in_queue.remove(&block);
             state.clone_from(&states[block]);
             for stmt in body.block_info.blocks()[block].stmts.iter() {
                 self.apply_stmt_effect(&mut state, stmt);
             }
             let terminator = body.block_info.blocks()[block].expect_terminator();
-            self.propagate_to_basic_blocks(&state, terminator, |succ| {
+            self.propagate_to_basic_blocks(&state, terminator, |succ,state| {
                 let new_state = &mut states[succ];
-                if new_state.join(&state) {
+                let changed = new_state.join(&state);
+                if changed && in_queue.insert(succ) {
                     queue.push_front(succ);
                 }
             });

@@ -154,8 +154,7 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
     fn visit_operation(&mut self, loc: Location, operation: &super::Operation<'ctxt>) {
         self.super_visit_operation(loc, operation);
         match operation {
-            Operation::Zeroed(_) => (),
-            Operation::ReadLine => (),
+            Operation::Copy(_) | Operation::Zeroed(_) | Operation::ReadLine => (),
             Operation::Bitwise(op, left, right) => {
                 let left_ty = left.type_of(self.ctxt, &self.body.registers);
                 let right_ty = right.type_of(self.ctxt, &self.body.registers);
