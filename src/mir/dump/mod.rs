@@ -327,7 +327,7 @@ impl<'ctxt> MirDump<'ctxt> {
         }
         self.writeln_fmt("")?;
         for stmt in &block.stmts {
-            self.write_fmt("  ")?;
+            self.write_fmt(" ")?;
             match &stmt.kind {
                 StmtKind::Store(place, value) => {
                     self.write_fmt("store ")?;
