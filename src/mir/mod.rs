@@ -648,7 +648,6 @@ pub enum StmtKind<'ctxt> {
     PanicIf(Value<'ctxt>),
     Assign(Reg, Operation<'ctxt>),
     Store(Place<'ctxt>, Value<'ctxt>),
-    OldStore(Place<'ctxt>, Box<Rvalue<'ctxt>>),
     Print { value: Value<'ctxt>, err: bool },
 }
 define_id!(BasicBlockId);

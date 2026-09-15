@@ -1,12 +1,10 @@
 use crate::{
     CtxtRef,
     mir::{
-        self, BasicBlock, BasicBlockId, Body, BodySource, ConstValue, Constant, Local, Location,
-        Operand, Place, Rvalue, StmtKind, Terminator, TerminatorKind, passes::optimisation_enabled,
-        visitor::MutVisit,
+        self, BasicBlock, BasicBlockId, Body, BodySource, Local, Location, Operand, Place,
+        TerminatorKind, passes::optimisation_enabled, visitor::MutVisit,
     },
     monomorph::instantiate_body,
-    src_loc::SrcLoc,
     types::GenericArgs,
 };
 
@@ -48,13 +46,8 @@ pub fn run_pass<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
                 let callee_entry = current_body.block_info.blocks().last().next();
                 let current_block = &mut current_body.block_info.blocks_mut()[block];
                 assert!(current_block.stmts.pop().is_some_and(|stmt| {
-                    if let StmtKind::OldStore(_, rvalue) = stmt.kind
-                        && let Rvalue::Call(..) = *rvalue
-                    {
-                        true
-                    } else {
-                        false
-                    }
+                    _ = stmt;
+                    false
                 }));
                 let TerminatorKind::Goto(ref mut target, ..) =
                     current_block.expect_terminator_mut().kind
@@ -63,17 +56,15 @@ pub fn run_pass<'ctxt>(ctxt: CtxtRef<'ctxt>, mir: &mut mir::Context<'ctxt>) {
                 };
                 let target = std::mem::replace(target, callee_entry);
                 for (local, arg) in body.param_locals_iter().zip(args) {
-                    let local = Local::new(local.into_usize() + current_body.locals.len());
-                    current_block.stmts.push(mir::Stmt {
-                        loc: SrcLoc::dummy(),
-                        kind: StmtKind::OldStore(Place::local(local), Box::new(Rvalue::Use(arg))),
-                    });
+                    let _local = Local::new(local.into_usize() + current_body.locals.len());
+                    _ = arg;
+                    todo!("fix inlining");
                 }
                 let mut updater = Updater {
                     block_count: current_body.block_info.blocks().len() as _,
                     local_count: current_body.locals.len() as _,
                     return_target: target,
-                    return_place,
+                    _return_place: return_place,
                 };
                 updater.visit_body(&mut body);
                 current_body
@@ -97,93 +88,21 @@ fn find_inlining_site<'ctxt>(
     mir: &mir::Context<'ctxt>,
     body: &Body<'ctxt>,
 ) -> Option<InlininingSite<'ctxt>> {
-    let mut site = None;
-    for (block_id, block) in body.block_info.blocks().iter_enumerated() {
-        for stmt in block.stmts.iter() {
-            let StmtKind::OldStore(place, value) = &stmt.kind else {
-                continue;
-            };
-            let Rvalue::Call(
-                Operand::Constant(Constant {
-                    ty: _,
-                    value: ConstValue::Named(id, ref generic_args),
-                }),
-                ref args,
-            ) = **value
-            else {
-                continue;
-            };
-            let call_site = InlininingSite {
-                src: BodySource::Function(id),
-                return_place: place.clone(),
-                generic_args: generic_args.clone(),
-                block: block_id,
-                args: args.clone(),
-            };
-
-            let body_id = mir.get_bodies_with_src(call_site.src)[0];
-            let call_site_budget = inline_budget_used_by(mir.get_body(body_id));
-            if let Some((current_budget, _)) = site
-                && current_budget <= call_site_budget
-            {
-                continue;
-            }
-            site = Some((call_site_budget, call_site));
-        }
-    }
-    site.map(|(_, site)| site)
+    _ = mir;
+    _ = body;
+    todo!("fix stuff")
 }
 
 fn split_calls<'ctxt>(body: &mut Body<'ctxt>) {
-    let mut block_id = BasicBlockId::ENTRY;
-    let blocks = body.block_info.blocks_mut();
-    while let Some(block) = blocks.get_mut(block_id) {
-        let mut call_stmt = None;
-        for (stmt_id, stmt) in block.stmts.iter_enumerated() {
-            let StmtKind::OldStore(_, value) = &stmt.kind else {
-                continue;
-            };
-            let Rvalue::Call(
-                Operand::Constant(Constant {
-                    ty: _,
-                    value: ConstValue::Named(..),
-                }),
-                _,
-            ) = **value
-            else {
-                continue;
-            };
-            if stmt_id != block.stmts.last()
-                || !matches!(block.expect_terminator().kind, TerminatorKind::Goto(..))
-            {
-                call_stmt = Some(stmt_id);
-                break;
-            }
-        }
-        if let Some(call_stmt) = call_stmt {
-            let stmts = block.stmts.split_off(call_stmt.next());
-            let src_info = block.expect_terminator().src_info;
-            let terminator = block.terminator.take();
-
-            let next_block_id = blocks.push(BasicBlock {
-                args: Vec::new(),
-                stmts,
-                terminator,
-            });
-            blocks[block_id].terminator = Some(Terminator {
-                src_info,
-                kind: mir::TerminatorKind::Goto(next_block_id, Vec::new()),
-            });
-        }
-        block_id = block_id.next();
-    }
+    _ = body;
+    todo!("fix stuff")
 }
 
 struct Updater<'ctxt> {
     local_count: u32,
     block_count: u32,
     return_target: BasicBlockId,
-    return_place: Place<'ctxt>,
+    _return_place: Place<'ctxt>,
 }
 
 impl<'ctxt> MutVisit<'ctxt> for Updater<'ctxt> {
@@ -196,8 +115,8 @@ impl<'ctxt> MutVisit<'ctxt> for Updater<'ctxt> {
         }
         let terminator = block.expect_terminator_mut();
         self.visit_terminator(mir::Location::terminator(id), terminator);
-        let src_info = terminator.src_info;
-        let value = match &mut terminator.kind {
+        let _src_info = terminator.src_info;
+        match &mut terminator.kind {
             mir::TerminatorKind::Return(_) => {
                 let mir::TerminatorKind::Return(value) = std::mem::replace(
                     &mut terminator.kind,
@@ -212,18 +131,8 @@ impl<'ctxt> MutVisit<'ctxt> for Updater<'ctxt> {
                 for succ in terminator.successors_mut() {
                     *succ = BasicBlockId(succ.0 + self.block_count);
                 }
-                None
             }
         };
-        if let Some(value) = value {
-            block.stmts.push(mir::Stmt {
-                loc: src_info,
-                kind: StmtKind::OldStore(
-                    self.return_place.clone(),
-                    Box::new(mir::Rvalue::Use(value)),
-                ),
-            });
-        }
     }
 }
 

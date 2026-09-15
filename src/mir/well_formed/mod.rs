@@ -584,20 +584,6 @@ impl<'ctxt> Visit<'ctxt> for WellFormed<'ctxt, '_> {
                     stmt.loc,
                 );
             }
-            StmtKind::OldStore(lhs, rhs) => {
-                let lhs_ty = lhs.type_of(self.ctxt, &self.body.locals, &self.body.registers);
-                let rhs_ty = rhs.type_of(self.ctxt, &self.body.locals, &self.body.registers);
-                self.assert(
-                    lhs_ty == rhs_ty,
-                    || {
-                        format!(
-                            "Cannot assign non equal types {} and {} for {:?} {:?}",
-                            lhs_ty, rhs_ty, lhs, rhs
-                        )
-                    },
-                    stmt.loc,
-                );
-            }
             StmtKind::Noop => (),
             StmtKind::Print { value, err: _ } => {
                 self.assert(

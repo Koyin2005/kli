@@ -33,9 +33,6 @@ pub trait Visit<'ctxt> {
             StmtKind::PanicIf(value) => {
                 self.visit_value(loc, value);
             }
-            StmtKind::OldStore(place, rvalue) => {
-                self.visit_assign(loc, place, rvalue);
-            }
             StmtKind::Print { value, .. } => {
                 self.visit_value(loc, value);
             }
@@ -298,9 +295,6 @@ pub trait MutVisit<'ctxt> {
             }
             StmtKind::PanicIf(value) => {
                 self.visit_value(loc, value);
-            }
-            StmtKind::OldStore(place, rvalue) => {
-                self.visit_assign(loc, place, rvalue);
             }
             StmtKind::Assign(dst, operation) => {
                 self.visit_reg(loc, dst);

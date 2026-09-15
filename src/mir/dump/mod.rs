@@ -348,11 +348,6 @@ impl<'ctxt> MirDump<'ctxt> {
                     self.write_value(value)?;
                     self.writeln_fmt("")?;
                 }
-                StmtKind::OldStore(place, _) => {
-                    self.write_place(place)?;
-                    write!(self.output, " = ")?;
-                    todo!("remove rvalues");
-                }
             }
         }
         self.write_fmt(" ")?;

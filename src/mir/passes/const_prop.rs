@@ -50,13 +50,13 @@ impl<'ctxt> Domain for Values<'ctxt> {
     }
 }
 struct ConstAnalysis<'ctxt> {
-    ctxt: CtxtRef<'ctxt>,
+    _ctxt: CtxtRef<'ctxt>,
 }
 
 impl<'ctxt> Analysis<'ctxt> for ConstAnalysis<'ctxt> {
     type Domain = Values<'ctxt>;
     fn apply_stmt_effect(&mut self, state: &mut Self::Domain, stmt: &Stmt<'ctxt>) {
-        let StmtKind::OldStore(place, rvalue) = &stmt.kind else {
+        let StmtKind::Store(place, rvalue) = &stmt.kind else {
             return;
         };
         let PlaceBase::Local(local) = place.base else {
@@ -66,7 +66,7 @@ impl<'ctxt> Analysis<'ctxt> for ConstAnalysis<'ctxt> {
             state[local] = None;
             return;
         }
-        state[local] = eval_rvalue(self.ctxt, state, rvalue);
+        _ = rvalue;
     }
 
     fn propagate_to_basic_blocks(
@@ -88,7 +88,7 @@ impl<'ctxt> BodyPass<'ctxt> for ConstProp {
         optimisation_enabled(ctxt)
     }
     fn run(&self, ctxt: crate::CtxtRef<'ctxt>, body: &'_ mut crate::mir::Body<'ctxt>) {
-        let mut states = ConstAnalysis { ctxt }.iterate_to_fixpoint(body);
+        let mut states = ConstAnalysis { _ctxt: ctxt }.iterate_to_fixpoint(body);
         for (block_id, block) in body
             .block_info
             .blocks_mut_dont_dirty()
@@ -116,7 +116,8 @@ impl<'ctxt> BodyPass<'ctxt> for ConstProp {
     }
 }
 fn apply_stmt_effect<'ctxt>(ctxt: CtxtRef<'ctxt>, values: &mut Values<'ctxt>, stmt: &Stmt<'ctxt>) {
-    let StmtKind::OldStore(place, rvalue) = &stmt.kind else {
+    _ = ctxt;
+    let StmtKind::Store(place, rvalue) = &stmt.kind else {
         return;
     };
     let PlaceBase::Local(local) = place.base else {
@@ -126,7 +127,7 @@ fn apply_stmt_effect<'ctxt>(ctxt: CtxtRef<'ctxt>, values: &mut Values<'ctxt>, st
         values[local] = None;
         return;
     }
-    values[local] = eval_rvalue(ctxt, values, rvalue);
+    _ = rvalue;
 }
 
 fn eval_operand<'ctxt>(
