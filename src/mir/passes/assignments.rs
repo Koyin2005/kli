@@ -13,8 +13,7 @@ pub fn _classify_locals<'ctxt>(body: &Body<'ctxt>) -> IndexVec<Local, _LocalClas
     struct LocalClassifier<'a> {
         classes: &'a mut IndexVec<Local, Option<_LocalClass>>,
     }
-    impl<'ctxt> Visit<'ctxt> for LocalClassifier<'_> {
-    }
+    impl<'ctxt> Visit<'ctxt> for LocalClassifier<'_> {}
 
     let mut local_classes =
         IndexVec::<Local, _>::from_value(body.locals.len(), None::<_LocalClass>);

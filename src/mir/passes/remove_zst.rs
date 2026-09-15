@@ -1,9 +1,7 @@
 use crate::{
     CtxtRef,
     layout::{Layout, calculate_layout},
-    mir::{
-        Locals, Location, Regs, StmtKind, passes::BodyPass, visitor::MutVisit,
-    },
+    mir::{Locals, Location, Regs, StmtKind, passes::BodyPass, visitor::MutVisit},
     types::Type,
 };
 

@@ -1,8 +1,8 @@
 use crate::{
     CtxtRef,
     mir::{
-        self, BasicBlock, BasicBlockId, Body, BodySource, Local, Location, Place,
-        TerminatorKind, passes::optimisation_enabled, visitor::MutVisit,
+        self, BasicBlock, BasicBlockId, Body, BodySource, Local, Location, Place, TerminatorKind,
+        passes::optimisation_enabled, visitor::MutVisit,
     },
     monomorph::instantiate_body,
     types::GenericArgs,

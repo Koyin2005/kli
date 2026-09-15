@@ -3,8 +3,7 @@ use crate::{
     def_ids::DefId,
     index_vec::IndexVec,
     mir::{
-        self, BasicBlockId, Body, Local, Place, PlaceBase,
-        PlaceProjection, Stmt, StmtKind,
+        self, BasicBlockId, Body, Local, Place, PlaceBase, PlaceProjection, Stmt, StmtKind,
         passes::{
             BodyPass,
             dataflow::{self, Analysis, Domain},
@@ -131,10 +130,7 @@ fn apply_stmt_effect<'ctxt>(ctxt: CtxtRef<'ctxt>, values: &mut Values<'ctxt>, st
     _ = rvalue;
 }
 
-fn eval_rvalue<'ctxt>(
-    _ctxt: CtxtRef<'ctxt>,
-    _values: &Values<'ctxt>,
-) -> Option<LocalValue<'ctxt>> {
+fn eval_rvalue<'ctxt>(_ctxt: CtxtRef<'ctxt>, _values: &Values<'ctxt>) -> Option<LocalValue<'ctxt>> {
     todo!()
 }
 
@@ -172,5 +168,4 @@ struct OperandUpdater<'a, 'ctxt> {
     values: &'a Values<'ctxt>,
     ctxt: CtxtRef<'ctxt>,
 }
-impl<'ctxt> MutVisit<'ctxt> for OperandUpdater<'_, 'ctxt> {
-}
+impl<'ctxt> MutVisit<'ctxt> for OperandUpdater<'_, 'ctxt> {}

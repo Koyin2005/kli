@@ -1,8 +1,8 @@
 use crate::{
     CtxtRef,
     mir::{
-        BasicBlock, BasicBlockId, Body, Local, Location, Operation, Place,
-        PlaceBase, PlaceProjection, Reg, Stmt, StmtKind, Terminator, TerminatorKind, Value,
+        BasicBlock, BasicBlockId, Body, Local, Location, Operation, Place, PlaceBase,
+        PlaceProjection, Reg, Stmt, StmtKind, Terminator, TerminatorKind, Value,
     },
 };
 pub enum PlaceCtxt {
@@ -185,7 +185,7 @@ pub trait MutVisit<'ctxt> {
             | Value::Lambda(..) => (),
         }
     }
-    fn visit_operation(&mut self, loc: Location, operation: &mut Operation<'ctxt>) {
+    fn super_visit_operation(&mut self, loc: Location, operation: &mut Operation<'ctxt>) {
         match operation {
             Operation::ReadLine => (),
             Operation::Len(value) | Operation::Discriminant(value) | Operation::Not(value) => {
@@ -222,6 +222,9 @@ pub trait MutVisit<'ctxt> {
                 }
             }
         }
+    }
+    fn visit_operation(&mut self, loc: Location, operation: &mut Operation<'ctxt>) {
+        self.super_visit_operation(loc, operation);
     }
     fn visit_reg(&mut self, loc: Location, reg: &mut Reg) {
         _ = loc;
