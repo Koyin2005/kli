@@ -307,8 +307,14 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                     BinaryOp::Subtract => mir::ArithOp::SubOverflow,
                     BinaryOp::Multiply => mir::ArithOp::MulOverflow,
                     BinaryOp::Divide => todo!(),
-                    BinaryOp::BitwiseOr => todo!(),
-                    BinaryOp::BitwiseAnd => todo!(),
+                    BinaryOp::BitwiseOr => return Value::Reg(self.push_operation(
+                            expr.loc,
+                            mir::Operation::Bitwise(mir::BitwiseOp::Or, left, right),
+                        )),
+                    BinaryOp::BitwiseAnd => return Value::Reg(self.push_operation(
+                            expr.loc,
+                            mir::Operation::Bitwise(mir::BitwiseOp::And, left, right),
+                        )),
                 };
 
                 let tuple =
