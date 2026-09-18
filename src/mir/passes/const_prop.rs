@@ -3,8 +3,8 @@ use crate::{
     def_ids::DefId,
     index_vec::IndexVec,
     mir::{
-        self, ArithOp, BasicBlockId, BitwiseOp, Body, Comparison, Operation, Reg, Stmt, StmtKind,
-        TerminatorKind, Value,
+        self, AggregateKind, ArithOp, BasicBlockId, BitwiseOp, Body, Comparison, Operation, Reg,
+        Stmt, StmtKind, TerminatorKind, Value,
         passes::{
             BodyPass,
             dataflow::{self, Analysis, Domain},
@@ -31,7 +31,7 @@ enum KnownValue<'ctxt> {
     Zeroed(Type<'ctxt>),
     String(Symbol),
     Function(DefId, GenericArgs<'ctxt>),
-    Unknown
+    Unknown,
 }
 impl KnownValue<'_> {
     fn as_scalar(&self) -> Option<i64> {
@@ -75,13 +75,12 @@ impl<'ctxt> Domain for Values<'ctxt> {
                     true
                 }
                 (Some(dst_value), Some(src)) => {
-                    if *src == KnownValue::Unknown{
+                    if *src == KnownValue::Unknown {
                         false
-                    }
-                    else if dst_value != src {
+                    } else if dst_value != src {
                         dst.clone_from(&None);
                         true
-                    } else{
+                    } else {
                         false
                     }
                 }
@@ -95,13 +94,12 @@ struct ConstAnalysis<'a, 'ctxt> {
     body: &'a Body<'ctxt>,
 }
 
-impl<'ctxt> ConstAnalysis<'_,'ctxt>{
-    
+impl<'ctxt> ConstAnalysis<'_, 'ctxt> {
     fn visit_terminator(
         &self,
         state: &Values<'ctxt>,
         terminator: &mir::Terminator<'ctxt>,
-        propagate: impl FnMut(BasicBlockId,&Values<'ctxt>),
+        propagate: impl FnMut(BasicBlockId, &Values<'ctxt>),
     ) {
         if let TerminatorKind::Goto(block, args) = &terminator.kind
             && !args.is_empty()
@@ -129,7 +127,7 @@ impl<'ctxt> Analysis<'ctxt> for ConstAnalysis<'_, 'ctxt> {
         &self,
         state: &Self::Domain,
         terminator: &mir::Terminator<'ctxt>,
-        propagate: impl FnMut(BasicBlockId,&Self::Domain),
+        propagate: impl FnMut(BasicBlockId, &Self::Domain),
     ) {
         self.visit_terminator(state, terminator, propagate);
     }
@@ -180,21 +178,19 @@ fn apply_stmt_effect<'ctxt>(ctxt: CtxtRef<'ctxt>, values: &mut Values<'ctxt>, st
 }
 
 fn eval_operation<'ctxt>(
-    _ctxt: CtxtRef<'ctxt>,
+    ctxt: CtxtRef<'ctxt>,
     values: &Values<'ctxt>,
     operation: &Operation<'ctxt>,
 ) -> Option<KnownValue<'ctxt>> {
     match operation {
-        Operation::Copy(value) => {
-            simplify_value(values, value)
-        }
+        Operation::Copy(value) => simplify_value(values, value),
         Operation::Cmp(op, left, right) => {
             let left = simplify_value(values, left)?.as_scalar()?;
             let right = simplify_value(values, right)?.as_scalar()?;
             match op {
                 Comparison::Equals => Some(KnownValue::Bool(left == right)),
-                Comparison::Greater => Some(KnownValue::Bool(left < right)),
-                Comparison::Lesser => Some(KnownValue::Bool(left == right)),
+                Comparison::Greater => Some(KnownValue::Bool(left > right)),
+                Comparison::Lesser => Some(KnownValue::Bool(left < right)),
             }
         }
         Operation::Zeroed(ty) => Some(match ty.kind() {
@@ -253,6 +249,44 @@ fn eval_operation<'ctxt>(
             };
             Some(fields[*field].clone())
         }
+        Operation::Aggregate(kind, fields) => match kind {
+            AggregateKind::Variant(id, case, args) => Some(KnownValue::Variant(
+                *id,
+                *case,
+                args.clone(),
+                if let Some(value) = fields
+                    .iter()
+                    .next()
+                    .map(|value| simplify_value(values, value))
+                {
+                    Some(Box::new(value?))
+                } else {
+                    None
+                },
+            )),
+            AggregateKind::Tuple => None,
+            AggregateKind::NamedRecord(..) => None,
+        },
+        Operation::Discriminant(value) => {
+            let KnownValue::Variant(ty_id, id, ..) = simplify_value(values, value)? else {
+                return None;
+            };
+            Some(KnownValue::Int(
+                ctxt.type_def(ty_id).case_value(id).1.into(),
+            ))
+        }
+        Operation::ExtractPayload(value, case_id) => {
+            let KnownValue::Variant(_, id, _, value) = simplify_value(values, value)? else {
+                return None;
+            };
+            if id != *case_id {
+                return None;
+            }
+            let Some(value) = value else {
+                return None;
+            };
+            Some(KnownValue::Tuple(IndexVec::from([*value])))
+        }
         _ => None,
     }
 }
@@ -283,7 +317,10 @@ fn load_value<'ctxt>(values: &Values<'ctxt>, reg: Reg) -> Option<Value<'ctxt>> {
         KnownValue::Bool(value) => Some(Value::Bool(*value)),
         KnownValue::Function(def_id, args) => Some(Value::Function(*def_id, args.clone())),
         KnownValue::String(string) => Some(Value::String(*string)),
-        KnownValue::Tuple(..) | KnownValue::Variant(..) | KnownValue::Zeroed(..) | KnownValue::Unknown => None,
+        KnownValue::Tuple(..)
+        | KnownValue::Variant(..)
+        | KnownValue::Zeroed(..)
+        | KnownValue::Unknown => None,
     }
 }
 type Values<'ctxt> = IndexVec<Reg, Option<KnownValue<'ctxt>>>;

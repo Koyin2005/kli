@@ -1,6 +1,9 @@
 #![allow(unused)]
 
-use std::{collections::{HashSet, VecDeque}, fmt::Debug};
+use std::{
+    collections::{HashSet, VecDeque},
+    fmt::Debug,
+};
 
 use crate::{
     index_vec::IndexVec,
@@ -16,10 +19,10 @@ pub fn prop_uniform<'ctxt, A: Analysis<'ctxt> + ?Sized>(
     a: &A,
     state: &A::Domain,
     terminator: &Terminator<'ctxt>,
-    mut f: impl FnMut(BasicBlockId,&A::Domain),
+    mut f: impl FnMut(BasicBlockId, &A::Domain),
 ) {
     for succ in terminator.successors() {
-        f(succ,state);
+        f(succ, state);
     }
 }
 pub trait Analysis<'ctxt> {
@@ -30,7 +33,7 @@ pub trait Analysis<'ctxt> {
         &self,
         state: &Self::Domain,
         terminator: &Terminator<'ctxt>,
-        propagate: impl FnMut(BasicBlockId,&Self::Domain),
+        propagate: impl FnMut(BasicBlockId, &Self::Domain),
     ) {
         prop_uniform(self, state, terminator, propagate);
     }
@@ -50,7 +53,7 @@ pub trait Analysis<'ctxt> {
                 self.apply_stmt_effect(&mut state, stmt);
             }
             let terminator = body.block_info.blocks()[block].expect_terminator();
-            self.propagate_to_basic_blocks(&state, terminator, |succ,state| {
+            self.propagate_to_basic_blocks(&state, terminator, |succ, state| {
                 let new_state = &mut states[succ];
                 let changed = new_state.join(&state);
                 if changed && in_queue.insert(succ) {
