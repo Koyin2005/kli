@@ -32,3 +32,4 @@ pub mod mutability_check;
 mod res_visitor;
 pub mod unsafety;
 mod vm;
+mod codegen;
