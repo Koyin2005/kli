@@ -26,7 +26,7 @@ mod codegen;
 pub mod config;
 mod def_ids;
 pub mod files;
-mod ir;
+pub mod ir;
 mod lang_items;
 pub mod layout;
 pub mod mutability_check;

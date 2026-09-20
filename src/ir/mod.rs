@@ -1,7 +1,7 @@
 use crate::{
     Symbol, def_ids::DefId, define_id, index_vec::IndexVec, typed_ast::FieldId, types::CaseId,
 };
-
+pub mod lower;
 pub enum Constant {
     Int(i64),
     Bool(bool),
@@ -66,13 +66,18 @@ pub enum Stmt {
     Assign(Place, Expr),
     Return(Expr),
 }
-pub type Type = ();
+pub enum Type{
+    Int,
+    Bool,
+    String,
+}
 pub struct LocalInfo {
     pub name: Option<Symbol>,
     pub is_mutable: bool,
     pub ty: Type,
 }
 pub struct Body {
+    pub generic_params : Vec<Symbol>,
     pub param_count: u32,
     pub return_ty: Type,
     pub locals: IndexVec<Local, LocalInfo>,
