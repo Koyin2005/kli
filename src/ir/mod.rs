@@ -52,9 +52,9 @@ pub struct Loop {
     pub label: LoopLabel,
     pub stmts: Vec<Stmt>,
 }
-pub struct Match{
-    pub tree : DecisionTree,
-    pub arms : IndexVec<ArmId,Vec<Stmt>>
+pub struct Match {
+    pub tree: DecisionTree,
+    pub arms: IndexVec<ArmId, Vec<Stmt>>,
 }
 pub enum Stmt {
     Block(Vec<Stmt>),
