@@ -3,11 +3,11 @@ use crate::{
     vm::instructions::{Function, FunctionId, Instr, Intrinsic, Program, Reg},
 };
 
-pub mod instructions;
+pub(crate) mod instructions;
 pub enum RuntimeError {
     Panic,
 }
-pub struct Frame {
+pub(super) struct Frame {
     current_function: FunctionId,
     regs: Vec<i64>,
     ip: usize,

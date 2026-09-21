@@ -1,6 +1,9 @@
-use crate::vm::{self, instructions};
+use crate::{
+    ir,
+    vm::instructions,
+};
 
-pub struct Codegen {
+pub(super) struct Codegen {
     program: instructions::Program,
 }
 impl Codegen {
@@ -12,4 +15,8 @@ impl Codegen {
     pub fn finish(self) -> instructions::Program {
         self.program
     }
+}
+
+pub fn codegen(_program: ir::Program) -> instructions::Program {
+    Codegen::new().finish()
 }

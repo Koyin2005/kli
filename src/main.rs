@@ -1,6 +1,7 @@
 use kli::{
     Arenas,
     builtin_check::BuiltinCheck,
+    codegen,
     config::{CommandArg, config},
     files::{FileError, build_file_tree},
     ir, mir,
@@ -50,15 +51,20 @@ fn main() {
     if had_error {
         return;
     }
-    let _program = ir::lower::lower_program(
-        ctxt,
-        program
-            .functions
-            .iter()
-            .map(|(id, function)| (*id, function))
-            .filter(|(id, _)| ctxt.builtin_for(*id).is_none()),
-    );
-
+    {
+        let program = ir::lower::lower_program(
+            ctxt,
+            program
+                .functions
+                .iter()
+                .map(|(id, function)| (*id, function))
+                .filter(|(id, _)| ctxt.builtin_for(*id).is_none()),
+        );
+        let _program = codegen::vm::codegen(program);
+        if true {
+            return;
+        }
+    }
     let mut mir_context = mir::Context::new(true);
     for (&id, function) in program.functions.iter() {
         if ctxt.builtin_for(id).is_some() {
