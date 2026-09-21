@@ -376,7 +376,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                         value,
                         is_err: false,
                     });
-                    None
+                    Some(ir::Expr::unit_value())
                 }
                 Builtin::EprintString => {
                     let [value] = self.lower_exprs_const(exprs);
@@ -384,7 +384,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                         value,
                         is_err: true,
                     });
-                    None
+                    Some(ir::Expr::unit_value())
                 }
                 Builtin::IntegerBuiltin(_) => todo!("integer builtins"),
                 Builtin::Len => todo!("Array len"),
