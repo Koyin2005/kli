@@ -1,4 +1,6 @@
-use crate::ir::{AggregateKind, Body, Call, Constant, Expr, ExprKind, Place, Program, Stmt};
+use crate::ir::{
+    AggregateKind, BinaryOp, Body, Call, Constant, Expr, ExprKind, Place, Program, Stmt,
+};
 
 pub struct Print<'a> {
     program: &'a Program,
@@ -28,6 +30,20 @@ impl<'a> Print<'a> {
     }
     fn format_value(&self, value: &Expr) -> String {
         match &value.kind {
+            ExprKind::BinaryOp(op, left, right) => {
+                let mut output = match *op {
+                    BinaryOp::Add => "add",
+                    BinaryOp::AddWithOverflow => "add_with_overflow",
+                    BinaryOp::Lesser => "lesser",
+                }
+                .to_string();
+                output.push('(');
+                output.push_str(&self.format_value(left));
+                output.push_str(", ");
+                output.push_str(&self.format_value(right));
+                output.push(')');
+                output
+            }
             ExprKind::Load(place) => self.format_place(place),
             ExprKind::Aggregate(kind, fields) => match kind {
                 AggregateKind::Tuple => {
@@ -74,6 +90,12 @@ impl<'a> Print<'a> {
                 ));
             }
             Stmt::Panic => todo!(),
+            Stmt::PanicIf(value) => {
+                self.write_newline_after(|this| {
+                    this.write("panic_if ");
+                    this.write(this.format_value(value));
+                });
+            }
             Stmt::Print { value, is_err } => {
                 self.write(if *is_err { "eprint " } else { "print " });
                 self.write(self.format_value(value));
@@ -111,7 +133,7 @@ impl<'a> Print<'a> {
             }) => {
                 self.write_newline_after(|this| {
                     this.write(this.format_place(return_place));
-                    this.write(" = ");
+                    this.write(" = call ");
                     this.write(this.format_value(callee));
                     this.write("(");
                     for (i, arg) in args.iter().enumerate() {

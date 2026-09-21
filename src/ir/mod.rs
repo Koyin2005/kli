@@ -33,10 +33,21 @@ impl Expr {
             kind: ExprKind::Load(place),
         }
     }
+    pub fn binary(op: BinaryOp, left: Self, right: Self) -> Self {
+        Self {
+            kind: ExprKind::BinaryOp(op, Box::new(left), Box::new(right)),
+        }
+    }
 }
 #[derive(Debug, Clone)]
 pub enum AggregateKind {
     Tuple,
+}
+#[derive(Debug, Clone)]
+pub enum BinaryOp {
+    Add,
+    AddWithOverflow,
+    Lesser,
 }
 #[derive(Debug, Clone)]
 pub enum ExprKind {
@@ -44,6 +55,7 @@ pub enum ExprKind {
     Load(Place),
     Discriminant(Place),
     Aggregate(AggregateKind, IndexVec<FieldId, Expr>),
+    BinaryOp(BinaryOp, Box<Expr>, Box<Expr>),
 }
 define_id!(Local);
 #[derive(Debug, Clone)]
@@ -52,6 +64,11 @@ pub enum Place {
     Field(Box<Place>, FieldId),
     Deref(Box<Place>),
     Downcast(Box<Place>, CaseId),
+}
+impl Place {
+    pub fn with_field(self, field: FieldId) -> Self {
+        Self::Field(Box::new(self), field)
+    }
 }
 
 #[derive(Debug)]
@@ -91,6 +108,7 @@ pub struct Match {
 #[derive(Debug)]
 pub enum Stmt {
     Panic,
+    PanicIf(Expr),
     Print { value: Expr, is_err: bool },
     Block(Vec<Stmt>),
     Loop(LoopLabel, Vec<Stmt>),

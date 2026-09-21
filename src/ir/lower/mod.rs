@@ -7,7 +7,7 @@ use crate::{
     def_ids::DefId,
     ir::{self, BodyId, Local, print::Print},
     resolved_ast::{Var, VarId},
-    typed_ast::{self, Expr, LogicalOp, Pattern, PatternKind, Place, Stmt, StmtKind},
+    typed_ast::{self, BinaryOp, Expr, LogicalOp, Pattern, PatternKind, Place, Stmt, StmtKind},
     types::{Type, TypeKind},
 };
 
@@ -238,7 +238,8 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             | typed_ast::ExprKind::VariantInit(..)
             | typed_ast::ExprKind::NamedRecord(..)
             | typed_ast::ExprKind::Load(..)
-            | typed_ast::ExprKind::Case(..) => {
+            | typed_ast::ExprKind::Case(..)
+            | typed_ast::ExprKind::Binary(..) => {
                 let result = self.lower_expr(expr);
                 if let Some(result) = result {
                     self.push_stmt(ir::Stmt::Assign(dest, result));
@@ -251,7 +252,6 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             typed_ast::ExprKind::Logic(op, lhs, rhs) => {
                 self.lower_logical(dest, *op, lhs, rhs);
             }
-            typed_ast::ExprKind::Binary(..) => todo!("binary ops"),
         }
     }
     fn lower_call(&mut self, dest: ir::Place, callee: &Expr<'ctxt>, args: &[Expr<'ctxt>]) {
@@ -404,7 +404,27 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 Some(ir::Expr::load(ir::Place::Local(tmp)))
             }
             typed_ast::ExprKind::Load(place) => Some(ir::Expr::load(self.lower_place(place))),
-            typed_ast::ExprKind::Binary(..) => todo!("Binary ops"),
+            typed_ast::ExprKind::Binary(op, left, right) => {
+                let left = self.lower_expr(left)?;
+                let right = self.lower_expr(right)?;
+                let op = match op {
+                    BinaryOp::Add => {
+                        let tmp =
+                            self.fresh_temp(ir::Type::Tuple(vec![ir::Type::Int, ir::Type::Bool]));
+                        let result = ir::Expr::binary(ir::BinaryOp::AddWithOverflow, left, right);
+                        self.push_stmt(ir::Stmt::Assign(ir::Place::Local(tmp), result));
+                        self.push_stmt(ir::Stmt::PanicIf(ir::Expr::load(
+                            ir::Place::Local(tmp).with_field(ir::FieldId::new(1)),
+                        )));
+                        return Some(ir::Expr::load(
+                            ir::Place::Local(tmp).with_field(ir::FieldId::new(0)),
+                        ));
+                    }
+                    BinaryOp::Lesser => ir::BinaryOp::Lesser,
+                    op => todo!("binary op {:?}", op),
+                };
+                Some(ir::Expr::binary(op, left, right))
+            }
             typed_ast::ExprKind::Logic(logical_op, lhs, rhs) => {
                 let dest = self.fresh_temp(ir::Type::Bool);
                 self.lower_logical(ir::Place::Local(dest), *logical_op, lhs, rhs);
