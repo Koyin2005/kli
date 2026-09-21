@@ -1,12 +1,11 @@
-use crate::{
-    Symbol, def_ids::DefId, define_id, index_vec::IndexVec, typed_ast::FieldId, types::CaseId,
-};
+use crate::{Symbol, define_id, index_vec::IndexVec, typed_ast::FieldId, types::CaseId};
 pub mod lower;
+mod print;
 #[derive(Debug, Clone)]
 pub enum Constant {
     Int(i64),
     Bool(bool),
-    Function(DefId),
+    Function(BodyId),
     String(Symbol),
 }
 #[derive(Debug, Clone)]
@@ -120,6 +119,7 @@ pub struct LocalInfo {
 }
 #[derive(Debug)]
 pub struct Body {
+    pub name: String,
     pub generic_params: Vec<Symbol>,
     pub param_count: u32,
     pub return_ty: Type,

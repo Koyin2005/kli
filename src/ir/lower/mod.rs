@@ -5,24 +5,42 @@ use crate::{
     ast::Mutable,
     builtins::Builtin,
     def_ids::DefId,
-    ir::{self, Local},
+    ir::{self, BodyId, Local, print::Print},
     resolved_ast::{Var, VarId},
     typed_ast::{self, Expr, LogicalOp, Pattern, PatternKind, Place, Stmt, StmtKind},
     types::{Type, TypeKind},
 };
 
+struct LoweringCtxt {
+    id_map: HashMap<DefId, BodyId>,
+}
+impl LoweringCtxt {
+    fn expect_body_id(&self, id: DefId) -> BodyId {
+        let Some(&id) = self.id_map.get(&id) else {
+            panic!("should have an id for '{:?}'", id)
+        };
+        id
+    }
+}
 pub(super) struct LowerFunction<'a, 'ctxt> {
     vars: HashMap<VarId, Local>,
     function: &'a typed_ast::Function<'ctxt>,
+    ctxt: &'a LoweringCtxt,
     body: ir::Body,
     stmts: Vec<ir::Stmt>,
     loop_label: u32,
 }
 
 impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
-    pub fn new(ctxt: CtxtRef<'ctxt>, id: DefId, function: &'a typed_ast::Function<'ctxt>) -> Self {
+    fn new(
+        lower_ctxt: &'a LoweringCtxt,
+        ctxt: CtxtRef<'ctxt>,
+        id: DefId,
+        function: &'a typed_ast::Function<'ctxt>,
+    ) -> Self {
         let param_count = function.params.len();
         Self {
+            ctxt: lower_ctxt,
             loop_label: 0,
             vars: function
                 .params
@@ -32,6 +50,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 .collect(),
             function,
             body: ir::Body {
+                name: ctxt.expect_ident(id).symbol.to_string(),
                 generic_params: ctxt.generics(id).names().collect(),
                 param_count: param_count as u32,
                 return_ty: lower_type(function.return_type),
@@ -61,11 +80,13 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         (stmts, result)
     }
     fn fresh_local_for_var(&mut self, var: Var, mutable: bool, ty: ir::Type) -> Local {
-        self.body.locals.push(ir::LocalInfo {
+        let local = self.body.locals.push(ir::LocalInfo {
             name: Some(var.0),
             is_mutable: mutable,
             ty,
-        })
+        });
+        self.vars.insert(var.1, local);
+        local
     }
     fn fresh_temp(&mut self, ty: ir::Type) -> Local {
         self.body.locals.push(ir::LocalInfo {
@@ -148,7 +169,10 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         match &place.kind {
             typed_ast::PlaceKind::Upvar(..) => todo!(),
             typed_ast::PlaceKind::Var(var) => {
-                let local = *self.vars.get(&var.1).expect("should have a variable");
+                let local = *self
+                    .vars
+                    .get(&var.1)
+                    .unwrap_or_else(|| panic!("should have a variable for {}", var.0));
                 ir::Place::Local(local)
             }
             typed_ast::PlaceKind::Field(place, field_id) => {
@@ -344,7 +368,9 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             typed_ast::ExprKind::VariantInit(..) => todo!(),
             typed_ast::ExprKind::Function(def_id, generic_args) => {
                 assert!(generic_args.is_empty(), "Cant handle generics yet");
-                Some(ir::Expr::constant(ir::Constant::Function(*def_id)))
+                Some(ir::Expr::constant(ir::Constant::Function(
+                    self.ctxt.expect_body_id(*def_id),
+                )))
             }
             typed_ast::ExprKind::Call(callee, args) => {
                 let tmp = self.fresh_temp(lower_type(expr.ty));
@@ -390,7 +416,6 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         }
         let mut body = self.body;
         body.body.extend(self.stmts);
-        println!("{:?}", body);
         body
     }
 }
@@ -424,12 +449,23 @@ fn lower_type(ty: Type<'_>) -> ir::Type {
 }
 pub fn lower_program<'a, 'ctxt: 'a>(
     ctxt: CtxtRef<'ctxt>,
-    functions: impl IntoIterator<Item = (DefId, &'a typed_ast::Function<'ctxt>)>,
+    functions: impl IntoIterator<Item = (DefId, &'a typed_ast::Function<'ctxt>)> + Clone,
 ) -> ir::Program {
-    ir::Program {
+    let id_map = functions
+        .clone()
+        .into_iter()
+        .enumerate()
+        .map(|(i, (id, _))| (id, BodyId::new(i)))
+        .collect::<HashMap<_, _>>();
+    let lowering_ctxt = LoweringCtxt { id_map };
+    let program = ir::Program {
         bodies: functions
             .into_iter()
-            .map(|(id, function)| LowerFunction::new(ctxt, id, function).lower())
+            .map(|(id, function)| LowerFunction::new(&lowering_ctxt, ctxt, id, function).lower())
             .collect(),
+    };
+    for body in &program.bodies {
+        Print::new(&program, std::io::stdout()).print_body(body);
     }
+    program
 }

@@ -1,7 +1,4 @@
-use crate::{
-    ir,
-    vm::instructions,
-};
+use crate::{ir, vm::instructions};
 
 pub(super) struct Codegen {
     program: instructions::Program,
