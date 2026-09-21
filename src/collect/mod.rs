@@ -216,6 +216,9 @@ impl Generics {
             })
             .collect()
     }
+    pub fn names(&self) -> impl Iterator<Item = Symbol> {
+        self.params.iter().map(|param| param.name)
+    }
 }
 struct Interner<'a, T> {
     seen: RefCell<HashMap<T, &'a T>>,

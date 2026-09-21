@@ -121,7 +121,7 @@ pub enum BinaryOp {
     BitwiseAnd,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum LogicalOp {
     And,
     Or,
