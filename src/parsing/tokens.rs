@@ -70,6 +70,9 @@ pub enum TokenKind {
     CharLiteral(char),
     Bor,
     Band,
+    If,
+    Then,
+    Else,
 }
 
 impl Display for TokenKind {
@@ -144,6 +147,9 @@ impl Display for TokenKind {
             Self::Return => "return",
             Self::Unsafe => "unsafe",
             Self::Or => "or",
+            Self::If => "if",
+            Self::Then => "then",
+            Self::Else => "else",
         };
         f.write_str(txt)
     }

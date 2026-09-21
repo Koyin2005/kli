@@ -84,6 +84,11 @@ where
 {
     match &expr.kind {
         ExprKind::Int(value) => v.visit_lit(expr.loc, *value, expr.ty),
+        ExprKind::If(condition, then_branch, else_branch) => {
+            v.visit_expr(condition);
+            v.visit_expr(then_branch);
+            v.visit_expr(else_branch);
+        }
         ExprKind::Block(body) => {
             for stmt in &body.stmts {
                 v.visit_stmt(stmt);

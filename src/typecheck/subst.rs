@@ -87,6 +87,11 @@ impl<'a, 'ctxt> TypeSubst<'a, 'ctxt> {
             ExprKind::NeverToAny(expr) => {
                 self.subst_expr(expr);
             }
+            ExprKind::If(condition, then_branch, else_branch) => {
+                self.subst_expr(condition);
+                self.subst_expr(then_branch);
+                self.subst_expr(else_branch);
+            }
             ExprKind::Bool(_)
             | ExprKind::Char(_)
             | ExprKind::Err

@@ -115,6 +115,7 @@ pub enum ExprKind {
     Block(Box<BlockBody>),
     Unit,
     Err,
+    If(Box<Expr>, Box<Expr>, Option<Box<Expr>>),
     Annotate(Box<Expr>, Box<Type>),
     Int(IntegerLiteral),
     Bool(bool),

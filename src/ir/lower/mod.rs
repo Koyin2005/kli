@@ -184,8 +184,29 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             typed_ast::PlaceKind::Invalid => todo!(),
         }
     }
+    fn lower_if_expr(
+        &mut self,
+        dest: ir::Place,
+        condition: &Expr<'ctxt>,
+        then_branch: &Expr<'ctxt>,
+        else_branch: &Expr<'ctxt>,
+    ) {
+        let Some(condition) = self.lower_expr(condition) else {
+            return;
+        };
+        let (then_stmts, ()) = self.stmts_for(|this| {
+            this.lower_expr_into(dest.clone(), then_branch);
+        });
+        let (else_stmts, ()) = self.stmts_for(|this| {
+            this.lower_expr_into(dest.clone(), else_branch);
+        });
+        self.push_stmt(ir::Stmt::If(condition, then_stmts, else_stmts));
+    }
     fn lower_expr_into(&mut self, dest: ir::Place, expr: &Expr<'ctxt>) {
         match &expr.kind {
+            typed_ast::ExprKind::If(condition, then_branch, else_branch) => {
+                self.lower_if_expr(dest, condition, then_branch, else_branch);
+            }
             typed_ast::ExprKind::Unsafe(expr) => self.lower_expr_into(dest, expr),
             typed_ast::ExprKind::Return(expr) => {
                 let Some(result) = self.lower_expr(expr) else {
@@ -230,7 +251,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             typed_ast::ExprKind::Logic(op, lhs, rhs) => {
                 self.lower_logical(dest, *op, lhs, rhs);
             }
-            typed_ast::ExprKind::Binary(..) => todo!("maybe"),
+            typed_ast::ExprKind::Binary(..) => todo!("binary ops"),
         }
     }
     fn lower_call(&mut self, dest: ir::Place, callee: &Expr<'ctxt>, args: &[Expr<'ctxt>]) {
@@ -342,6 +363,11 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             typed_ast::ExprKind::NeverToAny(expr) => {
                 let _ = self.lower_expr(expr);
                 None
+            }
+            typed_ast::ExprKind::If(condition, then_branch, else_branch) => {
+                let dest = self.fresh_temp(lower_type(expr.ty));
+                self.lower_if_expr(ir::Place::Local(dest), condition, then_branch, else_branch);
+                Some(ir::Expr::load(ir::Place::Local(dest)))
             }
             typed_ast::ExprKind::BuiltinCall(builtin, _, exprs) => match *builtin {
                 Builtin::PrintString => {

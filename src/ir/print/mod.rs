@@ -79,9 +79,9 @@ impl<'a> Print<'a> {
                 self.write(self.format_value(value));
                 self.write("\n");
             }
-            Stmt::Block(stmts) => todo!(),
-            Stmt::Loop(loop_label, stmts) => todo!(),
-            Stmt::Break(loop_label) => todo!(),
+            Stmt::Block(_) => todo!(),
+            Stmt::Loop(..) => todo!(),
+            Stmt::Break(_) => todo!(),
             Stmt::If(condition, then_branch, else_branch) => {
                 self.write("if ");
                 self.write(self.format_value(condition));

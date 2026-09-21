@@ -579,6 +579,16 @@ impl<'info> Resolve<'info> {
     fn resolve_expr(&mut self, expr: ast::Expr) -> res::Expr {
         let loc = expr.loc;
         let kind = match expr.kind {
+            ast::ExprKind::If(condition, then_branch, else_branch) => {
+                let condition = self.resolve_expr(*condition);
+                let then_branch = self.resolve_expr(*then_branch);
+                let else_branch = else_branch.map(|else_branch| self.resolve_expr(*else_branch));
+                res::ExprKind::If(
+                    Box::new(condition),
+                    Box::new(then_branch),
+                    else_branch.map(Box::new),
+                )
+            }
             ast::ExprKind::Char(char) => res::ExprKind::Char(char),
             ast::ExprKind::Unsafe(expr) => {
                 let expr = self.resolve_expr(*expr);

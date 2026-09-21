@@ -307,6 +307,9 @@ impl<'s> Lexer<'s> {
                 "or" => TokenKind::Or,
                 "bor" => TokenKind::Bor,
                 "band" => TokenKind::Band,
+                "if" => TokenKind::If,
+                "then" => TokenKind::Then,
+                "else" => TokenKind::Else,
                 _ => TokenKind::Ident(self.current_token_src().to_string()),
             },
         })

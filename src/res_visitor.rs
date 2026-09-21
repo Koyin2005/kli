@@ -76,6 +76,13 @@ pub trait Visitor {
             | ExprKind::Var(..)
             | ExprKind::Panic
             | ExprKind::Char(_) => (),
+            ExprKind::If(condition, then_branch, else_branch) => {
+                self.visit_expr(condition);
+                self.visit_expr(then_branch);
+                if let Some(else_branch) = else_branch {
+                    self.visit_expr(else_branch);
+                }
+            }
             ExprKind::Lambda(lambda) => {
                 self.visit_body(
                     lambda.param_tys.iter().flatten(),

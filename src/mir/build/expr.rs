@@ -160,6 +160,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
     }
     pub(super) fn expr_value(&mut self, expr: &Expr<'ctxt>) -> Value<'ctxt> {
         match &expr.kind {
+            ExprKind::If(..) => todo!(),
             ExprKind::Unsafe(expr) => self.expr_value(expr),
             ExprKind::Block(block) => {
                 for stmt in block.stmts.iter() {

@@ -349,6 +349,32 @@ impl Parser {
 
         self.parse_block_expr_tail(loc)
     }
+    fn parse_if_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
+        self.advance();
+        let condition = self.parse_expr()?;
+        self.expect(&TokenKind::Then)?;
+        let then_expr = self.parse_expr()?;
+        let else_branch = if self.matches_token(&TokenKind::Else) {
+            Some(if self.check_token(&TokenKind::If) {
+                self.parse_expr()?
+            } else {
+                let expr = self.parse_expr()?;
+                self.expect(&TokenKind::End)?;
+                expr
+            })
+        } else {
+            self.expect(&TokenKind::End)?;
+            None
+        };
+        Ok(Expr {
+            loc,
+            kind: ExprKind::If(
+                Box::new(condition),
+                Box::new(then_expr),
+                else_branch.map(Box::new),
+            ),
+        })
+    }
     fn parse_case_expr(&mut self, loc: SrcLoc) -> Result<Expr, ParseError> {
         self.advance();
         let matchee = self.parse_expr()?;
@@ -592,6 +618,7 @@ impl Parser {
             }
             TokenKind::Case => self.parse_case_expr(loc),
             TokenKind::Do => self.parse_block_expr(loc),
+            TokenKind::If => self.parse_if_expr(loc),
             TokenKind::StringLiteral(_) => {
                 let Token {
                     loc,

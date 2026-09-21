@@ -128,6 +128,7 @@ pub enum LogicalOp {
 }
 #[derive(Debug)]
 pub enum ExprKind<'ctxt> {
+    If(Box<Expr<'ctxt>>, Box<Expr<'ctxt>>, Box<Expr<'ctxt>>),
     Unsafe(Box<Expr<'ctxt>>),
     Return(Box<Expr<'ctxt>>),
     Block(BlockBody<'ctxt>),

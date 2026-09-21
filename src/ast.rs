@@ -213,6 +213,7 @@ pub struct InstancePath {
 #[derive(Debug)]
 pub enum ExprKind {
     Unit,
+    If(Box<Expr>, Box<Expr>, Option<Box<Expr>>),
     Char(char),
     Deref(Box<Expr>),
     Unsafe(Box<Expr>),

@@ -60,6 +60,7 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
                 self.finish_block(expr.loc, TerminatorKind::Unreachable);
                 self.switch_to_new_block();
             }
+            ExprKind::If(..) => todo!(),
             //Evaluate
             ExprKind::String(_)
             | ExprKind::Unit

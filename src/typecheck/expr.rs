@@ -559,6 +559,54 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             },
         }
     }
+    fn check_if_expr(
+        &self,
+        loc: SrcLoc,
+        condition: &Expr,
+        then_branch: &Expr,
+        else_branch: Option<&Expr>,
+        expected_ty: Option<Type<'ctxt>>,
+    ) -> typed_ast::Expr<'ctxt> {
+        let condition = self.check_expr(condition, Some(Type::new_bool(self.ctxt())));
+        let then_branch = self.check_expr(then_branch, expected_ty);
+        let (ty, else_branch) = if let Some(else_branch) = else_branch {
+            let else_branch = self.check_expr(else_branch, expected_ty);
+            (
+                self.root()
+                    .unify(then_branch.ty, else_branch.ty, else_branch.loc),
+                else_branch,
+            )
+        } else {
+            let ty = if let Some(ty) = self
+                .root()
+                .try_unify(then_branch.ty, Type::new_unit(self.ctxt()))
+            {
+                ty
+            } else {
+                self.ctxt()
+                    .diag()
+                    .add_diagnostic(format!("Expected 'then' branch to have '()' type"), loc);
+                then_branch.ty
+            };
+            (
+                ty,
+                typed_ast::Expr {
+                    kind: typed_ast::ExprKind::Unit,
+                    ty: Type::new_unit(self.ctxt()),
+                    loc: then_branch.loc,
+                },
+            )
+        };
+        typed_ast::Expr {
+            ty,
+            loc,
+            kind: typed_ast::ExprKind::If(
+                Box::new(condition),
+                Box::new(then_branch),
+                Box::new(else_branch),
+            ),
+        }
+    }
     pub(super) fn check_expr_coerces_to(
         &self,
         expr: &Expr,
@@ -634,6 +682,15 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                     loc,
                     kind: typed_ast::ExprKind::Tuple(fields),
                 }
+            }
+            ExprKind::If(condition, then_branch, else_branch) => {
+                return self.check_if_expr(
+                    loc,
+                    condition,
+                    then_branch,
+                    else_branch.as_deref(),
+                    expected_ty,
+                );
             }
             ExprKind::Block(block) => self.check_block(loc, block, expected_ty),
             ExprKind::Annotate(expr, ty) => self.check_expr(expr, Some(self.root().lower_type(ty))),
