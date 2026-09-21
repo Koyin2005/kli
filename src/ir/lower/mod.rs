@@ -1,14 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    CtxtRef, Symbol,
-    ast::Mutable,
-    builtins::Builtin,
-    def_ids::DefId,
-    ir::{self, BodyId, Local, print::Print},
-    resolved_ast::{Var, VarId},
-    typed_ast::{self, BinaryOp, Expr, LogicalOp, Pattern, PatternKind, Place, Stmt, StmtKind},
-    types::{Type, TypeKind},
+    CtxtRef, Symbol, ast::Mutable, builtins::{Builtin, IntegerBuiltin}, def_ids::DefId, ir::{self, BodyId, Local, print::Print}, resolved_ast::{Var, VarId}, typed_ast::{self, BinaryOp, Expr, LogicalOp, Pattern, PatternKind, Place, Stmt, StmtKind}, types::{Type, TypeKind},
 };
 
 struct LoweringCtxt {
@@ -386,7 +379,23 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                     });
                     Some(ir::Expr::unit_value())
                 }
-                Builtin::IntegerBuiltin(_) => todo!("integer builtins"),
+                Builtin::IntegerBuiltin(builtin) => match builtin{
+                    IntegerBuiltin::IntMaxValue => Some(ir::Expr::constant(ir::Constant::Int(i64::MAX))),
+                    IntegerBuiltin::WrappingAdd => Some({
+                        let [left,right] = self.lower_exprs_const(exprs);
+                        ir::Expr::binary(ir::BinaryOp::Add, left, right)
+                    }),
+                    IntegerBuiltin::OverflowingAdd => Some({
+                        let [left,right] = self.lower_exprs_const(exprs);
+                        ir::Expr::binary(ir::BinaryOp::AddWithOverflow, left, right)
+                    }),
+                    IntegerBuiltin::ShiftLeft => todo!("shift left"),
+                    IntegerBuiltin::ShiftRight => todo!("shift right"),
+                    IntegerBuiltin::WrappingSub => todo!("wrapping sub"),
+                    IntegerBuiltin::OverflowingSub => todo!("oveflowing sub"),
+                    IntegerBuiltin::WrappingMul => todo!("wrapping mul"),
+                    IntegerBuiltin::OverflowingMul => todo!("oveflowing mul"),
+                },
                 Builtin::Len => todo!("Array len"),
                 Builtin::StringLen => todo!("String len"),
                 Builtin::ReadLine => todo!("read len"),
