@@ -5,6 +5,8 @@ use crate::{
     ast::Mutable,
     builtins::{Builtin, IntegerBuiltin},
     def_ids::DefId,
+    ident::Ident,
+    index_vec::IndexVec,
     ir::{self, BodyId, Local, TypeDefId, print::Print},
     resolved_ast::{Var, VarId},
     typed_ast::{
@@ -17,6 +19,7 @@ use crate::{
 struct LoweringCtxt {
     id_map: HashMap<DefId, BodyId>,
     type_defs: HashMap<DefId, TypeDefId>,
+    program: ir::Program,
 }
 impl LoweringCtxt {
     fn expect_body_id(&self, id: DefId) -> BodyId {
@@ -77,7 +80,7 @@ impl LoweringCtxt {
 }
 pub(super) struct LowerFunction<'a, 'ctxt> {
     vars: HashMap<VarId, Local>,
-    function: &'a typed_ast::Function<'ctxt>,
+    def_id: DefId,
     lower_ctxt: &'a mut LoweringCtxt,
     ctxt: CtxtRef<'ctxt>,
     body: ir::Body,
@@ -86,38 +89,40 @@ pub(super) struct LowerFunction<'a, 'ctxt> {
 }
 
 impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
-    fn new(
+    fn new<'b>(
         lower_ctxt: &'a mut LoweringCtxt,
         ctxt: CtxtRef<'ctxt>,
         id: DefId,
-        function: &'a typed_ast::Function<'ctxt>,
-    ) -> Self {
-        let param_count = function.params.len();
+        params: impl IntoIterator<Item = &'b typed_ast::Param<'ctxt>>,
+        return_type: Type<'ctxt>,
+    ) -> Self
+    where
+        'ctxt: 'b,
+    {
+        let mut vars = HashMap::new();
+        let mut locals = IndexVec::new();
+
+        for (i, param) in params.into_iter().enumerate() {
+            if let Some((var, local)) = param.var.map(|var| (var, Local::new(i))) {
+                vars.insert(var, local);
+            }
+            locals.push(ir::LocalInfo {
+                ty: lower_ctxt.lower_type(param.ty),
+                is_mutable: true,
+                name: Some(param.name.symbol),
+            });
+        }
+
         Self {
+            def_id: id,
             loop_label: 0,
-            vars: function
-                .params
-                .iter()
-                .enumerate()
-                .filter_map(|(i, param)| param.var.map(|var| (var, Local::new(i))))
-                .collect(),
-            function,
+            vars,
             body: ir::Body {
                 name: ctxt.expect_ident(id).symbol.to_string(),
                 generic_params: ctxt.generics(id).names().collect(),
-                param_count: param_count as u32,
-                return_ty: lower_ctxt.lower_type(function.return_type),
-                locals: {
-                    function
-                        .params
-                        .iter()
-                        .map(|param| ir::LocalInfo {
-                            ty: lower_ctxt.lower_type(param.ty),
-                            is_mutable: true,
-                            name: Some(param.name.symbol),
-                        })
-                        .collect()
-                },
+                param_count: locals.len() as u32,
+                return_ty: lower_ctxt.lower_type(return_type),
+                locals,
                 body: Vec::new(),
             },
             stmts: Vec::new(),
@@ -564,7 +569,45 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 )))
             }
             typed_ast::ExprKind::VariantConstructor { ty, args, case } => {
-                todo!("Variant constructor")
+                let type_def = self.ctxt.type_def(*ty);
+                let name = type_def.name;
+                let case_info = type_def.case(*case);
+                let id = case_info.id;
+                let body_id = if let Some(&id) = self.lower_ctxt.id_map.get(&id) {
+                    id
+                } else {
+                    let params = case_info
+                        .field
+                        .iter()
+                        .map(|field| {
+                            let ty = field.type_of(args, self.ctxt);
+                            typed_ast::Param {
+                                name: Ident::new(field.name, self.ctxt.span(field.id)),
+                                ty,
+                                var: None,
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    let param_count = params.len();
+                    let mut lower_body = LowerFunction::new(
+                        self.lower_ctxt,
+                        self.ctxt,
+                        id,
+                        params.iter(),
+                        Type::named(self.ctxt, *ty, name, args.clone()),
+                    );
+                    let return_value = ir::Expr::aggregate(
+                        ir::AggregateKind::Variant,
+                        (0..param_count)
+                            .map(|i| ir::Expr::load(ir::Place::Local(ir::Local::new(i)))),
+                    );
+                    lower_body.push_stmt(ir::Stmt::Return(return_value));
+                    lower_body.finish()
+                };
+                Some(ir::Expr::constant(ir::Constant::Function(
+                    body_id,
+                    self.lower_ctxt.lower_generic_args(args),
+                )))
             }
             typed_ast::ExprKind::Call(callee, args) => {
                 let ty = self.lower_type(expr.ty);
@@ -645,15 +688,20 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             }
         }
     }
-    pub fn lower(mut self) -> ir::Body {
-        if let Some(ref expr) = self.function.body
+    pub fn finish(self) -> BodyId {
+        let mut body = self.body;
+        body.body.extend(self.stmts);
+        let body_id = self.lower_ctxt.program.bodies.push(body);
+        self.lower_ctxt.id_map.insert(self.def_id, body_id);
+        body_id
+    }
+    pub fn lower(mut self, body: Option<&'_ typed_ast::Expr<'ctxt>>) {
+        if let Some(expr) = body
             && let Some(result) = self.lower_expr(&expr)
         {
             self.push_stmt(ir::Stmt::Return(result));
         }
-        let mut body = self.body;
-        body.body.extend(self.stmts);
-        body
+        self.finish();
     }
 }
 pub fn lower_program<'a, 'ctxt: 'a>(
@@ -669,15 +717,22 @@ pub fn lower_program<'a, 'ctxt: 'a>(
     let mut lowering_ctxt = LoweringCtxt {
         id_map,
         type_defs: HashMap::new(),
+        program: ir::Program {
+            bodies: Default::default(),
+        },
     };
-    let program = ir::Program {
-        bodies: functions
-            .into_iter()
-            .map(|(id, function)| {
-                LowerFunction::new(&mut lowering_ctxt, ctxt, id, function).lower()
-            })
-            .collect(),
-    };
+
+    for (id, function) in functions {
+        LowerFunction::new(
+            &mut lowering_ctxt,
+            ctxt,
+            id,
+            function.params.iter(),
+            function.return_type,
+        )
+        .lower(function.body.as_ref());
+    }
+    let program = lowering_ctxt.program;
     for body in &program.bodies {
         Print::new(&program, std::io::stdout()).print_body(body);
     }

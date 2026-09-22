@@ -86,6 +86,17 @@ impl<'a> Print<'a> {
                     output.push_str("}");
                     output
                 }
+                AggregateKind::Variant => {
+                    let mut output = "v{".to_string();
+                    for (i, value) in fields.iter().enumerate() {
+                        if i > 0 {
+                            output.push_str(",");
+                        }
+                        output.push_str(&format!("._{i} = {}", self.format_value(value)));
+                    }
+                    output.push_str("}");
+                    output
+                }
             },
             ExprKind::Constant(value) => match value {
                 Constant::Bool(value) => value.to_string(),
@@ -131,7 +142,7 @@ impl<'a> Print<'a> {
                     self.format_value(value)
                 ));
             }
-            Stmt::Panic => todo!(),
+            Stmt::Panic => self.write("panic\n"),
             Stmt::PanicIf(value) => {
                 self.write_newline_after(|this| {
                     this.write("panic_if ");

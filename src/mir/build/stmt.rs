@@ -79,7 +79,7 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
             | ExprKind::Array(..)
             | ExprKind::Char(_)
             | ExprKind::BuiltinCall(..)
-            |  ExprKind::VariantConstructor { .. } => {
+            | ExprKind::VariantConstructor { .. } => {
                 self.expr_value(expr);
             }
         }

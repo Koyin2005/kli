@@ -56,6 +56,7 @@ impl Expr {
 pub enum AggregateKind {
     Tuple,
     Named,
+    Variant,
 }
 #[derive(Debug, Clone)]
 pub enum BinaryOp {

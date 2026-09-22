@@ -458,7 +458,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 self.expr_stmt(expr);
                 Value::Unit
             }
-            ExprKind::VariantConstructor { .. } => todo!("Variant case")
+            ExprKind::VariantConstructor { .. } => todo!("Variant case"),
         }
     }
 }
