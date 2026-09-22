@@ -142,6 +142,8 @@ pub enum Stmt {
     Assign(Place, Expr),
     Return(Expr),
 }
+
+define_id!(TypeDefId);
 #[derive(Debug, Clone)]
 pub enum Type {
     Int,
@@ -151,7 +153,7 @@ pub enum Type {
     Function(Vec<Type>, Box<Type>),
     Tuple(Vec<Type>),
     Array(Box<Type>),
-    Named(Vec<Type>),
+    Named(TypeDefId, Vec<Type>),
 }
 #[derive(Debug)]
 pub struct LocalInfo {

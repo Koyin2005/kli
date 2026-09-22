@@ -1,14 +1,22 @@
 use std::collections::HashMap;
 
 use crate::{
-    CtxtRef, Symbol, ast::Mutable, builtins::{Builtin, IntegerBuiltin}, def_ids::DefId, ir::{self, BodyId, Local, print::Print}, resolved_ast::{Var, VarId}, typed_ast::{
+    CtxtRef, Symbol,
+    ast::Mutable,
+    builtins::{Builtin, IntegerBuiltin},
+    def_ids::DefId,
+    ir::{self, BodyId, Local, TypeDefId, print::Print},
+    resolved_ast::{Var, VarId},
+    typed_ast::{
         self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern, PatternKind, Place, PlaceKind,
         Stmt, StmtKind,
-    }, types::{GenericArgs, Type, TypeKind},
+    },
+    types::{GenericArgs, Type, TypeKind},
 };
 
 struct LoweringCtxt {
     id_map: HashMap<DefId, BodyId>,
+    type_defs: HashMap<DefId, TypeDefId>,
 }
 impl LoweringCtxt {
     fn expect_body_id(&self, id: DefId) -> BodyId {
@@ -17,11 +25,61 @@ impl LoweringCtxt {
         };
         id
     }
+    fn type_def_id(&mut self, id: DefId) -> TypeDefId {
+        let len = self.type_defs.len();
+        *self
+            .type_defs
+            .entry(id)
+            .or_insert_with(|| TypeDefId::new(len))
+    }
+    fn lower_generic_args(&mut self, args: &GenericArgs<'_>) -> Vec<ir::Type> {
+        args.iter()
+            .map(|arg| self.lower_type(arg.expect_ty()))
+            .collect()
+    }
+    fn lower_type(&mut self, ty: Type<'_>) -> ir::Type {
+        match ty.kind() {
+            TypeKind::Bool => ir::Type::Bool,
+            TypeKind::Char => todo!("Chars"),
+            TypeKind::Int => ir::Type::Int,
+            TypeKind::Infer(_) => todo!(),
+            TypeKind::Unknown => todo!(),
+            TypeKind::IntVar(_) => todo!(),
+            TypeKind::Never => todo!(),
+            TypeKind::Param(_, index) => {
+                ir::Type::Param((*index).try_into().expect("too many generic params"))
+            }
+            TypeKind::Function(function_sig) => ir::Type::Function(
+                function_sig
+                    .params
+                    .iter()
+                    .copied()
+                    .map(|ty| self.lower_type(ty))
+                    .collect(),
+                Box::new(self.lower_type(function_sig.return_type)),
+            ),
+            TypeKind::Tuple(items) => ir::Type::Tuple(
+                items
+                    .iter()
+                    .copied()
+                    .map(|ty| self.lower_type(ty))
+                    .collect(),
+            ),
+            TypeKind::Array(ty) => ir::Type::Array(Box::new(self.lower_type(*ty))),
+            TypeKind::Named(id, _, args) => {
+                let id = self.type_def_id(*id);
+                ir::Type::Named(id, self.lower_generic_args(args))
+            }
+            TypeKind::String => ir::Type::String,
+            TypeKind::Box(_) => todo!(),
+        }
+    }
 }
 pub(super) struct LowerFunction<'a, 'ctxt> {
     vars: HashMap<VarId, Local>,
     function: &'a typed_ast::Function<'ctxt>,
-    ctxt: &'a LoweringCtxt,
+    lower_ctxt: &'a mut LoweringCtxt,
+    ctxt: CtxtRef<'ctxt>,
     body: ir::Body,
     stmts: Vec<ir::Stmt>,
     loop_label: u32,
@@ -29,14 +87,13 @@ pub(super) struct LowerFunction<'a, 'ctxt> {
 
 impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
     fn new(
-        lower_ctxt: &'a LoweringCtxt,
+        lower_ctxt: &'a mut LoweringCtxt,
         ctxt: CtxtRef<'ctxt>,
         id: DefId,
         function: &'a typed_ast::Function<'ctxt>,
     ) -> Self {
         let param_count = function.params.len();
         Self {
-            ctxt: lower_ctxt,
             loop_label: 0,
             vars: function
                 .params
@@ -49,13 +106,13 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 name: ctxt.expect_ident(id).symbol.to_string(),
                 generic_params: ctxt.generics(id).names().collect(),
                 param_count: param_count as u32,
-                return_ty: lower_type(function.return_type),
+                return_ty: lower_ctxt.lower_type(function.return_type),
                 locals: {
                     function
                         .params
                         .iter()
                         .map(|param| ir::LocalInfo {
-                            ty: lower_type(param.ty),
+                            ty: lower_ctxt.lower_type(param.ty),
                             is_mutable: true,
                             name: Some(param.name.symbol),
                         })
@@ -64,6 +121,8 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 body: Vec::new(),
             },
             stmts: Vec::new(),
+            ctxt,
+            lower_ctxt,
         }
     }
     fn push_stmt(&mut self, stmt: ir::Stmt) {
@@ -91,24 +150,29 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             is_mutable: false,
         })
     }
+    fn lower_type(&mut self, ty: Type<'_>) -> ir::Type {
+        self.lower_ctxt.lower_type(ty)
+    }
     fn lower_expr_to_place(&mut self, expr: &Expr<'ctxt>) -> ir::Place {
         if let Some(result) = self.lower_expr(expr) {
             if let ir::ExprKind::Load(place) = result.kind {
                 place
             } else {
-                let tmp = self.fresh_temp(lower_type(expr.ty));
+                let ty = self.lower_type(expr.ty);
+                let tmp = self.fresh_temp(ty);
                 self.push_stmt(ir::Stmt::Assign(ir::Place::Local(tmp), result));
                 ir::Place::Local(tmp)
             }
         } else {
-            let tmp = self.fresh_temp(lower_type(expr.ty));
+            let ty = self.lower_type(expr.ty);
+            let tmp = self.fresh_temp(ty);
             ir::Place::Local(tmp)
         }
     }
     fn lower_stmt(&mut self, stmt: &Stmt<'ctxt>) {
         match &stmt.kind {
             StmtKind::Expr(expr) => {
-                let ty = lower_type(expr.ty);
+                let ty = self.lower_ctxt.lower_type(expr.ty);
                 let tmp = self.fresh_temp(ty);
                 self.lower_expr_into(ir::Place::Local(tmp), expr);
             }
@@ -120,7 +184,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
     fn assign_to_pattern(&mut self, pattern: &Pattern<'ctxt>, expr: &Expr<'ctxt>) {
         match pattern.kind {
             PatternKind::Binding(mutable, var, ty) => {
-                let ty = lower_type(ty);
+                let ty = self.lower_ctxt.lower_type(ty);
                 let local = self.fresh_local_for_var(var, matches!(mutable, Mutable::Mutable), ty);
                 self.lower_expr_into(ir::Place::Local(local), expr);
             }
@@ -134,7 +198,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
     fn lower_place_to_pattern(&mut self, place: ir::Place, pattern: &Pattern<'ctxt>) {
         match &pattern.kind {
             PatternKind::Binding(mutable, var, ty) => {
-                let ty = lower_type(*ty);
+                let ty = self.lower_type(*ty);
                 let local = self.fresh_local_for_var(*var, matches!(mutable, Mutable::Mutable), ty);
                 self.push_stmt(ir::Stmt::Assign(
                     ir::Place::Local(local),
@@ -213,7 +277,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         else {
             return;
         };
-        let ty = lower_type(ty);
+        let ty = self.lower_type(ty);
         self.push_stmt(ir::Stmt::Alloc(dest, ir::Allocate::Array(ty, elements)));
     }
     fn lower_if_expr(
@@ -244,7 +308,8 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         (local, value)
     }
     fn lower_expr_to_temp(&mut self, expr: &Expr<'ctxt>) -> ir::Local {
-        let (index, ()) = self.lower_into_temp(lower_type(expr.ty), |local, this| {
+        let ty = self.lower_type(expr.ty);
+        let (index, ()) = self.lower_into_temp(ty, |local, this| {
             this.lower_expr_into(ir::Place::Local(local), expr);
         });
         index
@@ -443,7 +508,8 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 None
             }
             typed_ast::ExprKind::If(condition, then_branch, else_branch) => {
-                let (dest, ()) = self.lower_into_temp(lower_type(expr.ty), |dest, this| {
+                let ty = self.lower_type(expr.ty);
+                let (dest, ()) = self.lower_into_temp(ty, |dest, this| {
                     this.lower_if_expr(ir::Place::Local(dest), condition, then_branch, else_branch)
                 });
                 Some(ir::Expr::load(ir::Place::Local(dest)))
@@ -490,14 +556,15 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             },
             typed_ast::ExprKind::VariantInit(..) => todo!(),
             typed_ast::ExprKind::Function(def_id, generic_args) => {
-                let args = lower_generic_args(generic_args);
+                let args = self.lower_ctxt.lower_generic_args(generic_args);
                 Some(ir::Expr::constant(ir::Constant::Function(
-                    self.ctxt.expect_body_id(*def_id),
+                    self.lower_ctxt.expect_body_id(*def_id),
                     args,
                 )))
             }
             typed_ast::ExprKind::Call(callee, args) => {
-                let (dest, ()) = self.lower_into_temp(lower_type(expr.ty), |dest, this| {
+                let ty = self.lower_type(expr.ty);
+                let (dest, ()) = self.lower_into_temp(ty, |dest, this| {
                     this.lower_call(ir::Place::Local(dest), callee, args)
                 });
                 Some(ir::Expr::load(ir::Place::Local(dest)))
@@ -544,9 +611,10 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                     .collect::<Option<Vec<_>>>()?,
             )),
             typed_ast::ExprKind::Array(elements) => {
-                let ty = expr.ty.as_array().expect("should be an array");
-                let (dest, ()) = self.lower_into_temp(lower_type(expr.ty), |dest, this| {
-                    this.lower_array(ir::Place::Local(dest), ty, elements);
+                let element_type = expr.ty.as_array().expect("should be an array");
+                let ty = self.lower_type(expr.ty);
+                let (dest, ()) = self.lower_into_temp(ty, |dest, this| {
+                    this.lower_array(ir::Place::Local(dest), element_type, elements);
                 });
                 Some(ir::Expr::load(ir::Place::Local(dest)))
             }
@@ -584,39 +652,6 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         body
     }
 }
-fn lower_generic_args(args: &GenericArgs<'_>) -> Vec<ir::Type>{
-    args.iter().map(|arg| lower_type(arg.expect_ty())).collect()
-}
-fn lower_type(ty: Type<'_>) -> ir::Type {
-    match ty.kind() {
-        TypeKind::Bool => ir::Type::Bool,
-        TypeKind::Char => todo!("Chars"),
-        TypeKind::Int => ir::Type::Int,
-        TypeKind::Infer(_) => todo!(),
-        TypeKind::Unknown => todo!(),
-        TypeKind::IntVar(_) => todo!(),
-        TypeKind::Never => todo!(),
-        TypeKind::Param(_, index) => {
-            ir::Type::Param((*index).try_into().expect("too many generic params"))
-        }
-        TypeKind::Function(function_sig) => ir::Type::Function(
-            function_sig
-                .params
-                .iter()
-                .copied()
-                .map(lower_type)
-                .collect(),
-            Box::new(lower_type(function_sig.return_type)),
-        ),
-        TypeKind::Tuple(items) => ir::Type::Tuple(items.iter().copied().map(lower_type).collect()),
-        TypeKind::Array(ty) => ir::Type::Array(Box::new(lower_type(*ty))),
-        TypeKind::Named(_, _, args) => {
-            ir::Type::Named(lower_generic_args(args))
-        }
-        TypeKind::String => ir::Type::String,
-        TypeKind::Box(_) => todo!(),
-    }
-}
 pub fn lower_program<'a, 'ctxt: 'a>(
     ctxt: CtxtRef<'ctxt>,
     functions: impl IntoIterator<Item = (DefId, &'a typed_ast::Function<'ctxt>)> + Clone,
@@ -627,11 +662,16 @@ pub fn lower_program<'a, 'ctxt: 'a>(
         .enumerate()
         .map(|(i, (id, _))| (id, BodyId::new(i)))
         .collect::<HashMap<_, _>>();
-    let lowering_ctxt = LoweringCtxt { id_map };
+    let mut lowering_ctxt = LoweringCtxt {
+        id_map,
+        type_defs: HashMap::new(),
+    };
     let program = ir::Program {
         bodies: functions
             .into_iter()
-            .map(|(id, function)| LowerFunction::new(&lowering_ctxt, ctxt, id, function).lower())
+            .map(|(id, function)| {
+                LowerFunction::new(&mut lowering_ctxt, ctxt, id, function).lower()
+            })
             .collect(),
     };
     for body in &program.bodies {
