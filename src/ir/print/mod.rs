@@ -232,7 +232,7 @@ impl<'a> Print<'a> {
             if i > 0 {
                 self.write(",");
             }
-            self.write(format!("{:?}", param.ty));
+            self.write(format!("t{i} : {:?}", param.ty));
         }
         self.write(") -> ");
 
