@@ -15,6 +15,10 @@ use crate::{
     },
     types::{GenericArgs, Type, TypeKind},
 };
+enum BuiltinResult {
+    Value(ir::Expr),
+    Unit,
+}
 type Functions<'a, 'ctxt> = BTreeMap<DefId, &'a typed_ast::Function<'ctxt>>;
 struct LoweringCtxt {
     id_map: HashMap<DefId, BodyId>,
@@ -127,6 +131,13 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             lower_ctxt,
         }
     }
+    fn push_assign(&mut self, place: ir::Place, value: ir::Expr) {
+        self.stmts.push(ir::Stmt::Assign(place, value));
+    }
+    fn push_tmp_assign(&mut self, ty: ir::Type, value: ir::Expr) {
+        let local = self.fresh_temp(ty);
+        self.push_assign(ir::Place::Local(local), value);
+    }
     fn push_stmt(&mut self, stmt: ir::Stmt) {
         self.stmts.push(stmt);
     }
@@ -171,12 +182,109 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             ir::Place::Local(tmp)
         }
     }
+    fn lower_builtin_call(&mut self, builtin: Builtin, args: &[Expr<'ctxt>]) -> BuiltinResult {
+        match builtin {
+            Builtin::PrintString => {
+                let [value] = self.lower_exprs_const(args);
+                self.push_stmt(ir::Stmt::Print {
+                    value,
+                    is_err: false,
+                });
+                BuiltinResult::Unit
+            }
+            Builtin::EprintString => {
+                let [value] = self.lower_exprs_const(args);
+                self.push_stmt(ir::Stmt::Print {
+                    value,
+                    is_err: true,
+                });
+                BuiltinResult::Unit
+            }
+            Builtin::IntegerBuiltin(builtin) => match builtin {
+                IntegerBuiltin::IntMaxValue => {
+                    BuiltinResult::Value(ir::Expr::constant(ir::Constant::Int(i64::MAX)))
+                }
+                IntegerBuiltin::WrappingAdd => {
+                    let [left, right] = self.lower_exprs_const(args);
+                    BuiltinResult::Value(ir::Expr::binary(ir::BinaryOp::Add, left, right))
+                }
+                IntegerBuiltin::OverflowingAdd => {
+                    let [left, right] = self.lower_exprs_const(args);
+                    BuiltinResult::Value(ir::Expr::binary(
+                        ir::BinaryOp::AddWithOverflow,
+                        left,
+                        right,
+                    ))
+                }
+                IntegerBuiltin::ShiftLeft => todo!("shift left"),
+                IntegerBuiltin::ShiftRight => todo!("shift right"),
+                IntegerBuiltin::WrappingSub => todo!("wrapping sub"),
+                IntegerBuiltin::OverflowingSub => todo!("oveflowing sub"),
+                IntegerBuiltin::WrappingMul => todo!("wrapping mul"),
+                IntegerBuiltin::OverflowingMul => todo!("oveflowing mul"),
+            },
+            Builtin::Len => todo!("Array len"),
+            Builtin::StringLen => todo!("String len"),
+            Builtin::ReadLine => todo!("read len"),
+        }
+    }
+    fn lower_expr_stmt(&mut self, expr: &Expr<'ctxt>) {
+        match &expr.kind {
+            ExprKind::If(..)
+            | ExprKind::Block(_)
+            | ExprKind::While(..)
+            | ExprKind::String(_)
+            | ExprKind::Bool(_)
+            | ExprKind::Int(_)
+            | ExprKind::Char(_)
+            | ExprKind::Unit
+            | ExprKind::Err
+            | ExprKind::Function(..)
+            | ExprKind::VariantConstructor { .. }
+            | ExprKind::Case(..)
+            | ExprKind::Call(..)
+            | ExprKind::Load(_)
+            | ExprKind::Lambda(_)
+            | ExprKind::Binary(..)
+            | ExprKind::Logic(..)
+            | ExprKind::Tuple(..)
+            | ExprKind::Array(..)
+            | ExprKind::NamedRecord(..)
+            | ExprKind::VariantInit(..) => {
+                self.lower_expr_to_temp(expr);
+            }
+            ExprKind::Unsafe(expr) => self.lower_expr_stmt(expr),
+            ExprKind::Return(expr) => {
+                let Some(result) = self.lower_expr(expr) else {
+                    return;
+                };
+                self.push_stmt(ir::Stmt::Return(result));
+            }
+            ExprKind::Assign(place, rhs) => {
+                self.lower_assign(place, rhs);
+            }
+            ExprKind::Panic => {
+                self.push_stmt(ir::Stmt::Panic);
+            }
+            ExprKind::NeverToAny(expr) => {
+                self.lower_expr_stmt(expr);
+            }
+            ExprKind::BuiltinCall(builtin, _, args) => {
+                match self.lower_builtin_call(*builtin, args) {
+                    BuiltinResult::Unit => (),
+                    BuiltinResult::Value(value) => {
+                        let ty = self.lower_type(expr.ty);
+                        self.push_tmp_assign(ty, value);
+                    }
+                }
+            }
+            ExprKind::For { .. } => todo!(),
+        }
+    }
     fn lower_stmt(&mut self, stmt: &Stmt<'ctxt>) {
         match &stmt.kind {
             StmtKind::Expr(expr) => {
-                let ty = self.lower_ctxt.lower_type(expr.ty);
-                let tmp = self.fresh_temp(ty);
-                self.lower_expr_into(ir::Place::Local(tmp), expr);
+                self.lower_expr_stmt(expr);
             }
             StmtKind::Let(binding) => {
                 self.assign_to_pattern(&binding.pattern, &binding.value);
@@ -517,46 +625,12 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 });
                 Some(ir::Expr::load(ir::Place::Local(dest)))
             }
-            typed_ast::ExprKind::BuiltinCall(builtin, _, exprs) => match *builtin {
-                Builtin::PrintString => {
-                    let [value] = self.lower_exprs_const(exprs);
-                    self.push_stmt(ir::Stmt::Print {
-                        value,
-                        is_err: false,
-                    });
-                    Some(ir::Expr::unit_value())
+            typed_ast::ExprKind::BuiltinCall(builtin, _, exprs) => {
+                match self.lower_builtin_call(*builtin, exprs) {
+                    BuiltinResult::Unit => Some(ir::Expr::unit_value()),
+                    BuiltinResult::Value(value) => Some(value),
                 }
-                Builtin::EprintString => {
-                    let [value] = self.lower_exprs_const(exprs);
-                    self.push_stmt(ir::Stmt::Print {
-                        value,
-                        is_err: true,
-                    });
-                    Some(ir::Expr::unit_value())
-                }
-                Builtin::IntegerBuiltin(builtin) => match builtin {
-                    IntegerBuiltin::IntMaxValue => {
-                        Some(ir::Expr::constant(ir::Constant::Int(i64::MAX)))
-                    }
-                    IntegerBuiltin::WrappingAdd => Some({
-                        let [left, right] = self.lower_exprs_const(exprs);
-                        ir::Expr::binary(ir::BinaryOp::Add, left, right)
-                    }),
-                    IntegerBuiltin::OverflowingAdd => Some({
-                        let [left, right] = self.lower_exprs_const(exprs);
-                        ir::Expr::binary(ir::BinaryOp::AddWithOverflow, left, right)
-                    }),
-                    IntegerBuiltin::ShiftLeft => todo!("shift left"),
-                    IntegerBuiltin::ShiftRight => todo!("shift right"),
-                    IntegerBuiltin::WrappingSub => todo!("wrapping sub"),
-                    IntegerBuiltin::OverflowingSub => todo!("oveflowing sub"),
-                    IntegerBuiltin::WrappingMul => todo!("wrapping mul"),
-                    IntegerBuiltin::OverflowingMul => todo!("oveflowing mul"),
-                },
-                Builtin::Len => todo!("Array len"),
-                Builtin::StringLen => todo!("String len"),
-                Builtin::ReadLine => todo!("read len"),
-            },
+            }
             typed_ast::ExprKind::VariantInit(..) => todo!(),
             typed_ast::ExprKind::Function(def_id, generic_args) => {
                 let body_id = if let Some(&id) = self.lower_ctxt.id_map.get(def_id) {
@@ -715,7 +789,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
 }
 pub fn lower_program<'a, 'ctxt: 'a>(
     ctxt: CtxtRef<'ctxt>,
-    functions: Functions<'a,'ctxt>,
+    functions: Functions<'a, 'ctxt>,
 ) -> ir::Program {
     let mut lowering_ctxt = LoweringCtxt {
         id_map: HashMap::new(),
