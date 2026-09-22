@@ -160,7 +160,7 @@ impl<'a> Print<'a> {
                 self.write("\n");
             }
             Stmt::Loop(label, stmts) => {
-                self.write(format!("loop L{}",label.into_usize()));
+                self.write(format!("loop L{}", label.into_usize()));
                 self.write(":\n");
                 self.indent += 1;
                 for stmt in stmts {
@@ -169,8 +169,8 @@ impl<'a> Print<'a> {
                 self.indent -= 1;
             }
             Stmt::Break(label) => {
-                self.write(format!("break L{}\n",label.into_usize()));
-            },
+                self.write(format!("break L{}\n", label.into_usize()));
+            }
             Stmt::If(condition, then_branch, else_branch) => {
                 self.write("if ");
                 self.write(self.format_value(condition));

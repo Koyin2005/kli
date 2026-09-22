@@ -11,8 +11,8 @@ use crate::{
     ir::{self, BodyId, Local, TypeDef, TypeDefId, print::Print},
     resolved_ast::{Var, VarId},
     typed_ast::{
-        self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern, PatternKind, Place, PlaceKind,
-        Stmt, StmtKind,
+        self, BinaryOp, BlockBody, Expr, ExprKind, FieldId, LogicalOp, Pattern, PatternKind, Place,
+        PlaceKind, Stmt, StmtKind,
     },
     types::{GenericArgs, Type, TypeKind},
 };
@@ -263,34 +263,30 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
     }
     fn lower_expr_stmt(&mut self, expr: &Expr<'ctxt>) {
         match &expr.kind {
-            ExprKind::If(..)
-            | ExprKind::Block(_)
-            | ExprKind::String(_)
-            | ExprKind::Bool(_)
-            | ExprKind::Int(_)
-            | ExprKind::Char(_)
-            | ExprKind::Unit
-            | ExprKind::Err
-            | ExprKind::Function(..)
-            | ExprKind::VariantConstructor { .. }
-            | ExprKind::Case(..)
-            | ExprKind::Call(..)
-            | ExprKind::Load(_)
-            | ExprKind::Lambda(_)
-            | ExprKind::Binary(..)
-            | ExprKind::Logic(..)
-            | ExprKind::Tuple(..)
-            | ExprKind::Array(..)
-            | ExprKind::NamedRecord(..)
-            | ExprKind::VariantInit(..) => {
-                self.lower_expr_to_temp(expr);
-            }
+            ExprKind::Unit => (),
+            ExprKind::Err => unreachable!(),
             ExprKind::Unsafe(expr) => self.lower_expr_stmt(expr),
             ExprKind::Return(expr) => {
                 let Some(result) = self.lower_expr(expr) else {
                     return;
                 };
                 self.push_stmt(ir::Stmt::Return(result));
+            }
+            ExprKind::If(condition, then_branch, else_branch) => {
+                let Some(condition) = self.lower_expr(condition) else {
+                    return;
+                };
+                let (then_stmts, ()) = self.stmts_for(|this| {
+                    this.lower_expr_stmt(then_branch);
+                });
+                let (else_stmts, ()) = self.stmts_for(|this| {
+                    this.lower_expr_stmt(else_branch);
+                });
+                self.push_stmt(ir::Stmt::If(condition, then_stmts, else_stmts));
+            }
+            ExprKind::Block(block_body) => {
+                self.lower_block_stmts(block_body);
+                self.lower_expr_stmt(&block_body.expr);
             }
             ExprKind::Assign(place, rhs) => {
                 self.lower_assign(place, rhs);
@@ -312,6 +308,24 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             }
             ExprKind::While(condition, body) => {
                 self.lower_while_loop(condition, body);
+            }
+            ExprKind::String(_)
+            | ExprKind::Bool(_)
+            | ExprKind::Int(_)
+            | ExprKind::Char(_)
+            | ExprKind::Function(..)
+            | ExprKind::VariantConstructor { .. }
+            | ExprKind::Case(..)
+            | ExprKind::Call(..)
+            | ExprKind::Load(_)
+            | ExprKind::Lambda(_)
+            | ExprKind::Binary(..)
+            | ExprKind::Logic(..)
+            | ExprKind::Tuple(..)
+            | ExprKind::Array(..)
+            | ExprKind::NamedRecord(..)
+            | ExprKind::VariantInit(..) => {
+                self.lower_expr_to_temp(expr);
             }
         }
     }
@@ -489,6 +503,11 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             }
         }
     }
+    fn lower_block_stmts(&mut self, body: &BlockBody<'ctxt>) {
+        for stmt in body.stmts.iter() {
+            self.lower_stmt(stmt);
+        }
+    }
     fn lower_expr_into(&mut self, dest: ir::Place, expr: &Expr<'ctxt>) {
         match &expr.kind {
             typed_ast::ExprKind::If(condition, then_branch, else_branch) => {
@@ -506,10 +525,8 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 self.push_stmt(ir::Stmt::Panic);
             }
             typed_ast::ExprKind::Block(block_body) => {
-                for stmt in block_body.stmts.iter() {
-                    self.lower_stmt(stmt);
-                }
-                self.lower_expr_into(dest, expr);
+                self.lower_block_stmts(block_body);
+                self.lower_expr_into(dest, &block_body.expr);
             }
             typed_ast::ExprKind::Array(elements) => {
                 let ty = expr.ty.as_array().expect("should be an array");
@@ -609,30 +626,31 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         (label, value)
     }
     fn lower_while_loop(&mut self, condition: &Expr<'ctxt>, body: &Expr<'ctxt>) {
-        let Some(condition) = self.lower_expr(condition) else {
-            return;
-        };
-        let (label, body) = self.in_loop(|this| {
-            let (stmts, _) = this.stmts_for(|this| this.lower_expr(body));
-            stmts
+        let (label, (body, condition)) = self.in_loop(|this| {
+            let (stmts, condition) = this.stmts_for(|this| {
+                let condition = this.lower_expr(condition)?;
+                this.lower_expr_stmt(body);
+                Some(condition)
+            });
+            (stmts, condition)
         });
-        self.push_stmt(ir::Stmt::Loop(
-            label,
-            vec![ir::Stmt::If(condition, body, vec![ir::Stmt::Break(label)])],
-        ));
+        if let Some(condition) = condition {
+            self.push_stmt(ir::Stmt::Loop(
+                label,
+                vec![ir::Stmt::If(condition, body, vec![ir::Stmt::Break(label)])],
+            ));
+        }
     }
     fn lower_expr(&mut self, expr: &Expr<'ctxt>) -> Option<ir::Expr> {
         match &expr.kind {
-            typed_ast::ExprKind::Unsafe(expr) => self.lower_expr(expr),
-            typed_ast::ExprKind::Return(expr) => {
-                let value = self.lower_expr(expr)?;
+            typed_ast::ExprKind::Unsafe(inner) => self.lower_expr(inner),
+            typed_ast::ExprKind::Return(inner) => {
+                let value = self.lower_expr(inner)?;
                 self.push_stmt(ir::Stmt::Return(value));
                 None
             }
             typed_ast::ExprKind::Block(block_body) => {
-                for stmt in block_body.stmts.iter() {
-                    self.lower_stmt(stmt);
-                }
+                self.lower_block_stmts(block_body);
                 self.lower_expr(&block_body.expr)
             }
             typed_ast::ExprKind::String(string) => Some(ir::Expr::constant(ir::Constant::String(
