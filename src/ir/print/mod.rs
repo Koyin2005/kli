@@ -1,5 +1,5 @@
 use crate::ir::{
-    AggregateKind, BinaryOp, Body, Call, Constant, Expr, ExprKind, Place, Program, Stmt,
+    AggregateKind, Allocate, BinaryOp, Body, Call, Constant, Expr, ExprKind, Place, Program, Stmt,
 };
 
 pub struct Print<'a> {
@@ -26,15 +26,33 @@ impl<'a> Print<'a> {
                 format!("({} as {})", self.format_place(place), case.into_usize())
             }
             Place::Deref(place) => format!("{}^", self.format_place(place)),
+            Place::Index(value, index) => {
+                format!("{}.[t{}]", self.format_value(value), index.into_usize())
+            }
         }
     }
     fn format_value(&self, value: &Expr) -> String {
         match &value.kind {
+            ExprKind::Not(value) => {
+                let mut output = "not".to_string();
+                output.push('(');
+                output.push_str(&self.format_value(value));
+                output.push(')');
+                output
+            }
+            ExprKind::Len(place) => {
+                let mut output = "len".to_string();
+                output.push('(');
+                output.push_str(&self.format_value(place));
+                output.push(')');
+                output
+            }
             ExprKind::BinaryOp(op, left, right) => {
                 let mut output = match *op {
                     BinaryOp::Add => "add",
                     BinaryOp::AddWithOverflow => "add_with_overflow",
                     BinaryOp::Lesser => "lesser",
+                    BinaryOp::InBounds => "in_bounds",
                 }
                 .to_string();
                 output.push('(');
@@ -55,6 +73,17 @@ impl<'a> Print<'a> {
                         output.push_str(&self.format_value(value));
                     }
                     output.push_str(")");
+                    output
+                }
+                AggregateKind::Named => {
+                    let mut output = "{".to_string();
+                    for (i, value) in fields.iter().enumerate() {
+                        if i > 0 {
+                            output.push_str(",");
+                        }
+                        output.push_str(&format!("._{i} = {}", self.format_value(value)));
+                    }
+                    output.push_str("}");
                     output
                 }
             },
@@ -143,6 +172,25 @@ impl<'a> Print<'a> {
                         this.write(this.format_value(arg));
                     }
                     this.write(")");
+                });
+            }
+            Stmt::Alloc(place, allocate) => {
+                self.write_newline_after(|this| {
+                    this.write(this.format_place(place));
+                    this.write(" = alloc ");
+                    match allocate {
+                        Allocate::Array(ty, exprs) => {
+                            this.write(format!("Array[{:?}]", ty));
+                            this.write("(");
+                            for (i, arg) in exprs.iter().enumerate() {
+                                if i > 0 {
+                                    this.write(",");
+                                }
+                                this.write(this.format_value(arg));
+                            }
+                            this.write(")");
+                        }
+                    }
                 });
             }
             Stmt::Return(expr) => {

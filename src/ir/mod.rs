@@ -13,9 +13,22 @@ pub struct Expr {
     pub kind: ExprKind,
 }
 impl Expr {
-    pub fn tuple(exprs: impl IntoIterator<Item = Self>) -> Self {
+    pub fn len(self) -> Self {
         Self {
-            kind: ExprKind::Aggregate(AggregateKind::Tuple, exprs.into_iter().collect()),
+            kind: ExprKind::Len(Box::new(self)),
+        }
+    }
+    pub fn not(self) -> Self {
+        Self {
+            kind: ExprKind::Not(Box::new(self)),
+        }
+    }
+    pub fn tuple(exprs: impl IntoIterator<Item = Self>) -> Self {
+        Self::aggregate(AggregateKind::Tuple, exprs)
+    }
+    pub fn aggregate(kind: AggregateKind, exprs: impl IntoIterator<Item = Self>) -> Self {
+        Self {
+            kind: ExprKind::Aggregate(kind, exprs.into_iter().collect()),
         }
     }
     pub fn unit_value() -> Self {
@@ -42,20 +55,24 @@ impl Expr {
 #[derive(Debug, Clone)]
 pub enum AggregateKind {
     Tuple,
+    Named,
 }
 #[derive(Debug, Clone)]
 pub enum BinaryOp {
     Add,
     AddWithOverflow,
     Lesser,
+    InBounds,
 }
 #[derive(Debug, Clone)]
 pub enum ExprKind {
     Constant(Constant),
     Load(Place),
+    Len(Box<Expr>),
     Discriminant(Place),
     Aggregate(AggregateKind, IndexVec<FieldId, Expr>),
     BinaryOp(BinaryOp, Box<Expr>, Box<Expr>),
+    Not(Box<Expr>),
 }
 define_id!(Local);
 #[derive(Debug, Clone)]
@@ -64,6 +81,7 @@ pub enum Place {
     Field(Box<Place>, FieldId),
     Deref(Box<Place>),
     Downcast(Box<Place>, CaseId),
+    Index(Box<Expr>, Local),
 }
 impl Place {
     pub fn with_field(self, field: FieldId) -> Self {
@@ -106,6 +124,10 @@ pub struct Match {
     pub arms: IndexVec<ArmId, Vec<Stmt>>,
 }
 #[derive(Debug)]
+pub enum Allocate {
+    Array(Type, Vec<Expr>),
+}
+#[derive(Debug)]
 pub enum Stmt {
     Panic,
     PanicIf(Expr),
@@ -116,6 +138,7 @@ pub enum Stmt {
     If(Expr, Vec<Stmt>, Vec<Stmt>),
     Match(Match),
     Call(Call),
+    Alloc(Place, Allocate),
     Assign(Place, Expr),
     Return(Expr),
 }
@@ -128,6 +151,7 @@ pub enum Type {
     Function(Vec<Type>, Box<Type>),
     Tuple(Vec<Type>),
     Array(Box<Type>),
+    Named,
 }
 #[derive(Debug)]
 pub struct LocalInfo {

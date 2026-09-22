@@ -1,7 +1,17 @@
 use std::collections::HashMap;
 
 use crate::{
-    CtxtRef, Symbol, ast::Mutable, builtins::{Builtin, IntegerBuiltin}, def_ids::DefId, ir::{self, BodyId, Local, print::Print}, resolved_ast::{Var, VarId}, typed_ast::{self, BinaryOp, Expr, LogicalOp, Pattern, PatternKind, Place, Stmt, StmtKind}, types::{Type, TypeKind},
+    CtxtRef, Symbol,
+    ast::Mutable,
+    builtins::{Builtin, IntegerBuiltin},
+    def_ids::DefId,
+    ir::{self, BodyId, Local, print::Print},
+    resolved_ast::{Var, VarId},
+    typed_ast::{
+        self, BinaryOp, Expr, FieldId, LogicalOp, Pattern, PatternKind, Place, PlaceKind, Stmt,
+        StmtKind,
+    },
+    types::{Type, TypeKind},
 };
 
 struct LoweringCtxt {
@@ -158,24 +168,42 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         };
         exprs
     }
-    fn lower_place(&mut self, place: &Place<'ctxt>) -> ir::Place {
+    fn local_for_var(&self, var: Var) -> Local {
+        *self
+            .vars
+            .get(&var.1)
+            .unwrap_or_else(|| panic!("should have a variable for {}", var.0))
+    }
+    fn lower_place(&mut self, place: &Place<'ctxt>) -> Option<ir::Place> {
         match &place.kind {
             typed_ast::PlaceKind::Upvar(..) => todo!(),
-            typed_ast::PlaceKind::Var(var) => {
-                let local = *self
-                    .vars
-                    .get(&var.1)
-                    .unwrap_or_else(|| panic!("should have a variable for {}", var.0));
-                ir::Place::Local(local)
-            }
+            typed_ast::PlaceKind::Var(var) => Some(ir::Place::Local(self.local_for_var(*var))),
             typed_ast::PlaceKind::Field(place, field_id) => {
-                let place = self.lower_place(place);
-                ir::Place::Field(Box::new(place), *field_id)
+                let place = self.lower_place(place)?;
+                Some(ir::Place::Field(Box::new(place), *field_id))
             }
-            typed_ast::PlaceKind::Index(..) => todo!(),
+            typed_ast::PlaceKind::Index(base, index) => {
+                let base = self.lower_expr(base)?;
+                let (index, ()) = self.lower_into_temp(lower_type(index.ty), |local, this| {
+                    this.lower_expr_into(ir::Place::Local(local), index);
+                });
+                self.bounds_check(base.clone(), index);
+                Some(ir::Place::Index(Box::new(base), index))
+            }
             typed_ast::PlaceKind::Deref(..) => todo!(),
             typed_ast::PlaceKind::Invalid => todo!(),
         }
+    }
+    fn lower_array(&mut self, dest: ir::Place, ty: Type<'_>, elements: &[Expr<'ctxt>]) {
+        let Some(elements) = elements
+            .iter()
+            .map(|element| self.lower_expr(element))
+            .collect::<Option<Vec<_>>>()
+        else {
+            return;
+        };
+        let ty = lower_type(ty);
+        self.push_stmt(ir::Stmt::Alloc(dest, ir::Allocate::Array(ty, elements)));
     }
     fn lower_if_expr(
         &mut self,
@@ -194,6 +222,53 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             this.lower_expr_into(dest.clone(), else_branch);
         });
         self.push_stmt(ir::Stmt::If(condition, then_stmts, else_stmts));
+    }
+    fn lower_into_temp<T>(
+        &mut self,
+        ty: ir::Type,
+        f: impl FnOnce(Local, &mut Self) -> T,
+    ) -> (Local, T) {
+        let local = self.fresh_temp(ty);
+        let value = f(local, self);
+        (local, value)
+    }
+    fn lower_expr_to_temp(&mut self, expr: &Expr<'ctxt>) -> ir::Local {
+        let (index, ()) = self.lower_into_temp(lower_type(expr.ty), |local, this| {
+            this.lower_expr_into(ir::Place::Local(local), expr);
+        });
+        index
+    }
+    fn bounds_check(&mut self, base: ir::Expr, index: ir::Local) {
+        let in_bounds = ir::Expr::binary(
+            ir::BinaryOp::InBounds,
+            ir::Expr::load(ir::Place::Local(index)),
+            ir::Expr::len(base),
+        );
+        self.push_stmt(ir::Stmt::PanicIf(ir::Expr::not(in_bounds)));
+    }
+    fn lower_assign(&mut self, place: &Place<'ctxt>, rhs: &Expr<'ctxt>) {
+        match &place.kind {
+            &PlaceKind::Var(var) => {
+                let local = self.local_for_var(var);
+                self.lower_expr_into(ir::Place::Local(local), rhs);
+            }
+            PlaceKind::Index(base, index) => {
+                let Some(base) = self.lower_expr(base) else {
+                    return;
+                };
+                let index = self.lower_expr_to_temp(index);
+                let Some(rhs) = self.lower_expr(rhs) else {
+                    return;
+                };
+                let place = ir::Place::Index(Box::new(base.clone()), index);
+                self.bounds_check(base, index);
+                self.push_stmt(ir::Stmt::Assign(place, rhs));
+            }
+            PlaceKind::Upvar(..) => todo!(),
+            PlaceKind::Field(..) => todo!(),
+            PlaceKind::Deref(..) => todo!(),
+            PlaceKind::Invalid => todo!(),
+        }
     }
     fn lower_expr_into(&mut self, dest: ir::Place, expr: &Expr<'ctxt>) {
         match &expr.kind {
@@ -217,13 +292,16 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 }
                 self.lower_expr_into(dest, expr);
             }
+            typed_ast::ExprKind::Array(elements) => {
+                let ty = expr.ty.as_array().expect("should be an array");
+                self.lower_array(dest, ty, elements);
+            }
             typed_ast::ExprKind::String(_)
             | typed_ast::ExprKind::Bool(_)
             | typed_ast::ExprKind::Int(_)
             | typed_ast::ExprKind::Unit
             | typed_ast::ExprKind::Err
             | typed_ast::ExprKind::Char(_)
-            | typed_ast::ExprKind::Array(_)
             | typed_ast::ExprKind::BuiltinCall(..)
             | typed_ast::ExprKind::Lambda(_)
             | typed_ast::ExprKind::Tuple(_)
@@ -232,7 +310,8 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             | typed_ast::ExprKind::NamedRecord(..)
             | typed_ast::ExprKind::Load(..)
             | typed_ast::ExprKind::Case(..)
-            | typed_ast::ExprKind::Binary(..) => {
+            | typed_ast::ExprKind::Binary(..)
+            | typed_ast::ExprKind::Assign(..) => {
                 let result = self.lower_expr(expr);
                 if let Some(result) = result {
                     self.push_stmt(ir::Stmt::Assign(dest, result));
@@ -240,7 +319,6 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             }
             typed_ast::ExprKind::For { .. } | typed_ast::ExprKind::While(..) => todo!(),
             typed_ast::ExprKind::NeverToAny(..) => todo!("idk"),
-            typed_ast::ExprKind::Assign(..) => todo!(),
             typed_ast::ExprKind::Call(callee, args) => self.lower_call(dest, callee, args),
             typed_ast::ExprKind::Logic(op, lhs, rhs) => {
                 self.lower_logical(dest, *op, lhs, rhs);
@@ -358,8 +436,9 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 None
             }
             typed_ast::ExprKind::If(condition, then_branch, else_branch) => {
-                let dest = self.fresh_temp(lower_type(expr.ty));
-                self.lower_if_expr(ir::Place::Local(dest), condition, then_branch, else_branch);
+                let (dest, ()) = self.lower_into_temp(lower_type(expr.ty), |dest, this| {
+                    this.lower_if_expr(ir::Place::Local(dest), condition, then_branch, else_branch)
+                });
                 Some(ir::Expr::load(ir::Place::Local(dest)))
             }
             typed_ast::ExprKind::BuiltinCall(builtin, _, exprs) => match *builtin {
@@ -379,14 +458,16 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                     });
                     Some(ir::Expr::unit_value())
                 }
-                Builtin::IntegerBuiltin(builtin) => match builtin{
-                    IntegerBuiltin::IntMaxValue => Some(ir::Expr::constant(ir::Constant::Int(i64::MAX))),
+                Builtin::IntegerBuiltin(builtin) => match builtin {
+                    IntegerBuiltin::IntMaxValue => {
+                        Some(ir::Expr::constant(ir::Constant::Int(i64::MAX)))
+                    }
                     IntegerBuiltin::WrappingAdd => Some({
-                        let [left,right] = self.lower_exprs_const(exprs);
+                        let [left, right] = self.lower_exprs_const(exprs);
                         ir::Expr::binary(ir::BinaryOp::Add, left, right)
                     }),
                     IntegerBuiltin::OverflowingAdd => Some({
-                        let [left,right] = self.lower_exprs_const(exprs);
+                        let [left, right] = self.lower_exprs_const(exprs);
                         ir::Expr::binary(ir::BinaryOp::AddWithOverflow, left, right)
                     }),
                     IntegerBuiltin::ShiftLeft => todo!("shift left"),
@@ -402,17 +483,20 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             },
             typed_ast::ExprKind::VariantInit(..) => todo!(),
             typed_ast::ExprKind::Function(def_id, generic_args) => {
-                assert!(generic_args.is_empty(), "Cant handle generics yet");
+                if !generic_args.is_empty() {
+                    todo!("handle generics");
+                }
                 Some(ir::Expr::constant(ir::Constant::Function(
                     self.ctxt.expect_body_id(*def_id),
                 )))
             }
             typed_ast::ExprKind::Call(callee, args) => {
-                let tmp = self.fresh_temp(lower_type(expr.ty));
-                self.lower_call(ir::Place::Local(tmp), callee, args);
-                Some(ir::Expr::load(ir::Place::Local(tmp)))
+                let (dest, ()) = self.lower_into_temp(lower_type(expr.ty), |dest, this| {
+                    this.lower_call(ir::Place::Local(dest), callee, args)
+                });
+                Some(ir::Expr::load(ir::Place::Local(dest)))
             }
-            typed_ast::ExprKind::Load(place) => Some(ir::Expr::load(self.lower_place(place))),
+            typed_ast::ExprKind::Load(place) => Some(ir::Expr::load(self.lower_place(place)?)),
             typed_ast::ExprKind::Binary(op, left, right) => {
                 let left = self.lower_expr(left)?;
                 let right = self.lower_expr(right)?;
@@ -435,15 +519,15 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 Some(ir::Expr::binary(op, left, right))
             }
             typed_ast::ExprKind::Logic(logical_op, lhs, rhs) => {
-                let dest = self.fresh_temp(ir::Type::Bool);
-                self.lower_logical(ir::Place::Local(dest), *logical_op, lhs, rhs);
+                let (dest, ()) = self.lower_into_temp(ir::Type::Bool, |dest, this| {
+                    this.lower_logical(ir::Place::Local(dest), *logical_op, lhs, rhs)
+                });
                 Some(ir::Expr::load(ir::Place::Local(dest)))
             }
             typed_ast::ExprKind::For { .. } => todo!(),
             typed_ast::ExprKind::Case(..) => todo!("case exprs"),
             typed_ast::ExprKind::Assign(place, rhs) => {
-                let place = self.lower_place(place);
-                self.lower_expr_into(place, rhs);
+                self.lower_assign(place, rhs);
                 Some(ir::Expr::unit_value())
             }
             typed_ast::ExprKind::Lambda(_) => todo!("lambdas"),
@@ -453,10 +537,30 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                     .map(|expr| self.lower_expr(expr))
                     .collect::<Option<Vec<_>>>()?,
             )),
-            typed_ast::ExprKind::Array(_) => {
-                todo!("arrays")
+            typed_ast::ExprKind::Array(elements) => {
+                let ty = expr.ty.as_array().expect("should be an array");
+                let (dest, ()) = self.lower_into_temp(lower_type(expr.ty), |dest, this| {
+                    this.lower_array(ir::Place::Local(dest), ty, elements);
+                });
+                Some(ir::Expr::load(ir::Place::Local(dest)))
             }
-            typed_ast::ExprKind::NamedRecord(..) => todo!("records"),
+            typed_ast::ExprKind::NamedRecord(_, generic_args, fields) => {
+                if !generic_args.is_empty() {
+                    todo!("handle generic args")
+                }
+                let mut field_map = fields
+                    .iter()
+                    .map(|field_init| Some((field_init.index, self.lower_expr(&field_init.value)?)))
+                    .collect::<Option<HashMap<_, _>>>()?;
+                Some(ir::Expr::aggregate(
+                    ir::AggregateKind::Named,
+                    (0..fields.len()).map(|field| {
+                        field_map
+                            .remove(&FieldId::new(field))
+                            .expect("should have a value for this field")
+                    }),
+                ))
+            }
             typed_ast::ExprKind::While(condition, body) => {
                 self.lower_while_loop(condition, body);
                 Some(ir::Expr::unit_value())
@@ -497,7 +601,12 @@ fn lower_type(ty: Type<'_>) -> ir::Type {
         ),
         TypeKind::Tuple(items) => ir::Type::Tuple(items.iter().copied().map(lower_type).collect()),
         TypeKind::Array(ty) => ir::Type::Array(Box::new(lower_type(*ty))),
-        TypeKind::Named(..) => todo!(),
+        TypeKind::Named(_, _, args) => {
+            if !args.is_empty() {
+                todo!("handle generic types")
+            }
+            ir::Type::Named
+        }
         TypeKind::String => ir::Type::String,
         TypeKind::Box(_) => todo!(),
     }
