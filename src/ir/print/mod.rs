@@ -1,5 +1,6 @@
 use crate::ir::{
     AggregateKind, Allocate, BinaryOp, Body, Call, Constant, Expr, ExprKind, Place, Program, Stmt,
+    Type,
 };
 
 pub struct Print<'a> {
@@ -52,6 +53,8 @@ impl<'a> Print<'a> {
                     BinaryOp::Add => "add",
                     BinaryOp::AddWithOverflow => "add_with_overflow",
                     BinaryOp::Lesser => "lesser",
+                    BinaryOp::Greater => "greater",
+                    BinaryOp::Equals => "equals",
                     BinaryOp::InBounds => "in_bounds",
                 }
                 .to_string();
@@ -86,15 +89,20 @@ impl<'a> Print<'a> {
                     output.push_str("}");
                     output
                 }
-                AggregateKind::Variant => {
-                    let mut output = "v{".to_string();
+                &AggregateKind::Variant(ty, case_id, ref args) => {
+                    let mut output = format!(
+                        "{}{}",
+                        self.program.type_defs[ty].variant_def().cases[case_id].name,
+                        Type::format_generic_args(args, self.program)
+                    );
+                    output.push('(');
                     for (i, value) in fields.iter().enumerate() {
                         if i > 0 {
                             output.push_str(",");
                         }
                         output.push_str(&format!("._{i} = {}", self.format_value(value)));
                     }
-                    output.push_str("}");
+                    output.push_str(")");
                     output
                 }
             },
@@ -102,16 +110,7 @@ impl<'a> Print<'a> {
                 Constant::Bool(value) => value.to_string(),
                 Constant::Function(id, args) => {
                     let mut output = self.program.bodies[*id].name.clone();
-                    if !args.is_empty() {
-                        output.push('[');
-                        for (i, arg) in args.iter().enumerate() {
-                            if i > 0 {
-                                output.push_str(", ");
-                            }
-                            output.push_str(&format!("{arg:?}"));
-                        }
-                        output.push(']');
-                    }
+                    output.push_str(&Type::format_generic_args(args, self.program));
                     output
                 }
                 Constant::Int(value) => value.to_string(),

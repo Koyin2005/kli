@@ -56,13 +56,15 @@ impl Expr {
 pub enum AggregateKind {
     Tuple,
     Named,
-    Variant,
+    Variant(TypeDefId, CaseId, Vec<Type>),
 }
 #[derive(Debug, Clone)]
 pub enum BinaryOp {
     Add,
     AddWithOverflow,
     Lesser,
+    Greater,
+    Equals,
     InBounds,
 }
 #[derive(Debug, Clone)]
@@ -156,6 +158,25 @@ pub enum Type {
     Array(Box<Type>),
     Named(TypeDefId, Vec<Type>),
 }
+impl Type {
+    pub fn format_type(&self, _: &Program) -> String {
+        format!("{self:?}")
+    }
+    pub fn format_generic_args(args: &[Self], program: &Program) -> String {
+        if args.is_empty() {
+            return String::new();
+        }
+        let mut output = "[".to_string();
+        for (i, arg) in args.iter().enumerate() {
+            if i > 0 {
+                output.push(',');
+            }
+            output.push_str(&arg.format_type(program));
+        }
+        output.push(']');
+        output
+    }
+}
 #[derive(Debug)]
 pub struct LocalInfo {
     pub name: Option<Symbol>,
@@ -172,7 +193,6 @@ pub struct Body {
     pub body: Vec<Stmt>,
 }
 pub struct CaseField {
-    pub constructor: BodyId,
     pub ty: Type,
 }
 pub struct CaseDef {
@@ -184,8 +204,17 @@ pub struct VariantDef {
 }
 define_id!(BodyId);
 pub enum TypeDef {
-    Variant,
+    Variant(VariantDef),
     Struct,
+}
+impl TypeDef {
+    #[track_caller]
+    pub fn variant_def(&self) -> &VariantDef {
+        let Self::Variant(variant_def) = self else {
+            panic!("Should be a variant def")
+        };
+        variant_def
+    }
 }
 #[derive(Default)]
 pub struct Program {

@@ -31,12 +31,28 @@ impl LoweringCtxt {
         self.program
     }
     fn type_def_id<'ctxt>(&mut self, id: DefId, ctxt: CtxtRef<'ctxt>) -> TypeDefId {
-        *self.type_defs.entry(id).or_insert_with(|| {
-            self.program.type_defs.push(match ctxt.type_def(id).kind {
+        if let Some(id) = self.type_defs.get(&id) {
+            return *id;
+        }
+        let ty_id = {
+            let type_def = match ctxt.type_def(id).kind {
                 TypeDefKind::Record(_) => TypeDef::Struct,
-                TypeDefKind::Variant(_) => TypeDef::Variant,
-            })
-        })
+                TypeDefKind::Variant(cases) => TypeDef::Variant(ir::VariantDef {
+                    cases: cases
+                        .into_iter()
+                        .map(|case| ir::CaseDef {
+                            name: case.name.to_string(),
+                            field: case.field.map(|case| ir::CaseField {
+                                ty: self.lower_type(ctxt.type_of(case.id).skip(), ctxt),
+                            }),
+                        })
+                        .collect(),
+                }),
+            };
+            self.program.type_defs.push(type_def)
+        };
+        self.type_defs.insert(id, ty_id);
+        ty_id
     }
     fn lower_generic_args<'ctxt>(
         &mut self,
@@ -648,7 +664,18 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                     BuiltinResult::Value(value) => Some(value),
                 }
             }
-            typed_ast::ExprKind::VariantInit(..) => todo!(),
+            typed_ast::ExprKind::VariantInit(def_id, case_id, args, field) => Some({
+                let ty_id = self.lower_ctxt.type_def_id(*def_id, self.ctxt);
+                let args = self.lower_ctxt.lower_generic_args(args, self.ctxt);
+                ir::Expr::aggregate(
+                    ir::AggregateKind::Variant(ty_id, *case_id, args),
+                    if let Some(field) = field {
+                        Some(self.lower_expr(field)?)
+                    } else {
+                        None
+                    },
+                )
+            }),
             typed_ast::ExprKind::Function(def_id, generic_args) => {
                 let body_id = if let Some(&id) = self.lower_ctxt.id_map.get(def_id) {
                     id
@@ -675,11 +702,12 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 let body_id = if let Some(&id) = self.lower_ctxt.id_map.get(&id) {
                     id
                 } else {
+                    let args = self.ctxt.generics(id).instantiate_identity(self.ctxt);
                     let params = case_info
                         .field
                         .iter()
                         .map(|field| {
-                            let ty = field.type_of(args, self.ctxt);
+                            let ty = field.type_of(&args, self.ctxt);
                             typed_ast::Param {
                                 name: Ident::new(field.name, self.ctxt.span(field.id)),
                                 ty,
@@ -697,7 +725,11 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                         self.functions,
                     );
                     let return_value = ir::Expr::aggregate(
-                        ir::AggregateKind::Variant,
+                        ir::AggregateKind::Variant(
+                            lower_body.lower_ctxt.type_def_id(*ty, self.ctxt),
+                            *case,
+                            lower_body.lower_ctxt.lower_generic_args(&args, self.ctxt),
+                        ),
                         (0..param_count)
                             .map(|i| ir::Expr::load(ir::Place::Local(ir::Local::new(i)))),
                     );
@@ -734,6 +766,8 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                         ));
                     }
                     BinaryOp::Lesser => ir::BinaryOp::Lesser,
+                    BinaryOp::Equals => ir::BinaryOp::Equals,
+                    BinaryOp::Greater => ir::BinaryOp::Greater,
                     op => todo!("binary op {:?}", op),
                 };
                 Some(ir::Expr::binary(op, left, right))
