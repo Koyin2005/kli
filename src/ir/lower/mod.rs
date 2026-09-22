@@ -383,7 +383,8 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             | typed_ast::ExprKind::Load(..)
             | typed_ast::ExprKind::Case(..)
             | typed_ast::ExprKind::Binary(..)
-            | typed_ast::ExprKind::Assign(..) => {
+            | typed_ast::ExprKind::Assign(..)
+            | typed_ast::ExprKind::VariantConstructor { .. } => {
                 let result = self.lower_expr(expr);
                 if let Some(result) = result {
                     self.push_stmt(ir::Stmt::Assign(dest, result));
@@ -561,6 +562,9 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                     self.lower_ctxt.expect_body_id(*def_id),
                     args,
                 )))
+            }
+            typed_ast::ExprKind::VariantConstructor { ty, args, case } => {
+                todo!("Variant constructor")
             }
             typed_ast::ExprKind::Call(callee, args) => {
                 let ty = self.lower_type(expr.ty);

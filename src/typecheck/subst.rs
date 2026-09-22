@@ -132,7 +132,8 @@ impl<'a, 'ctxt> TypeSubst<'a, 'ctxt> {
                     self.subst_expr(&mut arm.body);
                 }
             }
-            ExprKind::Function(.., args) => {
+            ExprKind::Function(.., args) | 
+            ExprKind::VariantConstructor { args,..} => {
                 self.subst_generic_args(args);
             }
             ExprKind::BuiltinCall(.., generic_args, args) => {

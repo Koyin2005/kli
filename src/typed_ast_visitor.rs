@@ -106,7 +106,8 @@ where
         | ExprKind::String(_)
         | ExprKind::Function(..)
         | ExprKind::Unit
-        | ExprKind::Panic => (),
+        | ExprKind::Panic
+        | ExprKind::VariantConstructor { .. } => (),
         ExprKind::BuiltinCall(.., exprs) | ExprKind::Tuple(exprs) | ExprKind::Array(exprs) => {
             for expr in exprs {
                 v.visit_expr(expr);
