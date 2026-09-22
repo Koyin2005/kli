@@ -223,6 +223,7 @@ impl<'a> Print<'a> {
         }
     }
     pub fn print_body(mut self, body: &Body) {
+        self.write(&body.name);
         self.write("(");
         for (i, param) in body.locals.as_slice()[0..body.param_count as usize]
             .iter()
