@@ -43,9 +43,9 @@ impl LoweringCtxt {
             TypeKind::Bool => ir::Type::Bool,
             TypeKind::Char => todo!("Chars"),
             TypeKind::Int => ir::Type::Int,
-            TypeKind::Infer(_) => todo!(),
-            TypeKind::Unknown => todo!(),
-            TypeKind::IntVar(_) => todo!(),
+            TypeKind::Infer(_) | TypeKind::Unknown | TypeKind::IntVar(_) => {
+                unreachable!("types should be fully inferred, and have no errors")
+            }
             TypeKind::Never => todo!(),
             TypeKind::Param(_, index) => {
                 ir::Type::Param((*index).try_into().expect("too many generic params"))
