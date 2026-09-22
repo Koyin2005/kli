@@ -260,7 +260,6 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         match &expr.kind {
             ExprKind::If(..)
             | ExprKind::Block(_)
-            | ExprKind::While(..)
             | ExprKind::String(_)
             | ExprKind::Bool(_)
             | ExprKind::Int(_)
@@ -305,6 +304,9 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                         self.push_tmp_assign(ty, value);
                     }
                 }
+            }
+            ExprKind::While(condition, body) => {
+                self.lower_while_loop(condition, body);
             }
         }
     }
@@ -526,13 +528,13 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             | typed_ast::ExprKind::Case(..)
             | typed_ast::ExprKind::Binary(..)
             | typed_ast::ExprKind::Assign(..)
-            | typed_ast::ExprKind::VariantConstructor { .. } => {
+            | typed_ast::ExprKind::VariantConstructor { .. }
+            | typed_ast::ExprKind::While(..) => {
                 let result = self.lower_expr(expr);
                 if let Some(result) = result {
                     self.push_stmt(ir::Stmt::Assign(dest, result));
                 }
             }
-            typed_ast::ExprKind::While(..) => todo!(),
             typed_ast::ExprKind::NeverToAny(..) => todo!("idk"),
             typed_ast::ExprKind::Call(callee, args) => self.lower_call(dest, callee, args),
             typed_ast::ExprKind::Logic(op, lhs, rhs) => {

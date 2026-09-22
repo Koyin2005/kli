@@ -1,6 +1,3 @@
-use crate::{
-    mir::build::Builder,
-};
+use crate::mir::build::Builder;
 
-impl Builder<'_, '_> {
-}
+impl Builder<'_, '_> {}
