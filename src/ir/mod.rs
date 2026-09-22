@@ -152,11 +152,14 @@ pub enum Type {
     Int,
     Bool,
     String,
+    Char,
+    Never,
     Param(u32),
     Function(Vec<Type>, Box<Type>),
     Tuple(Vec<Type>),
     Array(Box<Type>),
     Named(TypeDefId, Vec<Type>),
+    Box(Box<Type>)
 }
 impl Type {
     pub fn format_type(&self, _: &Program) -> String {

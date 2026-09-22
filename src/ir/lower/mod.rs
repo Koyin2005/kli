@@ -66,12 +66,12 @@ impl LoweringCtxt {
     fn lower_type<'ctxt>(&mut self, ty: Type<'_>, ctxt: CtxtRef<'ctxt>) -> ir::Type {
         match ty.kind() {
             TypeKind::Bool => ir::Type::Bool,
-            TypeKind::Char => todo!("Chars"),
+            TypeKind::Char => ir::Type::Char,
             TypeKind::Int => ir::Type::Int,
             TypeKind::Infer(_) | TypeKind::Unknown | TypeKind::IntVar(_) => {
                 unreachable!("types should be fully inferred, and have no errors")
             }
-            TypeKind::Never => todo!(),
+            TypeKind::Never => ir::Type::Never,
             TypeKind::Param(_, index) => {
                 ir::Type::Param((*index).try_into().expect("too many generic params"))
             }
@@ -97,7 +97,7 @@ impl LoweringCtxt {
                 ir::Type::Named(id, self.lower_generic_args(args, ctxt))
             }
             TypeKind::String => ir::Type::String,
-            TypeKind::Box(_) => todo!(),
+            TypeKind::Box(ty) => ir::Type::Box(Box::new(self.lower_type(*ty, ctxt))),
         }
     }
 }
