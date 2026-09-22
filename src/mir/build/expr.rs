@@ -454,7 +454,7 @@ impl<'mir, 'ctxt> Builder<'mir, 'ctxt> {
                 );
                 Value::Reg(record)
             }
-            ExprKind::While(..) | ExprKind::For { .. } | ExprKind::Assign(..) => {
+            ExprKind::While(..) | ExprKind::Assign(..) => {
                 self.expr_stmt(expr);
                 Value::Unit
             }

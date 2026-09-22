@@ -306,7 +306,6 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                     }
                 }
             }
-            ExprKind::For { .. } => todo!(),
         }
     }
     fn lower_stmt(&mut self, stmt: &Stmt<'ctxt>) {
@@ -533,7 +532,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                     self.push_stmt(ir::Stmt::Assign(dest, result));
                 }
             }
-            typed_ast::ExprKind::For { .. } | typed_ast::ExprKind::While(..) => todo!(),
+            typed_ast::ExprKind::While(..) => todo!(),
             typed_ast::ExprKind::NeverToAny(..) => todo!("idk"),
             typed_ast::ExprKind::Call(callee, args) => self.lower_call(dest, callee, args),
             typed_ast::ExprKind::Logic(op, lhs, rhs) => {
@@ -778,7 +777,6 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 });
                 Some(ir::Expr::load(ir::Place::Local(dest)))
             }
-            typed_ast::ExprKind::For { .. } => todo!(),
             typed_ast::ExprKind::Case(..) => todo!("case exprs"),
             typed_ast::ExprKind::Assign(place, rhs) => {
                 self.lower_assign(place, rhs);

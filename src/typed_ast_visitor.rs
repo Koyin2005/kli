@@ -136,16 +136,6 @@ where
             v.visit_place(place);
             v.visit_expr(value);
         }
-        ExprKind::For {
-            pattern,
-            iterator,
-            iterator_type: _,
-            body,
-        } => {
-            v.visit_expr(iterator);
-            v.visit_pattern(pattern);
-            v.visit_expr(body);
-        }
         ExprKind::Lambda(_) => {}
         ExprKind::Case(matched, arms) => {
             v.visit_expr(matched);

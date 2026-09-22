@@ -29,14 +29,6 @@ impl<'ctxt, 'mir> Builder<'mir, 'ctxt> {
             ExprKind::Unsafe(expr) => {
                 self.expr_stmt(expr);
             }
-            ExprKind::For {
-                pattern,
-                iterator,
-                body,
-                iterator_type,
-            } => {
-                self.for_loop(pattern, iterator, iterator_type, body);
-            }
             ExprKind::While(condition, body) => {
                 let loop_start = self.goto_to_new_block(expr.loc);
                 let loop_condition = self.expr_value(condition);

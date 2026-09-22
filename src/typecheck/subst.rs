@@ -120,7 +120,6 @@ impl<'a, 'ctxt> TypeSubst<'a, 'ctxt> {
             ExprKind::Load(place) => {
                 self.subst_place(place);
             }
-            ExprKind::For { iterator_type, .. } => match *iterator_type {},
             ExprKind::Assign(place, expr) => {
                 self.subst_place(place);
                 self.subst_expr(expr);

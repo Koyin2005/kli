@@ -152,12 +152,6 @@ pub enum ExprKind<'ctxt> {
     Load(Place<'ctxt>),
     Binary(BinaryOp, Box<Expr<'ctxt>>, Box<Expr<'ctxt>>),
     Logic(LogicalOp, Box<Expr<'ctxt>>, Box<Expr<'ctxt>>),
-    For {
-        pattern: Box<Pattern<'ctxt>>,
-        iterator: Box<Expr<'ctxt>>,
-        iterator_type: IteratorType,
-        body: Box<Expr<'ctxt>>,
-    },
     Case(Box<Expr<'ctxt>>, Vec<CaseArm<'ctxt>>),
     Assign(Box<Place<'ctxt>>, Box<Expr<'ctxt>>),
     Lambda(Box<Lambda<'ctxt>>),
