@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     CtxtRef, Symbol,
@@ -15,19 +15,13 @@ use crate::{
     },
     types::{GenericArgs, Type, TypeKind},
 };
-
+type Functions<'a, 'ctxt> = BTreeMap<DefId, &'a typed_ast::Function<'ctxt>>;
 struct LoweringCtxt {
     id_map: HashMap<DefId, BodyId>,
     type_defs: HashMap<DefId, TypeDefId>,
     program: ir::Program,
 }
 impl LoweringCtxt {
-    fn expect_body_id(&self, id: DefId) -> BodyId {
-        let Some(&id) = self.id_map.get(&id) else {
-            panic!("should have an id for '{:?}'", id)
-        };
-        id
-    }
     fn type_def_id(&mut self, id: DefId) -> TypeDefId {
         let len = self.type_defs.len();
         *self
@@ -86,6 +80,7 @@ pub(super) struct LowerFunction<'a, 'ctxt> {
     body: ir::Body,
     stmts: Vec<ir::Stmt>,
     loop_label: u32,
+    functions: &'a Functions<'a, 'ctxt>,
 }
 
 impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
@@ -95,6 +90,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         id: DefId,
         params: impl IntoIterator<Item = &'b typed_ast::Param<'ctxt>>,
         return_type: Type<'ctxt>,
+        functions: &'a Functions<'a, 'ctxt>,
     ) -> Self
     where
         'ctxt: 'b,
@@ -114,6 +110,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         }
 
         Self {
+            functions,
             def_id: id,
             loop_label: 0,
             vars,
@@ -562,11 +559,22 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             },
             typed_ast::ExprKind::VariantInit(..) => todo!(),
             typed_ast::ExprKind::Function(def_id, generic_args) => {
+                let body_id = if let Some(&id) = self.lower_ctxt.id_map.get(def_id) {
+                    id
+                } else {
+                    let function = self.functions[def_id];
+                    LowerFunction::new(
+                        self.lower_ctxt,
+                        self.ctxt,
+                        *def_id,
+                        function.params.iter(),
+                        function.return_type,
+                        self.functions,
+                    )
+                    .lower(function.body.as_ref())
+                };
                 let args = self.lower_ctxt.lower_generic_args(generic_args);
-                Some(ir::Expr::constant(ir::Constant::Function(
-                    self.lower_ctxt.expect_body_id(*def_id),
-                    args,
-                )))
+                Some(ir::Expr::constant(ir::Constant::Function(body_id, args)))
             }
             typed_ast::ExprKind::VariantConstructor { ty, args, case } => {
                 let type_def = self.ctxt.type_def(*ty);
@@ -595,6 +603,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                         id,
                         params.iter(),
                         Type::named(self.ctxt, *ty, name, args.clone()),
+                        self.functions,
                     );
                     let return_value = ir::Expr::aggregate(
                         ir::AggregateKind::Variant,
@@ -695,40 +704,38 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         self.lower_ctxt.id_map.insert(self.def_id, body_id);
         body_id
     }
-    pub fn lower(mut self, body: Option<&'_ typed_ast::Expr<'ctxt>>) {
+    pub fn lower(mut self, body: Option<&'_ typed_ast::Expr<'ctxt>>) -> BodyId {
         if let Some(expr) = body
             && let Some(result) = self.lower_expr(&expr)
         {
             self.push_stmt(ir::Stmt::Return(result));
         }
-        self.finish();
+        self.finish()
     }
 }
 pub fn lower_program<'a, 'ctxt: 'a>(
     ctxt: CtxtRef<'ctxt>,
-    functions: impl IntoIterator<Item = (DefId, &'a typed_ast::Function<'ctxt>)> + Clone,
+    functions: Functions<'a,'ctxt>,
 ) -> ir::Program {
-    let id_map = functions
-        .clone()
-        .into_iter()
-        .enumerate()
-        .map(|(i, (id, _))| (id, BodyId::new(i)))
-        .collect::<HashMap<_, _>>();
     let mut lowering_ctxt = LoweringCtxt {
-        id_map,
+        id_map: HashMap::new(),
         type_defs: HashMap::new(),
         program: ir::Program {
             bodies: Default::default(),
         },
     };
 
-    for (id, function) in functions {
+    for (&id, &function) in &functions {
+        if lowering_ctxt.id_map.contains_key(&id) {
+            continue;
+        }
         LowerFunction::new(
             &mut lowering_ctxt,
             ctxt,
             id,
             function.params.iter(),
             function.return_type,
+            &functions,
         )
         .lower(function.body.as_ref());
     }

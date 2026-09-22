@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use kli::{
     Arenas,
     builtin_check::BuiltinCheck,
@@ -58,7 +60,8 @@ fn main() {
                 .functions
                 .iter()
                 .map(|(id, function)| (*id, function))
-                .filter(|(id, _)| ctxt.builtin_for(*id).is_none()),
+                .filter(|(id, _)| ctxt.builtin_for(*id).is_none())
+                .collect::<BTreeMap<_, _>>(),
         );
         let _program = codegen::vm::codegen(program);
         if true {
