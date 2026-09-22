@@ -141,7 +141,6 @@ pub enum Stmt {
     Panic,
     PanicIf(Expr),
     Print { value: Expr, is_err: bool },
-    Block(Vec<Stmt>),
     Loop(LoopLabel, Vec<Stmt>),
     Break(LoopLabel),
     If(Expr, Vec<Stmt>, Vec<Stmt>),
