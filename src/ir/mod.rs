@@ -7,6 +7,7 @@ pub enum Constant {
     Bool(bool),
     Function(BodyId, Vec<Type>),
     String(Symbol),
+    Char(char),
 }
 #[derive(Debug, Clone)]
 pub struct Expr {

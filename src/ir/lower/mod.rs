@@ -644,7 +644,9 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             typed_ast::ExprKind::Int(value) => Some(ir::Expr::constant(ir::Constant::Int(
                 (*value).try_into().expect("too big"),
             ))),
-            typed_ast::ExprKind::Char(_) => todo!("chars"),
+            typed_ast::ExprKind::Char(value) => {
+                Some(ir::Expr::constant(ir::Constant::Char(*value)))
+            }
             typed_ast::ExprKind::Unit => Some(ir::Expr::unit_value()),
             typed_ast::ExprKind::Err => unreachable!(),
             typed_ast::ExprKind::Panic => {

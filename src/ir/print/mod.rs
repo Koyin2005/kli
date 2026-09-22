@@ -115,6 +115,7 @@ impl<'a> Print<'a> {
                 }
                 Constant::Int(value) => value.to_string(),
                 Constant::String(s) => s.with_str(|s| format!("\"{}\"", s.escape_debug())),
+                Constant::Char(value) => format!("{:?}", value),
             },
             ExprKind::Discriminant(_) => todo!(),
         }
