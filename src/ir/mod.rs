@@ -171,7 +171,24 @@ pub struct Body {
     pub locals: IndexVec<Local, LocalInfo>,
     pub body: Vec<Stmt>,
 }
+pub struct CaseField {
+    pub constructor: BodyId,
+    pub ty: Type,
+}
+pub struct CaseDef {
+    pub name: String,
+    pub field: Option<CaseField>,
+}
+pub struct VariantDef {
+    pub cases: IndexVec<CaseId, CaseDef>,
+}
 define_id!(BodyId);
+pub enum TypeDef {
+    Variant,
+    Struct,
+}
+#[derive(Default)]
 pub struct Program {
+    pub type_defs: IndexVec<TypeDefId, TypeDef>,
     pub bodies: IndexVec<BodyId, Body>,
 }

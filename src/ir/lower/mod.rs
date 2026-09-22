@@ -4,10 +4,11 @@ use crate::{
     CtxtRef, Symbol,
     ast::Mutable,
     builtins::{Builtin, IntegerBuiltin},
+    collect::TypeDefKind,
     def_ids::DefId,
     ident::Ident,
     index_vec::IndexVec,
-    ir::{self, BodyId, Local, TypeDefId, print::Print},
+    ir::{self, BodyId, Local, TypeDef, TypeDefId, print::Print},
     resolved_ast::{Var, VarId},
     typed_ast::{
         self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern, PatternKind, Place, PlaceKind,
@@ -26,19 +27,27 @@ struct LoweringCtxt {
     program: ir::Program,
 }
 impl LoweringCtxt {
-    fn type_def_id(&mut self, id: DefId) -> TypeDefId {
-        let len = self.type_defs.len();
-        *self
-            .type_defs
-            .entry(id)
-            .or_insert_with(|| TypeDefId::new(len))
+    fn finish(self) -> ir::Program {
+        self.program
     }
-    fn lower_generic_args(&mut self, args: &GenericArgs<'_>) -> Vec<ir::Type> {
+    fn type_def_id<'ctxt>(&mut self, id: DefId, ctxt: CtxtRef<'ctxt>) -> TypeDefId {
+        *self.type_defs.entry(id).or_insert_with(|| {
+            self.program.type_defs.push(match ctxt.type_def(id).kind {
+                TypeDefKind::Record(_) => TypeDef::Struct,
+                TypeDefKind::Variant(_) => TypeDef::Variant,
+            })
+        })
+    }
+    fn lower_generic_args<'ctxt>(
+        &mut self,
+        args: &GenericArgs<'_>,
+        ctxt: CtxtRef<'ctxt>,
+    ) -> Vec<ir::Type> {
         args.iter()
-            .map(|arg| self.lower_type(arg.expect_ty()))
+            .map(|arg| self.lower_type(arg.expect_ty(), ctxt))
             .collect()
     }
-    fn lower_type(&mut self, ty: Type<'_>) -> ir::Type {
+    fn lower_type<'ctxt>(&mut self, ty: Type<'_>, ctxt: CtxtRef<'ctxt>) -> ir::Type {
         match ty.kind() {
             TypeKind::Bool => ir::Type::Bool,
             TypeKind::Char => todo!("Chars"),
@@ -55,21 +64,21 @@ impl LoweringCtxt {
                     .params
                     .iter()
                     .copied()
-                    .map(|ty| self.lower_type(ty))
+                    .map(|ty| self.lower_type(ty, ctxt))
                     .collect(),
-                Box::new(self.lower_type(function_sig.return_type)),
+                Box::new(self.lower_type(function_sig.return_type, ctxt)),
             ),
             TypeKind::Tuple(items) => ir::Type::Tuple(
                 items
                     .iter()
                     .copied()
-                    .map(|ty| self.lower_type(ty))
+                    .map(|ty| self.lower_type(ty, ctxt))
                     .collect(),
             ),
-            TypeKind::Array(ty) => ir::Type::Array(Box::new(self.lower_type(*ty))),
+            TypeKind::Array(ty) => ir::Type::Array(Box::new(self.lower_type(*ty, ctxt))),
             TypeKind::Named(id, _, args) => {
-                let id = self.type_def_id(*id);
-                ir::Type::Named(id, self.lower_generic_args(args))
+                let id = self.type_def_id(*id, ctxt);
+                ir::Type::Named(id, self.lower_generic_args(args, ctxt))
             }
             TypeKind::String => ir::Type::String,
             TypeKind::Box(_) => todo!(),
@@ -107,7 +116,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 vars.insert(var, local);
             }
             locals.push(ir::LocalInfo {
-                ty: lower_ctxt.lower_type(param.ty),
+                ty: lower_ctxt.lower_type(param.ty, ctxt),
                 is_mutable: true,
                 name: Some(param.name.symbol),
             });
@@ -122,7 +131,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 name: ctxt.expect_ident(id).symbol.to_string(),
                 generic_params: ctxt.generics(id).names().collect(),
                 param_count: locals.len() as u32,
-                return_ty: lower_ctxt.lower_type(return_type),
+                return_ty: lower_ctxt.lower_type(return_type, ctxt),
                 locals,
                 body: Vec::new(),
             },
@@ -164,7 +173,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         })
     }
     fn lower_type(&mut self, ty: Type<'_>) -> ir::Type {
-        self.lower_ctxt.lower_type(ty)
+        self.lower_ctxt.lower_type(ty, self.ctxt)
     }
     fn lower_expr_to_place(&mut self, expr: &Expr<'ctxt>) -> ir::Place {
         if let Some(result) = self.lower_expr(expr) {
@@ -297,7 +306,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
     fn assign_to_pattern(&mut self, pattern: &Pattern<'ctxt>, expr: &Expr<'ctxt>) {
         match pattern.kind {
             PatternKind::Binding(mutable, var, ty) => {
-                let ty = self.lower_ctxt.lower_type(ty);
+                let ty = self.lower_type(ty);
                 let local = self.fresh_local_for_var(var, matches!(mutable, Mutable::Mutable), ty);
                 self.lower_expr_into(ir::Place::Local(local), expr);
             }
@@ -436,7 +445,11 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
     }
     fn lower_assign(&mut self, place: &Place<'ctxt>, rhs: &Expr<'ctxt>) {
         match &place.kind {
-            PlaceKind::Var(_)|PlaceKind::Field(..)|PlaceKind::Deref(_) | PlaceKind::Upvar(..) | PlaceKind::Invalid => {
+            PlaceKind::Var(_)
+            | PlaceKind::Field(..)
+            | PlaceKind::Deref(_)
+            | PlaceKind::Upvar(..)
+            | PlaceKind::Invalid => {
                 let Some(place) = self.lower_place(place) else {
                     return;
                 };
@@ -651,7 +664,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                     )
                     .lower(function.body.as_ref())
                 };
-                let args = self.lower_ctxt.lower_generic_args(generic_args);
+                let args = self.lower_ctxt.lower_generic_args(generic_args, self.ctxt);
                 Some(ir::Expr::constant(ir::Constant::Function(body_id, args)))
             }
             typed_ast::ExprKind::VariantConstructor { ty, args, case } => {
@@ -693,7 +706,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 };
                 Some(ir::Expr::constant(ir::Constant::Function(
                     body_id,
-                    self.lower_ctxt.lower_generic_args(args),
+                    self.lower_ctxt.lower_generic_args(args, self.ctxt),
                 )))
             }
             typed_ast::ExprKind::Call(callee, args) => {
@@ -798,9 +811,7 @@ pub fn lower_program<'a, 'ctxt: 'a>(
     let mut lowering_ctxt = LoweringCtxt {
         id_map: HashMap::new(),
         type_defs: HashMap::new(),
-        program: ir::Program {
-            bodies: Default::default(),
-        },
+        program: ir::Program::default(),
     };
 
     for (&id, &function) in &functions {
@@ -817,7 +828,7 @@ pub fn lower_program<'a, 'ctxt: 'a>(
         )
         .lower(function.body.as_ref());
     }
-    let program = lowering_ctxt.program;
+    let program = lowering_ctxt.finish();
     for body in &program.bodies {
         Print::new(&program, std::io::stdout()).print_body(body);
     }
