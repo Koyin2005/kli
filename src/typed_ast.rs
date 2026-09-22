@@ -21,6 +21,15 @@ pub struct Pattern<'ctxt> {
     pub loc: SrcLoc,
     pub kind: PatternKind<'ctxt>,
 }
+impl<'ctxt> Pattern<'ctxt> {
+    pub fn binding(ty: Type<'ctxt>, loc: SrcLoc, mutable: Mutable, var: Var) -> Self {
+        Self {
+            ty,
+            loc,
+            kind: PatternKind::Binding(mutable, var, ty),
+        }
+    }
+}
 #[derive(Debug)]
 pub enum PatternKind<'ctxt> {
     Err,
@@ -42,6 +51,15 @@ pub struct Place<'ctxt> {
     pub ty: Type<'ctxt>,
     pub loc: SrcLoc,
     pub kind: PlaceKind<'ctxt>,
+}
+impl<'ctxt> Place<'ctxt> {
+    pub fn var(ty: Type<'ctxt>, loc: SrcLoc, var: Var) -> Self {
+        Self {
+            ty,
+            loc,
+            kind: PlaceKind::Var(var),
+        }
+    }
 }
 #[derive(Debug)]
 pub enum PlaceKind<'ctxt> {
@@ -85,6 +103,20 @@ pub struct Stmt<'ctxt> {
     pub loc: SrcLoc,
     pub kind: StmtKind<'ctxt>,
 }
+impl<'ctxt> Stmt<'ctxt> {
+    pub fn expr(loc: SrcLoc, expr: Expr<'ctxt>) -> Self {
+        Self {
+            loc,
+            kind: StmtKind::Expr(expr),
+        }
+    }
+    pub fn let_stmt(loc: SrcLoc, pattern: Pattern<'ctxt>, value: Expr<'ctxt>) -> Self {
+        Self {
+            loc,
+            kind: StmtKind::Let(LetBinding { pattern, value }),
+        }
+    }
+}
 #[derive(Debug)]
 pub struct BlockBody<'ctxt> {
     pub stmts: Vec<Stmt<'ctxt>>,
@@ -95,6 +127,39 @@ pub struct Expr<'ctxt> {
     pub ty: Type<'ctxt>,
     pub loc: SrcLoc,
     pub kind: ExprKind<'ctxt>,
+}
+impl<'ctxt> Expr<'ctxt> {
+    pub fn assign(ty: Type<'ctxt>, loc: SrcLoc, left: Place<'ctxt>, right: Self) -> Self {
+        Self {
+            ty,
+            loc,
+            kind: ExprKind::Assign(Box::new(left), Box::new(right)),
+        }
+    }
+    pub fn binary(ty: Type<'ctxt>, loc: SrcLoc, op: BinaryOp, left: Self, right: Self) -> Self {
+        Self {
+            ty,
+            loc,
+            kind: ExprKind::Binary(op, Box::new(left), Box::new(right)),
+        }
+    }
+    pub fn var(ty: Type<'ctxt>, loc: SrcLoc, var: Var) -> Self {
+        Self {
+            ty,
+            loc,
+            kind: ExprKind::Load(Place::var(ty, loc, var)),
+        }
+    }
+    pub fn block(ty: Type<'ctxt>, loc: SrcLoc, stmts: Vec<Stmt<'ctxt>>, result: Self) -> Self {
+        Self {
+            ty,
+            loc,
+            kind: ExprKind::Block(BlockBody {
+                stmts,
+                expr: Box::new(result),
+            }),
+        }
+    }
 }
 define_id!(FieldId);
 impl FieldId {
