@@ -223,7 +223,10 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 IntegerBuiltin::WrappingMul => todo!("wrapping mul"),
                 IntegerBuiltin::OverflowingMul => todo!("oveflowing mul"),
             },
-            Builtin::Len => todo!("Array len"),
+            Builtin::Len => BuiltinResult::Value(ir::Expr::len({
+                let [expr] = self.lower_exprs_const(args);
+                expr
+            })),
             Builtin::StringLen => todo!("String len"),
             Builtin::ReadLine => todo!("read len"),
         }
