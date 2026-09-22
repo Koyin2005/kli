@@ -532,13 +532,13 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             | typed_ast::ExprKind::Binary(..)
             | typed_ast::ExprKind::Assign(..)
             | typed_ast::ExprKind::VariantConstructor { .. }
-            | typed_ast::ExprKind::While(..) => {
+            | typed_ast::ExprKind::While(..)
+            | typed_ast::ExprKind::NeverToAny(_) => {
                 let result = self.lower_expr(expr);
                 if let Some(result) = result {
                     self.push_stmt(ir::Stmt::Assign(dest, result));
                 }
             }
-            typed_ast::ExprKind::NeverToAny(..) => todo!("idk"),
             typed_ast::ExprKind::Call(callee, args) => self.lower_call(dest, callee, args),
             typed_ast::ExprKind::Logic(op, lhs, rhs) => {
                 self.lower_logical(dest, *op, lhs, rhs);
