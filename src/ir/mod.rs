@@ -46,6 +46,11 @@ impl Expr {
             kind: ExprKind::Load(place),
         }
     }
+    pub fn load_local(local: Local) -> Self {
+        Self {
+            kind: ExprKind::Load(Place::Local(local)),
+        }
+    }
     pub fn binary(op: BinaryOp, left: Self, right: Self) -> Self {
         Self {
             kind: ExprKind::BinaryOp(op, Box::new(left), Box::new(right)),

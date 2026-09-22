@@ -257,7 +257,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 let (tmp, ()) = self.lower_into_temp(ir::Type::String, |tmp, this| {
                     this.push_stmt(ir::Stmt::ReadLine(ir::Place::Local(tmp)));
                 });
-                BuiltinResult::Value(ir::Expr::load(ir::Place::Local(tmp)))
+                BuiltinResult::Value(ir::Expr::load_local(tmp))
             }
         }
     }
@@ -379,9 +379,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         match &index.kind {
             ExprKind::Load(place) => {
                 if let PlaceKind::Index(..) = place.kind {
-                    Some(ir::Expr::load(ir::Place::Local(
-                        self.lower_expr_to_temp(index),
-                    )))
+                    Some(ir::Expr::load_local(self.lower_expr_to_temp(index)))
                 } else {
                     Some(ir::Expr::load(self.lower_place(place)?))
                 }
@@ -391,7 +389,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             ))),
             _ => {
                 let index = self.lower_expr_to_temp(index);
-                Some(ir::Expr::load(ir::Place::Local(index)))
+                Some(ir::Expr::load_local(index))
             }
         }
     }
@@ -662,7 +660,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 let (dest, ()) = self.lower_into_temp(ty, |dest, this| {
                     this.lower_if_expr(ir::Place::Local(dest), condition, then_branch, else_branch)
                 });
-                Some(ir::Expr::load(ir::Place::Local(dest)))
+                Some(ir::Expr::load_local(dest))
             }
             typed_ast::ExprKind::BuiltinCall(builtin, _, exprs) => {
                 match self.lower_builtin_call(*builtin, exprs) {
@@ -736,8 +734,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                             *case,
                             lower_body.lower_ctxt.lower_generic_args(&args, self.ctxt),
                         ),
-                        (0..param_count)
-                            .map(|i| ir::Expr::load(ir::Place::Local(ir::Local::new(i)))),
+                        (0..param_count).map(|i| ir::Expr::load_local(ir::Local::new(i))),
                     );
                     lower_body.push_stmt(ir::Stmt::Return(return_value));
                     lower_body.finish()
@@ -752,7 +749,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 let (dest, ()) = self.lower_into_temp(ty, |dest, this| {
                     this.lower_call(ir::Place::Local(dest), callee, args)
                 });
-                Some(ir::Expr::load(ir::Place::Local(dest)))
+                Some(ir::Expr::load_local(dest))
             }
             typed_ast::ExprKind::Load(place) => Some(ir::Expr::load(self.lower_place(place)?)),
             typed_ast::ExprKind::Binary(op, left, right) => {
@@ -782,7 +779,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 let (dest, ()) = self.lower_into_temp(ir::Type::Bool, |dest, this| {
                     this.lower_logical(ir::Place::Local(dest), *logical_op, lhs, rhs)
                 });
-                Some(ir::Expr::load(ir::Place::Local(dest)))
+                Some(ir::Expr::load_local(dest))
             }
             typed_ast::ExprKind::Case(..) => todo!("case exprs"),
             typed_ast::ExprKind::Assign(place, rhs) => {
@@ -802,7 +799,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 let (dest, ()) = self.lower_into_temp(ty, |dest, this| {
                     this.lower_array(ir::Place::Local(dest), element_type, elements);
                 });
-                Some(ir::Expr::load(ir::Place::Local(dest)))
+                Some(ir::Expr::load_local(dest))
             }
             typed_ast::ExprKind::NamedRecord(_, generic_args, fields) => {
                 if !generic_args.is_empty() {
