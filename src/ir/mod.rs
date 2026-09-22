@@ -5,7 +5,7 @@ mod print;
 pub enum Constant {
     Int(i64),
     Bool(bool),
-    Function(BodyId),
+    Function(BodyId, Vec<Type>),
     String(Symbol),
 }
 #[derive(Debug, Clone)]
@@ -81,7 +81,7 @@ pub enum Place {
     Field(Box<Place>, FieldId),
     Deref(Box<Place>),
     Downcast(Box<Place>, CaseId),
-    Index(Box<Expr>, Local),
+    Index(Box<Place>, Box<Expr>),
 }
 impl Place {
     pub fn with_field(self, field: FieldId) -> Self {
@@ -142,7 +142,7 @@ pub enum Stmt {
     Assign(Place, Expr),
     Return(Expr),
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Type {
     Int,
     Bool,
@@ -151,7 +151,7 @@ pub enum Type {
     Function(Vec<Type>, Box<Type>),
     Tuple(Vec<Type>),
     Array(Box<Type>),
-    Named,
+    Named(Vec<Type>),
 }
 #[derive(Debug)]
 pub struct LocalInfo {

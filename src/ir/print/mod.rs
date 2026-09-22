@@ -26,8 +26,8 @@ impl<'a> Print<'a> {
                 format!("({} as {})", self.format_place(place), case.into_usize())
             }
             Place::Deref(place) => format!("{}^", self.format_place(place)),
-            Place::Index(value, index) => {
-                format!("{}.[t{}]", self.format_value(value), index.into_usize())
+            Place::Index(base, index) => {
+                format!("{}.[{}]", self.format_place(base), self.format_value(index))
             }
         }
     }
@@ -89,7 +89,20 @@ impl<'a> Print<'a> {
             },
             ExprKind::Constant(value) => match value {
                 Constant::Bool(value) => value.to_string(),
-                Constant::Function(id) => self.program.bodies[*id].name.clone(),
+                Constant::Function(id, args) => {
+                    let mut output = self.program.bodies[*id].name.clone();
+                    if !args.is_empty() {
+                        output.push('[');
+                        for (i, arg) in args.iter().enumerate() {
+                            if i > 0 {
+                                output.push_str(", ");
+                            }
+                            output.push_str(&format!("{arg:?}"));
+                        }
+                        output.push(']');
+                    }
+                    output
+                }
                 Constant::Int(value) => value.to_string(),
                 Constant::String(s) => s.with_str(|s| format!("\"{}\"", s.escape_debug())),
             },

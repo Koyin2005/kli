@@ -1,17 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    CtxtRef, Symbol,
-    ast::Mutable,
-    builtins::{Builtin, IntegerBuiltin},
-    def_ids::DefId,
-    ir::{self, BodyId, Local, print::Print},
-    resolved_ast::{Var, VarId},
-    typed_ast::{
-        self, BinaryOp, Expr, FieldId, LogicalOp, Pattern, PatternKind, Place, PlaceKind, Stmt,
-        StmtKind,
-    },
-    types::{Type, TypeKind},
+    CtxtRef, Symbol, ast::Mutable, builtins::{Builtin, IntegerBuiltin}, def_ids::DefId, ir::{self, BodyId, Local, print::Print}, resolved_ast::{Var, VarId}, typed_ast::{
+        self, BinaryOp, Expr, ExprKind, FieldId, LogicalOp, Pattern, PatternKind, Place, PlaceKind,
+        Stmt, StmtKind,
+    }, types::{GenericArgs, Type, TypeKind},
 };
 
 struct LoweringCtxt {
@@ -174,6 +167,26 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             .get(&var.1)
             .unwrap_or_else(|| panic!("should have a variable for {}", var.0))
     }
+    fn lower_index(&mut self, index: &Expr<'ctxt>) -> Option<ir::Expr> {
+        match &index.kind {
+            ExprKind::Load(place) => {
+                if let PlaceKind::Index(..) = place.kind {
+                    Some(ir::Expr::load(ir::Place::Local(
+                        self.lower_expr_to_temp(index),
+                    )))
+                } else {
+                    Some(ir::Expr::load(self.lower_place(place)?))
+                }
+            }
+            &ExprKind::Int(value) => Some(ir::Expr::constant(ir::Constant::Int(
+                value.try_into().expect("too big"),
+            ))),
+            _ => {
+                let index = self.lower_expr_to_temp(index);
+                Some(ir::Expr::load(ir::Place::Local(index)))
+            }
+        }
+    }
     fn lower_place(&mut self, place: &Place<'ctxt>) -> Option<ir::Place> {
         match &place.kind {
             typed_ast::PlaceKind::Upvar(..) => todo!(),
@@ -183,12 +196,10 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 Some(ir::Place::Field(Box::new(place), *field_id))
             }
             typed_ast::PlaceKind::Index(base, index) => {
-                let base = self.lower_expr(base)?;
-                let (index, ()) = self.lower_into_temp(lower_type(index.ty), |local, this| {
-                    this.lower_expr_into(ir::Place::Local(local), index);
-                });
-                self.bounds_check(base.clone(), index);
-                Some(ir::Place::Index(Box::new(base), index))
+                let base = self.lower_expr_to_place(base);
+                let index = self.lower_index(index)?;
+                self.bounds_check(ir::Expr::load(base.clone()), index.clone());
+                Some(ir::Place::Index(Box::new(base), Box::new(index)))
             }
             typed_ast::PlaceKind::Deref(..) => todo!(),
             typed_ast::PlaceKind::Invalid => todo!(),
@@ -238,12 +249,8 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         });
         index
     }
-    fn bounds_check(&mut self, base: ir::Expr, index: ir::Local) {
-        let in_bounds = ir::Expr::binary(
-            ir::BinaryOp::InBounds,
-            ir::Expr::load(ir::Place::Local(index)),
-            ir::Expr::len(base),
-        );
+    fn bounds_check(&mut self, base: ir::Expr, index: ir::Expr) {
+        let in_bounds = ir::Expr::binary(ir::BinaryOp::InBounds, index, ir::Expr::len(base));
         self.push_stmt(ir::Stmt::PanicIf(ir::Expr::not(in_bounds)));
     }
     fn lower_assign(&mut self, place: &Place<'ctxt>, rhs: &Expr<'ctxt>) {
@@ -253,15 +260,15 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 self.lower_expr_into(ir::Place::Local(local), rhs);
             }
             PlaceKind::Index(base, index) => {
-                let Some(base) = self.lower_expr(base) else {
+                let base = self.lower_expr_to_place(base);
+                let Some(index) = self.lower_index(index) else {
                     return;
                 };
-                let index = self.lower_expr_to_temp(index);
                 let Some(rhs) = self.lower_expr(rhs) else {
                     return;
                 };
-                let place = ir::Place::Index(Box::new(base.clone()), index);
-                self.bounds_check(base, index);
+                let place = ir::Place::Index(Box::new(base.clone()), Box::new(index.clone()));
+                self.bounds_check(ir::Expr::load(base), index);
                 self.push_stmt(ir::Stmt::Assign(place, rhs));
             }
             PlaceKind::Upvar(..) => todo!(),
@@ -483,11 +490,10 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             },
             typed_ast::ExprKind::VariantInit(..) => todo!(),
             typed_ast::ExprKind::Function(def_id, generic_args) => {
-                if !generic_args.is_empty() {
-                    todo!("handle generics");
-                }
+                let args = lower_generic_args(generic_args);
                 Some(ir::Expr::constant(ir::Constant::Function(
                     self.ctxt.expect_body_id(*def_id),
+                    args,
                 )))
             }
             typed_ast::ExprKind::Call(callee, args) => {
@@ -578,6 +584,9 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         body
     }
 }
+fn lower_generic_args(args: &GenericArgs<'_>) -> Vec<ir::Type>{
+    args.iter().map(|arg| lower_type(arg.expect_ty())).collect()
+}
 fn lower_type(ty: Type<'_>) -> ir::Type {
     match ty.kind() {
         TypeKind::Bool => ir::Type::Bool,
@@ -602,10 +611,7 @@ fn lower_type(ty: Type<'_>) -> ir::Type {
         TypeKind::Tuple(items) => ir::Type::Tuple(items.iter().copied().map(lower_type).collect()),
         TypeKind::Array(ty) => ir::Type::Array(Box::new(lower_type(*ty))),
         TypeKind::Named(_, _, args) => {
-            if !args.is_empty() {
-                todo!("handle generic types")
-            }
-            ir::Type::Named
+            ir::Type::Named(lower_generic_args(args))
         }
         TypeKind::String => ir::Type::String,
         TypeKind::Box(_) => todo!(),
