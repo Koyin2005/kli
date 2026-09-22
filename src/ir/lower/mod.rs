@@ -319,10 +319,10 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 ));
             }
             PatternKind::Err => unreachable!(),
-            PatternKind::Unit => todo!(),
-            PatternKind::Int(_) => todo!(),
-            PatternKind::Bool(_) => todo!(),
-            PatternKind::Char(_) => todo!(),
+            PatternKind::Unit
+            | PatternKind::Int(_)
+            | PatternKind::Bool(_)
+            | PatternKind::Char(_) => (),
             PatternKind::Case(..) => todo!(),
             PatternKind::Record(_) => todo!(),
         }
@@ -378,8 +378,11 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 self.bounds_check(ir::Expr::load(base.clone()), index.clone());
                 Some(ir::Place::Index(Box::new(base), Box::new(index)))
             }
-            typed_ast::PlaceKind::Deref(..) => todo!(),
-            typed_ast::PlaceKind::Invalid => todo!(),
+            typed_ast::PlaceKind::Deref(expr) => {
+                let place = self.lower_expr_to_place(expr);
+                Some(ir::Place::Deref(Box::new(place)))
+            }
+            typed_ast::PlaceKind::Invalid => unreachable!(),
         }
     }
     fn lower_array(&mut self, dest: ir::Place, ty: Type<'_>, elements: &[Expr<'ctxt>]) {
@@ -433,9 +436,11 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
     }
     fn lower_assign(&mut self, place: &Place<'ctxt>, rhs: &Expr<'ctxt>) {
         match &place.kind {
-            &PlaceKind::Var(var) => {
-                let local = self.local_for_var(var);
-                self.lower_expr_into(ir::Place::Local(local), rhs);
+            PlaceKind::Var(_)|PlaceKind::Field(..)|PlaceKind::Deref(_) | PlaceKind::Upvar(..) | PlaceKind::Invalid => {
+                let Some(place) = self.lower_place(place) else {
+                    return;
+                };
+                self.lower_expr_into(place, rhs);
             }
             PlaceKind::Index(base, index) => {
                 let base = self.lower_expr_to_place(base);
@@ -449,10 +454,6 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 self.bounds_check(ir::Expr::load(base), index);
                 self.push_stmt(ir::Stmt::Assign(place, rhs));
             }
-            PlaceKind::Upvar(..) => todo!(),
-            PlaceKind::Field(..) => todo!(),
-            PlaceKind::Deref(..) => todo!(),
-            PlaceKind::Invalid => todo!(),
         }
     }
     fn lower_expr_into(&mut self, dest: ir::Place, expr: &Expr<'ctxt>) {
