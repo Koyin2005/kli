@@ -141,6 +141,7 @@ pub enum Stmt {
     If(Expr, Vec<Stmt>, Vec<Stmt>),
     Match(Match),
     Call(Call),
+    ReadLine(Place),
     Alloc(Place, Allocate),
     Assign(Place, Expr),
     Return(Expr),

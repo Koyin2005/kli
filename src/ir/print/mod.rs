@@ -153,6 +153,11 @@ impl<'a> Print<'a> {
                 self.write(self.format_value(value));
                 self.write("\n");
             }
+            Stmt::ReadLine(place) => {
+                self.write(self.format_place(place));
+                self.write("= read_line");
+                self.write("\n");
+            }
             Stmt::Block(_) => todo!(),
             Stmt::Loop(..) => todo!(),
             Stmt::Break(_) => todo!(),

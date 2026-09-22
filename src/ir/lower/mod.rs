@@ -253,7 +253,12 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 expr
             })),
             Builtin::StringLen => todo!("String len"),
-            Builtin::ReadLine => todo!("read len"),
+            Builtin::ReadLine => {
+                let (tmp, ()) = self.lower_into_temp(ir::Type::String, |tmp, this| {
+                    this.push_stmt(ir::Stmt::ReadLine(ir::Place::Local(tmp)));
+                });
+                BuiltinResult::Value(ir::Expr::load(ir::Place::Local(tmp)))
+            }
         }
     }
     fn lower_expr_stmt(&mut self, expr: &Expr<'ctxt>) {
