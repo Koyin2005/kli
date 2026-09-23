@@ -228,5 +228,6 @@ impl TypeDef {
 #[derive(Default)]
 pub struct Program {
     pub type_defs: IndexVec<TypeDefId, TypeDef>,
+    pub entrypoint: Option<BodyId>,
     pub bodies: IndexVec<BodyId, Body>,
 }

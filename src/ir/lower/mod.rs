@@ -27,8 +27,12 @@ struct LoweringCtxt {
     program: ir::Program,
 }
 impl LoweringCtxt {
-    fn finish(self) -> ir::Program {
-        self.program
+    fn finish<'ctxt>(self, ctxt: CtxtRef<'ctxt>) -> ir::Program {
+        let mut program = self.program;
+        program.entrypoint = ctxt
+            .main_function()
+            .and_then(|(id, _)| self.id_map.get(&id).copied());
+        program
     }
     fn type_def_id<'ctxt>(&mut self, id: DefId, ctxt: CtxtRef<'ctxt>) -> TypeDefId {
         if let Some(id) = self.type_defs.get(&id) {
@@ -884,7 +888,7 @@ pub fn lower_program<'a, 'ctxt: 'a>(
         )
         .lower(function.body.as_ref());
     }
-    let program = lowering_ctxt.finish();
+    let program = lowering_ctxt.finish(ctxt);
     for body in &program.bodies {
         Print::new(&program, std::io::stdout()).print_body(body);
     }
