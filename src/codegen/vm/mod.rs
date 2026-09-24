@@ -30,6 +30,7 @@ struct CodegenFunction<'a> {
     codgen: &'a mut Codegen,
     program: &'a ir::Program,
     locals: IndexVec<ir::Local, LoweredPlace>,
+    local_reg_end: u16,
     next_reg: u16,
     max_reg: u16,
 }
@@ -39,6 +40,9 @@ impl CodegenFunction<'_> {
         self.next_reg = self.next_reg.checked_add(1).expect("too many registers");
         self.max_reg = self.max_reg.max(self.next_reg);
         instructions::Reg::new(reg)
+    }
+    fn release_registers(&mut self) {
+        self.next_reg = self.local_reg_end;
     }
     fn lower_expr_result(&mut self, expr: &ir::Expr) -> ExprResult {
         match &expr.kind {
@@ -168,63 +172,68 @@ impl CodegenFunction<'_> {
             ),
         }
     }
+    fn lower_stmt(&mut self, stmt: &ir::Stmt) {
+        match stmt {
+            ir::Stmt::Return(value) => {
+                let result = self.lower_expr_result(value);
+                self.push_result(result);
+                self.push_instr(instructions::Instr::Return);
+            }
+            ir::Stmt::Panic => {
+                self.push_instr(instructions::Instr::CallIntrinisic(
+                    instructions::Intrinsic::Panic,
+                ));
+            }
+            ir::Stmt::Call(call) => {
+                let ir::Call {
+                    return_place,
+                    callee,
+                    args,
+                } = call;
+                let ExprResult::Scalar(function) = self.lower_expr_result(callee) else {
+                    unreachable!("functions should always be scalar")
+                };
+                for arg in args {
+                    let arg_result = self.lower_expr_result(arg);
+                    self.push_result(arg_result);
+                }
+                match function {
+                    ScalarResult::Func(func) => {
+                        self.push_instr(instructions::Instr::Call(func));
+                    }
+                    ScalarResult::Reg(reg) => {
+                        self.push_instr(instructions::Instr::CallIndirect(reg));
+                    }
+                }
+                let place = self.lower_place(return_place);
+                self.pop_place(place);
+            }
+            ir::Stmt::Print { value, is_err } => {
+                let result @ ExprResult::Scalar(_) = self.lower_expr_result(value) else {
+                    unreachable!("strings are always scalar")
+                };
+                self.push_result(result);
+                self.push_intr_call(
+                    if *is_err {
+                        instructions::Intrinsic::Eprint
+                    } else {
+                        instructions::Intrinsic::Print
+                    },
+                    None,
+                );
+            }
+            _ => todo!("{stmt:?}"),
+        }
+    }
     fn lower(mut self) {
         for local in &self.program.bodies[self.id].locals {
             let place = self.create_local_for(&self.codgen.type_repr(&local.ty));
             self.locals.push(place);
         }
+        self.local_reg_end = self.next_reg;
         for stmt in &self.program.bodies[self.id].body {
-            match stmt {
-                ir::Stmt::Return(value) => {
-                    let result = self.lower_expr_result(value);
-                    self.push_result(result);
-                    self.push_instr(instructions::Instr::Return);
-                }
-                ir::Stmt::Panic => {
-                    self.push_instr(instructions::Instr::CallIntrinisic(
-                        instructions::Intrinsic::Panic,
-                    ));
-                }
-                ir::Stmt::Call(call) => {
-                    let ir::Call {
-                        return_place,
-                        callee,
-                        args,
-                    } = call;
-                    let ExprResult::Scalar(function) = self.lower_expr_result(callee) else {
-                        unreachable!("functions should always be scalar")
-                    };
-                    for arg in args {
-                        let arg_result = self.lower_expr_result(arg);
-                        self.push_result(arg_result);
-                    }
-                    match function {
-                        ScalarResult::Func(func) => {
-                            self.push_instr(instructions::Instr::Call(func));
-                        }
-                        ScalarResult::Reg(reg) => {
-                            self.push_instr(instructions::Instr::CallIndirect(reg));
-                        }
-                    }
-                    let place = self.lower_place(return_place);
-                    self.pop_place(place);
-                }
-                ir::Stmt::Print { value, is_err } => {
-                    let result @ ExprResult::Scalar(_) = self.lower_expr_result(value) else {
-                        unreachable!("strings are always scalar")
-                    };
-                    self.push_result(result);
-                    self.push_intr_call(
-                        if *is_err {
-                            instructions::Intrinsic::Eprint
-                        } else {
-                            instructions::Intrinsic::Print
-                        },
-                        None,
-                    );
-                }
-                _ => todo!("{stmt:?}"),
-            }
+            self.lower_stmt(stmt);
+            self.release_registers();
         }
         self.result_function.registers = self.max_reg;
         self.codgen.result.functions[self.function] = self.result_function;
@@ -302,6 +311,7 @@ impl Codegen {
             codgen: self,
             program,
             locals: IndexVec::new(),
+            local_reg_end: 0,
             next_reg: 0,
             max_reg: 0,
         }
