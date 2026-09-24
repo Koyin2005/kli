@@ -29,6 +29,7 @@ pub enum Instr {
     Call(FunctionId),
     CallIntrinisic(Intrinsic),
     CallIndirect(Reg),
+    JumpIfFalse(Reg, JumpOffset),
     JumpIf(Reg, JumpOffset),
     Jump(JumpOffset),
     Return,

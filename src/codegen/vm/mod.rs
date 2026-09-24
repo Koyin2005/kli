@@ -383,11 +383,17 @@ impl<'a> CodegenFunction<'a> {
                 .expect("too many instructions"),
         )
     }
-    fn patch_jump(&mut self, instr: usize, new_offset: instructions::JumpOffset) {
-        let (instructions::Instr::Jump(offset) | instructions::Instr::JumpIf(_, offset)) =
-            &mut self.result_function.instrs[instr]
+    fn patch_jump_current(&mut self, instr: usize) {
+        let new_offset = self.current_jump_offset();
+        self.patch_jump(instr, new_offset);
+    }
+    fn patch_jump(&mut self, instr_index: usize, new_offset: instructions::JumpOffset) {
+        let instr = &mut self.result_function.instrs[instr_index];
+        let (instructions::Instr::Jump(offset)
+        | instructions::Instr::JumpIf(_, offset)
+        | instructions::Instr::JumpIfFalse(_, offset)) = instr
         else {
-            panic!("cannot patch non jump instruction")
+            panic!("cannot patch non jump instruction {instr:?} at {instr_index}")
         };
         *offset = new_offset;
     }
@@ -402,6 +408,10 @@ impl<'a> CodegenFunction<'a> {
     fn panic(&mut self) {
         let index = self.push_instr_offset(instructions::Instr::Jump(instructions::JumpOffset(0)));
         self.panic_jumps.push(index);
+    }
+    fn lower_stmt_full(&mut self, stmt: &ir::Stmt) {
+        self.lower_stmt(stmt);
+        self.release_registers();
     }
     fn lower_stmt(&mut self, stmt: &ir::Stmt) {
         match stmt {
@@ -475,7 +485,40 @@ impl<'a> CodegenFunction<'a> {
             }
             ir::Stmt::Loop(..) => todo!("loop"),
             ir::Stmt::Break(_) => todo!("break"),
-            ir::Stmt::If(..) => todo!("if"),
+            ir::Stmt::If(condition, then_branch, else_branch) => {
+                let ExprResult::Scalar(scalar) = self.lower_expr_result(condition, None) else {
+                    unreachable!("if condition should be a scalar")
+                };
+                if let ScalarResult::Int(n) = scalar {
+                    let stmts = if n == 0 { else_branch } else { then_branch };
+                    for stmt in stmts {
+                        self.lower_stmt(stmt);
+                    }
+                    return;
+                }
+                if then_branch.is_empty() && else_branch.is_empty() {
+                    return;
+                }
+                let cond_jump = {
+                    let reg = self.force_scalar_in_reg(&scalar);
+                    let cond_jump = self.push_instr_offset(instructions::Instr::JumpIfFalse(
+                        reg,
+                        instructions::JumpOffset(0),
+                    ));
+                    self.release_registers();
+                    cond_jump
+                };
+                for stmt in then_branch {
+                    self.lower_stmt_full(stmt);
+                }
+                let end_jump =
+                    self.push_instr_offset(instructions::Instr::Jump(instructions::JumpOffset(0)));
+                self.patch_jump_current(cond_jump);
+                for stmt in else_branch {
+                    self.lower_stmt_full(stmt);
+                }
+                self.patch_jump_current(end_jump);
+            }
             ir::Stmt::Match(_) => todo!("match"),
             ir::Stmt::ReadLine(_) => todo!("read_line"),
             ir::Stmt::Alloc(..) => todo!("alloc"),
@@ -488,8 +531,7 @@ impl<'a> CodegenFunction<'a> {
         }
         self.local_reg_end = self.next_reg;
         for stmt in &self.program.bodies[self.id].body {
-            self.lower_stmt(stmt);
-            self.release_registers();
+            self.lower_stmt_full(stmt);
         }
         if !self.panic_jumps.is_empty() {
             let offset = self.current_jump_offset();

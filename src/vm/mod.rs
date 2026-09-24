@@ -126,6 +126,11 @@ impl VM {
                         self.current_frame.ip = jump_offset.0 as _;
                     }
                 }
+                Instr::JumpIfFalse(reg, jump_offset) => {
+                    if self.current_frame.read_reg(reg) == 0 {
+                        self.current_frame.ip = jump_offset.0 as _;
+                    }
+                }
                 Instr::Jump(jump_offset) => {
                     self.current_frame.ip = jump_offset.0 as _;
                 }
