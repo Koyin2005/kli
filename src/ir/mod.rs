@@ -180,6 +180,27 @@ pub enum Type {
     Box(Box<Type>),
 }
 impl Type {
+    pub fn subst(&mut self, args: &[Self]) {
+        match self {
+            Type::Int | Type::Bool | Type::String | Type::Char | Type::Never => (),
+            Type::Param(index) => {
+                let index = *index as usize;
+                self.clone_from(&args[index]);
+            }
+            Type::Function(params, return_type) => {
+                for arg in params {
+                    arg.subst(args);
+                }
+                return_type.subst(args);
+            }
+            Type::Tuple(items) | Type::Named(_, items) => {
+                for arg in items {
+                    arg.subst(args);
+                }
+            }
+            Type::Box(ty) | Type::Array(ty) => ty.subst(args),
+        }
+    }
     pub fn format_type(&self, _: &Program) -> String {
         format!("{self:?}")
     }

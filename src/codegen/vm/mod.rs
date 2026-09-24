@@ -4,16 +4,29 @@ use crate::{
     codegen::classify_locals, index_vec::IndexVec, ir, typed_ast::FieldId, types::CaseId,
     vm::instructions,
 };
-
-type Instance = ir::BodyId;
-
-#[derive(Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone)]
+struct Instance {
+    id: ir::BodyId,
+    args: Vec<Repr>,
+}
+impl Instance {
+    fn new(id: ir::BodyId) -> Self {
+        Self {
+            id,
+            args: Vec::new(),
+        }
+    }
+    fn with_args(id: ir::BodyId, args: Vec<Repr>) -> Self {
+        Self { id, args }
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum ReprKind {
     Scalar,
     Tuple(IndexVec<FieldId, Repr>),
     Union(IndexVec<CaseId, Repr>),
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Repr {
     size: usize,
     kind: ReprKind,
@@ -152,6 +165,7 @@ struct LocalInfo {
 }
 struct CodegenFunction<'a> {
     id: ir::BodyId,
+    args: Vec<ir::Type>,
     function: instructions::FunctionId,
     result_function: instructions::Function,
     codegen: &'a mut Codegen,
@@ -166,14 +180,16 @@ struct CodegenFunction<'a> {
 impl<'a> CodegenFunction<'a> {
     fn new(
         id: ir::BodyId,
+        args: Vec<ir::Type>,
         function: instructions::FunctionId,
         codegen: &'a mut Codegen,
         program: &'a ir::Program,
     ) -> Self {
         let body = &program.bodies[id];
         Self {
+            args,
             _local_info: classify_locals(body),
-            id,
+            id: id,
             function,
             result_function: instructions::Function {
                 registers: 0,
@@ -288,11 +304,15 @@ impl<'a> CodegenFunction<'a> {
             ir::ExprKind::Constant(constant) => match constant {
                 ir::Constant::Int(value) => ExprResult::Scalar(ScalarResult::Int(*value)),
                 ir::Constant::Bool(value) => ExprResult::Scalar(ScalarResult::Int((*value).into())),
-                ir::Constant::Function(id, args) => {
-                    if !args.is_empty() {
-                        todo!("handle generic functions")
-                    }
-                    let id = self.codegen.function_for(*id, self.program);
+                ir::Constant::Function(id, ty_args) => {
+                    let args = ty_args
+                        .iter()
+                        .map(|arg| self.codegen.type_repr(arg, self.program, &self.args))
+                        .collect();
+                    let instance = Instance::with_args(*id, args);
+                    let id = self
+                        .codegen
+                        .function_for(instance, ty_args.clone(), self.program);
                     ExprResult::Scalar(ScalarResult::Func(id))
                 }
                 ir::Constant::String(value) => {
@@ -318,10 +338,7 @@ impl<'a> CodegenFunction<'a> {
                     results
                 }),
                 ir::AggregateKind::Named => todo!("named"),
-                ir::AggregateKind::Variant(_, case, args) => {
-                    if !args.is_empty() {
-                        todo!("handle generics")
-                    }
+                ir::AggregateKind::Variant(_, case, _) => {
                     ExprResult::Tuple({
                         let mut results = vec![ScalarResult::Int(case.into_u32().into())];
                         for field in fields {
@@ -521,11 +538,7 @@ impl<'a> CodegenFunction<'a> {
             ir::Place::Index(..) => todo!(),
         }
     }
-    fn create_local_for(
-        &mut self,
-        repr: &Repr,
-        regs: Vec<instructions::Reg>,
-    ) -> LoweredPlace {
+    fn create_local_for(&mut self, repr: &Repr, regs: Vec<instructions::Reg>) -> LoweredPlace {
         match &repr.kind {
             ReprKind::Scalar => {
                 let [reg] = regs.try_into().expect("should be single reg");
@@ -686,7 +699,7 @@ impl<'a> CodegenFunction<'a> {
     }
     fn lower(mut self) {
         for local in &self.program.bodies[self.id].locals {
-            let repr = self.codegen.type_repr(&local.ty, self.program);
+            let repr = self.codegen.type_repr(&local.ty, self.program, &self.args);
             let regs = (0..repr.size)
                 .map(|_| self.reserve_register())
                 .collect::<Vec<_>>();
@@ -710,7 +723,8 @@ impl<'a> CodegenFunction<'a> {
 }
 
 pub(super) struct Codegen {
-    function_map: HashMap<Instance, instructions::FunctionId>,
+    
+    function_map: HashMap<Instance, (instructions::FunctionId,Vec<ir::Type>)>,
     string_map: HashMap<String, i64>,
     result: instructions::Program,
 }
@@ -722,7 +736,7 @@ impl Codegen {
             function_map: HashMap::new(),
         }
     }
-    fn type_repr(&self, ty: &ir::Type, program: &ir::Program) -> Repr {
+    fn type_repr(&self, ty: &ir::Type, program: &ir::Program, args: &[ir::Type]) -> Repr {
         match ty {
             ir::Type::Int
             | ir::Type::Bool
@@ -730,21 +744,26 @@ impl Codegen {
             | ir::Type::Char
             | ir::Type::Function(..) => SCALAR_REPR,
             ir::Type::Never => UNIT_REPR,
-            ir::Type::Param(_) => todo!(),
+            ir::Type::Param(index) => self.type_repr(&args[*index as usize], program, args),
             ir::Type::Tuple(fields) => {
-                Repr::tuple(fields.iter().map(|ty| self.type_repr(ty, program)))
+                Repr::tuple(fields.iter().map(|ty| self.type_repr(ty, program, args)))
             }
             ir::Type::Array(_) => todo!(),
             ir::Type::Named(id, args) => {
-                if !args.is_empty() {
-                    todo!("handle generic types")
-                }
+                let args = args
+                    .iter()
+                    .cloned()
+                    .map(|mut arg| {
+                        arg.subst(args);
+                        arg
+                    })
+                    .collect::<Vec<_>>();
                 match &program.type_defs[*id] {
                     ir::TypeDef::Struct => todo!("handle structs"),
                     ir::TypeDef::Variant(variant_def) => {
                         let reprs = variant_def.cases.iter_enumerated().map(|(_, case)| {
                             if let Some(ref field) = case.field {
-                                Repr::single_tuple(self.type_repr(&field.ty, program))
+                                Repr::single_tuple(self.type_repr(&field.ty, program, &args))
                             } else {
                                 UNIT_REPR
                             }
@@ -776,23 +795,24 @@ impl Codegen {
     }
     fn function_for(
         &mut self,
-        body_id: ir::BodyId,
+        instance: Instance,
+        args: Vec<ir::Type>,
         program: &ir::Program,
     ) -> instructions::FunctionId {
-        if let Some(id) = self.function_map.get(&body_id) {
-            return *id;
+        if let Some(&(id,_)) = self.function_map.get(&instance) {
+            return id;
         }
         let id = self.push_function(instructions::Function {
             registers: 0,
             instrs: vec![],
         });
-        self.function_map.insert(body_id, id);
-        CodegenFunction::new(body_id, id, self, program).lower();
+        self.function_map.insert(instance.clone(), (id,args.clone()));
+        CodegenFunction::new(instance.id, args, id, self, program).lower();
         id
     }
     fn make_entrypoint_function(&mut self, program: &ir::Program) -> instructions::FunctionId {
         let instrs = if let Some(entrypoint) = program.entrypoint {
-            let id = self.function_for(entrypoint, program);
+            let id = self.function_for(Instance::new(entrypoint), Vec::new(), program);
             vec![instructions::Instr::Call(id), instructions::Instr::Return]
         } else {
             vec![instructions::Instr::Return]
@@ -802,20 +822,20 @@ impl Codegen {
             instrs: instrs,
         })
     }
-    pub fn lower_program(
+    fn lower_program(
         mut self,
         program: &ir::Program,
     ) -> (
         instructions::Program,
         instructions::FunctionId,
-        HashMap<instructions::FunctionId, ir::BodyId>,
+        HashMap<instructions::FunctionId, (Vec<ir::Type>,Instance)>,
     ) {
         let entrypoint = self.make_entrypoint_function(program);
         let program = self.result;
         let map = self
             .function_map
             .into_iter()
-            .map(|(first, second)| (second, first))
+            .map(|(first, (id,args))| (id, (args,first)))
             .collect();
         (program, entrypoint, map)
     }
@@ -824,8 +844,11 @@ impl Codegen {
 pub fn codegen(ir_program: ir::Program) -> (instructions::Program, instructions::FunctionId) {
     let (program, entrypoint, map) = Codegen::new().lower_program(&ir_program);
     for (i, function) in program.functions.iter_enumerated() {
-        if let Some(&id) = map.get(&i) {
-            println!("body {}", ir_program.bodies[id].name);
+        if let Some((args,instance)) = map.get(&i) {
+            println!(
+                "body {} {:?}",
+                ir_program.bodies[instance.id].name, args
+            );
         }
         println!("function {:?}", i.into_usize());
         println!("regs: {:?}", function.registers);
