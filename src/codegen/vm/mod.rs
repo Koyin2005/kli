@@ -92,6 +92,9 @@ impl CodegenFunction<'_> {
     fn push_immediate(&mut self, reg: instructions::Reg, value: i64) {
         self.push_instr(instructions::Instr::LoadImmediate(reg, value));
     }
+    fn push_move(&mut self, dst: instructions::Reg, src: instructions::Reg) {
+        self.push_instr(instructions::Instr::Move { dst, src });
+    }
     fn push_intr_call(
         &mut self,
         instrinsic: instructions::Intrinsic,
@@ -144,6 +147,30 @@ impl CodegenFunction<'_> {
             }
         }
     }
+    #[track_caller]
+    fn store_place(&mut self, place: LoweredPlace, result: ExprResult) {
+        match (place, result) {
+            (LoweredPlace::Reg(reg), ExprResult::Scalar(value)) => match value {
+                ScalarResult::Func(func) => {
+                    self.push_immediate(
+                        reg,
+                        func.into_usize().try_into().expect("too many functions"),
+                    );
+                }
+                ScalarResult::Reg(src) => {
+                    self.push_move(reg, src);
+                }
+            },
+            (LoweredPlace::Tuple(places), ExprResult::Tuple(results)) => {
+                for (place, result) in places.into_iter().zip(results) {
+                    self.store_place(place, result);
+                }
+            }
+            (LoweredPlace::Reg(_) | LoweredPlace::Tuple(_), _) => {
+                panic!("invalid place to result store")
+            }
+        }
+    }
     fn lower_place(&mut self, place: &ir::Place) -> LoweredPlace {
         match place {
             ir::Place::Local(local) => self.locals[*local].clone(),
@@ -190,6 +217,7 @@ impl CodegenFunction<'_> {
                     callee,
                     args,
                 } = call;
+                let place = self.lower_place(return_place);
                 let ExprResult::Scalar(function) = self.lower_expr_result(callee) else {
                     unreachable!("functions should always be scalar")
                 };
@@ -205,7 +233,6 @@ impl CodegenFunction<'_> {
                         self.push_instr(instructions::Instr::CallIndirect(reg));
                     }
                 }
-                let place = self.lower_place(return_place);
                 self.pop_place(place);
             }
             ir::Stmt::Print { value, is_err } => {
@@ -221,6 +248,11 @@ impl CodegenFunction<'_> {
                     },
                     None,
                 );
+            }
+            ir::Stmt::Assign(place, value) => {
+                let place = self.lower_place(place);
+                let value = self.lower_expr_result(value);
+                self.store_place(place, value);
             }
             _ => todo!("{stmt:?}"),
         }
