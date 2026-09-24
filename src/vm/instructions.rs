@@ -1,5 +1,5 @@
 use crate::{define_id, index_vec::IndexVec};
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy,Debug)]
 pub struct Reg(u16);
 impl Reg {
     pub fn into_u16(self) -> u16 {
@@ -8,14 +8,14 @@ impl Reg {
 }
 
 define_id!(FunctionId);
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy,Debug)]
 pub struct JumpOffset(u32);
 impl JumpOffset {
     pub fn into_u32(self) -> u32 {
         self.0
     }
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy,Debug)]
 pub enum Instr {
     Move { dst: Reg, src: Reg },
     LoadImmediate(Reg, i64),
@@ -29,14 +29,16 @@ pub enum Instr {
     Jump(JumpOffset),
     Return,
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy,Debug)]
 pub enum Intrinsic {
     AddWithOverflow,
 }
+#[derive(Debug)]
 pub struct Function {
     pub registers: u16,
     pub instrs: Vec<Instr>,
 }
+#[derive(Debug)]
 pub struct Program {
     pub functions: IndexVec<FunctionId, Function>,
 }

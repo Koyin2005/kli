@@ -131,5 +131,12 @@ impl Codegen {
 
 pub fn codegen(program: ir::Program) -> (instructions::Program, instructions::FunctionId) {
     let (program, entrypoint) = Codegen::new().lower_program(&program);
+    for (i,function) in program.functions.iter().enumerate(){
+        println!("function {i:?}");
+        for (i,instr) in function.instrs.iter().enumerate(){
+            println!("{i:?} {:?}",instr)
+        }
+        println!();
+    }
     (program, entrypoint)
 }
