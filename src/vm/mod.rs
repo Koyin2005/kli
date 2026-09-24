@@ -85,6 +85,9 @@ impl VM {
                     let src2 = self.current_frame.read_reg(src2);
                     self.current_frame.store_reg(dst, src1.wrapping_add(src2));
                 }
+                Instr::PushImmediate(value) => {
+                    self.stack.push(value);
+                }
                 Instr::Push(reg) => {
                     self.stack.push(self.current_frame.read_reg(reg));
                 }
@@ -106,7 +109,7 @@ impl VM {
                     }
                     Intrinsic::PanicIf => {
                         let value = self.stack.pop().unwrap();
-                        if value == 0 {
+                        if value != 0 {
                             return Err(RuntimeError::Panic);
                         }
                     }

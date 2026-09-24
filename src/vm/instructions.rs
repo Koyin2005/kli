@@ -11,6 +11,11 @@ impl Reg {
 }
 
 define_id!(FunctionId);
+impl FunctionId {
+    pub fn as_u32(self) -> u32 {
+        self.0
+    }
+}
 #[derive(Clone, Copy, Debug)]
 pub struct JumpOffset(u32);
 impl JumpOffset {
@@ -24,6 +29,7 @@ pub enum Instr {
     LoadImmediate(Reg, i64),
     Add { dst: Reg, src1: Reg, src2: Reg },
     Push(Reg),
+    PushImmediate(i64),
     Pop(Reg),
     Call(FunctionId),
     CallIntrinisic(Intrinsic),

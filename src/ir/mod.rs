@@ -64,7 +64,7 @@ pub enum AggregateKind {
     Named,
     Variant(TypeDefId, CaseId, Vec<Type>),
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinaryOp {
     Add,
     AddWithOverflow,

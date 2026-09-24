@@ -20,9 +20,53 @@ enum ScalarResult {
     Func(instructions::FunctionId),
     Int(i64),
 }
+impl ScalarResult {
+    pub fn as_i64(&self) -> Option<i64> {
+        match self {
+            ScalarResult::Reg(_) => None,
+            ScalarResult::Func(function_id) => Some(function_id.as_u32().into()),
+            ScalarResult::Int(value) => Some(*value),
+        }
+    }
+}
+impl From<ScalarResult> for ExprResult {
+    fn from(value: ScalarResult) -> Self {
+        Self::Scalar(value)
+    }
+}
+impl From<bool> for ExprResult {
+    fn from(value: bool) -> Self {
+        Self::Scalar(ScalarResult::Int(value.into()))
+    }
+}
+impl From<i64> for ScalarResult {
+    fn from(value: i64) -> Self {
+        Self::Int(value)
+    }
+}
+impl From<i64> for ExprResult {
+    fn from(value: i64) -> Self {
+        Self::Scalar(value.into())
+    }
+}
+impl From<instructions::Reg> for ExprResult {
+    fn from(value: instructions::Reg) -> Self {
+        Self::Scalar(ScalarResult::Reg(value))
+    }
+}
+impl From<instructions::Reg> for ScalarResult {
+    fn from(value: instructions::Reg) -> Self {
+        ScalarResult::Reg(value)
+    }
+}
 enum ExprResult {
     Scalar(ScalarResult),
     Tuple(Vec<ExprResult>),
+}
+impl ExprResult {
+    fn pair(first: impl Into<Self>, second: impl Into<Self>) -> Self {
+        Self::Tuple(vec![first.into(), second.into()])
+    }
 }
 struct CodegenFunction<'a> {
     id: ir::BodyId,
@@ -45,6 +89,57 @@ impl CodegenFunction<'_> {
     fn release_registers(&mut self) {
         self.next_reg = self.local_reg_end;
     }
+    fn lower_binary_op(
+        &mut self,
+        op: ir::BinaryOp,
+        left: ScalarResult,
+        right: ScalarResult,
+    ) -> ExprResult {
+        match op {
+            ir::BinaryOp::Add => match (left, right) {
+                (ScalarResult::Int(left), ScalarResult::Int(right)) => {
+                    ExprResult::Scalar(ScalarResult::Int(left.wrapping_add(right)))
+                }
+                (ScalarResult::Int(0), not_zero) | (not_zero, ScalarResult::Int(0)) => {
+                    ExprResult::Scalar(not_zero)
+                }
+                (left, right) => {
+                    let dst = self.reserve_register();
+                    let src1 = self.force_scalar_in_reg(&left);
+                    let src2 = self.force_scalar_in_reg(&right);
+                    self.push_instr(instructions::Instr::Add { dst, src1, src2 });
+                    ExprResult::Scalar(ScalarResult::Reg(dst))
+                }
+            },
+            ir::BinaryOp::AddWithOverflow => match (left, right) {
+                (ScalarResult::Int(left), ScalarResult::Int(right)) => {
+                    let (result, overflowed) = left.overflowing_add(right);
+                    ExprResult::pair(result, overflowed)
+                }
+                (ScalarResult::Int(0), non_zero) | (non_zero, ScalarResult::Int(0)) => {
+                    ExprResult::pair(non_zero, false)
+                }
+                (left, right) => {
+                    self.push_scalar_on_stack(&left);
+                    self.push_scalar_on_stack(&right);
+                    let left_reg = self.reserve_register();
+                    let right_reg = self.reserve_register();
+                    self.push_intr_call(
+                        instructions::Intrinsic::AddWithOverflow,
+                        Some(LoweredPlace::Tuple(IndexVec::from([
+                            LoweredPlace::Reg(left_reg),
+                            LoweredPlace::Reg(right_reg),
+                        ]))),
+                    );
+                    ExprResult::pair(left_reg, right_reg)
+                }
+            },
+            ir::BinaryOp::Lesser => todo!(),
+            ir::BinaryOp::Greater => todo!(),
+            ir::BinaryOp::Equals => todo!(),
+            ir::BinaryOp::InBounds => todo!(),
+        }
+    }
     fn lower_expr_result(&mut self, expr: &ir::Expr) -> ExprResult {
         match &expr.kind {
             ir::ExprKind::Constant(constant) => match constant {
@@ -58,14 +153,12 @@ impl CodegenFunction<'_> {
                     ExprResult::Scalar(ScalarResult::Func(id))
                 }
                 ir::Constant::String(value) => {
-                    let reg = self.reserve_register();
-                    value.with_str(|s| {
-                        let s = self.codgen.string_index(s);
-                        self.push_immediate(reg, s);
-                    });
-                    ExprResult::Scalar(ScalarResult::Reg(reg))
+                    let index = value.with_str(|s| self.codgen.string_index(s));
+                    ExprResult::Scalar(ScalarResult::Int(index))
                 }
-                ir::Constant::Char(_) => todo!("char"),
+                &ir::Constant::Char(value) => {
+                    ExprResult::Scalar(ScalarResult::Int(u32::from(value).into()))
+                }
             },
             ir::ExprKind::Load(place) => {
                 let place = self.lower_place(place);
@@ -90,51 +183,7 @@ impl CodegenFunction<'_> {
                 let ExprResult::Scalar(right) = self.lower_expr_result(right) else {
                     unreachable!("should be a scalar")
                 };
-                match op {
-                    ir::BinaryOp::Add => match (left,right){
-                        (ScalarResult::Int(left),ScalarResult::Int(right)) => {
-                            ExprResult::Scalar(ScalarResult::Int(left.wrapping_add(right)))
-                        },
-                        (ScalarResult::Int(0),not_zero) | (not_zero,ScalarResult::Int(0)) => ExprResult::Scalar(not_zero),
-                        (left,right) => {
-                            let dst = self.reserve_register();
-                            let src1 = self.force_scalar_in_reg(&left);
-                            let src2 = self.force_scalar_in_reg(&right);
-                            self.push_instr(instructions::Instr::Add { dst, src1, src2 });
-                            ExprResult::Scalar(ScalarResult::Reg(dst))
-                        }
-                    },
-                    ir::BinaryOp::AddWithOverflow => match (left, right) {
-                        (ScalarResult::Int(left), ScalarResult::Int(right)) => {
-                            let (result, overflowed) = left.overflowing_add(right);
-                            ExprResult::Tuple(vec![
-                                ExprResult::Scalar(ScalarResult::Int(result)),
-                                ExprResult::Scalar(ScalarResult::Int(overflowed.into())),
-                            ])
-                        }
-                        (left, right) => {
-                            self.push_scalar_on_stack(&left);
-                            self.push_scalar_on_stack(&right);
-                            let left_reg = self.reserve_register();
-                            let right_reg = self.reserve_register();
-                            self.push_intr_call(
-                                instructions::Intrinsic::AddWithOverflow,
-                                Some(LoweredPlace::Tuple(IndexVec::from([
-                                    LoweredPlace::Reg(left_reg),
-                                    LoweredPlace::Reg(right_reg),
-                                ]))),
-                            );
-                            ExprResult::Tuple(vec![
-                                ExprResult::Scalar(ScalarResult::Reg(left_reg)),
-                                ExprResult::Scalar(ScalarResult::Reg(right_reg)),
-                            ])
-                        }
-                    },
-                    ir::BinaryOp::Lesser => todo!(),
-                    ir::BinaryOp::Greater => todo!(),
-                    ir::BinaryOp::Equals => todo!(),
-                    ir::BinaryOp::InBounds => todo!(),
-                }
+                self.lower_binary_op(*op, left, right)
             }
             ir::ExprKind::Not(_) => todo!("not"),
         }
@@ -161,7 +210,13 @@ impl CodegenFunction<'_> {
         }
     }
     fn push_scalar_on_stack(&mut self, value: &ScalarResult) {
-        let reg = self.force_scalar_in_reg(value);
+        let reg = match value.as_i64() {
+            Some(value) => {
+                self.push_instr(instructions::Instr::PushImmediate(value));
+                return;
+            }
+            None => self.force_scalar_in_reg(value),
+        };
         self.push_instr(instructions::Instr::Push(reg));
     }
     fn push_result(&mut self, result: &ExprResult) {
@@ -199,8 +254,8 @@ impl CodegenFunction<'_> {
             }
         }
     }
-    fn force_scalar_in_reg(&mut self, value: &ScalarResult) -> instructions::Reg{
-        match value{
+    fn force_scalar_in_reg(&mut self, value: &ScalarResult) -> instructions::Reg {
+        match value {
             ScalarResult::Reg(reg) => *reg,
             _ => {
                 let reg = self.reserve_register();
