@@ -7,6 +7,7 @@ pub(crate) mod instructions;
 #[derive(Debug)]
 pub enum RuntimeError {
     Panic,
+    DivideByZero,
 }
 pub(super) struct Frame {
     current_function: FunctionId,
@@ -94,6 +95,19 @@ impl VM {
                     let src1 = self.current_frame.read_reg(src1);
                     let src2 = self.current_frame.read_reg(src2);
                     self.current_frame.store_reg(dst, src1.wrapping_mul(src2));
+                }
+                Instr::Div { dst, src1, src2 } => {
+                    let src1 = self.current_frame.read_reg(src1);
+                    let src2 = self.current_frame.read_reg(src2);
+                    if src2 == 0 {
+                        return Err(RuntimeError::DivideByZero);
+                    }
+                    self.current_frame.store_reg(dst, src1.wrapping_div(src2));
+                }
+                Instr::And { dst, src1, src2 } => {
+                    let src1 = self.current_frame.read_reg(src1);
+                    let src2 = self.current_frame.read_reg(src2);
+                    self.current_frame.store_reg(dst, src1 | src2);
                 }
                 Instr::LesserThan { dst, src1, src2 } => {
                     let src1 = self.current_frame.read_reg(src1);

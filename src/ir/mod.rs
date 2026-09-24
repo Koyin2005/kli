@@ -42,6 +42,11 @@ impl Expr {
             kind: ExprKind::Constant(value),
         }
     }
+    pub fn constant_int(value: i64) -> Self {
+        Self {
+            kind: ExprKind::Constant(Constant::Int(value)),
+        }
+    }
     pub fn load(place: Place) -> Self {
         Self {
             kind: ExprKind::Load(place),
@@ -72,9 +77,11 @@ pub enum BinaryOp {
     SubtractWithOverflow,
     Multiply,
     MultiplyWithOverflow,
+    Divide,
     Lesser,
     Greater,
     Equals,
+    BitwiseAnd,
     InBounds,
 }
 #[derive(Debug, Clone)]

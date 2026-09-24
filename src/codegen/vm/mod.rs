@@ -130,6 +130,7 @@ enum BinaryOpInstr {
     Lt,
     Gt,
     Eq,
+    And,
 }
 #[derive(PartialEq, Eq, Debug)]
 enum ExprResult {
@@ -265,11 +266,12 @@ impl<'a> CodegenFunction<'a> {
         let instr = match op {
             BinaryOpInstr::Add => instructions::Instr::Add { dst, src1, src2 },
             BinaryOpInstr::Sub => instructions::Instr::Sub { dst, src1, src2 },
-            BinaryOpInstr::Div => todo!(),
+            BinaryOpInstr::Div => instructions::Instr::Div { dst, src1, src2 },
             BinaryOpInstr::Mul => instructions::Instr::Mul { dst, src1, src2 },
             BinaryOpInstr::Lt => instructions::Instr::LesserThan { dst, src1, src2 },
             BinaryOpInstr::Gt => instructions::Instr::GreaterThan { dst, src1, src2 },
             BinaryOpInstr::Eq => instructions::Instr::Equals { dst, src1, src2 },
+            BinaryOpInstr::And => instructions::Instr::And { dst, src1, src2 },
         };
         self.push_instr(instr);
         ExprResult::Scalar(ScalarResult::Reg(dst))
@@ -299,6 +301,12 @@ impl<'a> CodegenFunction<'a> {
             }
             ir::BinaryOp::MultiplyWithOverflow => {
                 self.eval_overflow_op(result_place, ir::OverflowOp::Mul, &left, &right)
+            }
+            ir::BinaryOp::Divide => {
+                self.eval_binary_op(BinaryOpInstr::Div, result_place, &left, &right)
+            }
+            ir::BinaryOp::BitwiseAnd => {
+                self.eval_binary_op(BinaryOpInstr::And, result_place, &left, &right)
             }
             ir::BinaryOp::Lesser => {
                 self.eval_binary_op(BinaryOpInstr::Lt, result_place, &left, &right)

@@ -724,6 +724,32 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             BinaryOp::Lesser => ir::BinaryOp::Lesser,
             BinaryOp::Equals => ir::BinaryOp::Equals,
             BinaryOp::Greater => ir::BinaryOp::Greater,
+            BinaryOp::Divide => {
+                let is_min = ir::Expr::binary(
+                    ir::BinaryOp::Equals,
+                    left.clone(),
+                    ir::Expr::constant_int(i64::MIN),
+                );
+                let is_neg_1 = ir::Expr::binary(
+                    ir::BinaryOp::Equals,
+                    right.clone(),
+                    ir::Expr::constant_int(-1),
+                );
+                self.push_stmt(ir::Stmt::PanicIf(ir::Expr::binary(
+                    ir::BinaryOp::BitwiseAnd,
+                    is_min,
+                    is_neg_1,
+                )));
+
+                let is_zero = ir::Expr::binary(
+                    ir::BinaryOp::Equals,
+                    right.clone(),
+                    ir::Expr::constant_int(0),
+                );
+                self.push_stmt(ir::Stmt::PanicIf(is_zero));
+                ir::BinaryOp::Divide
+            }
+            BinaryOp::BitwiseAnd => ir::BinaryOp::BitwiseAnd,
             op => todo!("binary op {:?}", op),
         };
         Some(ir::Expr::binary(op, left, right))

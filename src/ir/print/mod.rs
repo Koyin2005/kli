@@ -56,9 +56,11 @@ impl<'a> Print<'a> {
                     BinaryOp::SubtractWithOverflow => "sub_with_overflow",
                     BinaryOp::Multiply => "mul",
                     BinaryOp::MultiplyWithOverflow => "mul_with_overflow",
+                    BinaryOp::Divide => "div",
                     BinaryOp::Lesser => "lesser",
                     BinaryOp::Greater => "greater",
                     BinaryOp::Equals => "equals",
+                    BinaryOp::BitwiseAnd => "and",
                     BinaryOp::InBounds => "in_bounds",
                 }
                 .to_string();
