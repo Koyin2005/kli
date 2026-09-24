@@ -4,8 +4,12 @@ use crate::{ir, vm::instructions};
 
 type Instance = ir::BodyId;
 
+enum ScalarResult {
+    Reg(instructions::Reg),
+    Func(instructions::FunctionId),
+}
 enum ExprResult {
-    Scalar(instructions::Reg),
+    Scalar(ScalarResult),
     Tuple(Vec<ExprResult>),
 }
 struct CodegenFunction<'a> {
@@ -18,7 +22,19 @@ struct CodegenFunction<'a> {
 impl CodegenFunction<'_> {
     fn lower_expr_result(&mut self, expr: &ir::Expr) -> ExprResult {
         match &expr.kind {
-            ir::ExprKind::Constant(_) => todo!("constants"),
+            ir::ExprKind::Constant(constant) => match constant {
+                ir::Constant::Int(_) => todo!("const int"),
+                ir::Constant::Bool(_) => todo!("const bool"),
+                ir::Constant::Function(id, args) => {
+                    if !args.is_empty() {
+                        todo!("handle generic functions")
+                    }
+                    let id = self.codgen.function_for(*id, self.program);
+                    ExprResult::Scalar(ScalarResult::Func(id))
+                }
+                ir::Constant::String(..) => todo!("string"),
+                ir::Constant::Char(_) => todo!("char"),
+            },
             ir::ExprKind::Load(_) => todo!("load"),
             ir::ExprKind::Len(_) => todo!("len"),
             ir::ExprKind::Discriminant(_) => todo!("discriminant"),
@@ -42,7 +58,12 @@ impl CodegenFunction<'_> {
     fn push_result(&mut self, result: ExprResult) {
         match result {
             ExprResult::Scalar(value) => {
-                self.push_instr(instructions::Instr::Push(value));
+                match value {
+                    ScalarResult::Reg(value) => self.push_instr(instructions::Instr::Push(value)),
+                    ScalarResult::Func(_) => {
+                        todo!("func instruction")
+                    }
+                };
             }
             ExprResult::Tuple(elements) => {
                 for element in elements {
@@ -131,10 +152,10 @@ impl Codegen {
 
 pub fn codegen(program: ir::Program) -> (instructions::Program, instructions::FunctionId) {
     let (program, entrypoint) = Codegen::new().lower_program(&program);
-    for (i,function) in program.functions.iter().enumerate(){
+    for (i, function) in program.functions.iter().enumerate() {
         println!("function {i:?}");
-        for (i,instr) in function.instrs.iter().enumerate(){
-            println!("{i:?} {:?}",instr)
+        for (i, instr) in function.instrs.iter().enumerate() {
+            println!("{i:?} {:?}", instr)
         }
         println!();
     }
