@@ -26,6 +26,7 @@ pub struct VM {
     frames: Vec<Frame>,
     stack: Vec<i64>,
     current_frame: Frame,
+    strings: Vec<String>,
 }
 impl VM {
     pub fn new(entry_point: FunctionId, program: Program) -> Self {
@@ -39,6 +40,7 @@ impl VM {
             frames: Vec::new(),
             stack: Vec::new(),
             current_frame: frame,
+            strings: program.strings,
         }
     }
     fn next_instr(&mut self) -> Instr {
@@ -59,6 +61,14 @@ impl VM {
         };
         self.frames
             .push(std::mem::replace(&mut self.current_frame, new_frame));
+    }
+    fn print_string(&mut self, index: i64, err: bool) {
+        let index: usize = index.try_into().expect("should be a usize");
+        if err {
+            eprint!("{}", self.strings[index]);
+        } else {
+            print!("{}", self.strings[index]);
+        }
     }
     pub fn run(mut self) -> Result<(), RuntimeError> {
         loop {
@@ -93,6 +103,14 @@ impl VM {
                     }
                     Intrinsic::Panic => {
                         return Err(RuntimeError::Panic);
+                    }
+                    Intrinsic::Print => {
+                        let value = self.stack.pop().unwrap();
+                        self.print_string(value, false);
+                    }
+                    Intrinsic::Eprint => {
+                        let value = self.stack.pop().unwrap();
+                        self.print_string(value, true);
                     }
                 },
                 Instr::CallIndirect(reg) => {

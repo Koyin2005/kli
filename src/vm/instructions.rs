@@ -2,6 +2,9 @@ use crate::{define_id, index_vec::IndexVec};
 #[derive(Clone, Copy, Debug)]
 pub struct Reg(u16);
 impl Reg {
+    pub fn new(value: u16) -> Self {
+        Self(value)
+    }
     pub fn into_u16(self) -> u16 {
         self.0
     }
@@ -33,6 +36,8 @@ pub enum Instr {
 pub enum Intrinsic {
     AddWithOverflow,
     Panic,
+    Print,
+    Eprint,
 }
 #[derive(Debug)]
 pub struct Function {
@@ -41,12 +46,14 @@ pub struct Function {
 }
 #[derive(Debug)]
 pub struct Program {
+    pub strings: Vec<String>,
     pub functions: IndexVec<FunctionId, Function>,
 }
 impl Program {
     pub fn new() -> Self {
         Self {
             functions: IndexVec::new(),
+            strings: Vec::new(),
         }
     }
 }
