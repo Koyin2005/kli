@@ -85,6 +85,21 @@ impl VM {
                     let src2 = self.current_frame.read_reg(src2);
                     self.current_frame.store_reg(dst, src1.wrapping_add(src2));
                 }
+                Instr::LesserThan { dst, src1, src2 } => {
+                    let src1 = self.current_frame.read_reg(src1);
+                    let src2 = self.current_frame.read_reg(src2);
+                    self.current_frame.store_reg(dst, (src1 < src2).into());
+                }
+                Instr::GreaterThan { dst, src1, src2 } => {
+                    let src1 = self.current_frame.read_reg(src1);
+                    let src2 = self.current_frame.read_reg(src2);
+                    self.current_frame.store_reg(dst, (src1 > src2).into());
+                }
+                Instr::Equals { dst, src1, src2 } => {
+                    let src1 = self.current_frame.read_reg(src1);
+                    let src2 = self.current_frame.read_reg(src2);
+                    self.current_frame.store_reg(dst, (src1 == src2).into());
+                }
                 Instr::PushImmediate(value) => {
                     self.stack.push(value);
                 }

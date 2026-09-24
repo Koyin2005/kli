@@ -62,6 +62,15 @@ impl From<instructions::Reg> for ScalarResult {
         ScalarResult::Reg(value)
     }
 }
+enum BinaryOpInstr {
+    Add,
+    Sub,
+    Div,
+    Mul,
+    Lt,
+    Gt,
+    Eq,
+}
 #[derive(PartialEq, Eq)]
 enum ExprResult {
     Scalar(ScalarResult),
@@ -119,6 +128,35 @@ impl<'a> CodegenFunction<'a> {
     fn release_registers(&mut self) {
         self.next_reg = self.local_reg_end;
     }
+    fn eval_binary_op(
+        &mut self,
+        op: BinaryOpInstr,
+        result_place: Option<&LoweredPlace>,
+        left: &ScalarResult,
+        right: &ScalarResult,
+    ) -> ExprResult {
+        let dst = if let Some(result) = result_place {
+            let LoweredPlace::Reg(reg) = result else {
+                unreachable!("should be a scalar");
+            };
+            *reg
+        } else {
+            self.reserve_register()
+        };
+        let src1 = self.force_scalar_in_reg(&left);
+        let src2 = self.force_scalar_in_reg(&right);
+        let instr = match op {
+            BinaryOpInstr::Add => instructions::Instr::Add { dst, src1, src2 },
+            BinaryOpInstr::Sub => todo!(),
+            BinaryOpInstr::Div => todo!(),
+            BinaryOpInstr::Mul => todo!(),
+            BinaryOpInstr::Lt => instructions::Instr::LesserThan { dst, src1, src2 },
+            BinaryOpInstr::Gt => instructions::Instr::GreaterThan { dst, src1, src2 },
+            BinaryOpInstr::Eq =>  instructions::Instr::Equals { dst, src1, src2 },
+        };
+        self.push_instr(instr);
+        ExprResult::Scalar(ScalarResult::Reg(dst))
+    }
     fn lower_binary_op(
         &mut self,
         op: ir::BinaryOp,
@@ -127,61 +165,39 @@ impl<'a> CodegenFunction<'a> {
         result_place: Option<&LoweredPlace>,
     ) -> ExprResult {
         match op {
-            ir::BinaryOp::Add => match (left, right) {
-                (ScalarResult::Int(left), ScalarResult::Int(right)) => {
-                    ExprResult::Scalar(ScalarResult::Int(left.wrapping_add(right)))
-                }
-                (ScalarResult::Int(0), not_zero) | (not_zero, ScalarResult::Int(0)) => {
-                    ExprResult::Scalar(not_zero)
-                }
-                (left, right) => {
-                    let dst = if let Some(result) = result_place {
-                        let LoweredPlace::Reg(reg) = result else {
-                            unreachable!("should be a scalar");
-                        };
-                        *reg
-                    } else {
-                        self.reserve_register()
-                    };
-                    let src1 = self.force_scalar_in_reg(&left);
-                    let src2 = self.force_scalar_in_reg(&right);
-                    self.push_instr(instructions::Instr::Add { dst, src1, src2 });
-                    ExprResult::Scalar(ScalarResult::Reg(dst))
-                }
-            },
-            ir::BinaryOp::AddWithOverflow => match (left, right) {
-                (ScalarResult::Int(left), ScalarResult::Int(right)) => {
-                    let (result, overflowed) = left.overflowing_add(right);
-                    ExprResult::pair(result, overflowed)
-                }
-                (ScalarResult::Int(0), non_zero) | (non_zero, ScalarResult::Int(0)) => {
-                    ExprResult::pair(non_zero, false)
-                }
-                (left, right) => {
-                    self.push_scalar_on_stack(&left);
-                    self.push_scalar_on_stack(&right);
-                    if let Some(result_place) = result_place {
-                        self.push_intr_call(
-                            instructions::Intrinsic::AddWithOverflow,
-                            Some(result_place),
-                        );
-                        return self.load_place(&result_place);
-                    }
-                    let left_reg = self.reserve_register();
-                    let right_reg = self.reserve_register();
+            ir::BinaryOp::Add => {
+                self.eval_binary_op(BinaryOpInstr::Add, result_place, &left, &right)
+            }
+            ir::BinaryOp::AddWithOverflow => {
+                self.push_scalar_on_stack(&left);
+                self.push_scalar_on_stack(&right);
+                if let Some(result_place) = result_place {
                     self.push_intr_call(
                         instructions::Intrinsic::AddWithOverflow,
-                        Some(&LoweredPlace::Tuple(IndexVec::from([
-                            LoweredPlace::Reg(left_reg),
-                            LoweredPlace::Reg(right_reg),
-                        ]))),
+                        Some(result_place),
                     );
-                    ExprResult::pair(left_reg, right_reg)
+                    return self.load_place(&result_place);
                 }
-            },
-            ir::BinaryOp::Lesser => todo!(),
-            ir::BinaryOp::Greater => todo!(),
-            ir::BinaryOp::Equals => todo!(),
+                let left_reg = self.reserve_register();
+                let right_reg = self.reserve_register();
+                self.push_intr_call(
+                    instructions::Intrinsic::AddWithOverflow,
+                    Some(&LoweredPlace::Tuple(IndexVec::from([
+                        LoweredPlace::Reg(left_reg),
+                        LoweredPlace::Reg(right_reg),
+                    ]))),
+                );
+                ExprResult::pair(left_reg, right_reg)
+            }
+            ir::BinaryOp::Lesser => {
+                self.eval_binary_op(BinaryOpInstr::Lt, result_place, &left, &right)
+            }
+            ir::BinaryOp::Greater => {
+                self.eval_binary_op(BinaryOpInstr::Gt, result_place, &left, &right)
+            }
+            ir::BinaryOp::Equals => {
+                self.eval_binary_op(BinaryOpInstr::Eq, result_place, &left, &right)
+            }
             ir::BinaryOp::InBounds => todo!(),
         }
     }
