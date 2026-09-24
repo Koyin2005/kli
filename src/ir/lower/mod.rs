@@ -350,7 +350,8 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 let local = self.fresh_local_for_var(var, matches!(mutable, Mutable::Mutable), ty);
                 self.lower_expr_into(ir::Place::Local(local), expr);
             }
-            PatternKind::Unit | PatternKind::Bool(_) | PatternKind::Int(_) => (),
+            PatternKind::Unit | PatternKind::Bool(_) | PatternKind::Int(_) | PatternKind::Char(_) => (),
+            PatternKind::Err => unreachable!("cannot assign to err patterns"),
             _ => {
                 let result = self.lower_expr_to_place(&expr);
                 self.lower_place_to_pattern(result, pattern);
@@ -373,7 +374,14 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             | PatternKind::Bool(_)
             | PatternKind::Char(_) => (),
             PatternKind::Case(..) => todo!(),
-            PatternKind::Record(_) => todo!(),
+            PatternKind::Record(fields) => {
+                for field in fields {
+                    self.lower_place_to_pattern(
+                        ir::Place::Field(Box::new(place.clone()), field.index),
+                        &field.pattern,
+                    );
+                }
+            }
         }
     }
     fn lower_exprs_const<const N: usize>(&mut self, exprs: &[Expr<'ctxt>]) -> [ir::Expr; N] {
