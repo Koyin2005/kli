@@ -104,6 +104,12 @@ impl VM {
                     Intrinsic::Panic => {
                         return Err(RuntimeError::Panic);
                     }
+                    Intrinsic::PanicIf => {
+                        let value = self.stack.pop().unwrap();
+                        if value == 0 {
+                            return Err(RuntimeError::Panic);
+                        }
+                    }
                     Intrinsic::Print => {
                         let value = self.stack.pop().unwrap();
                         self.print_string(value, false);
