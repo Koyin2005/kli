@@ -244,7 +244,7 @@ impl<'a> Print<'a> {
             .enumerate()
         {
             if i > 0 {
-                self.write(",");
+                self.write(", ");
             }
             self.write(format!("t{i} : {:?}", param.ty));
         }
