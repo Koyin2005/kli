@@ -131,6 +131,7 @@ enum BinaryOpInstr {
     Gt,
     Eq,
     And,
+    Or,
 }
 #[derive(PartialEq, Eq, Debug)]
 enum ExprResult {
@@ -272,6 +273,7 @@ impl<'a> CodegenFunction<'a> {
             BinaryOpInstr::Gt => instructions::Instr::GreaterThan { dst, src1, src2 },
             BinaryOpInstr::Eq => instructions::Instr::Equals { dst, src1, src2 },
             BinaryOpInstr::And => instructions::Instr::And { dst, src1, src2 },
+            BinaryOpInstr::Or => instructions::Instr::Or { dst, src1, src2 },
         };
         self.push_instr(instr);
         ExprResult::Scalar(ScalarResult::Reg(dst))
@@ -307,6 +309,9 @@ impl<'a> CodegenFunction<'a> {
             }
             ir::BinaryOp::BitwiseAnd => {
                 self.eval_binary_op(BinaryOpInstr::And, result_place, &left, &right)
+            }
+            ir::BinaryOp::BitwiseOr => {
+                self.eval_binary_op(BinaryOpInstr::Or, result_place, &left, &right)
             }
             ir::BinaryOp::Lesser => {
                 self.eval_binary_op(BinaryOpInstr::Lt, result_place, &left, &right)

@@ -27,6 +27,7 @@ pub enum Instr {
     Mul { dst: Reg, src1: Reg, src2: Reg },
     Div { dst: Reg, src1: Reg, src2: Reg },
     And { dst: Reg, src1: Reg, src2: Reg },
+    Or { dst: Reg, src1: Reg, src2: Reg },
     LesserThan { dst: Reg, src1: Reg, src2: Reg },
     GreaterThan { dst: Reg, src1: Reg, src2: Reg },
     Equals { dst: Reg, src1: Reg, src2: Reg },

@@ -750,7 +750,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 ir::BinaryOp::Divide
             }
             BinaryOp::BitwiseAnd => ir::BinaryOp::BitwiseAnd,
-            op => todo!("binary op {:?}", op),
+            BinaryOp::BitwiseOr => ir::BinaryOp::BitwiseOr,
         };
         Some(ir::Expr::binary(op, left, right))
     }

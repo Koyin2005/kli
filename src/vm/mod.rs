@@ -107,6 +107,11 @@ impl VM {
                 Instr::And { dst, src1, src2 } => {
                     let src1 = self.current_frame.read_reg(src1);
                     let src2 = self.current_frame.read_reg(src2);
+                    self.current_frame.store_reg(dst, src1 & src2);
+                }
+                Instr::Or { dst, src1, src2 } => {
+                    let src1 = self.current_frame.read_reg(src1);
+                    let src2 = self.current_frame.read_reg(src2);
                     self.current_frame.store_reg(dst, src1 | src2);
                 }
                 Instr::LesserThan { dst, src1, src2 } => {

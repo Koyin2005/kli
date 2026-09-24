@@ -61,6 +61,7 @@ impl<'a> Print<'a> {
                     BinaryOp::Greater => "greater",
                     BinaryOp::Equals => "equals",
                     BinaryOp::BitwiseAnd => "and",
+                    BinaryOp::BitwiseOr => "or",
                     BinaryOp::InBounds => "in_bounds",
                 }
                 .to_string();
