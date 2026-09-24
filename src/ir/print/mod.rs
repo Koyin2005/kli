@@ -54,6 +54,8 @@ impl<'a> Print<'a> {
                     BinaryOp::AddWithOverflow => "add_with_overflow",
                     BinaryOp::Subtract => "sub",
                     BinaryOp::SubtractWithOverflow => "sub_with_overflow",
+                    BinaryOp::Multiply => "mul",
+                    BinaryOp::MultiplyWithOverflow => "mul_with_overflow",
                     BinaryOp::Lesser => "lesser",
                     BinaryOp::Greater => "greater",
                     BinaryOp::Equals => "equals",

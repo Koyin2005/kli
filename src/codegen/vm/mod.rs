@@ -158,6 +158,12 @@ impl ExprResult {
             Self::Tuple(elements) => elements,
         }
     }
+    fn into_single_scalar(self) -> ScalarResult {
+        match self {
+            Self::Scalar(scalar) => scalar,
+            Self::Tuple(elements) => { elements }.swap_remove(0),
+        }
+    }
 }
 struct LocalInfo {
     place: LoweredPlace,
@@ -223,6 +229,7 @@ impl<'a> CodegenFunction<'a> {
         let instrinsic = match op {
             ir::OverflowOp::Add => instructions::Intrinsic::AddWithOverflow,
             ir::OverflowOp::Sub => instructions::Intrinsic::SubWithOverflow,
+            ir::OverflowOp::Mul => instructions::Intrinsic::MulWithOverflow,
         };
         self.push_scalar_on_stack(&left);
         self.push_scalar_on_stack(&right);
@@ -259,7 +266,7 @@ impl<'a> CodegenFunction<'a> {
             BinaryOpInstr::Add => instructions::Instr::Add { dst, src1, src2 },
             BinaryOpInstr::Sub => instructions::Instr::Sub { dst, src1, src2 },
             BinaryOpInstr::Div => todo!(),
-            BinaryOpInstr::Mul => todo!(),
+            BinaryOpInstr::Mul => instructions::Instr::Mul { dst, src1, src2 },
             BinaryOpInstr::Lt => instructions::Instr::LesserThan { dst, src1, src2 },
             BinaryOpInstr::Gt => instructions::Instr::GreaterThan { dst, src1, src2 },
             BinaryOpInstr::Eq => instructions::Instr::Equals { dst, src1, src2 },
@@ -286,6 +293,12 @@ impl<'a> CodegenFunction<'a> {
             }
             ir::BinaryOp::SubtractWithOverflow => {
                 self.eval_overflow_op(result_place, ir::OverflowOp::Sub, &left, &right)
+            }
+            ir::BinaryOp::Multiply => {
+                self.eval_binary_op(BinaryOpInstr::Mul, result_place, &left, &right)
+            }
+            ir::BinaryOp::MultiplyWithOverflow => {
+                self.eval_overflow_op(result_place, ir::OverflowOp::Mul, &left, &right)
             }
             ir::BinaryOp::Lesser => {
                 self.eval_binary_op(BinaryOpInstr::Lt, result_place, &left, &right)
@@ -338,15 +351,13 @@ impl<'a> CodegenFunction<'a> {
                     results
                 }),
                 ir::AggregateKind::Named => todo!("named"),
-                ir::AggregateKind::Variant(_, case, _) => {
-                    ExprResult::Tuple({
-                        let mut results = vec![ScalarResult::Int(case.into_u32().into())];
-                        for field in fields {
-                            results.extend(self.lower_expr_result(field, result).into_scalars());
-                        }
-                        results
-                    })
-                }
+                ir::AggregateKind::Variant(_, case, _) => ExprResult::Tuple({
+                    let mut results = vec![ScalarResult::Int(case.into_u32().into())];
+                    for field in fields {
+                        results.extend(self.lower_expr_result(field, result).into_scalars());
+                    }
+                    results
+                }),
             },
             ir::ExprKind::BinaryOp(op, left, right) => {
                 let ExprResult::Scalar(left) = self.lower_expr_result(left, None) else {
@@ -603,9 +614,7 @@ impl<'a> CodegenFunction<'a> {
                     args,
                 } = call;
                 let (place, _) = self.lower_place(return_place);
-                let ExprResult::Scalar(function) = self.lower_expr_result(callee, None) else {
-                    unreachable!("functions should always be scalar")
-                };
+                let function = self.lower_expr_result(callee, None).into_single_scalar();
                 for arg in args {
                     let arg_result = self.lower_expr_result(arg, None);
                     self.push_result(&arg_result);
@@ -622,9 +631,7 @@ impl<'a> CodegenFunction<'a> {
                 self.pop_place(&place);
             }
             ir::Stmt::Print { value, is_err } => {
-                let result @ ExprResult::Scalar(_) = self.lower_expr_result(value, None) else {
-                    unreachable!("strings are always scalar")
-                };
+                let result = self.lower_expr_result(value, None);
                 self.push_result(&result);
                 self.push_intr_call(
                     if *is_err {
@@ -644,11 +651,9 @@ impl<'a> CodegenFunction<'a> {
             }
             ir::Stmt::PanicIf(value) => {
                 let value = self.lower_expr_result(value, None);
-                let ExprResult::Scalar(ScalarResult::Int(value)) = value else {
-                    let ExprResult::Scalar(scalar) = value else {
-                        unreachable!("should be a scalar for panic if")
-                    };
-                    self.panic_if(&scalar);
+                let value = value.into_single_scalar();
+                let ScalarResult::Int(value) = value else {
+                    self.panic_if(&value);
                     return;
                 };
                 if value != 0 {
@@ -659,9 +664,7 @@ impl<'a> CodegenFunction<'a> {
             ir::Stmt::Loop(..) => todo!("loop"),
             ir::Stmt::Break(_) => todo!("break"),
             ir::Stmt::If(condition, then_branch, else_branch) => {
-                let ExprResult::Scalar(scalar) = self.lower_expr_result(condition, None) else {
-                    unreachable!("if condition should be a scalar")
-                };
+                let scalar = self.lower_expr_result(condition, None).into_single_scalar();
                 if let ScalarResult::Int(n) = scalar {
                     let stmts = if n == 0 { else_branch } else { then_branch };
                     for stmt in stmts {
@@ -723,8 +726,7 @@ impl<'a> CodegenFunction<'a> {
 }
 
 pub(super) struct Codegen {
-    
-    function_map: HashMap<Instance, (instructions::FunctionId,Vec<ir::Type>)>,
+    function_map: HashMap<Instance, (instructions::FunctionId, Vec<ir::Type>)>,
     string_map: HashMap<String, i64>,
     result: instructions::Program,
 }
@@ -799,14 +801,15 @@ impl Codegen {
         args: Vec<ir::Type>,
         program: &ir::Program,
     ) -> instructions::FunctionId {
-        if let Some(&(id,_)) = self.function_map.get(&instance) {
+        if let Some(&(id, _)) = self.function_map.get(&instance) {
             return id;
         }
         let id = self.push_function(instructions::Function {
             registers: 0,
             instrs: vec![],
         });
-        self.function_map.insert(instance.clone(), (id,args.clone()));
+        self.function_map
+            .insert(instance.clone(), (id, args.clone()));
         CodegenFunction::new(instance.id, args, id, self, program).lower();
         id
     }
@@ -828,14 +831,14 @@ impl Codegen {
     ) -> (
         instructions::Program,
         instructions::FunctionId,
-        HashMap<instructions::FunctionId, (Vec<ir::Type>,Instance)>,
+        HashMap<instructions::FunctionId, (Vec<ir::Type>, Instance)>,
     ) {
         let entrypoint = self.make_entrypoint_function(program);
         let program = self.result;
         let map = self
             .function_map
             .into_iter()
-            .map(|(first, (id,args))| (id, (args,first)))
+            .map(|(first, (id, args))| (id, (args, first)))
             .collect();
         (program, entrypoint, map)
     }
@@ -844,11 +847,8 @@ impl Codegen {
 pub fn codegen(ir_program: ir::Program) -> (instructions::Program, instructions::FunctionId) {
     let (program, entrypoint, map) = Codegen::new().lower_program(&ir_program);
     for (i, function) in program.functions.iter_enumerated() {
-        if let Some((args,instance)) = map.get(&i) {
-            println!(
-                "body {} {:?}",
-                ir_program.bodies[instance.id].name, args
-            );
+        if let Some((args, instance)) = map.get(&i) {
+            println!("body {} {:?}", ir_program.bodies[instance.id].name, args);
         }
         println!("function {:?}", i.into_usize());
         println!("regs: {:?}", function.registers);

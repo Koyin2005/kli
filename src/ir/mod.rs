@@ -70,6 +70,8 @@ pub enum BinaryOp {
     AddWithOverflow,
     Subtract,
     SubtractWithOverflow,
+    Multiply,
+    MultiplyWithOverflow,
     Lesser,
     Greater,
     Equals,
@@ -162,6 +164,7 @@ pub enum Stmt {
 pub enum OverflowOp {
     Add,
     Sub,
+    Mul,
 }
 
 define_id!(TypeDefId);

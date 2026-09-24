@@ -259,8 +259,18 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                         right,
                     ))
                 }
-                IntegerBuiltin::WrappingMul => todo!("wrapping mul"),
-                IntegerBuiltin::OverflowingMul => todo!("oveflowing mul"),
+                IntegerBuiltin::WrappingMul => {
+                    let [left, right] = self.lower_exprs_const(args);
+                    BuiltinResult::Value(ir::Expr::binary(ir::BinaryOp::Multiply, left, right))
+                }
+                IntegerBuiltin::OverflowingMul => {
+                    let [left, right] = self.lower_exprs_const(args);
+                    BuiltinResult::Value(ir::Expr::binary(
+                        ir::BinaryOp::MultiplyWithOverflow,
+                        left,
+                        right,
+                    ))
+                }
             },
             Builtin::Len => BuiltinResult::Value(ir::Expr::len({
                 let [expr] = self.lower_exprs_const(args);
@@ -683,6 +693,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         let op = match op {
             ir::OverflowOp::Add => ir::BinaryOp::AddWithOverflow,
             ir::OverflowOp::Sub => ir::BinaryOp::SubtractWithOverflow,
+            ir::OverflowOp::Mul => ir::BinaryOp::MultiplyWithOverflow,
         };
         let tmp = self.fresh_temp(ir::Type::Tuple(vec![ir::Type::Int, ir::Type::Bool]));
         let result = ir::Expr::binary(op, left, right);
@@ -706,6 +717,9 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             }
             BinaryOp::Subtract => {
                 return Some(self.checked_overflow_op_expr(ir::OverflowOp::Sub, left, right));
+            }
+            BinaryOp::Multiply => {
+                return Some(self.checked_overflow_op_expr(ir::OverflowOp::Mul, left, right));
             }
             BinaryOp::Lesser => ir::BinaryOp::Lesser,
             BinaryOp::Equals => ir::BinaryOp::Equals,
