@@ -80,6 +80,11 @@ impl CodegenFunction<'_> {
                     self.push_result(result);
                     self.push_instr(instructions::Instr::Return);
                 }
+                ir::Stmt::Panic => {
+                    self.push_instr(instructions::Instr::CallIntrinisic(
+                        instructions::Intrinsic::Panic,
+                    ));
+                }
                 _ => todo!("{stmt:?}"),
             }
         }

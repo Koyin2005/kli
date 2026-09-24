@@ -91,6 +91,9 @@ impl VM {
                         let (result, overflowed) = first.overflowing_add(second);
                         self.stack.extend([result, overflowed as i64]);
                     }
+                    Intrinsic::Panic => {
+                        return Err(RuntimeError::Panic);
+                    }
                 },
                 Instr::CallIndirect(reg) => {
                     let id = self.current_frame.read_reg(reg);

@@ -32,6 +32,7 @@ pub enum Instr {
 #[derive(Clone, Copy, Debug)]
 pub enum Intrinsic {
     AddWithOverflow,
+    Panic,
 }
 #[derive(Debug)]
 pub struct Function {
