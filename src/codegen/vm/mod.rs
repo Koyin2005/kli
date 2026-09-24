@@ -18,6 +18,7 @@ enum LoweredPlace {
 enum ScalarResult {
     Reg(instructions::Reg),
     Func(instructions::FunctionId),
+    Int(i64),
 }
 enum ExprResult {
     Scalar(ScalarResult),
@@ -47,8 +48,8 @@ impl CodegenFunction<'_> {
     fn lower_expr_result(&mut self, expr: &ir::Expr) -> ExprResult {
         match &expr.kind {
             ir::ExprKind::Constant(constant) => match constant {
-                ir::Constant::Int(_) => todo!("const int"),
-                ir::Constant::Bool(_) => todo!("const bool"),
+                ir::Constant::Int(value) => ExprResult::Scalar(ScalarResult::Int(*value)),
+                ir::Constant::Bool(value) => ExprResult::Scalar(ScalarResult::Int((*value).into())),
                 ir::Constant::Function(id, args) => {
                     if !args.is_empty() {
                         todo!("handle generic functions")
@@ -110,12 +111,15 @@ impl CodegenFunction<'_> {
     fn push_result(&mut self, result: ExprResult) {
         match result {
             ExprResult::Scalar(value) => {
-                match value {
-                    ScalarResult::Reg(value) => self.push_instr(instructions::Instr::Push(value)),
-                    ScalarResult::Func(_) => {
-                        todo!("func instruction")
+                let reg = match value {
+                    ScalarResult::Reg(reg) => reg,
+                    ScalarResult::Func(_) | ScalarResult::Int(_) => {
+                        let reg = self.reserve_register();
+                        self.store_scalar_in_reg(reg, value);
+                        reg
                     }
                 };
+                self.push_instr(instructions::Instr::Push(reg));
             }
             ExprResult::Tuple(elements) => {
                 for element in elements {
@@ -147,20 +151,28 @@ impl CodegenFunction<'_> {
             }
         }
     }
+    fn store_scalar_in_reg(&mut self, reg: instructions::Reg, value: ScalarResult) {
+        match value {
+            ScalarResult::Func(func) => {
+                self.push_immediate(
+                    reg,
+                    func.into_usize().try_into().expect("too many functions"),
+                );
+            }
+            ScalarResult::Int(value) => {
+                self.push_immediate(reg, value);
+            }
+            ScalarResult::Reg(src) => {
+                self.push_move(reg, src);
+            }
+        }
+    }
     #[track_caller]
     fn store_place(&mut self, place: LoweredPlace, result: ExprResult) {
         match (place, result) {
-            (LoweredPlace::Reg(reg), ExprResult::Scalar(value)) => match value {
-                ScalarResult::Func(func) => {
-                    self.push_immediate(
-                        reg,
-                        func.into_usize().try_into().expect("too many functions"),
-                    );
-                }
-                ScalarResult::Reg(src) => {
-                    self.push_move(reg, src);
-                }
-            },
+            (LoweredPlace::Reg(reg), ExprResult::Scalar(value)) => {
+                self.store_scalar_in_reg(reg, value)
+            }
             (LoweredPlace::Tuple(places), ExprResult::Tuple(results)) => {
                 for (place, result) in places.into_iter().zip(results) {
                     self.store_place(place, result);
@@ -232,6 +244,7 @@ impl CodegenFunction<'_> {
                     ScalarResult::Reg(reg) => {
                         self.push_instr(instructions::Instr::CallIndirect(reg));
                     }
+                    ScalarResult::Int(_) => unreachable!()
                 }
                 self.pop_place(place);
             }
