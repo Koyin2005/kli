@@ -386,7 +386,14 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             | PatternKind::Int(_)
             | PatternKind::Bool(_)
             | PatternKind::Char(_) => (),
-            PatternKind::Case(..) => todo!(),
+            PatternKind::Case(_, _, case_id, field) => {
+                if let Some(field) = field {
+                    self.lower_place_to_pattern(
+                        ir::Place::Downcast(Box::new(place.clone()), *case_id).with_field(FieldId::new(0)),
+                        field,
+                    );
+                }
+            }
             PatternKind::Record(fields) => {
                 for field in fields {
                     self.lower_place_to_pattern(

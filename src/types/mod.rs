@@ -8,6 +8,11 @@ use crate::{
     typed_ast::FieldId,
 };
 define_id!(CaseId);
+impl CaseId {
+    pub fn into_u32(self) -> u32 {
+        self.0
+    }
+}
 pub mod lower;
 pub mod visit;
 

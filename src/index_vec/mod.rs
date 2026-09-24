@@ -101,7 +101,7 @@ impl<I: Id, V> IndexVec<I, V> {
     pub fn expect_get_mut(&mut self, i: I) -> &mut V {
         &mut self.0[i.into_usize()]
     }
-    pub fn iter(&self) -> impl Iterator<Item = &V> {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &V> {
         self.0.iter()
     }
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut V> {

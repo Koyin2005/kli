@@ -1,23 +1,70 @@
 use std::collections::HashMap;
 
 use crate::{
-    codegen::classify_locals, index_vec::IndexVec, ir, typed_ast::FieldId, vm::instructions,
+    codegen::classify_locals, index_vec::IndexVec, ir, typed_ast::FieldId, types::CaseId,
+    vm::instructions,
 };
 
 type Instance = ir::BodyId;
 
 #[derive(Clone, Debug)]
-enum Repr {
+enum ReprKind {
     Scalar,
     Tuple(IndexVec<FieldId, Repr>),
+    Union(IndexVec<CaseId, Repr>),
 }
+#[derive(Clone, Debug)]
+struct Repr {
+    size: usize,
+    kind: ReprKind,
+}
+impl Repr {
+    fn single_tuple(field: Self) -> Self {
+        Self::tuple([field])
+    }
+    fn pair(first: Self, second: Self) -> Self {
+        Self::tuple([first, second])
+    }
+    fn tuple(fields: impl IntoIterator<Item = Self>) -> Self {
+        let fields = fields.into_iter().collect::<IndexVec<_, _>>();
+        let size = fields.iter().map(|field| field.size).sum();
+        Self {
+            size,
+            kind: ReprKind::Tuple(fields),
+        }
+    }
+    fn union(cases: impl IntoIterator<Item = Self>) -> Self {
+        let fields = cases.into_iter().collect::<IndexVec<_, _>>();
+        let size = fields.iter().map(|field| field.size).max().unwrap_or(0);
+        Self {
+            size,
+            kind: ReprKind::Union(fields),
+        }
+    }
+}
+const SCALAR_REPR: Repr = Repr {
+    size: 1,
+    kind: ReprKind::Scalar,
+};
+const UNIT_REPR: Repr = Repr {
+    size: 0,
+    kind: ReprKind::Tuple(IndexVec::new()),
+};
 
 #[derive(Clone, Debug)]
 enum LoweredPlace {
     Reg(instructions::Reg),
-    Tuple(IndexVec<FieldId, LoweredPlace>),
+    Tuple(Vec<instructions::Reg>),
 }
-#[derive(PartialEq, Eq)]
+impl LoweredPlace {
+    pub fn regs(&self) -> Vec<instructions::Reg> {
+        match self {
+            &Self::Reg(reg) => vec![reg],
+            Self::Tuple(fields) => fields.clone(),
+        }
+    }
+}
+#[derive(PartialEq, Eq, Debug)]
 enum ScalarResult {
     Reg(instructions::Reg),
     Func(instructions::FunctionId),
@@ -71,15 +118,37 @@ enum BinaryOpInstr {
     Gt,
     Eq,
 }
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 enum ExprResult {
     Scalar(ScalarResult),
-    Tuple(Vec<ExprResult>),
+    Tuple(Vec<ScalarResult>),
 }
 impl ExprResult {
-    fn pair(first: impl Into<Self>, second: impl Into<Self>) -> Self {
+    fn pair(first: impl Into<ScalarResult>, second: impl Into<ScalarResult>) -> Self {
         Self::Tuple(vec![first.into(), second.into()])
     }
+    fn scalars(&self) -> Vec<&ScalarResult> {
+        match self {
+            Self::Scalar(scalar) => vec![scalar],
+            Self::Tuple(elements) => {
+                let mut output = Vec::new();
+                for element in elements {
+                    output.push(element);
+                }
+                output
+            }
+        }
+    }
+    fn into_scalars(self) -> Vec<ScalarResult> {
+        match self {
+            Self::Scalar(scalar) => vec![scalar],
+            Self::Tuple(elements) => elements,
+        }
+    }
+}
+struct LocalInfo {
+    place: LoweredPlace,
+    repr: Repr,
 }
 struct CodegenFunction<'a> {
     id: ir::BodyId,
@@ -87,7 +156,7 @@ struct CodegenFunction<'a> {
     result_function: instructions::Function,
     codegen: &'a mut Codegen,
     program: &'a ir::Program,
-    locals: IndexVec<ir::Local, LoweredPlace>,
+    locals: IndexVec<ir::Local, LocalInfo>,
     local_reg_end: u16,
     next_reg: u16,
     max_reg: u16,
@@ -143,16 +212,13 @@ impl<'a> CodegenFunction<'a> {
         self.push_scalar_on_stack(&right);
         if let Some(result_place) = result_place {
             self.push_intr_call(instrinsic, Some(result_place));
-            return self.load_place(&result_place);
+            return self.load_place(&result_place, &Repr::pair(SCALAR_REPR, SCALAR_REPR));
         }
         let left_reg = self.reserve_register();
         let right_reg = self.reserve_register();
         self.push_intr_call(
             instrinsic,
-            Some(&LoweredPlace::Tuple(IndexVec::from([
-                LoweredPlace::Reg(left_reg),
-                LoweredPlace::Reg(right_reg),
-            ]))),
+            Some(&LoweredPlace::Tuple(vec![left_reg, right_reg])),
         );
         ExprResult::pair(left_reg, right_reg)
     }
@@ -238,20 +304,32 @@ impl<'a> CodegenFunction<'a> {
                 }
             },
             ir::ExprKind::Load(place) => {
-                let place = self.lower_place(place);
-                self.load_place(&place)
+                let (place, repr) = self.lower_place(place);
+                self.load_place(&place, &repr)
             }
             ir::ExprKind::Len(_) => todo!("len"),
             ir::ExprKind::Discriminant(_) => todo!("discriminant"),
             ir::ExprKind::Aggregate(kind, fields) => match kind {
-                ir::AggregateKind::Tuple => ExprResult::Tuple(
-                    fields
-                        .iter()
-                        .map(|field| self.lower_expr_result(field, None))
-                        .collect(),
-                ),
+                ir::AggregateKind::Tuple => ExprResult::Tuple({
+                    let mut results = Vec::new();
+                    for field in fields {
+                        results.extend(self.lower_expr_result(field, None).into_scalars());
+                    }
+                    results
+                }),
                 ir::AggregateKind::Named => todo!("named"),
-                ir::AggregateKind::Variant(..) => todo!("variant"),
+                ir::AggregateKind::Variant(_, case, args) => {
+                    if !args.is_empty() {
+                        todo!("handle generics")
+                    }
+                    ExprResult::Tuple({
+                        let mut results = vec![ScalarResult::Int(case.into_u32().into())];
+                        for field in fields {
+                            results.extend(self.lower_expr_result(field, result).into_scalars());
+                        }
+                        results
+                    })
+                }
             },
             ir::ExprKind::BinaryOp(op, left, right) => {
                 let ExprResult::Scalar(left) = self.lower_expr_result(left, None) else {
@@ -294,7 +372,7 @@ impl<'a> CodegenFunction<'a> {
         self.push_instr(instr);
         offset
     }
-    fn push_immediate(&mut self, reg: instructions::Reg, value: i64) {
+    fn load_immediate(&mut self, reg: instructions::Reg, value: i64) {
         self.push_instr(instructions::Instr::LoadImmediate(reg, value));
     }
     fn push_move(&mut self, dst: instructions::Reg, src: instructions::Reg) {
@@ -329,18 +407,40 @@ impl<'a> CodegenFunction<'a> {
             }
             ExprResult::Tuple(elements) => {
                 for element in elements {
-                    self.push_result(element);
+                    self.push_scalar_on_stack(element);
                 }
             }
         }
     }
-    fn load_place(&self, place: &LoweredPlace) -> ExprResult {
+    fn project_field(
+        &self,
+        base_place: LoweredPlace,
+        field_id: FieldId,
+        repr: Repr,
+    ) -> (LoweredPlace, Repr) {
+        let ReprKind::Tuple(fields) = repr.kind else {
+            unreachable!("should be a tuple but got {:?}", repr)
+        };
+        let mut repr_fields = fields.into_vec();
+        let LoweredPlace::Tuple(fields) = base_place else {
+            unreachable!("should be a tuple")
+        };
+        let mut offset = 0;
+        for i in 0..field_id.into_usize() {
+            offset += repr_fields[i].size;
+        }
+        let repr = repr_fields.swap_remove(field_id.into_usize());
+        let fields = fields[offset..][..repr.size].to_vec();
+        (LoweredPlace::Tuple(fields), repr)
+    }
+    #[track_caller]
+    fn load_place(&self, place: &LoweredPlace, _: &Repr) -> ExprResult {
         match place {
             &LoweredPlace::Reg(reg) => ExprResult::Scalar(ScalarResult::Reg(reg)),
             LoweredPlace::Tuple(fields) => ExprResult::Tuple(
                 fields
-                    .into_iter()
-                    .map(|field| self.load_place(field))
+                    .iter()
+                    .map(|field| ScalarResult::Reg(*field))
                     .collect(),
             ),
         }
@@ -351,8 +451,8 @@ impl<'a> CodegenFunction<'a> {
                 self.push_instr(instructions::Instr::Pop(reg));
             }
             LoweredPlace::Tuple(fields) => {
-                for field in fields.into_iter().rev() {
-                    self.pop_place(field);
+                for &reg in fields.into_iter().rev() {
+                    self.push_instr(instructions::Instr::Pop(reg));
                 }
             }
         }
@@ -370,13 +470,13 @@ impl<'a> CodegenFunction<'a> {
     fn store_scalar_in_reg(&mut self, reg: instructions::Reg, value: &ScalarResult) {
         match value {
             &ScalarResult::Func(func) => {
-                self.push_immediate(
+                self.load_immediate(
                     reg,
                     func.into_usize().try_into().expect("too many functions"),
                 );
             }
             &ScalarResult::Int(value) => {
-                self.push_immediate(reg, value);
+                self.load_immediate(reg, value);
             }
             &ScalarResult::Reg(src) => {
                 self.push_move(reg, src);
@@ -384,47 +484,54 @@ impl<'a> CodegenFunction<'a> {
         }
     }
     #[track_caller]
-    fn store_place(&mut self, place: LoweredPlace, result: &ExprResult) {
-        match (place, result) {
-            (LoweredPlace::Reg(reg), ExprResult::Scalar(value)) => {
-                self.store_scalar_in_reg(reg, value)
-            }
-            (LoweredPlace::Tuple(places), ExprResult::Tuple(results)) => {
-                for (place, result) in places.into_iter().zip(results) {
-                    self.store_place(place, result);
-                }
-            }
-            (LoweredPlace::Reg(_) | LoweredPlace::Tuple(_), _) => {
-                panic!("invalid place to result store")
-            }
+    fn store_place(&mut self, place: &LoweredPlace, result: &ExprResult) {
+        for (reg, scalar) in place.regs().into_iter().zip(result.scalars()) {
+            self.store_scalar_in_reg(reg, scalar);
         }
     }
-    fn lower_place(&self, place: &ir::Place) -> LoweredPlace {
+    fn lower_place(&self, place: &ir::Place) -> (LoweredPlace, Repr) {
         match place {
-            ir::Place::Local(local) => self.locals[*local].clone(),
+            ir::Place::Local(local) => {
+                let local_info = &self.locals[*local];
+                (local_info.place.clone(), local_info.repr.clone())
+            }
             ir::Place::Field(place, field_id) => {
-                let LoweredPlace::Tuple(fields) = self.lower_place(place) else {
-                    unreachable!("should be a tuple")
-                };
-                fields[*field_id].clone()
+                let (base_place, repr) = self.lower_place(place);
+                self.project_field(base_place, *field_id, repr)
             }
             ir::Place::Deref(_) => todo!(),
-            ir::Place::Downcast(..) => todo!(),
+            ir::Place::Downcast(place, case_id) => {
+                let (base_place, repr) = self.lower_place(place);
+                let ReprKind::Tuple(fields) = repr.kind else {
+                    unreachable!("should be a tuple for variant")
+                };
+                let [_, payload] = fields.into_vec().try_into().expect("should have 2 fields");
+
+                let ReprKind::Union(cases) = payload.kind else {
+                    unreachable!("should be a union")
+                };
+                let LoweredPlace::Tuple(fields) = base_place else {
+                    unreachable!("should be a tuple")
+                };
+                let mut cases = cases.into_vec();
+                let repr = cases.remove(case_id.into_usize());
+                let fields = fields[1..].to_vec();
+                (LoweredPlace::Tuple(fields), repr)
+            }
             ir::Place::Index(..) => todo!(),
         }
     }
-    fn create_local_for(&mut self, repr: &Repr) -> LoweredPlace {
-        match repr {
-            Repr::Scalar => {
-                let reg = self.reserve_register();
+    fn create_local_for(
+        &mut self,
+        repr: &Repr,
+        regs: Vec<instructions::Reg>,
+    ) -> LoweredPlace {
+        match &repr.kind {
+            ReprKind::Scalar => {
+                let [reg] = regs.try_into().expect("should be single reg");
                 LoweredPlace::Reg(reg)
             }
-            Repr::Tuple(fields) => LoweredPlace::Tuple(
-                fields
-                    .iter()
-                    .map(|field| self.create_local_for(field))
-                    .collect(),
-            ),
+            ReprKind::Tuple(_) | ReprKind::Union(_) => LoweredPlace::Tuple(regs),
         }
     }
     fn current_jump_offset(&self) -> instructions::JumpOffset {
@@ -482,7 +589,7 @@ impl<'a> CodegenFunction<'a> {
                     callee,
                     args,
                 } = call;
-                let place = self.lower_place(return_place);
+                let (place, _) = self.lower_place(return_place);
                 let ExprResult::Scalar(function) = self.lower_expr_result(callee, None) else {
                     unreachable!("functions should always be scalar")
                 };
@@ -516,10 +623,10 @@ impl<'a> CodegenFunction<'a> {
                 );
             }
             ir::Stmt::Assign(place, value) => {
-                let place = self.lower_place(place);
+                let (place, repr) = self.lower_place(place);
                 let value = self.lower_expr_result(value, Some(&place));
-                if value != self.load_place(&place) {
-                    self.store_place(place, &value);
+                if value != self.load_place(&place, &repr) {
+                    self.store_place(&place, &value);
                 }
             }
             ir::Stmt::PanicIf(value) => {
@@ -579,8 +686,12 @@ impl<'a> CodegenFunction<'a> {
     }
     fn lower(mut self) {
         for local in &self.program.bodies[self.id].locals {
-            let place = self.create_local_for(&self.codegen.type_repr(&local.ty));
-            self.locals.push(place);
+            let repr = self.codegen.type_repr(&local.ty, self.program);
+            let regs = (0..repr.size)
+                .map(|_| self.reserve_register())
+                .collect::<Vec<_>>();
+            let place = self.create_local_for(&repr, regs);
+            self.locals.push(LocalInfo { place, repr });
         }
         self.local_reg_end = self.next_reg;
         for stmt in &self.program.bodies[self.id].body {
@@ -611,20 +722,37 @@ impl Codegen {
             function_map: HashMap::new(),
         }
     }
-    fn type_repr(&self, ty: &ir::Type) -> Repr {
+    fn type_repr(&self, ty: &ir::Type, program: &ir::Program) -> Repr {
         match ty {
-            ir::Type::Int => Repr::Scalar,
-            ir::Type::Bool => Repr::Scalar,
-            ir::Type::String => Repr::Scalar,
-            ir::Type::Char => Repr::Scalar,
-            ir::Type::Never => Repr::Tuple(IndexVec::new()),
+            ir::Type::Int
+            | ir::Type::Bool
+            | ir::Type::String
+            | ir::Type::Char
+            | ir::Type::Function(..) => SCALAR_REPR,
+            ir::Type::Never => UNIT_REPR,
             ir::Type::Param(_) => todo!(),
-            ir::Type::Function(_, _) => Repr::Scalar,
             ir::Type::Tuple(fields) => {
-                Repr::Tuple(fields.iter().map(|ty| self.type_repr(ty)).collect())
+                Repr::tuple(fields.iter().map(|ty| self.type_repr(ty, program)))
             }
             ir::Type::Array(_) => todo!(),
-            ir::Type::Named(..) => todo!(),
+            ir::Type::Named(id, args) => {
+                if !args.is_empty() {
+                    todo!("handle generic types")
+                }
+                match &program.type_defs[*id] {
+                    ir::TypeDef::Struct => todo!("handle structs"),
+                    ir::TypeDef::Variant(variant_def) => {
+                        let reprs = variant_def.cases.iter_enumerated().map(|(_, case)| {
+                            if let Some(ref field) = case.field {
+                                Repr::single_tuple(self.type_repr(&field.ty, program))
+                            } else {
+                                UNIT_REPR
+                            }
+                        });
+                        Repr::pair(SCALAR_REPR, Repr::union(reprs))
+                    }
+                }
+            }
             ir::Type::Box(_) => todo!(),
         }
     }
