@@ -4,6 +4,7 @@ use crate::{
 };
 
 pub(crate) mod instructions;
+#[derive(Debug)]
 pub enum RuntimeError {
     Panic,
 }

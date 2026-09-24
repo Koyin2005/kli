@@ -13,6 +13,7 @@ use kli::{
     resolve::Resolve,
     typecheck::root::TypeCheck,
     unsafety::SafetyCheck,
+    vm,
 };
 fn main() {
     let Ok(config) = config() else {
@@ -63,7 +64,13 @@ fn main() {
                 .filter(|(id, _)| ctxt.builtin_for(*id).is_none())
                 .collect::<BTreeMap<_, _>>(),
         );
-        let _program = codegen::vm::codegen(program);
+        let (program, entrypoint) = codegen::vm::codegen(program);
+        match vm::VM::new(entrypoint, program).run() {
+            Ok(()) => return,
+            Err(e) => {
+                eprintln!("{:?}", e);
+            }
+        }
         if true {
             return;
         }
