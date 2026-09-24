@@ -37,7 +37,6 @@ pub enum Instr {
 pub enum Intrinsic {
     AddWithOverflow,
     Panic,
-    PanicIf,
     Print,
     Eprint,
 }
