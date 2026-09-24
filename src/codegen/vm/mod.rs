@@ -152,7 +152,7 @@ impl<'a> CodegenFunction<'a> {
             BinaryOpInstr::Mul => todo!(),
             BinaryOpInstr::Lt => instructions::Instr::LesserThan { dst, src1, src2 },
             BinaryOpInstr::Gt => instructions::Instr::GreaterThan { dst, src1, src2 },
-            BinaryOpInstr::Eq =>  instructions::Instr::Equals { dst, src1, src2 },
+            BinaryOpInstr::Eq => instructions::Instr::Equals { dst, src1, src2 },
         };
         self.push_instr(instr);
         ExprResult::Scalar(ScalarResult::Reg(dst))
@@ -246,7 +246,28 @@ impl<'a> CodegenFunction<'a> {
                 };
                 self.lower_binary_op(*op, left, right, result)
             }
-            ir::ExprKind::Not(_) => todo!("not"),
+            ir::ExprKind::Not(value) => {
+                let ExprResult::Scalar(value) = self.lower_expr_result(value, None) else {
+                    unreachable!("should be a scalar")
+                };
+                if let ScalarResult::Int(value) = value {
+                    return ExprResult::Scalar(ScalarResult::Int((value == 0).into()));
+                }
+                let reg = self.force_scalar_in_reg(&value);
+                let dst_reg = if let Some(place) = result {
+                    let LoweredPlace::Reg(reg) = place else {
+                        unreachable!("should be a scalar")
+                    };
+                    *reg
+                } else {
+                    self.reserve_register()
+                };
+                self.push_instr(instructions::Instr::Not {
+                    dst: dst_reg,
+                    src: reg,
+                });
+                ExprResult::Scalar(ScalarResult::Reg(reg))
+            }
         }
     }
     fn push_instr(&mut self, instr: instructions::Instr) {

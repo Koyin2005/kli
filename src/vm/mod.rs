@@ -100,6 +100,10 @@ impl VM {
                     let src2 = self.current_frame.read_reg(src2);
                     self.current_frame.store_reg(dst, (src1 == src2).into());
                 }
+                Instr::Not { dst, src } => {
+                    let src1 = self.current_frame.read_reg(src);
+                    self.current_frame.store_reg(dst, (src1 == 0).into());
+                }
                 Instr::PushImmediate(value) => {
                     self.stack.push(value);
                 }
