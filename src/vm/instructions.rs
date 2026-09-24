@@ -1,5 +1,5 @@
 use crate::{define_id, index_vec::IndexVec};
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Reg(u16);
 impl Reg {
     pub fn new(value: u16) -> Self {

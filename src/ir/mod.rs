@@ -84,6 +84,11 @@ pub enum ExprKind {
     Not(Box<Expr>),
 }
 define_id!(Local);
+impl Local {
+    pub fn into_u32(self) -> u32 {
+        self.0
+    }
+}
 #[derive(Debug, Clone)]
 pub enum Place {
     Local(Local),
