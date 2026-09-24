@@ -52,6 +52,8 @@ impl<'a> Print<'a> {
                 let mut output = match *op {
                     BinaryOp::Add => "add",
                     BinaryOp::AddWithOverflow => "add_with_overflow",
+                    BinaryOp::Subtract => "sub",
+                    BinaryOp::SubtractWithOverflow => "sub_with_overflow",
                     BinaryOp::Lesser => "lesser",
                     BinaryOp::Greater => "greater",
                     BinaryOp::Equals => "equals",

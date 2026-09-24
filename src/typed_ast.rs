@@ -173,7 +173,7 @@ pub struct RecordFieldInit<'ctxt> {
 }
 #[derive(Debug)]
 pub enum IteratorType {}
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinaryOp {
     Add,
     Subtract,

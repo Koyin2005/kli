@@ -247,8 +247,18 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 }
                 IntegerBuiltin::ShiftLeft => todo!("shift left"),
                 IntegerBuiltin::ShiftRight => todo!("shift right"),
-                IntegerBuiltin::WrappingSub => todo!("wrapping sub"),
-                IntegerBuiltin::OverflowingSub => todo!("oveflowing sub"),
+                IntegerBuiltin::WrappingSub => {
+                    let [left, right] = self.lower_exprs_const(args);
+                    BuiltinResult::Value(ir::Expr::binary(ir::BinaryOp::Subtract, left, right))
+                }
+                IntegerBuiltin::OverflowingSub => {
+                    let [left, right] = self.lower_exprs_const(args);
+                    BuiltinResult::Value(ir::Expr::binary(
+                        ir::BinaryOp::SubtractWithOverflow,
+                        left,
+                        right,
+                    ))
+                }
                 IntegerBuiltin::WrappingMul => todo!("wrapping mul"),
                 IntegerBuiltin::OverflowingMul => todo!("oveflowing mul"),
             },
@@ -656,6 +666,46 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             ));
         }
     }
+    fn checked_overflow_op_expr(
+        &mut self,
+        op: ir::OverflowOp,
+        left: ir::Expr,
+        right: ir::Expr,
+    ) -> ir::Expr {
+        let op = match op {
+            ir::OverflowOp::Add => ir::BinaryOp::AddWithOverflow,
+            ir::OverflowOp::Sub => ir::BinaryOp::SubtractWithOverflow,
+        };
+        let tmp = self.fresh_temp(ir::Type::Tuple(vec![ir::Type::Int, ir::Type::Bool]));
+        let result = ir::Expr::binary(op, left, right);
+        self.push_stmt(ir::Stmt::Assign(ir::Place::Local(tmp), result));
+        self.push_stmt(ir::Stmt::PanicIf(ir::Expr::load(
+            ir::Place::Local(tmp).with_field(ir::FieldId::new(1)),
+        )));
+        ir::Expr::load(ir::Place::Local(tmp).with_field(ir::FieldId::new(0)))
+    }
+    fn lower_binary_op_expr(
+        &mut self,
+        op: BinaryOp,
+        left: &Expr<'ctxt>,
+        right: &Expr<'ctxt>,
+    ) -> Option<ir::Expr> {
+        let left = self.lower_expr(left)?;
+        let right = self.lower_expr(right)?;
+        let op = match op {
+            BinaryOp::Add => {
+                return Some(self.checked_overflow_op_expr(ir::OverflowOp::Add, left, right));
+            }
+            BinaryOp::Subtract => {
+                return Some(self.checked_overflow_op_expr(ir::OverflowOp::Sub, left, right));
+            }
+            BinaryOp::Lesser => ir::BinaryOp::Lesser,
+            BinaryOp::Equals => ir::BinaryOp::Equals,
+            BinaryOp::Greater => ir::BinaryOp::Greater,
+            op => todo!("binary op {:?}", op),
+        };
+        Some(ir::Expr::binary(op, left, right))
+    }
     fn lower_expr(&mut self, expr: &Expr<'ctxt>) -> Option<ir::Expr> {
         match &expr.kind {
             typed_ast::ExprKind::Unsafe(inner) => self.lower_expr(inner),
@@ -788,27 +838,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             }
             typed_ast::ExprKind::Load(place) => Some(ir::Expr::load(self.lower_place(place)?)),
             typed_ast::ExprKind::Binary(op, left, right) => {
-                let left = self.lower_expr(left)?;
-                let right = self.lower_expr(right)?;
-                let op = match op {
-                    BinaryOp::Add => {
-                        let tmp =
-                            self.fresh_temp(ir::Type::Tuple(vec![ir::Type::Int, ir::Type::Bool]));
-                        let result = ir::Expr::binary(ir::BinaryOp::AddWithOverflow, left, right);
-                        self.push_stmt(ir::Stmt::Assign(ir::Place::Local(tmp), result));
-                        self.push_stmt(ir::Stmt::PanicIf(ir::Expr::load(
-                            ir::Place::Local(tmp).with_field(ir::FieldId::new(1)),
-                        )));
-                        return Some(ir::Expr::load(
-                            ir::Place::Local(tmp).with_field(ir::FieldId::new(0)),
-                        ));
-                    }
-                    BinaryOp::Lesser => ir::BinaryOp::Lesser,
-                    BinaryOp::Equals => ir::BinaryOp::Equals,
-                    BinaryOp::Greater => ir::BinaryOp::Greater,
-                    op => todo!("binary op {:?}", op),
-                };
-                Some(ir::Expr::binary(op, left, right))
+                self.lower_binary_op_expr(*op, left, right)
             }
             typed_ast::ExprKind::Logic(logical_op, lhs, rhs) => {
                 let (dest, ()) = self.lower_into_temp(ir::Type::Bool, |dest, this| {

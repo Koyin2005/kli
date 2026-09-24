@@ -23,6 +23,7 @@ pub enum Instr {
     Move { dst: Reg, src: Reg },
     LoadImmediate(Reg, i64),
     Add { dst: Reg, src1: Reg, src2: Reg },
+    Sub { dst: Reg, src1: Reg, src2: Reg },
     LesserThan { dst: Reg, src1: Reg, src2: Reg },
     GreaterThan { dst: Reg, src1: Reg, src2: Reg },
     Equals { dst: Reg, src1: Reg, src2: Reg },
@@ -41,6 +42,7 @@ pub enum Instr {
 #[derive(Clone, Copy, Debug)]
 pub enum Intrinsic {
     AddWithOverflow,
+    SubWithOverflow,
     Panic,
     Print,
     Eprint,

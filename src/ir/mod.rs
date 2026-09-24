@@ -68,6 +68,8 @@ pub enum AggregateKind {
 pub enum BinaryOp {
     Add,
     AddWithOverflow,
+    Subtract,
+    SubtractWithOverflow,
     Lesser,
     Greater,
     Equals,
@@ -155,6 +157,11 @@ pub enum Stmt {
     Alloc(Place, Allocate),
     Assign(Place, Expr),
     Return(Expr),
+}
+#[derive(Debug)]
+pub enum OverflowOp {
+    Add,
+    Sub,
 }
 
 define_id!(TypeDefId);

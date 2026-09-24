@@ -85,6 +85,11 @@ impl VM {
                     let src2 = self.current_frame.read_reg(src2);
                     self.current_frame.store_reg(dst, src1.wrapping_add(src2));
                 }
+                Instr::Sub { dst, src1, src2 } => {
+                    let src1 = self.current_frame.read_reg(src1);
+                    let src2 = self.current_frame.read_reg(src2);
+                    self.current_frame.store_reg(dst, src1.wrapping_sub(src2));
+                }
                 Instr::LesserThan { dst, src1, src2 } => {
                     let src1 = self.current_frame.read_reg(src1);
                     let src2 = self.current_frame.read_reg(src2);
@@ -121,6 +126,12 @@ impl VM {
                         let second = self.stack.pop().unwrap();
                         let first = self.stack.pop().unwrap();
                         let (result, overflowed) = first.overflowing_add(second);
+                        self.stack.extend([result, overflowed as i64]);
+                    }
+                    Intrinsic::SubWithOverflow => {
+                        let second = self.stack.pop().unwrap();
+                        let first = self.stack.pop().unwrap();
+                        let (result, overflowed) = first.overflowing_sub(second);
                         self.stack.extend([result, overflowed as i64]);
                     }
                     Intrinsic::Panic => {

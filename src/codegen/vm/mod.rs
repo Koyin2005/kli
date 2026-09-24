@@ -128,6 +128,34 @@ impl<'a> CodegenFunction<'a> {
     fn release_registers(&mut self) {
         self.next_reg = self.local_reg_end;
     }
+    fn eval_overflow_op(
+        &mut self,
+        result_place: Option<&LoweredPlace>,
+        op: ir::OverflowOp,
+        left: &ScalarResult,
+        right: &ScalarResult,
+    ) -> ExprResult {
+        let instrinsic = match op {
+            ir::OverflowOp::Add => instructions::Intrinsic::AddWithOverflow,
+            ir::OverflowOp::Sub => instructions::Intrinsic::SubWithOverflow,
+        };
+        self.push_scalar_on_stack(&left);
+        self.push_scalar_on_stack(&right);
+        if let Some(result_place) = result_place {
+            self.push_intr_call(instrinsic, Some(result_place));
+            return self.load_place(&result_place);
+        }
+        let left_reg = self.reserve_register();
+        let right_reg = self.reserve_register();
+        self.push_intr_call(
+            instrinsic,
+            Some(&LoweredPlace::Tuple(IndexVec::from([
+                LoweredPlace::Reg(left_reg),
+                LoweredPlace::Reg(right_reg),
+            ]))),
+        );
+        ExprResult::pair(left_reg, right_reg)
+    }
     fn eval_binary_op(
         &mut self,
         op: BinaryOpInstr,
@@ -147,7 +175,7 @@ impl<'a> CodegenFunction<'a> {
         let src2 = self.force_scalar_in_reg(&right);
         let instr = match op {
             BinaryOpInstr::Add => instructions::Instr::Add { dst, src1, src2 },
-            BinaryOpInstr::Sub => todo!(),
+            BinaryOpInstr::Sub => instructions::Instr::Sub { dst, src1, src2 },
             BinaryOpInstr::Div => todo!(),
             BinaryOpInstr::Mul => todo!(),
             BinaryOpInstr::Lt => instructions::Instr::LesserThan { dst, src1, src2 },
@@ -169,25 +197,13 @@ impl<'a> CodegenFunction<'a> {
                 self.eval_binary_op(BinaryOpInstr::Add, result_place, &left, &right)
             }
             ir::BinaryOp::AddWithOverflow => {
-                self.push_scalar_on_stack(&left);
-                self.push_scalar_on_stack(&right);
-                if let Some(result_place) = result_place {
-                    self.push_intr_call(
-                        instructions::Intrinsic::AddWithOverflow,
-                        Some(result_place),
-                    );
-                    return self.load_place(&result_place);
-                }
-                let left_reg = self.reserve_register();
-                let right_reg = self.reserve_register();
-                self.push_intr_call(
-                    instructions::Intrinsic::AddWithOverflow,
-                    Some(&LoweredPlace::Tuple(IndexVec::from([
-                        LoweredPlace::Reg(left_reg),
-                        LoweredPlace::Reg(right_reg),
-                    ]))),
-                );
-                ExprResult::pair(left_reg, right_reg)
+                self.eval_overflow_op(result_place, ir::OverflowOp::Add, &left, &right)
+            }
+            ir::BinaryOp::Subtract => {
+                self.eval_binary_op(BinaryOpInstr::Sub, result_place, &left, &right)
+            }
+            ir::BinaryOp::SubtractWithOverflow => {
+                self.eval_overflow_op(result_place, ir::OverflowOp::Sub, &left, &right)
             }
             ir::BinaryOp::Lesser => {
                 self.eval_binary_op(BinaryOpInstr::Lt, result_place, &left, &right)
