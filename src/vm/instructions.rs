@@ -17,12 +17,7 @@ impl FunctionId {
     }
 }
 #[derive(Clone, Copy, Debug)]
-pub struct JumpOffset(u32);
-impl JumpOffset {
-    pub fn into_u32(self) -> u32 {
-        self.0
-    }
-}
+pub struct JumpOffset(pub u32);
 #[derive(Clone, Copy, Debug)]
 pub enum Instr {
     Move { dst: Reg, src: Reg },

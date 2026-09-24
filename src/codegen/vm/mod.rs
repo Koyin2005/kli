@@ -72,14 +72,37 @@ struct CodegenFunction<'a> {
     id: ir::BodyId,
     function: instructions::FunctionId,
     result_function: instructions::Function,
-    codgen: &'a mut Codegen,
+    codegen: &'a mut Codegen,
     program: &'a ir::Program,
     locals: IndexVec<ir::Local, LoweredPlace>,
     local_reg_end: u16,
     next_reg: u16,
     max_reg: u16,
+    panic_jumps: Vec<usize>,
 }
-impl CodegenFunction<'_> {
+impl<'a> CodegenFunction<'a> {
+    fn new(
+        id: ir::BodyId,
+        function: instructions::FunctionId,
+        codegen: &'a mut Codegen,
+        program: &'a ir::Program,
+    ) -> Self {
+        Self {
+            id,
+            function,
+            result_function: instructions::Function {
+                registers: 0,
+                instrs: Vec::new(),
+            },
+            codegen,
+            program,
+            locals: IndexVec::new(),
+            local_reg_end: 0,
+            next_reg: 0,
+            max_reg: 0,
+            panic_jumps: Vec::new(),
+        }
+    }
     fn reserve_register(&mut self) -> instructions::Reg {
         let reg = self.next_reg;
         self.next_reg = self.next_reg.checked_add(1).expect("too many registers");
@@ -149,11 +172,11 @@ impl CodegenFunction<'_> {
                     if !args.is_empty() {
                         todo!("handle generic functions")
                     }
-                    let id = self.codgen.function_for(*id, self.program);
+                    let id = self.codegen.function_for(*id, self.program);
                     ExprResult::Scalar(ScalarResult::Func(id))
                 }
                 ir::Constant::String(value) => {
-                    let index = value.with_str(|s| self.codgen.string_index(s));
+                    let index = value.with_str(|s| self.codegen.string_index(s));
                     ExprResult::Scalar(ScalarResult::Int(index))
                 }
                 &ir::Constant::Char(value) => {
@@ -190,6 +213,11 @@ impl CodegenFunction<'_> {
     }
     fn push_instr(&mut self, instr: instructions::Instr) {
         self.result_function.instrs.push(instr);
+    }
+    fn push_instr_offset(&mut self, instr: instructions::Instr) -> usize {
+        let offset = self.result_function.instrs.len();
+        self.push_instr(instr);
+        offset
     }
     fn push_immediate(&mut self, reg: instructions::Reg, value: i64) {
         self.push_instr(instructions::Instr::LoadImmediate(reg, value));
@@ -324,6 +352,35 @@ impl CodegenFunction<'_> {
             ),
         }
     }
+    fn current_jump_offset(&self) -> instructions::JumpOffset {
+        instructions::JumpOffset(
+            self.result_function
+                .instrs
+                .len()
+                .try_into()
+                .expect("too many instructions"),
+        )
+    }
+    fn patch_jump(&mut self, instr: usize, new_offset: instructions::JumpOffset) {
+        let (instructions::Instr::Jump(offset) | instructions::Instr::JumpIf(_, offset)) =
+            &mut self.result_function.instrs[instr]
+        else {
+            panic!("cannot patch non jump instruction")
+        };
+        *offset = new_offset;
+    }
+    fn panic_if(&mut self, result: &ScalarResult) {
+        let reg = self.force_scalar_in_reg(result);
+        let index = self.push_instr_offset(instructions::Instr::JumpIf(
+            reg,
+            instructions::JumpOffset(0),
+        ));
+        self.panic_jumps.push(index);
+    }
+    fn panic(&mut self) {
+        let index = self.push_instr_offset(instructions::Instr::Jump(instructions::JumpOffset(0)));
+        self.panic_jumps.push(index);
+    }
     fn lower_stmt(&mut self, stmt: &ir::Stmt) {
         match stmt {
             ir::Stmt::Return(value) => {
@@ -332,9 +389,7 @@ impl CodegenFunction<'_> {
                 self.push_instr(instructions::Instr::Return);
             }
             ir::Stmt::Panic => {
-                self.push_instr(instructions::Instr::CallIntrinisic(
-                    instructions::Intrinsic::Panic,
-                ));
+                self.panic();
             }
             ir::Stmt::Call(call) => {
                 let ir::Call {
@@ -383,12 +438,14 @@ impl CodegenFunction<'_> {
             ir::Stmt::PanicIf(value) => {
                 let value = self.lower_expr_result(value);
                 let ExprResult::Scalar(ScalarResult::Int(value)) = value else {
-                    self.push_result(&value);
-                    self.push_intr_call(instructions::Intrinsic::PanicIf, None);
+                    let ExprResult::Scalar(scalar) = value else {
+                        unreachable!("should be a scalar for panic if")
+                    };
+                    self.panic_if(&scalar);
                     return;
                 };
                 if value != 0 {
-                    self.push_intr_call(instructions::Intrinsic::Panic, None);
+                    self.panic();
                     return;
                 }
             }
@@ -402,7 +459,7 @@ impl CodegenFunction<'_> {
     }
     fn lower(mut self) {
         for local in &self.program.bodies[self.id].locals {
-            let place = self.create_local_for(&self.codgen.type_repr(&local.ty));
+            let place = self.create_local_for(&self.codegen.type_repr(&local.ty));
             self.locals.push(place);
         }
         self.local_reg_end = self.next_reg;
@@ -410,8 +467,15 @@ impl CodegenFunction<'_> {
             self.lower_stmt(stmt);
             self.release_registers();
         }
+        if !self.panic_jumps.is_empty() {
+            let offset = self.current_jump_offset();
+            self.push_intr_call(instructions::Intrinsic::Panic, None);
+            for jump in std::mem::take(&mut self.panic_jumps) {
+                self.patch_jump(jump, offset);
+            }
+        }
         self.result_function.registers = self.max_reg;
-        self.codgen.result.functions[self.function] = self.result_function;
+        self.codegen.result.functions[self.function] = self.result_function;
     }
 }
 
@@ -476,21 +540,7 @@ impl Codegen {
             instrs: vec![],
         });
         self.function_map.insert(body_id, id);
-        CodegenFunction {
-            id: body_id,
-            function: id,
-            result_function: instructions::Function {
-                registers: 0,
-                instrs: Vec::new(),
-            },
-            codgen: self,
-            program,
-            locals: IndexVec::new(),
-            local_reg_end: 0,
-            next_reg: 0,
-            max_reg: 0,
-        }
-        .lower();
+        CodegenFunction::new(body_id, id, self, program).lower();
         id
     }
     fn make_entrypoint_function(&mut self, program: &ir::Program) -> instructions::FunctionId {

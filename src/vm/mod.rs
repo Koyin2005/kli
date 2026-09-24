@@ -129,11 +129,11 @@ impl VM {
                 }
                 Instr::JumpIf(reg, jump_offset) => {
                     if self.current_frame.read_reg(reg) != 0 {
-                        self.current_frame.ip = jump_offset.into_u32() as _;
+                        self.current_frame.ip = jump_offset.0 as _;
                     }
                 }
                 Instr::Jump(jump_offset) => {
-                    self.current_frame.ip = jump_offset.into_u32() as _;
+                    self.current_frame.ip = jump_offset.0 as _;
                 }
                 Instr::Return => {
                     let Some(frame) = self.frames.pop() else {

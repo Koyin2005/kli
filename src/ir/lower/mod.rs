@@ -350,7 +350,10 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 let local = self.fresh_local_for_var(var, matches!(mutable, Mutable::Mutable), ty);
                 self.lower_expr_into(ir::Place::Local(local), expr);
             }
-            PatternKind::Unit | PatternKind::Bool(_) | PatternKind::Int(_) | PatternKind::Char(_) => (),
+            PatternKind::Unit
+            | PatternKind::Bool(_)
+            | PatternKind::Int(_)
+            | PatternKind::Char(_) => (),
             PatternKind::Err => unreachable!("cannot assign to err patterns"),
             _ => {
                 let result = self.lower_expr_to_place(&expr);
