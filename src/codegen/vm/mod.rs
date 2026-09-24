@@ -787,7 +787,7 @@ impl Codegen {
                     }
                 }
             }
-            ir::Type::Box(_) => todo!(),
+            ir::Type::Box(_) => SCALAR_REPR,
         }
     }
     fn string_index(&mut self, s: &str) -> i64 {
