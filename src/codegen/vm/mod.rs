@@ -91,7 +91,19 @@ impl CodegenFunction<'_> {
                     unreachable!("should be a scalar")
                 };
                 match op {
-                    ir::BinaryOp::Add => todo!(),
+                    ir::BinaryOp::Add => match (left,right){
+                        (ScalarResult::Int(left),ScalarResult::Int(right)) => {
+                            ExprResult::Scalar(ScalarResult::Int(left.wrapping_add(right)))
+                        },
+                        (ScalarResult::Int(0),not_zero) | (not_zero,ScalarResult::Int(0)) => ExprResult::Scalar(not_zero),
+                        (left,right) => {
+                            let dst = self.reserve_register();
+                            let src1 = self.force_scalar_in_reg(&left);
+                            let src2 = self.force_scalar_in_reg(&right);
+                            self.push_instr(instructions::Instr::Add { dst, src1, src2 });
+                            ExprResult::Scalar(ScalarResult::Reg(dst))
+                        }
+                    },
                     ir::BinaryOp::AddWithOverflow => match (left, right) {
                         (ScalarResult::Int(left), ScalarResult::Int(right)) => {
                             let (result, overflowed) = left.overflowing_add(right);
@@ -101,10 +113,10 @@ impl CodegenFunction<'_> {
                             ])
                         }
                         (left, right) => {
-                            let left_reg = self.reserve_register();
-                            let right_reg = self.reserve_register();
                             self.push_scalar_on_stack(&left);
                             self.push_scalar_on_stack(&right);
+                            let left_reg = self.reserve_register();
+                            let right_reg = self.reserve_register();
                             self.push_intr_call(
                                 instructions::Intrinsic::AddWithOverflow,
                                 Some(LoweredPlace::Tuple(IndexVec::from([
@@ -149,14 +161,7 @@ impl CodegenFunction<'_> {
         }
     }
     fn push_scalar_on_stack(&mut self, value: &ScalarResult) {
-        let reg = match value {
-            &ScalarResult::Reg(reg) => reg,
-            ScalarResult::Func(_) | ScalarResult::Int(_) => {
-                let reg = self.reserve_register();
-                self.store_scalar_in_reg(reg, value);
-                reg
-            }
-        };
+        let reg = self.force_scalar_in_reg(value);
         self.push_instr(instructions::Instr::Push(reg));
     }
     fn push_result(&mut self, result: &ExprResult) {
@@ -191,6 +196,16 @@ impl CodegenFunction<'_> {
                 for field in fields.into_iter().rev() {
                     self.pop_place(field);
                 }
+            }
+        }
+    }
+    fn force_scalar_in_reg(&mut self, value: &ScalarResult) -> instructions::Reg{
+        match value{
+            ScalarResult::Reg(reg) => *reg,
+            _ => {
+                let reg = self.reserve_register();
+                self.store_scalar_in_reg(reg, value);
+                reg
             }
         }
     }
@@ -322,7 +337,12 @@ impl CodegenFunction<'_> {
                     return;
                 }
             }
-            _ => todo!("{stmt:?}"),
+            ir::Stmt::Loop(..) => todo!("loop"),
+            ir::Stmt::Break(_) => todo!("break"),
+            ir::Stmt::If(..) => todo!("if"),
+            ir::Stmt::Match(_) => todo!("match"),
+            ir::Stmt::ReadLine(_) => todo!("read_line"),
+            ir::Stmt::Alloc(..) => todo!("alloc"),
         }
     }
     fn lower(mut self) {
