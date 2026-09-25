@@ -28,6 +28,7 @@ pub struct VM {
     stack: Vec<i64>,
     current_frame: Frame,
     strings: Vec<String>,
+    arrays: Vec<Vec<i64>>,
 }
 impl VM {
     pub fn new(entry_point: FunctionId, program: Program) -> Self {
@@ -42,6 +43,7 @@ impl VM {
             stack: Vec::new(),
             current_frame: frame,
             strings: program.strings,
+            arrays: Vec::new(),
         }
     }
     fn next_instr(&mut self) -> Instr {
@@ -146,6 +148,11 @@ impl VM {
                     self.call(function_id);
                 }
                 Instr::CallIntrinisic(intrinsic) => match intrinsic {
+                    Intrinsic::Alloc => {
+                        let index = self.arrays.len();
+                        self.arrays.push(std::mem::take(&mut self.stack));
+                        self.stack.push(index as _);
+                    }
                     Intrinsic::AddWithOverflow => {
                         let second = self.stack.pop().unwrap();
                         let first = self.stack.pop().unwrap();

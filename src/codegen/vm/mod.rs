@@ -710,7 +710,26 @@ impl<'a> CodegenFunction<'a> {
             }
             ir::Stmt::Match(_) => todo!("match"),
             ir::Stmt::ReadLine(_) => todo!("read_line"),
-            ir::Stmt::Alloc(..) => todo!("alloc"),
+            ir::Stmt::Alloc(place, alloc) => {
+                match alloc {
+                    ir::Allocate::Array(_, elements) => {
+                        let (place, _) = self.lower_place(place);
+                        let element_count: i64 =
+                            elements.len().try_into().expect("too many elements");
+                        for element in elements {
+                            let result = self.lower_expr_result(element, None);
+                            self.push_result(&result);
+                        }
+                        self.push_intr_call(
+                            instructions::Intrinsic::Alloc,
+                            None
+                        );
+                        self.push_scalar_on_stack(&ScalarResult::Int(element_count));
+                        self.push_scalar_on_stack(&ScalarResult::Int(element_count));
+                        self.push_intr_call(instructions::Intrinsic::Alloc, Some(&place));
+                    }
+                }
+            }
         }
     }
     fn lower(mut self) {
@@ -763,7 +782,7 @@ impl Codegen {
             ir::Type::Tuple(fields) => {
                 Repr::tuple(fields.iter().map(|ty| self.type_repr(ty, program, args)))
             }
-            ir::Type::Array(_) => todo!(),
+            ir::Type::Array(_) => SCALAR_REPR,
             ir::Type::Named(id, args) => {
                 let args = args
                     .iter()

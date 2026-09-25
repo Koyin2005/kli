@@ -45,6 +45,7 @@ pub enum Instr {
 }
 #[derive(Clone, Copy, Debug)]
 pub enum Intrinsic {
+    Alloc,
     AddWithOverflow,
     SubWithOverflow,
     MulWithOverflow,
