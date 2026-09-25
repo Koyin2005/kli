@@ -2,3 +2,8 @@ fun println(s : string) -> () = do
     builtins.print_string(s);
     builtins.print_string("\n");
 end
+
+fun eprintln(s : string) -> () = do 
+    builtins.eprint_string(s);
+    builtins.eprint_string("\n");
+end
