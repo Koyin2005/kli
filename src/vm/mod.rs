@@ -88,6 +88,10 @@ impl VM {
                     let src2 = self.current_frame.read_reg(src2);
                     self.current_frame.store_reg(dst, src1.wrapping_add(src2));
                 }
+                Instr::AddImm { dst, src1, src2 } => {
+                    let src1 = self.current_frame.read_reg(src1);
+                    self.current_frame.store_reg(dst, src1.wrapping_add(src2));
+                }
                 Instr::Sub { dst, src1, src2 } => {
                     let src1 = self.current_frame.read_reg(src1);
                     let src2 = self.current_frame.read_reg(src2);
@@ -121,6 +125,11 @@ impl VM {
                     let src2 = self.current_frame.read_reg(src2);
                     self.current_frame.store_reg(dst, (src1 < src2).into());
                 }
+                Instr::LesserThanUnsigned { dst, src1, src2 } => {
+                    let src1 = self.current_frame.read_reg(src1).cast_unsigned();
+                    let src2 = self.current_frame.read_reg(src2).cast_unsigned();
+                    self.current_frame.store_reg(dst, (src1 < src2).into());
+                }
                 Instr::GreaterThan { dst, src1, src2 } => {
                     let src1 = self.current_frame.read_reg(src1);
                     let src2 = self.current_frame.read_reg(src2);
@@ -137,6 +146,21 @@ impl VM {
                 }
                 Instr::PushImmediate(value) => {
                     self.stack.push(value);
+                }
+                Instr::LoadIndex { dst, base, offset } => {
+                    let base = self.current_frame.read_reg(base) as usize;
+                    let offset = self.current_frame.read_reg(offset) as usize;
+                    self.current_frame.store_reg(dst, self.arrays[base][offset]);
+                }
+                Instr::LoadIndexImm { dst, src, offset } => {
+                    let base = self.current_frame.read_reg(src) as usize;
+                    let offset = offset as usize;
+                    self.current_frame.store_reg(dst, self.arrays[base][offset]);
+                }
+                Instr::StoreIndex { base, offset, src } => {
+                    let base = self.current_frame.read_reg(base) as usize;
+                    let offset = self.current_frame.read_reg(offset) as usize;
+                    self.arrays[base][offset] = self.current_frame.read_reg(src);
                 }
                 Instr::Push(reg) => {
                     self.stack.push(self.current_frame.read_reg(reg));

@@ -269,9 +269,54 @@ impl TypeDef {
         variant_def
     }
 }
+pub type TypeDefs = IndexVec<TypeDefId, TypeDef>;
 #[derive(Default)]
 pub struct Program {
-    pub type_defs: IndexVec<TypeDefId, TypeDef>,
+    pub type_defs: TypeDefs,
     pub entrypoint: Option<BodyId>,
     pub bodies: IndexVec<BodyId, Body>,
+}
+
+impl Place {
+    pub fn type_of(&self, body: &Body, type_defs: &TypeDefs) -> Type {
+        match self {
+            &Self::Local(local) => body.locals[local].ty.clone(),
+            &Self::Field(ref place, field_id) => match place.type_of(body, type_defs) {
+                Type::Tuple(fields) => { fields }.swap_remove(field_id.into_usize()),
+                Type::Named(..) => {
+                    todo!("handle named types")
+                }
+                _ => unreachable!(),
+            },
+            Self::Deref(place) => {
+                let Type::Box(ty) = place.type_of(body, type_defs) else {
+                    unreachable!()
+                };
+                *ty
+            }
+            Place::Downcast(place, case_id) => match place.type_of(body, type_defs) {
+                Type::Named(id, args) => {
+                    let VariantDef { cases } = type_defs[id].variant_def();
+                    Type::Tuple(
+                        cases[*case_id]
+                            .field
+                            .iter()
+                            .map(|field| {
+                                let mut ty = field.ty.clone();
+                                ty.subst(&args);
+                                ty
+                            })
+                            .collect(),
+                    )
+                }
+                _ => unreachable!(),
+            },
+            Place::Index(place, _) => {
+                let Type::Array(ty) = place.type_of(body, type_defs) else {
+                    unreachable!()
+                };
+                *ty
+            }
+        }
+    }
 }
