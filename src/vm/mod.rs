@@ -162,6 +162,11 @@ impl VM {
                     let offset = self.current_frame.read_reg(offset) as usize;
                     self.arrays[base][offset] = self.current_frame.read_reg(src);
                 }
+                Instr::StoreIndexImm { base, offset, src } => {
+                    let base = self.current_frame.read_reg(base) as usize;
+                    let offset = offset as usize;
+                    self.arrays[base][offset] = self.current_frame.read_reg(src);
+                }
                 Instr::Push(reg) => {
                     self.stack.push(self.current_frame.read_reg(reg));
                 }

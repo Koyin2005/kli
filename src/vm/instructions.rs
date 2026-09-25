@@ -41,6 +41,7 @@ pub enum Instr {
     CallIntrinisic(Intrinsic),
     CallIndirect(Reg),
     StoreIndex { base: Reg, offset: Reg, src: Reg },
+    StoreIndexImm { base: Reg, offset: u16, src: Reg },
     LoadIndex { dst: Reg, base: Reg, offset: Reg },
     LoadIndexImm { dst: Reg, src: Reg, offset: u16 },
     JumpIfFalse(Reg, JumpOffset),

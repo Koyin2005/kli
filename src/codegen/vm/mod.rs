@@ -68,10 +68,12 @@ const UNIT_REPR: Repr = Repr {
 enum SimplePlace {
     Reg(instructions::Reg),
     Indexed(instructions::Reg, instructions::Reg),
+    ConstIndexed(instructions::Reg, u16),
 }
 impl From<SimplePlace> for ScalarResult {
     fn from(value: SimplePlace) -> Self {
         match value {
+            SimplePlace::ConstIndexed(base, index) => ScalarResult::ConstIndex(base, index),
             SimplePlace::Indexed(base, index) => ScalarResult::Index(base, index),
             SimplePlace::Reg(reg) => ScalarResult::Reg(reg),
         }
@@ -100,6 +102,7 @@ impl LoweredPlace {
 enum ScalarResult {
     Reg(instructions::Reg),
     Index(instructions::Reg, instructions::Reg),
+    ConstIndex(instructions::Reg, u16),
     Func(instructions::FunctionId),
     Int(i64),
 }
@@ -107,7 +110,7 @@ impl ScalarResult {
     pub fn as_i64(&self) -> Option<i64> {
         match self {
             ScalarResult::Reg(_) => None,
-            ScalarResult::Index(_, _) => None,
+            ScalarResult::Index(_, _) | ScalarResult::ConstIndex(..) => None,
             ScalarResult::Func(function_id) => Some(function_id.as_u32().into()),
             ScalarResult::Int(value) => Some(*value),
         }
@@ -336,12 +339,7 @@ impl<'a> CodegenFunction<'a> {
             },
         };
         self.push_instr(instr);
-        match dst {
-            SimplePlace::Reg(_) => (),
-            SimplePlace::Indexed(base, index) => {
-                self.store_index(base, index, dst_reg);
-            }
-        }
+        self.store_reg_for_simple_place(dst, dst_reg);
         ExprResult::Scalar(dst.into())
     }
     fn lower_binary_op(
@@ -397,6 +395,18 @@ impl<'a> CodegenFunction<'a> {
         match place {
             SimplePlace::Reg(reg) => reg,
             SimplePlace::Indexed(..) => self.reserve_register(),
+            SimplePlace::ConstIndexed(..) => self.reserve_register(),
+        }
+    }
+    fn store_reg_for_simple_place(&mut self, place: SimplePlace, reg: instructions::Reg) {
+        match place {
+            SimplePlace::Reg(_) => (),
+            SimplePlace::Indexed(base, index) => {
+                self.store_index(base, index, reg);
+            }
+            SimplePlace::ConstIndexed(base, index) => {
+                self.store_index_const(base, index, reg);
+            }
         }
     }
     fn reg_for_simple_place_dest_opt(
@@ -444,12 +454,7 @@ impl<'a> CodegenFunction<'a> {
                 let result = result.and_then(|place| place.as_simple_place());
                 let (dst, dst_reg) = self.reg_for_simple_place_dest_opt(result);
                 self.load_index_imm(dst_reg, base, 1);
-                match dst {
-                    SimplePlace::Indexed(base, index) => {
-                        self.store_index(base, index, dst_reg);
-                    }
-                    SimplePlace::Reg(_) => (),
-                }
+                self.store_reg_for_simple_place(dst, dst_reg);
                 ExprResult::Scalar(dst.into())
             }
             ir::ExprKind::Discriminant(_) => todo!("discriminant"),
@@ -494,6 +499,9 @@ impl<'a> CodegenFunction<'a> {
                     SimplePlace::Indexed(base, index) => {
                         self.store_index(base, index, dst_reg);
                     }
+                    SimplePlace::ConstIndexed(base, index) => {
+                        self.store_index_const(base, index, dst_reg);
+                    }
                 }
                 ExprResult::Scalar(dst.into())
             }
@@ -506,6 +514,9 @@ impl<'a> CodegenFunction<'a> {
         src: instructions::Reg,
     ) {
         self.push_instr(instructions::Instr::StoreIndex { base, offset, src });
+    }
+    fn store_index_const(&mut self, base: instructions::Reg, offset: u16, src: instructions::Reg) {
+        self.push_instr(instructions::Instr::StoreIndexImm { base, offset, src });
     }
     fn load_index_imm(&mut self, dst: instructions::Reg, src: instructions::Reg, index: u16) {
         self.push_instr(instructions::Instr::LoadIndexImm {
@@ -619,6 +630,11 @@ impl<'a> CodegenFunction<'a> {
                 self.push_instr(instructions::Instr::Pop(reg));
                 self.store_index(base, index, reg);
             }
+            SimplePlace::ConstIndexed(base, index) => {
+                let reg = self.reserve_register();
+                self.push_instr(instructions::Instr::Pop(reg));
+                self.store_index_const(base, index, reg);
+            }
         }
     }
     fn pop_place(&mut self, place: &LoweredPlace) {
@@ -649,6 +665,11 @@ impl<'a> CodegenFunction<'a> {
             SimplePlace::Indexed(base, index) => {
                 self.store_scalar_in_indexed(base, index, value);
             }
+            SimplePlace::ConstIndexed(base, index) => {
+                let reg = self.reserve_register();
+                self.store_scalar_in_reg(reg, value);
+                self.store_index_const(base, index, reg);
+            }
         }
     }
     fn store_scalar_in_indexed(
@@ -675,6 +696,9 @@ impl<'a> CodegenFunction<'a> {
                     dst,
                     func.into_usize().try_into().expect("too many functions"),
                 );
+            }
+            &ScalarResult::ConstIndex(base, index) => {
+                self.load_index_imm(dst, base, index);
             }
             &ScalarResult::Index(base, index) => {
                 self.load_index(dst, base, index);
@@ -750,26 +774,54 @@ impl<'a> CodegenFunction<'a> {
                     self.load_index_imm(dst, base, 0);
                     dst
                 };
-                let index = self.force_scalar_in_reg(&index);
                 match &elem_repr.kind {
                     ReprKind::Scalar => (
-                        LoweredPlace::Simple(SimplePlace::Indexed(base, index)),
+                        LoweredPlace::Simple(match index {
+                            ScalarResult::Int(value) if let Ok(value) = value.try_into() => {
+                                SimplePlace::ConstIndexed(base, value)
+                            }
+                            _ => SimplePlace::Indexed(base, self.force_scalar_in_reg(&index)),
+                        }),
                         elem_repr,
                     ),
                     ReprKind::Tuple(_) | ReprKind::Union(_) => {
                         let indices = {
+                            let index = match index {
+                                ScalarResult::Int(value)
+                                    if let Ok::<u16, _>(value) = value.try_into() =>
+                                {
+                                    Ok::<u16, _>(value)
+                                }
+                                _ => Err(self.force_scalar_in_reg(&index)),
+                            };
                             let mut indices = Vec::new();
                             for i in 0..elem_repr.size {
                                 if i == 0 {
-                                    indices.push(base);
+                                    indices.push(index);
                                 } else {
-                                    let reg = self.reserve_register();
-                                    self.push_instr(instructions::Instr::AddImm {
-                                        dst: reg,
-                                        src1: index,
-                                        src2: i as _,
-                                    });
-                                    indices.push(reg);
+                                    match index {
+                                        Ok(index) => {
+                                            if let Ok(i) = i.try_into()
+                                                && let Some(index) = index.checked_add(i)
+                                            {
+                                                indices.push(Ok(index));
+                                            } else {
+                                                let i: i64 = i.try_into().expect("too big");
+                                                let reg = self.reserve_register();
+                                                self.load_immediate(reg, i64::from(index) + i);
+                                                indices.push(Err(reg))
+                                            }
+                                        }
+                                        Err(index) => {
+                                            let reg = self.reserve_register();
+                                            self.push_instr(instructions::Instr::AddImm {
+                                                dst: reg,
+                                                src1: index,
+                                                src2: i as _,
+                                            });
+                                            indices.push(Err(reg))
+                                        }
+                                    };
                                 }
                             }
                             indices
@@ -778,7 +830,10 @@ impl<'a> CodegenFunction<'a> {
                             LoweredPlace::Tuple(
                                 indices
                                     .into_iter()
-                                    .map(|index| SimplePlace::Indexed(base, index))
+                                    .map(|index| match index {
+                                        Ok(index) => SimplePlace::ConstIndexed(base, index),
+                                        Err(index) => SimplePlace::Indexed(base, index),
+                                    })
                                     .collect(),
                             ),
                             elem_repr,
@@ -811,12 +866,11 @@ impl<'a> CodegenFunction<'a> {
         };
         *offset = new_offset;
     }
-    fn panic_if(&mut self, result: &ScalarResult, cond : bool) {
+    fn panic_if(&mut self, result: &ScalarResult, cond: bool) {
         let reg = self.force_scalar_in_reg(result);
-        let index = self.push_instr_offset(if cond { instructions::Instr::JumpIf(
-            reg,
-            instructions::JumpOffset(0),
-        )} else {
+        let index = self.push_instr_offset(if cond {
+            instructions::Instr::JumpIf(reg, instructions::JumpOffset(0))
+        } else {
             instructions::Instr::JumpIfFalse(reg, instructions::JumpOffset(0))
         });
         self.panic_jumps.push(index);
@@ -829,15 +883,15 @@ impl<'a> CodegenFunction<'a> {
         self.lower_stmt(stmt);
         self.release_registers();
     }
-    fn lower_cond_expr(&mut self, expr: &ir::Expr) -> (bool,ExprResult){
-        match &expr.kind{
+    fn lower_cond_expr(&mut self, expr: &ir::Expr) -> (bool, ExprResult) {
+        match &expr.kind {
             ir::ExprKind::Not(expr) => {
-                let (negated,result) = self.lower_cond_expr(expr);
-                (!negated,result)
-            },
+                let (negated, result) = self.lower_cond_expr(expr);
+                (!negated, result)
+            }
             _ => {
                 let expr = self.lower_expr_result(expr, None);
-                (false,expr)
+                (false, expr)
             }
         }
     }
@@ -874,6 +928,11 @@ impl<'a> CodegenFunction<'a> {
                         let reg = self.eval_load_index(base, index);
                         self.push_instr(instructions::Instr::CallIndirect(reg));
                     }
+                    ScalarResult::ConstIndex(base, index) => {
+                        let reg = self.reserve_register();
+                        self.load_index_imm(reg, base, index);
+                        self.push_instr(instructions::Instr::CallIndirect(reg));
+                    }
                     ScalarResult::Int(_) => unreachable!(),
                 }
                 self.pop_place(&place);
@@ -898,10 +957,10 @@ impl<'a> CodegenFunction<'a> {
                 }
             }
             ir::Stmt::PanicIf(value) => {
-                let (negated,value) = self.lower_cond_expr(value);
+                let (negated, value) = self.lower_cond_expr(value);
                 let value = value.into_single_scalar();
                 let ScalarResult::Int(value) = value else {
-                    self.panic_if(&value,!negated);
+                    self.panic_if(&value, !negated);
                     return;
                 };
                 if value != 0 {
