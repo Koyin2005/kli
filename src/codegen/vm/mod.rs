@@ -811,12 +811,14 @@ impl<'a> CodegenFunction<'a> {
         };
         *offset = new_offset;
     }
-    fn panic_if(&mut self, result: &ScalarResult) {
+    fn panic_if(&mut self, result: &ScalarResult, cond : bool) {
         let reg = self.force_scalar_in_reg(result);
-        let index = self.push_instr_offset(instructions::Instr::JumpIf(
+        let index = self.push_instr_offset(if cond { instructions::Instr::JumpIf(
             reg,
             instructions::JumpOffset(0),
-        ));
+        )} else {
+            instructions::Instr::JumpIfFalse(reg, instructions::JumpOffset(0))
+        });
         self.panic_jumps.push(index);
     }
     fn panic(&mut self) {
@@ -826,6 +828,18 @@ impl<'a> CodegenFunction<'a> {
     fn lower_stmt_full(&mut self, stmt: &ir::Stmt) {
         self.lower_stmt(stmt);
         self.release_registers();
+    }
+    fn lower_cond_expr(&mut self, expr: &ir::Expr) -> (bool,ExprResult){
+        match &expr.kind{
+            ir::ExprKind::Not(expr) => {
+                let (negated,result) = self.lower_cond_expr(expr);
+                (!negated,result)
+            },
+            _ => {
+                let expr = self.lower_expr_result(expr, None);
+                (false,expr)
+            }
+        }
     }
     fn lower_stmt(&mut self, stmt: &ir::Stmt) {
         match stmt {
@@ -884,10 +898,10 @@ impl<'a> CodegenFunction<'a> {
                 }
             }
             ir::Stmt::PanicIf(value) => {
-                let value = self.lower_expr_result(value, None);
+                let (negated,value) = self.lower_cond_expr(value);
                 let value = value.into_single_scalar();
                 let ScalarResult::Int(value) = value else {
-                    self.panic_if(&value);
+                    self.panic_if(&value,!negated);
                     return;
                 };
                 if value != 0 {
