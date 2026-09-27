@@ -12,7 +12,12 @@ impl CodegenFunction<'_> {
         for arg in args {
             match arg {
                 CallArg::Scalar(value) => {
-                    self.push_instr(instructions::Instr::PushImmediate(value));
+                    if let Ok(value) = value.try_into() {
+                        self.push_instr(instructions::Instr::PushImm(value));
+                        return;
+                    }
+                    let value = self.add_const(value);
+                    self.push_instr(instructions::Instr::PushConst(value));
                 }
                 CallArg::Reg(regs) => {
                     for reg in regs.into_iter() {
@@ -130,14 +135,14 @@ impl CodegenFunction<'_> {
                 }
                 let (reg, jump) = match condition {
                     Conditional::Bool(value) => {
-                        let stmts = if value { else_branch } else { then_branch };
+                        let stmts = if value { then_branch } else { else_branch };
                         for stmt in stmts {
                             self.lower_stmt(stmt);
                         }
                         return;
                     }
-                    Conditional::Reg(reg) => (reg, JumpIf::NotZero),
-                    Conditional::Not(reg) => (reg, JumpIf::Zero),
+                    Conditional::Reg(reg) => (reg, JumpIf::Zero),
+                    Conditional::Not(reg) => (reg, JumpIf::NotZero),
                 };
                 let cond_jump = {
                     let cond_jump = self.push_jump_if(jump, reg);

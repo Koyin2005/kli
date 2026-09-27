@@ -17,13 +17,16 @@ impl FunctionId {
     }
 }
 #[derive(Clone, Copy, Debug)]
+pub struct Const(pub u32);
+#[derive(Clone, Copy, Debug)]
 pub struct JumpOffset(pub u32);
 #[derive(Clone, Copy, Debug)]
 pub enum Instr {
     Move { dst: Reg, src: Reg },
-    LoadImmediate(Reg, i64),
+    LoadConst(Reg, Const),
+    LoadImmediate(Reg, i32),
     Add { dst: Reg, src1: Reg, src2: Reg },
-    AddImm { dst: Reg, src1: Reg, src2: i64 },
+    AddImm { dst: Reg, src1: Reg, src2: i16 },
     Sub { dst: Reg, src1: Reg, src2: Reg },
     Mul { dst: Reg, src1: Reg, src2: Reg },
     Div { dst: Reg, src1: Reg, src2: Reg },
@@ -35,7 +38,8 @@ pub enum Instr {
     Equals { dst: Reg, src1: Reg, src2: Reg },
     Not { dst: Reg, src: Reg },
     Push(Reg),
-    PushImmediate(i64),
+    PushConst(Const),
+    PushImm(i32),
     Pop(Reg),
     Call(FunctionId),
     CallIntrinisic(Intrinsic),
@@ -66,12 +70,14 @@ pub struct Function {
 }
 #[derive(Debug)]
 pub struct Program {
+    pub ints: Vec<i64>,
     pub strings: Vec<String>,
     pub functions: IndexVec<FunctionId, Function>,
 }
 impl Program {
     pub fn new() -> Self {
         Self {
+            ints: Vec::new(),
             functions: IndexVec::new(),
             strings: Vec::new(),
         }

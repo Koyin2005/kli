@@ -12,7 +12,7 @@ pub enum RuntimeError {
 pub(super) struct Frame {
     current_function: FunctionId,
     regs: Vec<i64>,
-    ip: usize,
+    return_ip: usize,
 }
 impl Frame {
     fn read_reg(&self, reg: Reg) -> i64 {
@@ -21,11 +21,15 @@ impl Frame {
     fn store_reg(&mut self, reg: Reg, value: i64) {
         self.regs[usize::from(reg.into_u16())] = value;
     }
+    fn move_reg(&mut self, dst: Reg, src: Reg) {
+        self.regs[usize::from(dst.into_u16())] = self.regs[usize::from(src.into_u16())];
+    }
 }
 pub struct VM {
     functions: IndexVec<FunctionId, Function>,
     frames: Vec<Frame>,
     stack: Vec<i64>,
+    constant_ints: Vec<i64>,
     current_frame: Frame,
     strings: Vec<String>,
     arrays: Vec<Vec<i64>>,
@@ -35,9 +39,10 @@ impl VM {
         let frame = Frame {
             current_function: entry_point,
             regs: vec![0; program.functions[entry_point].registers as _],
-            ip: 0,
+            return_ip: 0,
         };
         Self {
+            constant_ints: program.ints,
             functions: program.functions,
             frames: Vec::new(),
             stack: Vec::new(),
@@ -46,13 +51,10 @@ impl VM {
             arrays: Vec::new(),
         }
     }
-    fn next_instr(&mut self) -> Instr {
-        let frame = &mut self.current_frame;
-        let instr = self.functions[frame.current_function].instrs[frame.ip];
-        frame.ip += 1;
-        instr
+    fn next_instr(&mut self, ip: usize) -> Instr {
+        self.functions[self.current_frame.current_function].instrs[ip]
     }
-    fn call(&mut self, function_id: FunctionId) {
+    fn call(&mut self, function_id: FunctionId, ip: usize) {
         let mut new_regs = vec![0; self.functions[function_id].registers as _];
         for (reg, value) in new_regs.iter_mut().zip(self.stack.drain(..)) {
             *reg = value;
@@ -60,7 +62,7 @@ impl VM {
         let new_frame = Frame {
             current_function: function_id,
             regs: new_regs,
-            ip: 0,
+            return_ip: ip,
         };
         self.frames
             .push(std::mem::replace(&mut self.current_frame, new_frame));
@@ -74,14 +76,20 @@ impl VM {
         }
     }
     pub fn run(mut self) -> Result<(), RuntimeError> {
+        let mut ip = 0usize;
         loop {
-            match self.next_instr() {
-                Instr::LoadImmediate(dst, value) => {
+            let instr = self.next_instr(ip);
+            ip = ip.wrapping_add(1);
+            match instr {
+                Instr::LoadConst(dst, value) => {
+                    let value = self.constant_ints[value.0 as usize];
                     self.current_frame.store_reg(dst, value);
                 }
+                Instr::LoadImmediate(dst, value) => {
+                    self.current_frame.store_reg(dst, value.into());
+                }
                 Instr::Move { dst, src } => {
-                    let src = self.current_frame.read_reg(src);
-                    self.current_frame.store_reg(dst, src);
+                    self.current_frame.move_reg(dst, src);
                 }
                 Instr::Add { dst, src1, src2 } => {
                     let src1 = self.current_frame.read_reg(src1);
@@ -90,7 +98,8 @@ impl VM {
                 }
                 Instr::AddImm { dst, src1, src2 } => {
                     let src1 = self.current_frame.read_reg(src1);
-                    self.current_frame.store_reg(dst, src1.wrapping_add(src2));
+                    self.current_frame
+                        .store_reg(dst, src1.wrapping_add(src2.into()));
                 }
                 Instr::Sub { dst, src1, src2 } => {
                     let src1 = self.current_frame.read_reg(src1);
@@ -144,7 +153,12 @@ impl VM {
                     let src1 = self.current_frame.read_reg(src);
                     self.current_frame.store_reg(dst, (src1 == 0).into());
                 }
-                Instr::PushImmediate(value) => {
+                Instr::PushConst(value) => {
+                    let value = self.constant_ints[value.0 as usize];
+                    self.stack.push(value);
+                }
+                Instr::PushImm(value) => {
+                    let value = value.into();
                     self.stack.push(value);
                 }
                 Instr::LoadIndex { dst, base, offset } => {
@@ -174,7 +188,8 @@ impl VM {
                     self.current_frame.store_reg(reg, self.stack.pop().unwrap());
                 }
                 Instr::Call(function_id) => {
-                    self.call(function_id);
+                    self.call(function_id, ip);
+                    ip = 0;
                 }
                 Instr::CallIntrinisic(intrinsic) => match intrinsic {
                     Intrinsic::Alloc => {
@@ -215,26 +230,32 @@ impl VM {
                 Instr::CallIndirect(reg) => {
                     let id = self.current_frame.read_reg(reg);
                     let function_id = FunctionId::new(id as usize);
-                    self.call(function_id);
+                    self.call(function_id, ip);
+                    ip = 0;
                 }
                 Instr::JumpIfNotZero(reg, jump_offset) => {
                     if self.current_frame.read_reg(reg) != 0 {
-                        self.current_frame.ip = jump_offset.0 as _;
+                        ip = jump_offset.0 as _;
+                        continue;
                     }
                 }
                 Instr::JumpIfZero(reg, jump_offset) => {
                     if self.current_frame.read_reg(reg) == 0 {
-                        self.current_frame.ip = jump_offset.0 as _;
+                        ip = jump_offset.0 as _;
+                        continue;
                     }
                 }
                 Instr::Jump(jump_offset) => {
-                    self.current_frame.ip = jump_offset.0 as _;
+                    ip = jump_offset.0 as _;
+                    continue;
                 }
                 Instr::Return => {
+                    ip = self.current_frame.return_ip;
                     let Some(frame) = self.frames.pop() else {
                         return Ok(());
                     };
                     self.current_frame = frame;
+                    continue;
                 }
             }
         }

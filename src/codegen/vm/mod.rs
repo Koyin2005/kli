@@ -673,8 +673,19 @@ impl<'a> CodegenFunction<'a> {
         self.push_instr(instr);
         offset
     }
+    fn add_const(&mut self, value: i64) -> instructions::Const {
+        let ints = &mut self.codegen.result.ints;
+        let index = ints.len().try_into().expect("too many ints");
+        ints.push(value);
+        instructions::Const(index)
+    }
     fn load_immediate(&mut self, reg: instructions::Reg, value: i64) {
-        self.push_instr(instructions::Instr::LoadImmediate(reg, value));
+        if let Ok(value) = value.try_into() {
+            self.push_instr(instructions::Instr::LoadImmediate(reg, value));
+            return;
+        }
+        let value = self.add_const(value);
+        self.push_instr(instructions::Instr::LoadConst(reg, value));
     }
     fn push_move(&mut self, dst: instructions::Reg, src: instructions::Reg) {
         self.push_instr(instructions::Instr::Move { dst, src });
@@ -691,7 +702,8 @@ impl<'a> CodegenFunction<'a> {
     fn push_scalar_on_stack(&mut self, value: &ScalarResult) {
         let reg = match value.as_i64() {
             Some(value) => {
-                self.push_instr(instructions::Instr::PushImmediate(value));
+                let value = self.add_const(value);
+                self.push_instr(instructions::Instr::PushConst(value));
                 return;
             }
             None => self.force_scalar_in_reg(value),

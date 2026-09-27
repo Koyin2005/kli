@@ -3,7 +3,7 @@ use crate::{
         CodegenFunction, CodegenPlace, PlaceRepr, RegWindow, Repr, ReprKind, SCALAR_REPR,
     },
     index_vec::IndexVec,
-    ir,
+    ir::{self, BinaryOp},
     typed_ast::FieldId,
     vm::instructions::{self, FunctionId},
 };
@@ -52,7 +52,11 @@ impl CodegenFunction<'_> {
                 src1: left,
                 src2: right,
             },
-            ir::BinaryOp::Lesser => todo!(),
+            ir::BinaryOp::Lesser => instructions::Instr::LesserThan {
+                dst: dst.base,
+                src1: left,
+                src2: right,
+            },
             ir::BinaryOp::Greater => todo!(),
             ir::BinaryOp::Equals => instructions::Instr::Equals {
                 dst: dst.base,
@@ -216,12 +220,39 @@ impl CodegenFunction<'_> {
                 if let Some(result) = self.simplify_binary_op(op, left, right) {
                     return self.codegen_expr_into(&result, place);
                 }
-                let left = self.codegen_expr_into_reg_window(left, SCALAR_REPR).base;
-                let right = self.codegen_expr_into_reg_window(right, SCALAR_REPR).base;
                 let dst = {
                     let CodegenPlace::Reg(reg) = place.place;
                     reg
                 };
+                if let BinaryOp::Add = op {
+                    match (left.as_constant(), right.as_constant()) {
+                        (Some(&ir::Constant::Int(value)), None)
+                            if let Ok(value) = value.try_into() =>
+                        {
+                            let right = self.codegen_expr_into_reg_window(right, SCALAR_REPR).base;
+                            self.push_instr(instructions::Instr::AddImm {
+                                dst: dst.base,
+                                src1: right,
+                                src2: value,
+                            });
+                            return;
+                        }
+                        (None, Some(&ir::Constant::Int(value)))
+                            if let Ok(value) = value.try_into() =>
+                        {
+                            let left = self.codegen_expr_into_reg_window(left, SCALAR_REPR).base;
+                            self.push_instr(instructions::Instr::AddImm {
+                                dst: dst.base,
+                                src1: left,
+                                src2: value,
+                            });
+                            return;
+                        }
+                        _ => (),
+                    }
+                }
+                let left = self.codegen_expr_into_reg_window(left, SCALAR_REPR).base;
+                let right = self.codegen_expr_into_reg_window(right, SCALAR_REPR).base;
                 self.codegen_binary_op(dst, op, left, right);
             }
             ir::ExprKind::Not(expr) => {
