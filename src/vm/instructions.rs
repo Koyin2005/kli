@@ -44,8 +44,8 @@ pub enum Instr {
     StoreIndexImm { base: Reg, offset: u16, src: Reg },
     LoadIndex { dst: Reg, base: Reg, offset: Reg },
     LoadIndexImm { dst: Reg, src: Reg, offset: u16 },
-    JumpIfFalse(Reg, JumpOffset),
-    JumpIf(Reg, JumpOffset),
+    JumpIfZero(Reg, JumpOffset),
+    JumpIfNotZero(Reg, JumpOffset),
     Jump(JumpOffset),
     Return,
 }

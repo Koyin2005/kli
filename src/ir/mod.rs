@@ -1,7 +1,7 @@
 use crate::{Symbol, define_id, index_vec::IndexVec, typed_ast::FieldId, types::CaseId};
 pub mod lower;
 mod print;
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Constant {
     Int(i64),
     Bool(bool),
@@ -14,9 +14,16 @@ pub struct Expr {
     pub kind: ExprKind,
 }
 impl Expr {
-    pub fn len(self) -> Self {
+    pub fn as_constant(&self) -> Option<&Constant> {
+        if let ExprKind::Constant(ref value) = self.kind {
+            Some(value)
+        } else {
+            None
+        }
+    }
+    pub fn len(place: Place) -> Self {
         Self {
-            kind: ExprKind::Len(Box::new(self)),
+            kind: ExprKind::Len(place),
         }
     }
     pub fn not(self) -> Self {
@@ -47,6 +54,11 @@ impl Expr {
             kind: ExprKind::Constant(Constant::Int(value)),
         }
     }
+    pub fn constant_bool(value: bool) -> Self {
+        Self {
+            kind: ExprKind::Constant(Constant::Bool(value)),
+        }
+    }
     pub fn load(place: Place) -> Self {
         Self {
             kind: ExprKind::Load(place),
@@ -60,6 +72,54 @@ impl Expr {
     pub fn binary(op: BinaryOp, left: Self, right: Self) -> Self {
         Self {
             kind: ExprKind::BinaryOp(op, Box::new(left), Box::new(right)),
+        }
+    }
+    pub fn type_of(&self, program: &Program, body: &Body) -> Type {
+        match &self.kind {
+            ExprKind::Constant(constant) => match constant {
+                Constant::Int(_) => Type::Int,
+                Constant::Bool(_) => Type::Bool,
+                &Constant::Function(body_id, ref args) => {
+                    let body = &program.bodies[body_id];
+                    let args = body
+                        .param_tys()
+                        .cloned()
+                        .map(|ty| {
+                            let mut ty = ty;
+                            ty.subst(args);
+                            ty
+                        })
+                        .collect();
+                    Type::Function(args, Box::new(body.return_ty.clone()))
+                }
+                Constant::String(_) => Type::String,
+                Constant::Char(_) => Type::Char,
+            },
+            ExprKind::Load(place) => place.type_of(body, &program.type_defs),
+            ExprKind::Len(_) => Type::Int,
+            ExprKind::Discriminant(_) => Type::Int,
+            ExprKind::Aggregate(kind, fields) => match kind {
+                AggregateKind::Tuple => Type::Tuple(
+                    fields
+                        .iter()
+                        .map(|field| field.type_of(program, body))
+                        .collect(),
+                ),
+                AggregateKind::Named => todo!("Handle named types"),
+                AggregateKind::Variant(id, _, args) => Type::Named(*id, args.clone()),
+            },
+            ExprKind::BinaryOp(binary_op, left, _) => match binary_op {
+                BinaryOp::Add | BinaryOp::Subtract | BinaryOp::Multiply | BinaryOp::Divide => {
+                    Type::Int
+                }
+                BinaryOp::AddWithOverflow
+                | BinaryOp::MultiplyWithOverflow
+                | BinaryOp::SubtractWithOverflow => Type::pair(Type::Int, Type::Bool),
+                BinaryOp::Lesser | BinaryOp::Greater | BinaryOp::Equals => Type::Bool,
+                BinaryOp::BitwiseAnd | BinaryOp::BitwiseOr => left.type_of(program, body),
+                BinaryOp::InBounds => Type::Bool,
+            },
+            ExprKind::Not(_) => Type::Bool,
         }
     }
 }
@@ -89,7 +149,7 @@ pub enum BinaryOp {
 pub enum ExprKind {
     Constant(Constant),
     Load(Place),
-    Len(Box<Expr>),
+    Len(Place),
     Discriminant(Place),
     Aggregate(AggregateKind, IndexVec<FieldId, Expr>),
     BinaryOp(BinaryOp, Box<Expr>, Box<Expr>),
@@ -176,7 +236,7 @@ pub enum OverflowOp {
 }
 
 define_id!(TypeDefId);
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     Int,
     Bool,
@@ -191,6 +251,9 @@ pub enum Type {
     Box(Box<Type>),
 }
 impl Type {
+    pub fn pair(first: Self, second: Self) -> Self {
+        Self::Tuple(vec![first, second])
+    }
     pub fn subst(&mut self, args: &[Self]) {
         match self {
             Type::Int | Type::Bool | Type::String | Type::Char | Type::Never => (),
@@ -244,6 +307,11 @@ pub struct Body {
     pub return_ty: Type,
     pub locals: IndexVec<Local, LocalInfo>,
     pub body: Vec<Stmt>,
+}
+impl Body {
+    pub fn param_tys(&self) -> impl ExactSizeIterator<Item = &Type> {
+        (0..self.param_count).map(|i| &self.locals[Local(i)].ty)
+    }
 }
 pub struct CaseField {
     pub ty: Type,

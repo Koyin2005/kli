@@ -273,8 +273,8 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 }
             },
             Builtin::Len => BuiltinResult::Value(ir::Expr::len({
-                let [expr] = self.lower_exprs_const(args);
-                expr
+                let [expr] = args else { unreachable!() };
+                self.lower_expr_to_place(expr)
             })),
             Builtin::StringLen => todo!("String len"),
             Builtin::ReadLine => {
@@ -461,7 +461,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             typed_ast::PlaceKind::Index(base, index) => {
                 let base = self.lower_expr_to_place(base);
                 let index = self.lower_index(index)?;
-                self.bounds_check(ir::Expr::load(base.clone()), index.clone());
+                self.bounds_check(base.clone(), index.clone());
                 Some(ir::Place::Index(Box::new(base), Box::new(index)))
             }
             typed_ast::PlaceKind::Deref(expr) => {
@@ -516,7 +516,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         });
         index
     }
-    fn bounds_check(&mut self, base: ir::Expr, index: ir::Expr) {
+    fn bounds_check(&mut self, base: ir::Place, index: ir::Expr) {
         let in_bounds = ir::Expr::binary(ir::BinaryOp::InBounds, index, ir::Expr::len(base));
         self.push_stmt(ir::Stmt::PanicIf(ir::Expr::not(in_bounds)));
     }
@@ -541,7 +541,7 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                     return;
                 };
                 let place = ir::Place::Index(Box::new(base.clone()), Box::new(index.clone()));
-                self.bounds_check(ir::Expr::load(base), index);
+                self.bounds_check(base, index);
                 self.push_stmt(ir::Stmt::Assign(place, rhs));
             }
         }
@@ -684,25 +684,6 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
             ));
         }
     }
-    fn checked_overflow_op_expr(
-        &mut self,
-        op: ir::OverflowOp,
-        left: ir::Expr,
-        right: ir::Expr,
-    ) -> ir::Expr {
-        let op = match op {
-            ir::OverflowOp::Add => ir::BinaryOp::AddWithOverflow,
-            ir::OverflowOp::Sub => ir::BinaryOp::SubtractWithOverflow,
-            ir::OverflowOp::Mul => ir::BinaryOp::MultiplyWithOverflow,
-        };
-        let tmp = self.fresh_temp(ir::Type::Tuple(vec![ir::Type::Int, ir::Type::Bool]));
-        let result = ir::Expr::binary(op, left, right);
-        self.push_stmt(ir::Stmt::Assign(ir::Place::Local(tmp), result));
-        self.push_stmt(ir::Stmt::PanicIf(ir::Expr::load(
-            ir::Place::Local(tmp).with_field(ir::FieldId::new(1)),
-        )));
-        ir::Expr::load(ir::Place::Local(tmp).with_field(ir::FieldId::new(0)))
-    }
     fn lower_binary_op_expr(
         &mut self,
         op: BinaryOp,
@@ -712,35 +693,13 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
         let left = self.lower_expr(left)?;
         let right = self.lower_expr(right)?;
         let op = match op {
-            BinaryOp::Add => {
-                return Some(self.checked_overflow_op_expr(ir::OverflowOp::Add, left, right));
-            }
-            BinaryOp::Subtract => {
-                return Some(self.checked_overflow_op_expr(ir::OverflowOp::Sub, left, right));
-            }
-            BinaryOp::Multiply => {
-                return Some(self.checked_overflow_op_expr(ir::OverflowOp::Mul, left, right));
-            }
+            BinaryOp::Add => ir::BinaryOp::Add,
+            BinaryOp::Subtract => ir::BinaryOp::Subtract,
+            BinaryOp::Multiply => ir::BinaryOp::Multiply,
             BinaryOp::Lesser => ir::BinaryOp::Lesser,
             BinaryOp::Equals => ir::BinaryOp::Equals,
             BinaryOp::Greater => ir::BinaryOp::Greater,
             BinaryOp::Divide => {
-                let is_min = ir::Expr::binary(
-                    ir::BinaryOp::Equals,
-                    left.clone(),
-                    ir::Expr::constant_int(i64::MIN),
-                );
-                let is_neg_1 = ir::Expr::binary(
-                    ir::BinaryOp::Equals,
-                    right.clone(),
-                    ir::Expr::constant_int(-1),
-                );
-                self.push_stmt(ir::Stmt::PanicIf(ir::Expr::binary(
-                    ir::BinaryOp::BitwiseAnd,
-                    is_min,
-                    is_neg_1,
-                )));
-
                 let is_zero = ir::Expr::binary(
                     ir::BinaryOp::Equals,
                     right.clone(),

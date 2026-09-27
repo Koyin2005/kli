@@ -1,10 +1,19 @@
 use std::collections::HashMap;
 
 use crate::{
-    codegen::classify_locals, index_vec::IndexVec, ir, typed_ast::FieldId, types::CaseId,
-    vm::instructions,
+    codegen::{classify_locals, vm::expr::Conditional},
+    index_vec::IndexVec,
+    ir,
+    typed_ast::FieldId,
+    types::CaseId,
+    vm::instructions::{self, FunctionId},
 };
+mod expr;
 mod stmt;
+enum JumpIf {
+    Zero,
+    NotZero,
+}
 #[derive(PartialEq, Eq, Hash, Clone)]
 struct Instance {
     id: ir::BodyId,
@@ -33,6 +42,10 @@ struct Repr {
     kind: ReprKind,
 }
 impl Repr {
+    #[track_caller]
+    fn size_as_u16(&self) -> u16 {
+        self.size.try_into().expect("too big")
+    }
     fn single_tuple(field: Self) -> Self {
         Self::tuple([field])
     }
@@ -80,18 +93,19 @@ impl From<SimplePlace> for ScalarResult {
         }
     }
 }
+struct PlaceRepr {
+    place: CodegenPlace,
+    repr: Repr,
+}
+enum CodegenPlace {
+    Reg(RegWindow),
+}
 #[derive(Clone, Debug)]
 enum LoweredPlace {
     Simple(SimplePlace),
     Tuple(Vec<SimplePlace>),
 }
 impl LoweredPlace {
-    pub fn simple_places(&self) -> Vec<SimplePlace> {
-        match self {
-            &Self::Simple(reg) => vec![reg],
-            Self::Tuple(fields) => fields.clone(),
-        }
-    }
     fn as_simple_place(&self) -> Option<SimplePlace> {
         let Self::Simple(place) = self else {
             return None;
@@ -159,6 +173,24 @@ enum BinaryOpInstr {
     And,
     Or,
 }
+#[derive(Clone, Copy)]
+struct RegWindow {
+    base: instructions::Reg,
+    size: u16,
+}
+impl RegWindow {
+    fn into_iter(self) -> impl ExactSizeIterator<Item = instructions::Reg> + DoubleEndedIterator {
+        let base = self.base.into_u16();
+        (base..base + self.size).map(instructions::Reg::new)
+    }
+    fn offset_by(self, offset: u16) -> Self {
+        Self {
+            base: instructions::Reg::new(self.base.into_u16() + offset),
+            size: self.size,
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug)]
 enum ExprResult {
     Scalar(ScalarResult),
@@ -167,18 +199,6 @@ enum ExprResult {
 impl ExprResult {
     fn pair(first: impl Into<ScalarResult>, second: impl Into<ScalarResult>) -> Self {
         Self::Tuple(vec![first.into(), second.into()])
-    }
-    fn scalars(&self) -> Vec<&ScalarResult> {
-        match self {
-            Self::Scalar(scalar) => vec![scalar],
-            Self::Tuple(elements) => {
-                let mut output = Vec::new();
-                for element in elements {
-                    output.push(element);
-                }
-                output
-            }
-        }
     }
     fn into_scalars(self) -> Vec<ScalarResult> {
         match self {
@@ -194,7 +214,7 @@ impl ExprResult {
     }
 }
 struct LocalInfo {
-    regs: Vec<instructions::Reg>,
+    regs: RegWindow,
     repr: Repr,
 }
 struct CodegenFunction<'a> {
@@ -210,6 +230,7 @@ struct CodegenFunction<'a> {
     max_reg: u16,
     panic_jumps: Vec<usize>,
     _local_info: IndexVec<ir::Local, super::AssignCount>,
+    loop_labels: HashMap<ir::LoopLabel, (instructions::JumpOffset, Vec<usize>)>,
 }
 impl<'a> CodegenFunction<'a> {
     fn new(
@@ -221,6 +242,7 @@ impl<'a> CodegenFunction<'a> {
     ) -> Self {
         let body = &program.bodies[id];
         let mut this = Self {
+            loop_labels: HashMap::new(),
             args,
             _local_info: classify_locals(body),
             id: id,
@@ -237,16 +259,25 @@ impl<'a> CodegenFunction<'a> {
             max_reg: 0,
             panic_jumps: Vec::new(),
         };
-        
+
         for local in &this.program.bodies[id].locals {
             let repr = this.codegen.type_repr(&local.ty, program, &this.args);
-            let regs = (0..repr.size)
-                .map(|_| this.reserve_register())
-                .collect::<Vec<_>>();
-            this.locals.push(LocalInfo { regs, repr });
+            let size = repr.size.try_into().expect("too big");
+            let regs = this.reserve_registers(size);
+            this.locals.push(LocalInfo {
+                regs: RegWindow { base: regs, size },
+                repr,
+            });
         }
         this.local_reg_end = this.next_reg;
         this
+    }
+    fn reserve_registers(&mut self, count: u16) -> instructions::Reg {
+        let mut reg = None;
+        for _ in 0..count {
+            reg.get_or_insert(self.reserve_register());
+        }
+        reg.unwrap_or(instructions::Reg::new(0))
     }
     fn reserve_register(&mut self) -> instructions::Reg {
         let reg = self.next_reg;
@@ -431,6 +462,87 @@ impl<'a> CodegenFunction<'a> {
             (SimplePlace::Reg(reg), reg)
         }
     }
+    fn codegen_imm_store(&mut self, place: CodegenPlace, src: i64) {
+        match place {
+            CodegenPlace::Reg(RegWindow { base, size: _ }) => {
+                self.load_immediate(base, src);
+            }
+        }
+    }
+    fn lower_codegen_place(&self, place: &ir::Place) -> (CodegenPlace, Repr) {
+        match place {
+            ir::Place::Local(local) => {
+                let local_info = &self.locals[*local];
+                (CodegenPlace::Reg(local_info.regs), local_info.repr.clone())
+            }
+            ir::Place::Field(place, field_id) => {
+                let (place, repr) = self.lower_codegen_place(place);
+                let CodegenPlace::Reg(regs) = place;
+                let ReprKind::Tuple(fields) = repr.kind else {
+                    unreachable!()
+                };
+
+                let mut base = usize::from(regs.base.into_u16());
+                for (index, repr) in fields.iter_enumerated() {
+                    if index == *field_id {
+                        break;
+                    }
+                    base += repr.size;
+                }
+
+                let base = instructions::Reg::new(base.try_into().expect("too big"));
+                let repr = { fields.into_vec() }.swap_remove(field_id.into_usize());
+                (
+                    CodegenPlace::Reg(RegWindow {
+                        base,
+                        size: repr.size.try_into().expect("too big"),
+                    }),
+                    repr,
+                )
+            }
+            ir::Place::Deref(place) => todo!(),
+            ir::Place::Downcast(place, case_id) => {
+                let (place, repr) = self.lower_codegen_place(place);
+                let CodegenPlace::Reg(regs) = place;
+                let ReprKind::Tuple(fields) = repr.kind else {
+                    unreachable!()
+                };
+                let [_, union] = fields.into_vec().try_into().expect("should be a 2 tuple");
+                let ReprKind::Union(case_reprs) = union.kind else {
+                    unreachable!()
+                };
+                let repr = { case_reprs.into_vec() }.swap_remove(case_id.into_usize());
+                let regs = RegWindow {
+                    base: regs.offset_by(1).base,
+                    size: repr.size_as_u16(),
+                };
+                (CodegenPlace::Reg(regs), repr)
+            }
+            ir::Place::Index(place, expr) => todo!(),
+        }
+    }
+    fn function_id(&mut self, id: ir::BodyId, args: Vec<ir::Type>) -> FunctionId {
+        let reprs = args
+            .iter()
+            .map(|arg| self.codegen.type_repr(arg, self.program, &self.args))
+            .collect();
+        self.codegen
+            .function_for(Instance { id, args: reprs }, args.clone(), self.program)
+    }
+    fn eval_imm_constant(&mut self, constant: &ir::Constant) -> i64 {
+        match constant {
+            ir::Constant::Int(value) => *value,
+            &ir::Constant::Bool(value) => value.into(),
+            ir::Constant::Function(body_id, args) => {
+                self.function_id(*body_id, args.clone()).as_u32().into()
+            }
+            ir::Constant::String(symbol) => {
+                symbol.with_str(|symbol| self.codegen.string_index(symbol))
+            }
+            &ir::Constant::Char(value) => u32::from(value).into(),
+        }
+    }
+
     fn lower_expr_result(&mut self, expr: &ir::Expr, result: Option<&LoweredPlace>) -> ExprResult {
         match &expr.kind {
             ir::ExprKind::Constant(constant) => match constant {
@@ -459,14 +571,8 @@ impl<'a> CodegenFunction<'a> {
                 let (place, repr) = self.lower_place(place);
                 self.load_place(&place, &repr)
             }
-            ir::ExprKind::Len(place) => {
-                let scalar = self.lower_expr_result(place, None).into_single_scalar();
-                let base = self.force_scalar_in_reg(&scalar);
-                let result = result.and_then(|place| place.as_simple_place());
-                let (dst, dst_reg) = self.reg_for_simple_place_dest_opt(result);
-                self.load_index_imm(dst_reg, base, 1);
-                self.store_reg_for_simple_place(dst, dst_reg);
-                ExprResult::Scalar(dst.into())
+            ir::ExprKind::Len(_) => {
+                todo!("nah")
             }
             ir::ExprKind::Discriminant(_) => todo!("discriminant"),
             ir::ExprKind::Aggregate(kind, fields) => match kind {
@@ -556,6 +662,12 @@ impl<'a> CodegenFunction<'a> {
     fn push_instr(&mut self, instr: instructions::Instr) {
         self.result_function.instrs.push(instr);
     }
+    fn push_jump_if(&mut self, jump_if: JumpIf, reg: instructions::Reg) -> usize {
+        self.push_instr_offset(match jump_if {
+            JumpIf::NotZero => instructions::Instr::JumpIfNotZero(reg, instructions::JumpOffset(0)),
+            JumpIf::Zero => instructions::Instr::JumpIfZero(reg, instructions::JumpOffset(0)),
+        })
+    }
     fn push_instr_offset(&mut self, instr: instructions::Instr) -> usize {
         let offset = self.result_function.instrs.len();
         self.push_instr(instr);
@@ -575,9 +687,6 @@ impl<'a> CodegenFunction<'a> {
         self.result_function
             .instrs
             .push(instructions::Instr::CallIntrinisic(instrinsic));
-        if let Some(result) = result {
-            self.pop_place(result);
-        }
     }
     fn push_scalar_on_stack(&mut self, value: &ScalarResult) {
         let reg = match value.as_i64() {
@@ -587,6 +696,9 @@ impl<'a> CodegenFunction<'a> {
             }
             None => self.force_scalar_in_reg(value),
         };
+        self.push_instr(instructions::Instr::Push(reg));
+    }
+    fn push_reg_to_stack(&mut self, reg: instructions::Reg) {
         self.push_instr(instructions::Instr::Push(reg));
     }
     fn push_result(&mut self, result: &ExprResult) {
@@ -648,16 +760,10 @@ impl<'a> CodegenFunction<'a> {
             }
         }
     }
-    fn pop_place(&mut self, place: &LoweredPlace) {
-        match place {
-            &LoweredPlace::Simple(simple) => {
-                self.pop_simple_place(simple);
-            }
-            LoweredPlace::Tuple(fields) => {
-                for &place in fields.into_iter().rev() {
-                    self.pop_simple_place(place);
-                }
-            }
+    fn pop_place(&mut self, place: PlaceRepr) {
+        let CodegenPlace::Reg(regs) = place.place;
+        for reg in regs.into_iter().rev() {
+            self.push_instr(instructions::Instr::Pop(reg));
         }
     }
     fn force_scalar_in_reg(&mut self, value: &ScalarResult) -> instructions::Reg {
@@ -667,36 +773,6 @@ impl<'a> CodegenFunction<'a> {
                 let reg = self.reserve_register();
                 self.store_scalar_in_reg(reg, value);
                 reg
-            }
-        }
-    }
-    fn store_scalar_in_simple_place(&mut self, dst: SimplePlace, value: &ScalarResult) {
-        match dst {
-            SimplePlace::Reg(reg) => self.store_scalar_in_reg(reg, value),
-            SimplePlace::Indexed(base, index) => {
-                self.store_scalar_in_indexed(base, index, value);
-            }
-            SimplePlace::ConstIndexed(base, index) => {
-                let reg = self.reserve_register();
-                self.store_scalar_in_reg(reg, value);
-                self.store_index_const(base, index, reg);
-            }
-        }
-    }
-    fn store_scalar_in_indexed(
-        &mut self,
-        base: instructions::Reg,
-        offset: instructions::Reg,
-        value: &ScalarResult,
-    ) {
-        match value {
-            &ScalarResult::Reg(reg) => {
-                self.store_index(base, offset, reg);
-            }
-            _ => {
-                let reg = self.reserve_register();
-                self.store_scalar_in_reg(reg, value);
-                self.store_index(base, offset, reg);
             }
         }
     }
@@ -722,24 +798,14 @@ impl<'a> CodegenFunction<'a> {
             }
         }
     }
-    #[track_caller]
-    fn store_place(&mut self, place: &LoweredPlace, result: &ExprResult) {
-        for (place, scalar) in place.simple_places().into_iter().zip(result.scalars()) {
-            self.store_scalar_in_simple_place(place, scalar);
-        }
-    }
     fn lower_place(&mut self, place: &ir::Place) -> (LoweredPlace, Repr) {
         match place {
             ir::Place::Local(local) => {
                 let local_info = &self.locals[*local];
                 (
-                    LoweredPlace::Tuple(
-                        local_info
-                            .regs
-                            .iter()
-                            .map(|reg| SimplePlace::Reg(*reg))
-                            .collect(),
-                    ),
+                    LoweredPlace::Tuple({
+                        local_info.regs.into_iter().map(SimplePlace::Reg).collect()
+                    }),
                     local_info.repr.clone(),
                 )
             }
@@ -747,7 +813,13 @@ impl<'a> CodegenFunction<'a> {
                 let (base_place, repr) = self.lower_place(place);
                 self.project_field(base_place, *field_id, repr)
             }
-            ir::Place::Deref(_) => todo!(),
+            ir::Place::Deref(place) => {
+                let (base_place, repr) = self.lower_place(place);
+                let ReprKind::Scalar = repr.kind else {
+                    unreachable!("should  be a scalar")
+                };
+                todo!()
+            }
             ir::Place::Downcast(place, case_id) => {
                 let (base_place, repr) = self.lower_place(place);
                 let ReprKind::Tuple(fields) = repr.kind else {
@@ -870,37 +942,31 @@ impl<'a> CodegenFunction<'a> {
     fn patch_jump(&mut self, instr_index: usize, new_offset: instructions::JumpOffset) {
         let instr = &mut self.result_function.instrs[instr_index];
         let (instructions::Instr::Jump(offset)
-        | instructions::Instr::JumpIf(_, offset)
-        | instructions::Instr::JumpIfFalse(_, offset)) = instr
+        | instructions::Instr::JumpIfNotZero(_, offset)
+        | instructions::Instr::JumpIfZero(_, offset)) = instr
         else {
             panic!("cannot patch non jump instruction {instr:?} at {instr_index}")
         };
         *offset = new_offset;
     }
-    fn panic_if(&mut self, result: &ScalarResult, cond: bool) {
-        let reg = self.force_scalar_in_reg(result);
-        let index = self.push_instr_offset(if cond {
-            instructions::Instr::JumpIf(reg, instructions::JumpOffset(0))
-        } else {
-            instructions::Instr::JumpIfFalse(reg, instructions::JumpOffset(0))
+    fn codegen_panic_if(&mut self, condition: Conditional) {
+        let index = self.push_instr_offset(match condition {
+            Conditional::Bool(false) => {
+                return;
+            }
+            Conditional::Bool(true) => instructions::Instr::Jump(instructions::JumpOffset(0)),
+            Conditional::Not(reg) => {
+                instructions::Instr::JumpIfZero(reg, instructions::JumpOffset(0))
+            }
+            Conditional::Reg(reg) => {
+                instructions::Instr::JumpIfNotZero(reg, instructions::JumpOffset(0))
+            }
         });
         self.panic_jumps.push(index);
     }
     fn panic(&mut self) {
         let index = self.push_instr_offset(instructions::Instr::Jump(instructions::JumpOffset(0)));
         self.panic_jumps.push(index);
-    }
-    fn lower_cond_expr(&mut self, expr: &ir::Expr) -> (bool, ExprResult) {
-        match &expr.kind {
-            ir::ExprKind::Not(expr) => {
-                let (negated, result) = self.lower_cond_expr(expr);
-                (!negated, result)
-            }
-            _ => {
-                let expr = self.lower_expr_result(expr, None);
-                (false, expr)
-            }
-        }
     }
     fn lower(mut self) {
         for stmt in &self.program.bodies[self.id].body {

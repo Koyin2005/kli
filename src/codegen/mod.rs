@@ -40,7 +40,7 @@ pub fn classify_locals(body: &ir::Body) -> IndexVec<ir::Local, AssignCount> {
         match &expr.kind {
             ir::ExprKind::Constant(_) => (),
             ir::ExprKind::Load(place) => visit_place(kinds, body, place),
-            ir::ExprKind::Len(array) => visit_expr(kinds, body, array),
+            ir::ExprKind::Len(array) => visit_place(kinds, body, array),
             ir::ExprKind::Discriminant(place) => visit_place(kinds, body, place),
             ir::ExprKind::Aggregate(_, fields) => {
                 for field in fields {

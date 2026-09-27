@@ -217,12 +217,12 @@ impl VM {
                     let function_id = FunctionId::new(id as usize);
                     self.call(function_id);
                 }
-                Instr::JumpIf(reg, jump_offset) => {
+                Instr::JumpIfNotZero(reg, jump_offset) => {
                     if self.current_frame.read_reg(reg) != 0 {
                         self.current_frame.ip = jump_offset.0 as _;
                     }
                 }
-                Instr::JumpIfFalse(reg, jump_offset) => {
+                Instr::JumpIfZero(reg, jump_offset) => {
                     if self.current_frame.read_reg(reg) == 0 {
                         self.current_frame.ip = jump_offset.0 as _;
                     }

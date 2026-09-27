@@ -44,7 +44,7 @@ impl<'a> Print<'a> {
             ExprKind::Len(place) => {
                 let mut output = "len".to_string();
                 output.push('(');
-                output.push_str(&self.format_value(place));
+                output.push_str(&self.format_place(place));
                 output.push(')');
                 output
             }
