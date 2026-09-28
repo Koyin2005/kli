@@ -85,8 +85,12 @@ impl<'a> Print<'a> {
                     output.push_str(")");
                     output
                 }
-                AggregateKind::Named => {
-                    let mut output = "{".to_string();
+                &AggregateKind::Record(ty, ref args) => {
+                    let mut output = format!(
+                        "{}{}{{",
+                        self.program.type_defs[ty].struct_def().name,
+                        Type::format_generic_args(args, self.program)
+                    );
                     for (i, value) in fields.iter().enumerate() {
                         if i > 0 {
                             output.push_str(",");

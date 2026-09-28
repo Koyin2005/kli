@@ -39,11 +39,16 @@ impl LoweringCtxt {
             return *id;
         }
         let ty_id = {
-            let type_def = match ctxt.type_def(id).kind {
+            let type_def = ctxt.type_def(id);
+            let type_def = match type_def.kind {
                 TypeDefKind::Record(fields) => TypeDef::Struct(ir::StructDef {
+                    name: type_def.name.to_string(),
                     fields: fields
                         .into_iter()
-                        .map(|field| self.lower_type(ctxt.type_of(field.id).skip(), ctxt))
+                        .map(|field| ir::FieldDef {
+                            name: field.name.to_string(),
+                            field: self.lower_type(ctxt.type_of(field.id).skip(), ctxt),
+                        })
                         .collect(),
                 }),
                 TypeDefKind::Variant(cases) => TypeDef::Variant(ir::VariantDef {
@@ -878,16 +883,20 @@ impl<'a, 'ctxt> LowerFunction<'a, 'ctxt> {
                 });
                 Some(ir::Expr::load_local(dest))
             }
-            typed_ast::ExprKind::NamedRecord(_, generic_args, fields) => {
-                if !generic_args.is_empty() {
-                    todo!("handle generic args")
-                }
+            typed_ast::ExprKind::NamedRecord(id, generic_args, fields) => {
+                let ty_id = self.lower_ctxt.type_def_id(*id, self.ctxt);
                 let mut field_map = fields
                     .iter()
                     .map(|field_init| Some((field_init.index, self.lower_expr(&field_init.value)?)))
                     .collect::<Option<HashMap<_, _>>>()?;
                 Some(ir::Expr::aggregate(
-                    ir::AggregateKind::Named,
+                    ir::AggregateKind::Record(
+                        ty_id,
+                        generic_args
+                            .iter()
+                            .map(|arg| self.lower_type(arg.expect_ty()))
+                            .collect(),
+                    ),
                     (0..fields.len()).map(|field| {
                         field_map
                             .remove(&FieldId::new(field))

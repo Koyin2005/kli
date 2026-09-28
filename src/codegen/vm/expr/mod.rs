@@ -183,7 +183,7 @@ impl CodegenFunction<'_> {
                     offset += size;
                 }
             }
-            ir::AggregateKind::Named => todo!(),
+            ir::AggregateKind::Record(..) => todo!(),
             &ir::AggregateKind::Variant(_, case_id, _) => {
                 let ReprKind::Tuple(field_reprs) = place.repr.kind else {
                     unreachable!()
@@ -318,7 +318,7 @@ impl CodegenFunction<'_> {
                 args.push(CallArg::Scalar(self.eval_imm_constant(constant)));
             }
             ir::ExprKind::Aggregate(kind, fields) => match kind {
-                ir::AggregateKind::Tuple | ir::AggregateKind::Named => {
+                ir::AggregateKind::Tuple | ir::AggregateKind::Record(..) => {
                     for arg in fields {
                         let repr = self.codegen.type_repr(
                             &arg.type_of(self.program, &self.program.bodies[self.id]),

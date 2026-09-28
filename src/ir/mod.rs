@@ -105,7 +105,7 @@ impl Expr {
                         .map(|field| field.type_of(program, body))
                         .collect(),
                 ),
-                AggregateKind::Named => todo!("Handle named types"),
+                AggregateKind::Record(id, args) => Type::Named(*id, args.clone()),
                 AggregateKind::Variant(id, _, args) => Type::Named(*id, args.clone()),
             },
             ExprKind::BinaryOp(binary_op, left, _) => match binary_op {
@@ -126,7 +126,7 @@ impl Expr {
 #[derive(Debug, Clone)]
 pub enum AggregateKind {
     Tuple,
-    Named,
+    Record(TypeDefId, Vec<Type>),
     Variant(TypeDefId, CaseId, Vec<Type>),
 }
 #[derive(Debug, Clone, Copy)]
@@ -323,8 +323,13 @@ pub struct CaseDef {
 pub struct VariantDef {
     pub cases: IndexVec<CaseId, CaseDef>,
 }
+pub struct FieldDef {
+    pub name: String,
+    pub field: Type,
+}
 pub struct StructDef {
-    pub fields: IndexVec<FieldId, Type>,
+    pub name: String,
+    pub fields: IndexVec<FieldId, FieldDef>,
 }
 define_id!(BodyId);
 pub enum TypeDef {

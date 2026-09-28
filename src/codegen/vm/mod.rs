@@ -583,7 +583,7 @@ impl<'a> CodegenFunction<'a> {
                     }
                     results
                 }),
-                ir::AggregateKind::Named => todo!("named"),
+                ir::AggregateKind::Record(..) => todo!("named"),
                 ir::AggregateKind::Variant(_, case, _) => ExprResult::Tuple({
                     let mut results = vec![ScalarResult::Int(case.into_u32().into())];
                     for field in fields {
