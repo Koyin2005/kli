@@ -13,8 +13,6 @@ mod stmt;
 enum JumpIf {
     Zero(instructions::Reg),
     NotZero(instructions::Reg),
-    LesserThan(instructions::Reg, instructions::Reg),
-    GreaterEquals(instructions::Reg, instructions::Reg),
 }
 #[derive(PartialEq, Eq, Hash, Clone)]
 struct Instance {
@@ -670,12 +668,6 @@ impl<'a> CodegenFunction<'a> {
                 instructions::Instr::JumpIfNotZero(reg, instructions::JumpOffset(0))
             }
             JumpIf::Zero(reg) => instructions::Instr::JumpIfZero(reg, instructions::JumpOffset(0)),
-            JumpIf::GreaterEquals(src1, src2) => {
-                instructions::Instr::JumpIfGtEq(src1, src2, instructions::JumpOffset(0))
-            }
-            JumpIf::LesserThan(src1, src2) => {
-                instructions::Instr::JumpIfLt(src1, src2, instructions::JumpOffset(0))
-            }
         })
     }
     fn push_instr_offset(&mut self, instr: instructions::Instr) -> usize {
@@ -972,9 +964,7 @@ impl<'a> CodegenFunction<'a> {
         let instr = &mut self.result_function.instrs[instr_index];
         let (instructions::Instr::Jump(offset)
         | instructions::Instr::JumpIfNotZero(_, offset)
-        | instructions::Instr::JumpIfZero(_, offset)
-        | instructions::Instr::JumpIfLt(_, _, offset)
-        | instructions::Instr::JumpIfGtEq(_, _, offset)) = instr
+        | instructions::Instr::JumpIfZero(_, offset)) = instr
         else {
             panic!("cannot patch non jump instruction {instr:?} at {instr_index}")
         };
@@ -991,12 +981,6 @@ impl<'a> CodegenFunction<'a> {
             }
             Conditional::Reg(reg) => {
                 instructions::Instr::JumpIfNotZero(reg, instructions::JumpOffset(0))
-            }
-            Conditional::Lt(left, right) => {
-                instructions::Instr::JumpIfLt(left, right, instructions::JumpOffset(0))
-            }
-            Conditional::GtEq(left, right) => {
-                instructions::Instr::JumpIfGtEq(left, right, instructions::JumpOffset(0))
             }
         });
         self.panic_jumps.push(index);

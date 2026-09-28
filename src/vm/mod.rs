@@ -233,18 +233,6 @@ impl VM {
                     self.call(function_id, ip);
                     ip = 0;
                 }
-                Instr::JumpIfLt(src1, src2, jump_offset) => {
-                    if self.current_frame.read_reg(src1) < self.current_frame.read_reg(src2) {
-                        ip = jump_offset.0 as _;
-                        continue;
-                    }
-                }
-                Instr::JumpIfGtEq(src1, src2, jump_offset) => {
-                    if self.current_frame.read_reg(src1) >= self.current_frame.read_reg(src2) {
-                        ip = jump_offset.0 as _;
-                        continue;
-                    }
-                }
                 Instr::JumpIfNotZero(reg, jump_offset) => {
                     if self.current_frame.read_reg(reg) != 0 {
                         ip = jump_offset.0 as _;

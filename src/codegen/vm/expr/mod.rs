@@ -19,8 +19,6 @@ pub enum Conditional {
     Bool(bool),
     Reg(instructions::Reg),
     Not(instructions::Reg),
-    GtEq(instructions::Reg, instructions::Reg),
-    Lt(instructions::Reg, instructions::Reg),
 }
 impl CodegenFunction<'_> {
     pub(super) fn codegen_binary_op(
@@ -268,8 +266,6 @@ impl CodegenFunction<'_> {
                 Conditional::Bool(value) => Conditional::Bool(!value),
                 Conditional::Reg(reg) => Conditional::Not(reg),
                 Conditional::Not(reg) => Conditional::Reg(reg),
-                Conditional::GtEq(left, right) => Conditional::Lt(left, right),
-                Conditional::Lt(left, right) => Conditional::GtEq(left, right),
             },
             ir::ExprKind::BinaryOp(op, left, right)
                 if let Some(expr) = self.simplify_binary_op(*op, left, right) =>
@@ -282,11 +278,6 @@ impl CodegenFunction<'_> {
             {
                 let left = self.codegen_expr_into_reg_window(left, SCALAR_REPR).base;
                 return Conditional::Not(left);
-            }
-            ir::ExprKind::BinaryOp(ir::BinaryOp::Lesser, left, right) => {
-                let left = self.codegen_expr_into_reg_window(left, SCALAR_REPR).base;
-                let right = self.codegen_expr_into_reg_window(right, SCALAR_REPR).base;
-                return Conditional::Lt(left, right);
             }
             _ => Conditional::Reg({
                 let reg = self.codegen_expr_into_reg_window(expr, SCALAR_REPR).base;

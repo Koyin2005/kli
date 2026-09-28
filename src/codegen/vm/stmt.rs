@@ -143,8 +143,6 @@ impl CodegenFunction<'_> {
                     }
                     Conditional::Reg(reg) => JumpIf::Zero(reg),
                     Conditional::Not(reg) => JumpIf::NotZero(reg),
-                    Conditional::Lt(left, right) => JumpIf::GreaterEquals(left, right),
-                    Conditional::GtEq(left, right) => JumpIf::LesserThan(left, right),
                 };
                 let cond_jump = {
                     let cond_jump = self.push_jump_if(jump);
