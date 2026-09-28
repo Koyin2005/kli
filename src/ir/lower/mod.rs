@@ -40,7 +40,12 @@ impl LoweringCtxt {
         }
         let ty_id = {
             let type_def = match ctxt.type_def(id).kind {
-                TypeDefKind::Record(_) => TypeDef::Struct,
+                TypeDefKind::Record(fields) => TypeDef::Struct(ir::StructDef {
+                    fields: fields
+                        .into_iter()
+                        .map(|field| self.lower_type(ctxt.type_of(field.id).skip(), ctxt))
+                        .collect(),
+                }),
                 TypeDefKind::Variant(cases) => TypeDef::Variant(ir::VariantDef {
                     cases: cases
                         .into_iter()

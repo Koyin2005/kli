@@ -323,10 +323,13 @@ pub struct CaseDef {
 pub struct VariantDef {
     pub cases: IndexVec<CaseId, CaseDef>,
 }
+pub struct StructDef {
+    pub fields: IndexVec<FieldId, Type>,
+}
 define_id!(BodyId);
 pub enum TypeDef {
     Variant(VariantDef),
-    Struct,
+    Struct(StructDef),
 }
 impl TypeDef {
     #[track_caller]
@@ -335,6 +338,13 @@ impl TypeDef {
             panic!("Should be a variant def")
         };
         variant_def
+    }
+    #[track_caller]
+    pub fn struct_def(&self) -> &StructDef {
+        let Self::Struct(struct_def) = self else {
+            panic!("Should be a struct def")
+        };
+        struct_def
     }
 }
 pub type TypeDefs = IndexVec<TypeDefId, TypeDef>;
