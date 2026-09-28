@@ -163,17 +163,19 @@ impl CodegenFunction<'_> {
             ir::Stmt::Match(_) => todo!("match"),
             ir::Stmt::ReadLine(_) => todo!("read_line"),
             ir::Stmt::Alloc(place, alloc) => match alloc {
-                ir::Allocate::Array(_, elements) => {
-                    let (place, _) = self.lower_place(place);
+                ir::Allocate::Array(ty, elements) => {
+                    let (place, repr) = self.lower_codegen_place(place);
                     let element_count: i64 = elements.len().try_into().expect("too many elements");
+                    let mut args = Vec::new();
+                    let elem_repr = self.codegen.type_repr(ty, self.program, &self.args);
                     for element in elements {
-                        let result = self.lower_expr_result(element, None);
-                        self.push_result(&result);
+                        self.lower_call_arg(element, elem_repr.clone(), &mut args);
+                        self.push_call_args(std::mem::take(&mut args));
                     }
                     self.push_intr_call(instructions::Intrinsic::Alloc, None);
                     self.push_scalar_on_stack(&ScalarResult::Int(element_count));
                     self.push_scalar_on_stack(&ScalarResult::Int(element_count));
-                    self.push_intr_call(instructions::Intrinsic::Alloc, Some(&place));
+                    self.push_intr_call(instructions::Intrinsic::Alloc, Some(PlaceRepr { place, repr }));
                 }
             },
         }
