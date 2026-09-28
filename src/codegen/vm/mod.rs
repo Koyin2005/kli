@@ -650,15 +650,6 @@ impl<'a> CodegenFunction<'a> {
     ) {
         self.push_instr(instructions::Instr::LoadIndex { dst, base, offset });
     }
-    fn eval_load_index(
-        &mut self,
-        base: instructions::Reg,
-        offset: instructions::Reg,
-    ) -> instructions::Reg {
-        let dst = self.reserve_register();
-        self.push_instr(instructions::Instr::LoadIndex { dst, base, offset });
-        dst
-    }
     fn push_instr(&mut self, instr: instructions::Instr) {
         self.result_function.instrs.push(instr);
     }
