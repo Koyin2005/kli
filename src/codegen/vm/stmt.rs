@@ -1,6 +1,6 @@
 use crate::{
     codegen::vm::{
-        CodegenFunction, JumpIf, PlaceRepr, SCALAR_REPR, ScalarResult,
+        CodegenFunction, JumpIf, PlaceRepr, SCALAR_REPR,
         expr::{CallArg, Callee, Conditional},
     },
     ir,
@@ -11,11 +11,10 @@ impl CodegenFunction<'_> {
     fn push_call_args(&mut self, args: impl IntoIterator<Item = CallArg>) {
         for arg in args {
             match arg {
+                CallArg::Scalar(value) if let Ok(value) = value.try_into() => {
+                    self.push_instr(instructions::Instr::PushImm(value));
+                }
                 CallArg::Scalar(value) => {
-                    if let Ok(value) = value.try_into() {
-                        self.push_instr(instructions::Instr::PushImm(value));
-                        return;
-                    }
                     let value = self.add_const(value);
                     self.push_instr(instructions::Instr::PushConst(value));
                 }
@@ -173,9 +172,13 @@ impl CodegenFunction<'_> {
                         self.push_call_args(std::mem::take(&mut args));
                     }
                     self.push_intr_call(instructions::Intrinsic::Alloc, None);
-                    self.push_scalar_on_stack(&ScalarResult::Int(element_count));
-                    self.push_scalar_on_stack(&ScalarResult::Int(element_count));
-                    self.push_intr_call(instructions::Intrinsic::Alloc, Some(PlaceRepr { place, repr }));
+                    args.push(CallArg::Scalar(element_count));
+                    args.push(CallArg::Scalar(element_count));
+                    self.push_call_args(args);
+                    self.push_intr_call(
+                        instructions::Intrinsic::Alloc,
+                        Some(PlaceRepr { place, repr }),
+                    );
                 }
             },
         }

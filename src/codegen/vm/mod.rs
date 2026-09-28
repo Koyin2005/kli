@@ -75,44 +75,12 @@ const UNIT_REPR: Repr = Repr {
     kind: ReprKind::Tuple(IndexVec::new()),
 };
 
-#[derive(Clone, Debug, Copy)]
-enum SimplePlace {
-}
-impl From<SimplePlace> for ScalarResult {
-    fn from(value: SimplePlace) -> Self {
-        match value {
-        }
-    }
-}
 struct PlaceRepr {
     place: CodegenPlace,
     repr: Repr,
 }
 enum CodegenPlace {
     Reg(RegWindow),
-}
-#[derive(PartialEq, Eq, Debug)]
-enum ScalarResult {
-    Reg(instructions::Reg),
-    Int(i64),
-}
-impl ScalarResult {
-    pub fn as_i64(&self) -> Option<i64> {
-        match self {
-            ScalarResult::Reg(_) => None,
-            ScalarResult::Int(value) => Some(*value),
-        }
-    }
-}
-impl From<i64> for ScalarResult {
-    fn from(value: i64) -> Self {
-        Self::Int(value)
-    }
-}
-impl From<instructions::Reg> for ScalarResult {
-    fn from(value: instructions::Reg) -> Self {
-        ScalarResult::Reg(value)
-    }
 }
 #[derive(Clone, Copy)]
 struct RegWindow {
@@ -317,31 +285,13 @@ impl<'a> CodegenFunction<'a> {
         let value = self.add_const(value);
         self.push_instr(instructions::Instr::LoadConst(reg, value));
     }
-    fn push_move(&mut self, dst: instructions::Reg, src: instructions::Reg) {
-        self.push_instr(instructions::Instr::Move { dst, src });
-    }
-    fn push_intr_call(
-        &mut self,
-        instrinsic: instructions::Intrinsic,
-        result: Option<PlaceRepr>,
-    ) {
+    fn push_intr_call(&mut self, instrinsic: instructions::Intrinsic, result: Option<PlaceRepr>) {
         self.result_function
             .instrs
             .push(instructions::Instr::CallIntrinisic(instrinsic));
-        if let Some(place) = result{
+        if let Some(place) = result {
             self.pop_place(place);
         }
-    }
-    fn push_scalar_on_stack(&mut self, value: &ScalarResult) {
-        let reg = match value.as_i64() {
-            Some(value) => {
-                let value = self.add_const(value);
-                self.push_instr(instructions::Instr::PushConst(value));
-                return;
-            }
-            None => self.force_scalar_in_reg(value),
-        };
-        self.push_instr(instructions::Instr::Push(reg));
     }
     fn push_reg_to_stack(&mut self, reg: instructions::Reg) {
         self.push_instr(instructions::Instr::Push(reg));
@@ -350,26 +300,6 @@ impl<'a> CodegenFunction<'a> {
         let CodegenPlace::Reg(regs) = place.place;
         for reg in regs.into_iter().rev() {
             self.push_instr(instructions::Instr::Pop(reg));
-        }
-    }
-    fn force_scalar_in_reg(&mut self, value: &ScalarResult) -> instructions::Reg {
-        match value {
-            ScalarResult::Reg(reg) => *reg,
-            _ => {
-                let reg = self.reserve_register();
-                self.store_scalar_in_reg(reg, value);
-                reg
-            }
-        }
-    }
-    fn store_scalar_in_reg(&mut self, dst: instructions::Reg, value: &ScalarResult) {
-        match value {
-            &ScalarResult::Int(value) => {
-                self.load_immediate(dst, value);
-            }
-            &ScalarResult::Reg(src) => {
-                self.push_move(dst, src);
-            }
         }
     }
     fn add_imm(&mut self, dst: instructions::Reg, src: instructions::Reg, value: i16) {

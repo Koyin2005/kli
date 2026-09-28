@@ -227,7 +227,10 @@ impl CodegenFunction<'_> {
                 let (src_place, _) = self.lower_codegen_place(src);
                 self.codegen_copy(place.place, src_place);
             }
-            ir::ExprKind::Len(place) => todo!(),
+            ir::ExprKind::Len(place) => {
+                let (place, repr) = self.lower_codegen_place(place);
+                todo!()
+            }
             ir::ExprKind::Discriminant(place) => todo!(),
             ir::ExprKind::Aggregate(aggregate_kind, fields) => {
                 self.codegen_aggregrate(place, aggregate_kind, fields)
