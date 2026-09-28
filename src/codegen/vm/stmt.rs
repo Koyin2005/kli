@@ -133,7 +133,7 @@ impl CodegenFunction<'_> {
                 if then_branch.is_empty() && else_branch.is_empty() {
                     return;
                 }
-                let (reg, jump) = match condition {
+                let jump = match condition {
                     Conditional::Bool(value) => {
                         let stmts = if value { then_branch } else { else_branch };
                         for stmt in stmts {
@@ -141,11 +141,13 @@ impl CodegenFunction<'_> {
                         }
                         return;
                     }
-                    Conditional::Reg(reg) => (reg, JumpIf::Zero),
-                    Conditional::Not(reg) => (reg, JumpIf::NotZero),
+                    Conditional::Reg(reg) => JumpIf::Zero(reg),
+                    Conditional::Not(reg) => JumpIf::NotZero(reg),
+                    Conditional::Lt(left, right) => JumpIf::GreaterEquals(left, right),
+                    Conditional::GtEq(left, right) => JumpIf::LesserThan(left, right),
                 };
                 let cond_jump = {
-                    let cond_jump = self.push_jump_if(jump, reg);
+                    let cond_jump = self.push_jump_if(jump);
                     self.release_registers();
                     cond_jump
                 };

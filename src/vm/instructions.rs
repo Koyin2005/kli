@@ -50,6 +50,8 @@ pub enum Instr {
     LoadIndexImm { dst: Reg, src: Reg, offset: u16 },
     JumpIfZero(Reg, JumpOffset),
     JumpIfNotZero(Reg, JumpOffset),
+    JumpIfGtEq(Reg, Reg, JumpOffset),
+    JumpIfLt(Reg, Reg, JumpOffset),
     Jump(JumpOffset),
     Return,
 }

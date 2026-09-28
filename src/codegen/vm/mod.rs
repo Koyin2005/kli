@@ -11,8 +11,10 @@ use crate::{
 mod expr;
 mod stmt;
 enum JumpIf {
-    Zero,
-    NotZero,
+    Zero(instructions::Reg),
+    NotZero(instructions::Reg),
+    LesserThan(instructions::Reg, instructions::Reg),
+    GreaterEquals(instructions::Reg, instructions::Reg),
 }
 #[derive(PartialEq, Eq, Hash, Clone)]
 struct Instance {
@@ -662,10 +664,18 @@ impl<'a> CodegenFunction<'a> {
     fn push_instr(&mut self, instr: instructions::Instr) {
         self.result_function.instrs.push(instr);
     }
-    fn push_jump_if(&mut self, jump_if: JumpIf, reg: instructions::Reg) -> usize {
+    fn push_jump_if(&mut self, jump_if: JumpIf) -> usize {
         self.push_instr_offset(match jump_if {
-            JumpIf::NotZero => instructions::Instr::JumpIfNotZero(reg, instructions::JumpOffset(0)),
-            JumpIf::Zero => instructions::Instr::JumpIfZero(reg, instructions::JumpOffset(0)),
+            JumpIf::NotZero(reg) => {
+                instructions::Instr::JumpIfNotZero(reg, instructions::JumpOffset(0))
+            }
+            JumpIf::Zero(reg) => instructions::Instr::JumpIfZero(reg, instructions::JumpOffset(0)),
+            JumpIf::GreaterEquals(src1, src2) => {
+                instructions::Instr::JumpIfGtEq(src1, src2, instructions::JumpOffset(0))
+            }
+            JumpIf::LesserThan(src1, src2) => {
+                instructions::Instr::JumpIfLt(src1, src2, instructions::JumpOffset(0))
+            }
         })
     }
     fn push_instr_offset(&mut self, instr: instructions::Instr) -> usize {
@@ -809,6 +819,13 @@ impl<'a> CodegenFunction<'a> {
                 self.push_move(dst, src);
             }
         }
+    }
+    fn add_imm(&mut self, dst: instructions::Reg, src: instructions::Reg, value: i16) {
+        self.push_instr(instructions::Instr::AddImm {
+            dst: dst,
+            src1: src,
+            src2: value,
+        });
     }
     fn lower_place(&mut self, place: &ir::Place) -> (LoweredPlace, Repr) {
         match place {
@@ -955,7 +972,9 @@ impl<'a> CodegenFunction<'a> {
         let instr = &mut self.result_function.instrs[instr_index];
         let (instructions::Instr::Jump(offset)
         | instructions::Instr::JumpIfNotZero(_, offset)
-        | instructions::Instr::JumpIfZero(_, offset)) = instr
+        | instructions::Instr::JumpIfZero(_, offset)
+        | instructions::Instr::JumpIfLt(_, _, offset)
+        | instructions::Instr::JumpIfGtEq(_, _, offset)) = instr
         else {
             panic!("cannot patch non jump instruction {instr:?} at {instr_index}")
         };
@@ -972,6 +991,12 @@ impl<'a> CodegenFunction<'a> {
             }
             Conditional::Reg(reg) => {
                 instructions::Instr::JumpIfNotZero(reg, instructions::JumpOffset(0))
+            }
+            Conditional::Lt(left, right) => {
+                instructions::Instr::JumpIfLt(left, right, instructions::JumpOffset(0))
+            }
+            Conditional::GtEq(left, right) => {
+                instructions::Instr::JumpIfGtEq(left, right, instructions::JumpOffset(0))
             }
         });
         self.panic_jumps.push(index);
