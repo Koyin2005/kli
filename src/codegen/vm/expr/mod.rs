@@ -57,15 +57,31 @@ impl CodegenFunction<'_> {
                 src1: left,
                 src2: right,
             },
-            ir::BinaryOp::Greater => todo!(),
+            ir::BinaryOp::Greater => instructions::Instr::GreaterThan {
+                dst: dst.base,
+                src1: left,
+                src2: right,
+            },
             ir::BinaryOp::Equals => instructions::Instr::Equals {
                 dst: dst.base,
                 src1: left,
                 src2: right,
             },
-            ir::BinaryOp::BitwiseAnd => todo!(),
-            ir::BinaryOp::BitwiseOr => todo!(),
-            ir::BinaryOp::InBounds => todo!(),
+            ir::BinaryOp::BitwiseAnd => instructions::Instr::And {
+                dst: dst.base,
+                src1: left,
+                src2: right,
+            },
+            ir::BinaryOp::BitwiseOr => instructions::Instr::Or {
+                dst: dst.base,
+                src1: left,
+                src2: right,
+            },
+            ir::BinaryOp::InBounds => instructions::Instr::LesserThanUnsigned {
+                dst: dst.base,
+                src1: left,
+                src2: right,
+            },
         };
         self.push_instr(op);
     }
