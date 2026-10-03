@@ -180,9 +180,6 @@ impl<'a> CodegenFunction<'a> {
         self.max_reg = self.max_reg.max(self.next_reg);
         instructions::Reg::new(reg)
     }
-    fn release_registers(&mut self) {
-        self.next_reg = self.local_reg_end;
-    }
     fn store_immediate(&mut self, place: CodegenPlace, value: i64) {
         match place {
             CodegenPlace::Reg(reg) => {
@@ -291,8 +288,7 @@ impl<'a> CodegenFunction<'a> {
                     && let Some(index) = index.checked_mul(repr.size as i64)
                     && let Ok(index) = index.try_into()
                 {
-                    /* a.[i] = (**a + i) */
-                    let reg = self.reserve_register();
+                    let final_addr = self.reserve_register();
                     let (base, base_offset) = match place {
                         CodegenPlace::Reg(reg) => (reg, 0),
                         CodegenPlace::Offset(base, offset) => (base, offset),
@@ -302,14 +298,9 @@ impl<'a> CodegenFunction<'a> {
                             base,
                             offset: base_offset,
                         },
-                        dst: reg,
+                        dst: final_addr,
                     });
-                    self.push_instr(instructions::Instr::AddImm {
-                        src1: reg,
-                        src2: index as i64,
-                        dst: reg,
-                    });
-                    (reg, index)
+                    (final_addr, index)
                 } else {
                     let header_addr = self.reserve_register();
                     let index = self.expr_as_regs(index, SCALAR_REPR).base;
@@ -565,6 +556,7 @@ impl Codegen {
             .len()
             .try_into()
             .expect("too many strings");
+        println!("{} {}", index, s);
         let s = s.to_string();
         self.result.strings.push(s.clone());
         self.string_map.insert(s, index);

@@ -28,7 +28,6 @@ impl CodegenFunction<'_> {
     }
     pub fn lower_stmt_full(&mut self, stmt: &ir::Stmt) {
         self.lower_stmt(stmt);
-        self.release_registers();
     }
     pub fn lower_stmt(&mut self, stmt: &ir::Stmt) {
         match stmt {
@@ -143,11 +142,7 @@ impl CodegenFunction<'_> {
                     Conditional::Reg(reg) => JumpIf::Zero(reg),
                     Conditional::Not(reg) => JumpIf::NotZero(reg),
                 };
-                let cond_jump = {
-                    let cond_jump = self.push_jump_if(jump);
-                    self.release_registers();
-                    cond_jump
-                };
+                let cond_jump = self.push_jump_if(jump);
                 for stmt in then_branch {
                     self.lower_stmt_full(stmt);
                 }
