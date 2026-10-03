@@ -545,33 +545,25 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
         expected_ty: Option<Type<'ctxt>>,
     ) -> typed_ast::Expr<'ctxt> {
         let condition = self.check_expr(condition, Some(Type::new_bool(self.ctxt())));
-        let then_branch = self.check_expr(then_branch, expected_ty);
-        let (ty, else_branch) = if let Some(else_branch) = else_branch {
+        let (ty, else_branch, then_branch) = if let Some(else_branch) = else_branch {
+            let then_branch = self.check_expr(then_branch, expected_ty);
             let else_branch = self.check_expr(else_branch, expected_ty);
             (
                 self.root()
                     .unify(then_branch.ty, else_branch.ty, else_branch.loc),
                 else_branch,
+                then_branch,
             )
         } else {
-            let ty = if let Some(ty) = self
-                .root()
-                .try_unify(then_branch.ty, Type::new_unit(self.ctxt()))
-            {
-                ty
-            } else {
-                self.ctxt()
-                    .diag()
-                    .add_diagnostic(format!("Expected 'then' branch to have '()' type"), loc);
-                then_branch.ty
-            };
+            let then_branch = self.check_expr(then_branch, Some(Type::new_unit(self.ctxt())));
             (
-                ty,
+                then_branch.ty,
                 typed_ast::Expr {
                     kind: typed_ast::ExprKind::Unit,
                     ty: Type::new_unit(self.ctxt()),
                     loc: then_branch.loc,
                 },
+                then_branch,
             )
         };
         typed_ast::Expr {
@@ -624,7 +616,7 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
             ExprKind::Return(return_expr) => {
                 let value = self.check_expr_coerces_to(return_expr, Some(self.return_type));
                 make_expr(
-                    Type::new_never(self.ctxt()),
+                    expected_ty.unwrap_or(Type::new_never(self.ctxt())),
                     typed_ast::ExprKind::Return(Box::new(value)),
                     loc,
                 )
@@ -660,15 +652,13 @@ impl<'root, 'ctxt> FunctionCtxt<'root, 'ctxt> {
                     kind: typed_ast::ExprKind::Tuple(fields),
                 }
             }
-            ExprKind::If(condition, then_branch, else_branch) => {
-                return self.check_if_expr(
-                    loc,
-                    condition,
-                    then_branch,
-                    else_branch.as_deref(),
-                    expected_ty,
-                );
-            }
+            ExprKind::If(condition, then_branch, else_branch) => self.check_if_expr(
+                loc,
+                condition,
+                then_branch,
+                else_branch.as_deref(),
+                expected_ty,
+            ),
             ExprKind::Block(block) => self.check_block(loc, block, expected_ty),
             ExprKind::Annotate(expr, ty) => self.check_expr(expr, Some(self.root().lower_type(ty))),
             ExprKind::Err => typed_ast::Expr {
