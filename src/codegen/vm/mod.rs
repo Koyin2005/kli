@@ -538,14 +538,17 @@ impl Codegen {
                     })
                     .collect::<Vec<_>>();
                 match &program.type_defs[*id] {
-                    ir::TypeDef::Struct(struct_def) => {
-                        todo!("handle structs")
-                    }
+                    ir::TypeDef::Struct(struct_def) => Repr::tuple(
+                        struct_def
+                            .fields
+                            .iter()
+                            .map(|field| self.type_repr(&field.field, program, &args)),
+                    ),
                     ir::TypeDef::Variant(variant_def) => {
                         let reprs = variant_def.cases.iter_enumerated().map(|(_, case)| {
                             if let Some(ref field) = case.field {
                                 Repr::single_tuple_offset(
-                                    1,
+                                    0,
                                     self.type_repr(&field.ty, program, &args),
                                 )
                             } else {
