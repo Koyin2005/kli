@@ -315,13 +315,26 @@ impl<'a> CodegenFunction<'a> {
                         },
                         dst: header_addr,
                     });
-                    let addr = self.reserve_register();
-                    self.push_instr(instructions::Instr::ArrayOffset {
-                        dst: addr,
-                        base: header_addr,
-                        index,
-                        size: repr.size as u32,
-                    });
+                    let addr = if repr.size == 0 {
+                        header_addr
+                    } else {
+                        let addr = self.reserve_register();
+                        if repr.size == 1 {
+                            self.push_instr(instructions::Instr::Add {
+                                dst: addr,
+                                src1: header_addr,
+                                src2: index,
+                            });
+                        } else {
+                            self.push_instr(instructions::Instr::ArrayOffset {
+                                dst: addr,
+                                base: header_addr,
+                                index,
+                                size: repr.size as u32,
+                            });
+                        }
+                        addr
+                    };
                     (addr, 0)
                 };
                 (CodegenPlace::Offset(reg, offset), repr)
