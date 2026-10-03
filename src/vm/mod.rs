@@ -32,7 +32,7 @@ pub struct VM {
     constant_ints: Vec<i64>,
     current_frame: Frame,
     strings: Vec<String>,
-    arrays: Vec<Vec<i64>>,
+    memory: Vec<i64>,
 }
 impl VM {
     pub fn new(entry_point: FunctionId, program: Program) -> Self {
@@ -48,7 +48,7 @@ impl VM {
             stack: Vec::new(),
             current_frame: frame,
             strings: program.strings,
-            arrays: Vec::new(),
+            memory: vec![0],
         }
     }
     fn next_instr(&mut self, ip: usize) -> Instr {
@@ -161,25 +161,36 @@ impl VM {
                     let value = value.into();
                     self.stack.push(value);
                 }
-                Instr::LoadIndex { dst, base, offset } => {
-                    let base = self.current_frame.read_reg(base) as usize;
-                    let offset = self.current_frame.read_reg(offset) as usize;
-                    self.current_frame.store_reg(dst, self.arrays[base][offset]);
+                Instr::Alloc { dst, count } => {
+                    let ptr = self.memory.len();
+                    self.memory.extend(std::iter::repeat_n(0, count as usize));
+                    self.current_frame.store_reg(dst, ptr as i64);
                 }
-                Instr::LoadIndexImm { dst, src, offset } => {
-                    let base = self.current_frame.read_reg(src) as usize;
-                    let offset = offset as usize;
-                    self.current_frame.store_reg(dst, self.arrays[base][offset]);
+                Instr::Store { dst, src } => {
+                    let addr = self.current_frame.read_reg(dst.base) as usize + dst.offset as usize;
+                    self.memory[addr] = self.current_frame.read_reg(src);
                 }
-                Instr::StoreIndex { base, offset, src } => {
-                    let base = self.current_frame.read_reg(base) as usize;
-                    let offset = self.current_frame.read_reg(offset) as usize;
-                    self.arrays[base][offset] = self.current_frame.read_reg(src);
+                Instr::Load { dst, src } => {
+                    let addr = self.current_frame.read_reg(src.base) as usize + src.offset as usize;
+                    self.current_frame.store_reg(dst, self.memory[addr]);
                 }
-                Instr::StoreIndexImm { base, offset, src } => {
-                    let base = self.current_frame.read_reg(base) as usize;
-                    let offset = offset as usize;
-                    self.arrays[base][offset] = self.current_frame.read_reg(src);
+                Instr::Copy { dst, src, count } => {
+                    let dst_ptr = self.current_frame.read_reg(dst.base) as usize;
+                    let src_ptr = self.current_frame.read_reg(src.base) as usize;
+                    for i in 0..count {
+                        self.memory[dst_ptr..][(dst.offset + i) as usize] =
+                            self.memory[src_ptr..][(src.offset + i) as usize];
+                    }
+                }
+                Instr::ArrayOffset {
+                    dst,
+                    base,
+                    index,
+                    size,
+                } => {
+                    let addr = self.current_frame.read_reg(base)
+                        + self.current_frame.read_reg(index) * i64::from(size);
+                    self.current_frame.store_reg(dst, addr);
                 }
                 Instr::Push(reg) => {
                     self.stack.push(self.current_frame.read_reg(reg));
@@ -192,11 +203,6 @@ impl VM {
                     ip = 0;
                 }
                 Instr::CallIntrinisic(intrinsic) => match intrinsic {
-                    Intrinsic::Alloc => {
-                        let index = self.arrays.len();
-                        self.arrays.push(std::mem::take(&mut self.stack));
-                        self.stack.push(index as _);
-                    }
                     Intrinsic::AddWithOverflow => {
                         let second = self.stack.pop().unwrap();
                         let first = self.stack.pop().unwrap();

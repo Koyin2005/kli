@@ -1,6 +1,6 @@
 use crate::{
     codegen::vm::{
-        CodegenFunction, JumpIf, PlaceRepr, SCALAR_REPR,
+        CodegenFunction, CodegenPlace, JumpIf, PlaceRepr, SCALAR_REPR,
         expr::{CallArg, Callee, Conditional},
     },
     ir,
@@ -38,7 +38,7 @@ impl CodegenFunction<'_> {
                     self.program,
                     &self.args,
                 );
-                let result = self.codegen_expr_into_reg_window(value, repr);
+                let result = self.expr_as_regs(value, repr);
                 for reg in result.into_iter() {
                     self.push_reg_to_stack(reg);
                 }
@@ -53,7 +53,7 @@ impl CodegenFunction<'_> {
                     callee,
                     args,
                 } = call;
-                let (place, retrun_repr) = self.lower_codegen_place(return_place);
+                let (place, return_repr) = self.lower_place(return_place);
                 let function = self.lower_callee(callee);
                 {
                     let mut call_args = Vec::new();
@@ -77,7 +77,7 @@ impl CodegenFunction<'_> {
                 }
                 self.pop_place(PlaceRepr {
                     place,
-                    repr: retrun_repr,
+                    repr: return_repr,
                 });
             }
             ir::Stmt::Print { value, is_err } => {
@@ -96,8 +96,8 @@ impl CodegenFunction<'_> {
                 );
             }
             ir::Stmt::Assign(place, value) => {
-                let (place, repr) = self.lower_codegen_place(place);
-                self.codegen_expr_into(value, PlaceRepr { place, repr });
+                let (place, repr) = self.lower_place(place);
+                self.expr_into_place(value, PlaceRepr { place, repr });
             }
             ir::Stmt::PanicIf(value) => {
                 let condition = self.lower_condition(value);
@@ -163,22 +163,62 @@ impl CodegenFunction<'_> {
             ir::Stmt::ReadLine(_) => todo!("read_line"),
             ir::Stmt::Alloc(place, alloc) => match alloc {
                 ir::Allocate::Array(ty, elements) => {
-                    let (place, repr) = self.lower_codegen_place(place);
-                    let element_count: i64 = elements.len().try_into().expect("too many elements");
-                    let mut args = Vec::new();
+                    let (place, repr) = self.lower_place(place);
+                    let dest = match place {
+                        CodegenPlace::Reg(reg) => reg,
+                        CodegenPlace::Offset(..) => {
+                            let size = repr.size_as_u16();
+                            self.reserve_registers(size)
+                        }
+                    };
+                    let element_count: u32 = elements.len().try_into().expect("too many elements");
                     let elem_repr = self.codegen.type_repr(ty, self.program, &self.args);
-                    for element in elements {
-                        self.lower_call_arg(element, elem_repr.clone(), &mut args);
-                        self.push_call_args(std::mem::take(&mut args));
+                    let buf = self.reserve_register();
+                    self.push_instr(instructions::Instr::Alloc {
+                        dst: buf,
+                        count: element_count * u32::from(elem_repr.size_as_u16()),
+                    });
+                    for (i, element) in elements.iter().enumerate() {
+                        self.expr_into_place(
+                            element,
+                            PlaceRepr {
+                                place: CodegenPlace::Offset(buf, i as u32),
+                                repr: elem_repr.clone(),
+                            },
+                        );
                     }
-                    self.push_intr_call(instructions::Intrinsic::Alloc, None);
-                    args.push(CallArg::Scalar(element_count));
-                    args.push(CallArg::Scalar(element_count));
-                    self.push_call_args(args);
-                    self.push_intr_call(
-                        instructions::Intrinsic::Alloc,
-                        Some(PlaceRepr { place, repr }),
-                    );
+
+                    self.push_instr(instructions::Instr::Alloc {
+                        dst: dest,
+                        count: 3,
+                    });
+
+                    self.push_instr(instructions::Instr::Store {
+                        dst: instructions::Addr {
+                            base: dest,
+                            offset: 0,
+                        },
+                        src: buf,
+                    });
+                    let count = self.reserve_register();
+                    self.load_immediate(count, element_count.into());
+                    self.push_instr(instructions::Instr::Store {
+                        dst: instructions::Addr {
+                            base: dest,
+                            offset: 1,
+                        },
+                        src: count,
+                    });
+                    self.push_instr(instructions::Instr::Store {
+                        dst: instructions::Addr {
+                            base: dest,
+                            offset: 2,
+                        },
+                        src: count,
+                    });
+                    if let CodegenPlace::Offset(..) = place {
+                        self.codegen_copy(place, CodegenPlace::Reg(dest), 1);
+                    }
                 }
             },
         }

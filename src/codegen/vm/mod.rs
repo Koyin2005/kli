@@ -30,7 +30,7 @@ impl Instance {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum ReprKind {
     Scalar,
-    Tuple(IndexVec<FieldId, Repr>),
+    Tuple(IndexVec<FieldId, (usize, Repr)>),
     Union(IndexVec<CaseId, Repr>),
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -43,15 +43,27 @@ impl Repr {
     fn size_as_u16(&self) -> u16 {
         self.size.try_into().expect("too big")
     }
-    fn single_tuple(field: Self) -> Self {
-        Self::tuple([field])
+    fn single_tuple_offset(offset: usize, field: Self) -> Self {
+        let size = offset + field.size;
+        Self {
+            size,
+            kind: ReprKind::Tuple(IndexVec::from_vec(vec![(offset, field)])),
+        }
     }
     fn pair(first: Self, second: Self) -> Self {
         Self::tuple([first, second])
     }
     fn tuple(fields: impl IntoIterator<Item = Self>) -> Self {
-        let fields = fields.into_iter().collect::<IndexVec<_, _>>();
-        let size = fields.iter().map(|field| field.size).sum();
+        let mut offset = 0usize;
+        let fields = fields
+            .into_iter()
+            .map(|repr| {
+                let field_offset = offset;
+                offset += repr.size;
+                (field_offset, repr)
+            })
+            .collect::<IndexVec<_, _>>();
+        let size = offset;
         Self {
             size,
             kind: ReprKind::Tuple(fields),
@@ -79,8 +91,10 @@ struct PlaceRepr {
     place: CodegenPlace,
     repr: Repr,
 }
+#[derive(Clone, Copy)]
 enum CodegenPlace {
-    Reg(RegWindow),
+    Reg(instructions::Reg),
+    Offset(instructions::Reg, u32),
 }
 #[derive(Clone, Copy)]
 struct RegWindow {
@@ -91,12 +105,6 @@ impl RegWindow {
     fn into_iter(self) -> impl ExactSizeIterator<Item = instructions::Reg> + DoubleEndedIterator {
         let base = self.base.into_u16();
         (base..base + self.size).map(instructions::Reg::new)
-    }
-    fn offset_by(self, offset: u16) -> Self {
-        Self {
-            base: instructions::Reg::new(self.base.into_u16() + offset),
-            size: self.size,
-        }
     }
 }
 
@@ -175,63 +183,158 @@ impl<'a> CodegenFunction<'a> {
     fn release_registers(&mut self) {
         self.next_reg = self.local_reg_end;
     }
-    fn codegen_imm_store(&mut self, place: CodegenPlace, src: i64) {
+    fn store_immediate(&mut self, place: CodegenPlace, value: i64) {
         match place {
-            CodegenPlace::Reg(RegWindow { base, size: _ }) => {
-                self.load_immediate(base, src);
+            CodegenPlace::Reg(reg) => {
+                self.load_immediate(reg, value);
+            }
+            CodegenPlace::Offset(reg, offset) => {
+                let src = self.reserve_register();
+                self.load_immediate(src, value);
+                self.push_instr(instructions::Instr::Store {
+                    dst: instructions::Addr { base: reg, offset },
+                    src,
+                });
             }
         }
     }
-    fn lower_codegen_place(&self, place: &ir::Place) -> (CodegenPlace, Repr) {
+    fn project_field(
+        &self,
+        place: CodegenPlace,
+        repr: Repr,
+        field_id: FieldId,
+    ) -> (CodegenPlace, Repr) {
+        let ReprKind::Tuple(fields) = repr.kind else {
+            unreachable!()
+        };
+
+        let place = match place {
+            CodegenPlace::Reg(base) => {
+                let base: usize = base.into_u16() as usize + fields[field_id].0;
+                let base = instructions::Reg::new(base.try_into().expect("too big"));
+                CodegenPlace::Reg(base)
+            }
+            CodegenPlace::Offset(base, mut offset) => {
+                offset = (offset as usize + fields[field_id].0)
+                    .try_into()
+                    .expect("too big");
+                CodegenPlace::Offset(base, offset)
+            }
+        };
+
+        let (_, repr) = { fields.into_vec() }.swap_remove(field_id.into_usize());
+        (place, repr)
+    }
+    fn project_downcast(
+        &self,
+        place: CodegenPlace,
+        case_id: CaseId,
+        repr: Repr,
+    ) -> (CodegenPlace, Repr) {
+        let (place, repr) = self.project_field(place, repr, FieldId::new(1));
+        let ReprKind::Union(cases) = repr.kind else {
+            unreachable!()
+        };
+        let case = cases
+            .into_vec()
+            .into_iter()
+            .nth(case_id.into_usize())
+            .unwrap();
+        (place, case)
+    }
+    fn lower_place(&mut self, place: &ir::Place) -> (CodegenPlace, Repr) {
         match place {
             ir::Place::Local(local) => {
                 let local_info = &self.locals[*local];
-                (CodegenPlace::Reg(local_info.regs), local_info.repr.clone())
-            }
-            ir::Place::Field(place, field_id) => {
-                let (place, repr) = self.lower_codegen_place(place);
-                let CodegenPlace::Reg(regs) = place;
-                let ReprKind::Tuple(fields) = repr.kind else {
-                    unreachable!()
-                };
-
-                let mut base = usize::from(regs.base.into_u16());
-                for (index, repr) in fields.iter_enumerated() {
-                    if index == *field_id {
-                        break;
-                    }
-                    base += repr.size;
-                }
-
-                let base = instructions::Reg::new(base.try_into().expect("too big"));
-                let repr = { fields.into_vec() }.swap_remove(field_id.into_usize());
                 (
-                    CodegenPlace::Reg(RegWindow {
-                        base,
-                        size: repr.size.try_into().expect("too big"),
-                    }),
-                    repr,
+                    CodegenPlace::Reg(local_info.regs.base),
+                    local_info.repr.clone(),
                 )
             }
-            ir::Place::Deref(place) => todo!(),
-            ir::Place::Downcast(place, case_id) => {
-                let (place, repr) = self.lower_codegen_place(place);
-                let CodegenPlace::Reg(regs) = place;
-                let ReprKind::Tuple(fields) = repr.kind else {
-                    unreachable!()
-                };
-                let [_, union] = fields.into_vec().try_into().expect("should be a 2 tuple");
-                let ReprKind::Union(case_reprs) = union.kind else {
-                    unreachable!()
-                };
-                let repr = { case_reprs.into_vec() }.swap_remove(case_id.into_usize());
-                let regs = RegWindow {
-                    base: regs.offset_by(1).base,
-                    size: repr.size_as_u16(),
-                };
-                (CodegenPlace::Reg(regs), repr)
+            ir::Place::Field(place, field_id) => {
+                let (place, repr) = self.lower_place(place);
+                self.project_field(place, repr, *field_id)
             }
-            ir::Place::Index(place, expr) => todo!(),
+            ir::Place::Deref(place) => {
+                let ir::Type::Box(ty) =
+                    place.type_of(&self.program.bodies[self.id], &self.program.type_defs)
+                else {
+                    unreachable!()
+                };
+                let (place, _) = self.lower_place(place);
+                let reg = match place {
+                    CodegenPlace::Offset(reg, offset) => {
+                        let dst = self.reserve_register();
+                        self.push_instr(instructions::Instr::Load {
+                            dst,
+                            src: instructions::Addr { base: reg, offset },
+                        });
+                        dst
+                    }
+                    CodegenPlace::Reg(reg) => reg,
+                };
+                (
+                    CodegenPlace::Offset(reg, 0),
+                    self.codegen.type_repr(&ty, self.program, &self.args),
+                )
+            }
+            ir::Place::Downcast(place, case_id) => {
+                let (place, repr) = self.lower_place(place);
+                self.project_downcast(place, *case_id, repr)
+            }
+            ir::Place::Index(place, index) => {
+                let (place, _) = self.lower_place(place);
+                let ty = index.type_of(self.program, &self.program.bodies[self.id]);
+                let repr = self.codegen.type_repr(&ty, self.program, &self.args);
+                let (reg, offset) = if let ir::ExprKind::Constant(ir::Constant::Int(index)) =
+                    index.kind
+                    && let Some(index) = index.checked_mul(repr.size as i64)
+                    && let Ok(index) = index.try_into()
+                {
+                    /* a.[i] = (**a + i) */
+                    let reg = self.reserve_register();
+                    let (base, base_offset) = match place {
+                        CodegenPlace::Reg(reg) => (reg, 0),
+                        CodegenPlace::Offset(base, offset) => (base, offset),
+                    };
+                    self.push_instr(instructions::Instr::Load {
+                        src: instructions::Addr {
+                            base,
+                            offset: base_offset,
+                        },
+                        dst: reg,
+                    });
+                    self.push_instr(instructions::Instr::AddImm {
+                        src1: reg,
+                        src2: index as i64,
+                        dst: reg,
+                    });
+                    (reg, index)
+                } else {
+                    let header_addr = self.reserve_register();
+                    let index = self.expr_as_regs(index, SCALAR_REPR).base;
+                    let (base, base_offset) = match place {
+                        CodegenPlace::Reg(reg) => (reg, 0),
+                        CodegenPlace::Offset(base, offset) => (base, offset),
+                    };
+                    self.push_instr(instructions::Instr::Load {
+                        src: instructions::Addr {
+                            base,
+                            offset: base_offset,
+                        },
+                        dst: header_addr,
+                    });
+                    let addr = self.reserve_register();
+                    self.push_instr(instructions::Instr::ArrayOffset {
+                        dst: addr,
+                        base: header_addr,
+                        index,
+                        size: repr.size as u32,
+                    });
+                    (addr, 0)
+                };
+                (CodegenPlace::Offset(reg, offset), repr)
+            }
         }
     }
     fn function_id(&mut self, id: ir::BodyId, args: Vec<ir::Type>) -> FunctionId {
@@ -297,12 +400,40 @@ impl<'a> CodegenFunction<'a> {
         self.push_instr(instructions::Instr::Push(reg));
     }
     fn pop_place(&mut self, place: PlaceRepr) {
-        let CodegenPlace::Reg(regs) = place.place;
-        for reg in regs.into_iter().rev() {
-            self.push_instr(instructions::Instr::Pop(reg));
+        match place.place {
+            CodegenPlace::Reg(reg) => {
+                for reg in (RegWindow {
+                    base: reg,
+                    size: place.repr.size_as_u16(),
+                })
+                .into_iter()
+                .rev()
+                {
+                    self.push_instr(instructions::Instr::Pop(reg));
+                }
+            }
+            CodegenPlace::Offset(base, offset) => {
+                let reg = self.reserve_registers(place.repr.size_as_u16());
+                let window = RegWindow {
+                    base: reg,
+                    size: place.repr.size_as_u16(),
+                };
+                for reg in window.into_iter().rev() {
+                    self.push_instr(instructions::Instr::Pop(reg));
+                }
+                for (i, reg) in window.into_iter().enumerate() {
+                    self.push_instr(instructions::Instr::Store {
+                        dst: instructions::Addr {
+                            base,
+                            offset: offset + i as u32,
+                        },
+                        src: reg,
+                    });
+                }
+            }
         }
     }
-    fn add_imm(&mut self, dst: instructions::Reg, src: instructions::Reg, value: i16) {
+    fn add_imm(&mut self, dst: instructions::Reg, src: instructions::Reg, value: i64) {
         self.push_instr(instructions::Instr::AddImm {
             dst: dst,
             src1: src,
@@ -409,7 +540,10 @@ impl Codegen {
                     ir::TypeDef::Variant(variant_def) => {
                         let reprs = variant_def.cases.iter_enumerated().map(|(_, case)| {
                             if let Some(ref field) = case.field {
-                                Repr::single_tuple(self.type_repr(&field.ty, program, &args))
+                                Repr::single_tuple_offset(
+                                    1,
+                                    self.type_repr(&field.ty, program, &args),
+                                )
                             } else {
                                 UNIT_REPR
                             }

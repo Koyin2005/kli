@@ -5,6 +5,9 @@ impl Reg {
     pub fn new(value: u16) -> Self {
         Self(value)
     }
+    pub fn offset_by(self, count: u16) -> Self {
+        Self(self.0 + count)
+    }
     pub fn into_u16(self) -> u16 {
         self.0
     }
@@ -18,25 +21,80 @@ impl FunctionId {
 }
 #[derive(Clone, Copy, Debug)]
 pub struct Const(pub u32);
+#[derive(Debug, Clone, Copy)]
+pub struct Addr {
+    pub base: Reg,
+    pub offset: u32,
+}
 #[derive(Clone, Copy, Debug)]
 pub struct JumpOffset(pub u32);
 #[derive(Clone, Copy, Debug)]
 pub enum Instr {
-    Move { dst: Reg, src: Reg },
+    Move {
+        dst: Reg,
+        src: Reg,
+    },
     LoadConst(Reg, Const),
     LoadImmediate(Reg, i32),
-    Add { dst: Reg, src1: Reg, src2: Reg },
-    AddImm { dst: Reg, src1: Reg, src2: i16 },
-    Sub { dst: Reg, src1: Reg, src2: Reg },
-    Mul { dst: Reg, src1: Reg, src2: Reg },
-    Div { dst: Reg, src1: Reg, src2: Reg },
-    And { dst: Reg, src1: Reg, src2: Reg },
-    Or { dst: Reg, src1: Reg, src2: Reg },
-    LesserThan { dst: Reg, src1: Reg, src2: Reg },
-    GreaterThan { dst: Reg, src1: Reg, src2: Reg },
-    LesserThanUnsigned { dst: Reg, src1: Reg, src2: Reg },
-    Equals { dst: Reg, src1: Reg, src2: Reg },
-    Not { dst: Reg, src: Reg },
+    Add {
+        dst: Reg,
+        src1: Reg,
+        src2: Reg,
+    },
+    AddImm {
+        dst: Reg,
+        src1: Reg,
+        src2: i64,
+    },
+    Sub {
+        dst: Reg,
+        src1: Reg,
+        src2: Reg,
+    },
+    Mul {
+        dst: Reg,
+        src1: Reg,
+        src2: Reg,
+    },
+    Div {
+        dst: Reg,
+        src1: Reg,
+        src2: Reg,
+    },
+    And {
+        dst: Reg,
+        src1: Reg,
+        src2: Reg,
+    },
+    Or {
+        dst: Reg,
+        src1: Reg,
+        src2: Reg,
+    },
+    LesserThan {
+        dst: Reg,
+        src1: Reg,
+        src2: Reg,
+    },
+    GreaterThan {
+        dst: Reg,
+        src1: Reg,
+        src2: Reg,
+    },
+    LesserThanUnsigned {
+        dst: Reg,
+        src1: Reg,
+        src2: Reg,
+    },
+    Equals {
+        dst: Reg,
+        src1: Reg,
+        src2: Reg,
+    },
+    Not {
+        dst: Reg,
+        src: Reg,
+    },
     Push(Reg),
     PushConst(Const),
     PushImm(i32),
@@ -44,10 +102,29 @@ pub enum Instr {
     Call(FunctionId),
     CallIntrinisic(Intrinsic),
     CallIndirect(Reg),
-    StoreIndex { base: Reg, offset: Reg, src: Reg },
-    StoreIndexImm { base: Reg, offset: u16, src: Reg },
-    LoadIndex { dst: Reg, base: Reg, offset: Reg },
-    LoadIndexImm { dst: Reg, src: Reg, offset: u16 },
+    ArrayOffset {
+        dst: Reg,
+        base: Reg,
+        index: Reg,
+        size: u32,
+    },
+    Alloc {
+        dst: Reg,
+        count: u32,
+    },
+    Load {
+        dst: Reg,
+        src: Addr,
+    },
+    Store {
+        dst: Addr,
+        src: Reg,
+    },
+    Copy {
+        dst: Addr,
+        src: Addr,
+        count: u32,
+    },
     JumpIfZero(Reg, JumpOffset),
     JumpIfNotZero(Reg, JumpOffset),
     Jump(JumpOffset),
@@ -55,7 +132,6 @@ pub enum Instr {
 }
 #[derive(Clone, Copy, Debug)]
 pub enum Intrinsic {
-    Alloc,
     AddWithOverflow,
     SubWithOverflow,
     MulWithOverflow,
